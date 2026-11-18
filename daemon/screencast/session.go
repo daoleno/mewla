@@ -53,6 +53,13 @@ type Config struct {
 	LoopbackOnly bool
 	// ICEServers are STUN and TURN servers to gather through, when any.
 	ICEServers []webrtc.ICEServer
+	// SignOffer and VerifyAnswer bind the DTLS fingerprints to identities:
+	// SignOffer signs the offer's (as this computer; the viewer checks it
+	// with the computer's key from pairing) and VerifyAnswer checks the
+	// viewer's signature over the answer's (as its paired device) before the
+	// answer is used. The DTLS handshake then holds each side to them.
+	SignOffer    func(fingerprints []string) (any, error)
+	VerifyAnswer func(fingerprints []string, authorization string) error
 }
 
 // Stats is one second of the stream, in the fields the viewer's Connection
@@ -82,6 +89,11 @@ type Signal struct {
 	// ICEServers, on the offer, are the STUN and TURN servers the viewer
 	// gathers through too (the relay's TURN, when there is one).
 	ICEServers []webrtc.ICEServer `json:"ice_servers,omitempty"`
+	// Assertion, on the offer, is the computer's signature over the offer's
+	// DTLS fingerprints (Config.SignOffer); Authorization, on the answer, the
+	// viewer device's over the answer's (Config.VerifyAnswer).
+	Assertion     any    `json:"assertion,omitempty"`
+	Authorization string `json:"authorization,omitempty"`
 }
 
 const (
@@ -283,7 +295,14 @@ func (s *Session) setup() error {
 	if err := pc.SetLocalDescription(offer); err != nil {
 		return err
 	}
-	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: pc.LocalDescription().SDP, ICEServers: s.cfg.ICEServers})
+	offerSDP := pc.LocalDescription().SDP
+	var assertion any
+	if s.cfg.SignOffer != nil {
+		if assertion, err = s.cfg.SignOffer(Fingerprints(offerSDP)); err != nil {
+			return err
+		}
+	}
+	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: s.cfg.ICEServers, Assertion: assertion})
 	return nil
 }
 
@@ -297,6 +316,18 @@ func (s *Session) HandleSignal(raw []byte) error {
 	case "rtc":
 		if msg.SDPType != "answer" {
 			return errors.New("expected an answer")
+		}
+		s.mu.Lock()
+		answered := s.remoteSet
+		s.mu.Unlock()
+		if answered {
+			return errors.New("the viewer has answered already")
+		}
+		if s.cfg.VerifyAnswer != nil {
+			if err := s.cfg.VerifyAnswer(Fingerprints(msg.SDP), msg.Authorization); err != nil {
+				s.cancel(err)
+				return err
+			}
 		}
 		if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: msg.SDP}); err != nil {
 			return err

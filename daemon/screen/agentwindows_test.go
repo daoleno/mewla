@@ -512,7 +512,7 @@ func TestTheWindowViewCropsToItsPlaceAndAimsInputAtIt(t *testing.T) {
 	}
 }
 
-// View serves the window as RFB and holds the agent display while it is open.
+// View holds the agent display while it is open.
 func TestViewHoldsTheAgentDisplayWhileOpen(t *testing.T) {
 	a, viewer, _ := newTestWindows(t)
 	if _, err := a.View("mh-signin"); !errors.Is(err, errNoWindow) {
@@ -523,7 +523,7 @@ func TestViewHoldsTheAgentDisplayWhileOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Conn == nil || !viewer.holds["view:mh-signin"] {
+	if view.Next == nil || !viewer.holds["view:mh-signin"] {
 		t.Fatalf("the view holds %v", viewer.holds)
 	}
 	view.Close()
@@ -628,7 +628,6 @@ func TestTheVideoViewGivesPicturesAndTakesInput(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- view.Input(src) }()
 	msgs := [][]byte{
-		{1}, // ClientInit
 		{5, 1, 0, 10, 0, 20},
 		{5, 0, 0, 10, 0, 20},
 		{4, 1, 0, 0, 0, 0, 0, 'h'},

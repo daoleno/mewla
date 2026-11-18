@@ -5,7 +5,6 @@ import (
 	"context"
 	"image"
 	"io"
-	"net"
 	"time"
 )
 
@@ -116,17 +115,12 @@ func Pictures(get func() ([]byte, int, int), changed <-chan struct{}) func(ctx c
 
 // Viewer is a person's connection to a Worker's display.
 type Viewer struct {
-	// Conn is the display's RFB stream, past the handshake with no security:
-	// the next bytes in either direction are ClientInit and then updates.
-	Conn net.Conn
 	// Next is the view's next picture after the one numbered after (0: what
 	// it shows now), waiting for it: what Screen pushes as video.
 	Next func(ctx context.Context, after uint64) (Picture, error)
-	// Input is Relay for a view shown by Next: the same messages (from
-	// ClientInit on), counted the same, with no RFB pictures sent back.
+	// Input passes the person's input, RFB client messages, to the display
+	// and tells the agent what they did (Relay).
 	Input func(src io.Reader) error
-	// Relay passes the person's messages to the display and counts them.
-	Relay func(src io.Reader) error
 	// Hold holds the agent off (true) or lets it go on (false). A held view
 	// that closes lets go by itself.
 	Hold func(on bool)

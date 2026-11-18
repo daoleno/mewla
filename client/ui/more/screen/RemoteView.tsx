@@ -86,15 +86,12 @@ export interface ViewerStats {
   fps: number;
   kbps: number;
   inputMs: number | null;
-  bridgeMs: number | null;
-  presentMs: number | null;
 }
 
 /**
  * One live view of a remote screen: the socket to the computer, the viewer in
- * its WebView, and what passes between them. RFB bytes from the socket are
- * batched to the viewer once a frame and always ahead of later control; the
- * viewer's bytes go to the socket as they come.
+ * its WebView, and what passes between them: the WebRTC signalling both ways
+ * and the control messages. The picture and the input go peer to peer.
  */
 export class RemoteSession {
   readonly phase = signal<RemotePhase>("connecting");
@@ -111,14 +108,12 @@ export class RemoteSession {
   readonly viewSize = signal<StageSize | null>(null);
   /** The size the window was last laid out for, while held. */
   private fitted: StageSize | null = null;
-  /** The viewer felt a long press (a right-click) or the remote bell rang. No haptic: the app has two (SPEC §16.3). */
+  /** The viewer felt a long press (a right-click). No haptic: the app has two (SPEC §16.3). */
   onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
   private web: WebViewRef | null = null;
   private viewerReady = false;
   private outbox: ScreenHostMessage[] = [];
-  private chunks: string[] = [];
-  private flushQueued = false;
   private stopDeadline: (() => void) | null = null;
   private attempt = 0;
   mode: ScreenPointerMode = "touch";
@@ -155,22 +150,16 @@ export class RemoteSession {
         this.post([{ type: "mode", mode: this.mode }, { type: "align", align: this.align }], true);
         this.flush();
         return;
-      case "send":
-        this.connection?.send(message.data);
-        return;
       case "signal":
-        this.connection?.control(message.signal);
+        this.connection?.signal(message.signal);
         return;
       case "connected":
         this.stopDeadline?.();
         this.stopDeadline = null;
         this.phase.set("live");
         return;
-      case "closed":
-        this.lose(null);
-        return;
       case "stats":
-        this.viewerStats.set({ fps: message.fps, kbps: message.kbps, inputMs: message.inputMs, bridgeMs: message.bridgeMs ?? null, presentMs: message.presentMs ?? null });
+        this.viewerStats.set({ fps: message.fps, kbps: message.kbps, inputMs: message.inputMs });
         return;
       case "haptic":
         this.onHaptic?.();
@@ -199,13 +188,8 @@ export class RemoteSession {
     const connection = new ScreenConnection(
       this.server,
       {
-        open: () => attempt === this.attempt && this.post([{ type: "open", video: this.connection?.video === true }]),
+        open: () => attempt === this.attempt && this.post([{ type: "open" }]),
         signal: (signal) => attempt === this.attempt && this.post([{ type: "signal", signal }]),
-        data: (chunk) => {
-          if (attempt !== this.attempt) return;
-          this.chunks.push(chunk);
-          this.schedule();
-        },
         ready: () => {},
         rtt: (ms) => attempt === this.attempt && this.rtt.set(ms),
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
@@ -252,8 +236,6 @@ export class RemoteSession {
     this.reflow.set(NO_REFLOW);
     this.fitted = null;
     this.rtt.set(null);
-    this.chunks = [];
-    this.outbox = this.outbox.filter((message) => message.type !== "rfb");
     if (connection) this.post([{ type: "close" }]);
   }
 
@@ -312,31 +294,13 @@ export class RemoteSession {
     this.post([{ type: "text", text, mods }]);
   }
 
-  private schedule(): void {
-    if (this.flushQueued) return;
-    this.flushQueued = true;
-    requestAnimationFrame(() => {
-      this.flushQueued = false;
-      this.flush();
-    });
-  }
-
-  /** Queued bytes always go ahead of later control messages. */
   private post(messages: ScreenHostMessage[], front = false): void {
-    if (this.chunks.length) {
-      this.outbox.push({ type: "rfb", data: this.chunks, at: Date.now() });
-      this.chunks = [];
-    }
     if (front) this.outbox.unshift(...messages);
     else this.outbox.push(...messages);
     this.flush();
   }
 
   private flush(): void {
-    if (this.chunks.length) {
-      this.outbox.push({ type: "rfb", data: this.chunks, at: Date.now() });
-      this.chunks = [];
-    }
     if (!this.viewerReady || !this.web || !this.outbox.length) return;
     const batch = this.outbox;
     this.outbox = [];

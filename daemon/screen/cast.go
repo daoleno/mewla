@@ -17,9 +17,9 @@ type Cast struct {
 	release context.CancelFunc
 }
 
-// OpenCast starts a capture for an allowed device, as Open does for RFB: the
-// display is held on while it lasts, unless the computer is locked, and obs
-// (which may be nil) hears the lock.
+// OpenCast starts a capture for an allowed device. The display is held on
+// while it lasts, unless the computer is locked, and obs (which may be nil)
+// hears the lock.
 func (s *Service) OpenCast(ctx context.Context, deviceID string, obs *Observer) (*Cast, error) {
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err
@@ -40,7 +40,10 @@ func (s *Service) OpenCast(ctx context.Context, deviceID string, obs *Observer) 
 	return &Cast{session: session, release: release}, nil
 }
 
-// WatchWorkerCast is WatchWorker for pushed video: the agent's own capture.
+// WatchWorkerCast lets an allowed device watch a Worker's agent using the
+// screen (without a worker, the longest-running) without taking it over: the
+// viewer sees the agent's own capture; what the person does reaches the
+// screen and is told to the agent. It ends when the agent does.
 func (s *Service) WatchWorkerCast(ctx context.Context, deviceID, worker string) (*Cast, error) {
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err

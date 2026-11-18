@@ -1,9 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"image"
 	"io"
@@ -16,7 +14,6 @@ import (
 
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/vdisplay"
-	"github.com/gorilla/websocket"
 )
 
 // macAgentDisplayBackend is a scripted computer with an agent display, as a
@@ -83,6 +80,7 @@ func (s *windowCaptureSession) KeyTo(_ int, keysym uint32, down bool) error {
 // agent as counts), Hold and Stop refuse its browser calls, and its window
 // closing takes it off the list.
 func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
+	requireVideo(t)
 	a, priv, device := sessionFileAuthFixture(t)
 	capture := &windowCaptureSession{}
 	fake := screen.NewFakeBackend(64, 64)
@@ -99,6 +97,7 @@ func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
 	windows.SetNames(func(string) string { return "SignIn" })
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetDisplays(windows)
+	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	defer s.shutdownAuthenticatedClients()
@@ -129,39 +128,19 @@ func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
 		t.Fatalf("listed = %+v", got)
 	}
 
-	header := http.Header{"Authorization": []string{auth("mewla-display-view")}}
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/display/viewer?worker=mh-signin", header)
-	if err != nil {
-		t.Fatal(err)
+	v := dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/display/viewer?worker=mh-signin", viewerIdentity(priv, a, device))
+	v.next("ready")
+	v.picture()
+	var size struct{ Width, Height int }
+	for size.Width == 0 {
+		_ = json.Unmarshal(v.next("stats"), &size)
 	}
-	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	readBinary := func() []byte {
-		for {
-			kind, data, err := conn.ReadMessage()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if kind == websocket.BinaryMessage {
-				return data
-			}
-		}
+	if size.Width != 800 || size.Height != 500 {
+		t.Fatalf("the viewer is not shown the window's place: %dx%d", size.Width, size.Height)
 	}
-	if v := readBinary(); !bytes.HasPrefix(v, []byte("RFB 003.008")) {
-		t.Fatalf("server hello = %q", v)
-	}
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte("RFB 003.008\n"))
-	readBinary() // security types
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{1})
-	readBinary()                                              // security result
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{1}) // ClientInit
-	init := readBinary()
-	if len(init) < 4 || binary.BigEndian.Uint16(init) != 800 || binary.BigEndian.Uint16(init[2:]) != 500 {
-		t.Fatalf("the viewer is not shown the window's place: ServerInit %v", init[:min(len(init), 8)])
-	}
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{5, 1, 0, 40, 0, 30})       // press
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{5, 0, 0, 40, 0, 30})       // release
-	_ = conn.WriteMessage(websocket.BinaryMessage, []byte{4, 1, 0, 0, 0, 0, 0, 'q'}) // one key
+	v.send([]byte{5, 1, 0, 40, 0, 30})       // press
+	v.send([]byte{5, 0, 0, 40, 0, 30})       // release
+	v.send([]byte{4, 1, 0, 0, 0, 0, 0, 'q'}) // one key
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		capture.mu.Lock()
@@ -187,12 +166,12 @@ func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
 	}
 
 	// Hold, from the viewer, refuses the Worker's browser calls until let go.
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hold","on":true}`))
+	v.sendJSON(map[string]any{"type": "hold", "on": true})
 	waitUntil(t, func() bool { return windows.Begin("mh-signin") != nil })
 	if l := list(); l.Displays[0].Control != "person" {
 		t.Fatalf("a held window: %+v", l.Displays)
 	}
-	_ = conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"hold","on":false}`))
+	v.sendJSON(map[string]any{"type": "hold", "on": false})
 	waitUntil(t, func() bool {
 		if windows.Begin("mh-signin") != nil {
 			return false
@@ -222,15 +201,7 @@ func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
 	if l := list(); len(l.Displays) != 0 {
 		t.Fatalf("a closed window is listed: %+v", l.Displays)
 	}
-	for {
-		kind, data, err := conn.ReadMessage()
-		if err != nil {
-			break
-		}
-		if kind == websocket.TextMessage && strings.Contains(string(data), `"error"`) {
-			break
-		}
-	}
+	v.errorText()
 }
 
 func waitUntil(t *testing.T, ok func() bool) {

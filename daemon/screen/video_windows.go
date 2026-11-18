@@ -386,8 +386,8 @@ func (e *mfEncoder) encode(img *image.RGBA, key bool) ([]byte, bool, error) {
 	if len(out) == 0 {
 		return nil, false, errVideoDropped
 	}
-	isKey := annexBHasNAL(out, 5)
-	if isKey && !annexBHasNAL(out, 7) && len(e.header) > 0 {
+	isKey := hasNAL(out, 5)
+	if isKey && !hasNAL(out, 7) && len(e.header) > 0 {
 		out = append(append([]byte(nil), e.header...), out...)
 	}
 	return out, isKey, nil
@@ -483,22 +483,6 @@ func (e *mfEncoder) release() {
 		e.mft.release()
 		e.mft = nil
 	}
-}
-
-func annexBHasNAL(au []byte, kind byte) bool {
-	for i := 0; i+4 < len(au); i++ {
-		if au[i] == 0 && au[i+1] == 0 && (au[i+2] == 1 || (au[i+2] == 0 && au[i+3] == 1)) {
-			at := i + 3
-			if au[i+2] == 0 {
-				at = i + 4
-			}
-			if at < len(au) && au[at]&0x1f == kind {
-				return true
-			}
-			i = at - 1
-		}
-	}
-	return false
 }
 
 // rgbaToNV12 converts img (even size) to NV12: a luma plane, then

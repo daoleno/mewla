@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,37 +15,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type screenViewerClient struct {
-	t    *testing.T
-	conn *websocket.Conn
-	buf  []byte
-}
-
-// read returns the next n RFB bytes, skipping JSON control messages.
-func (c *screenViewerClient) read(n int) []byte {
-	c.t.Helper()
-	for len(c.buf) < n {
-		_ = c.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		kind, data, err := c.conn.ReadMessage()
-		if err != nil {
-			c.t.Fatalf("read RFB: %v", err)
-		}
-		if kind == websocket.BinaryMessage {
-			c.buf = append(c.buf, data...)
-		}
-	}
-	out := c.buf[:n]
-	c.buf = c.buf[n:]
-	return out
-}
-
-func (c *screenViewerClient) write(data []byte) {
-	c.t.Helper()
-	if err := c.conn.WriteMessage(websocket.BinaryMessage, data); err != nil {
-		c.t.Fatal(err)
-	}
-}
-
 func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	a, priv, device := sessionFileAuthFixture(t)
 	stateDir := t.TempDir()
@@ -54,6 +22,7 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	service := screen.NewServiceWith(stateDir, fake)
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
+	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	wsURL := "ws" + strings.TrimPrefix(h.URL, "http") + "/screen/viewer"
@@ -124,51 +93,27 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 		t.Fatalf("open settings: %d %v", code, fake.Opened)
 	}
 
-	open := func() *screenViewerClient {
-		conn, _, err := dial("mewla-screen-view")
-		if err != nil {
-			t.Fatal(err)
-		}
-		v := &screenViewerClient{t: t, conn: conn}
-		if got := string(v.read(12)); got != "RFB 003.008\n" {
-			t.Fatalf("version %q", got)
-		}
-		v.write([]byte("RFB 003.008\n"))
-		if got := v.read(2); got[0] != 1 || got[1] != 1 {
-			t.Fatalf("viewer was offered %v, want only None", got)
-		}
-		v.write([]byte{1})
-		if got := v.read(4); binary.BigEndian.Uint32(got) != 0 {
-			t.Fatalf("security result %v", got)
-		}
-		v.write([]byte{1}) // ClientInit
-		init := v.read(24)
-		if binary.BigEndian.Uint16(init[0:]) != 320 || binary.BigEndian.Uint16(init[2:]) != 200 {
-			t.Fatalf("ServerInit %v", init)
-		}
-		v.read(int(binary.BigEndian.Uint32(init[20:])))
+	open := func() *videoViewer {
+		header := http.Header{}
+		header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen-view"))
+		v := dialVideoViewer(t, wsURL, viewerIdentity(priv, a, device))
+		v.next("ready")
+		v.picture()
 		return v
 	}
-	// The pong below answers the ping in the socket's reader; the pointer goes on through the RFB stream to the
-	// backend, so the pong is no sign it has arrived. The backend says when it has (seen late under load on a Mac).
+	// The pong answers the ping in the socket's reader; the press goes on through the input channel to the
+	// backend, so the pong is no sign it has arrived. The backend says when it has.
 	pointed := make(chan struct{})
 	var pointedOnce sync.Once
 	fake.AfterPointer = func(int) { pointedOnce.Do(func() { close(pointed) }) }
 	first := open()
-	first.write([]byte{5, 1, 0, 10, 0, 20}) // pointer press at (10, 20)
-	if err := first.conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"ping","t":42}`)); err != nil {
-		t.Fatal(err)
-	}
+	first.send([]byte{5, 1, 0, 10, 0, 20}) // pointer press at (10, 20)
+	first.sendJSON(map[string]any{"type": "ping", "t": 42})
 	var pong struct {
 		Type string
 		T    int
 	}
-	for pong.Type != "pong" {
-		_ = first.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		if err := first.conn.ReadJSON(&pong); err != nil {
-			t.Fatal(err)
-		}
-	}
+	_ = json.Unmarshal(first.next("pong"), &pong)
 	if pong.T != 42 {
 		t.Fatalf("pong %+v", pong)
 	}
@@ -183,17 +128,8 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 
 	// A second viewer takes over; the first is closed with the reason.
 	second := open()
-	defer second.conn.Close()
-	_ = first.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	for {
-		_, _, err := first.conn.ReadMessage()
-		if err == nil {
-			continue
-		}
-		if !websocket.IsCloseError(err, websocket.CloseNormalClosure) || !strings.Contains(err.Error(), "took over") {
-			t.Fatalf("first viewer close: %v", err)
-		}
-		break
+	if err := first.closedWith(); !websocket.IsCloseError(err, websocket.CloseNormalClosure) || !strings.Contains(err.Error(), "took over") {
+		t.Fatalf("first viewer close: %v", err)
 	}
 
 	// The local kill switch ends the open session.
@@ -201,16 +137,9 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(2100 * time.Millisecond)
-	second.write([]byte{5, 0, 0, 1, 0, 1})
-	_ = second.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	for {
-		kind, data, err := second.conn.ReadMessage()
-		if err != nil {
-			t.Fatal("closed without saying why")
-		}
-		if kind == websocket.TextMessage && strings.Contains(string(data), "isn't allowed") {
-			break
-		}
+	second.sendJSON(map[string]any{"type": "ping", "t": 1})
+	if got := second.errorText(); !strings.Contains(got, "isn't allowed") {
+		t.Fatalf("closed saying %q", got)
 	}
 }
 
@@ -220,6 +149,7 @@ func TestRevokingADeviceForgetsItsScreenApproval(t *testing.T) {
 	service := screen.NewServiceWith(stateDir, screen.NewFakeBackend(320, 200))
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
+	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	req, _ := http.NewRequest(http.MethodPost, h.URL+"/screen", strings.NewReader(`{"action":"enable"}`))
@@ -269,6 +199,7 @@ func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
 	defer service.StopAgent()
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
+	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	req, _ := http.NewRequest(http.MethodPost, h.URL+"/screen", strings.NewReader(`{"action":"enable"}`))
@@ -276,56 +207,26 @@ func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
 	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 200 {
 		t.Fatalf("enable: %v %v", resp, err)
 	}
-	dial := func() *screenViewerClient {
+	dial := func() *videoViewer {
 		header := http.Header{}
 		header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen-view"))
-		conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer?watch=1", header)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return &screenViewerClient{t: t, conn: conn}
-	}
-	readError := func(v *screenViewerClient) string {
-		t.Helper()
-		for {
-			_ = v.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-			kind, data, err := v.conn.ReadMessage()
-			if err != nil {
-				t.Fatalf("closed without saying why: %v", err)
-			}
-			var msg struct{ Type, Error string }
-			if kind == websocket.TextMessage && json.Unmarshal(data, &msg) == nil && msg.Type == "error" {
-				return msg.Error
-			}
-		}
+		return dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer?watch=1", viewerIdentity(priv, a, device))
 	}
 
 	nobody := dial()
-	if got := readError(nobody); !strings.Contains(got, "No agent") {
+	if got := nobody.errorText(); !strings.Contains(got, "No agent") {
 		t.Fatalf("watching nobody: %q", got)
 	}
-	nobody.conn.Close()
+	nobody.close()
 
 	if _, err := service.Act(context.Background(), "%7", screen.AgentAction{Action: "screenshot"}); err != nil {
 		t.Fatal(err)
 	}
 	v := dial()
-	defer v.conn.Close()
-	v.read(12)
-	v.write([]byte("RFB 003.008\n"))
-	v.read(2)
-	v.write([]byte{1})
-	v.read(4)
-	v.write([]byte{1}) // ClientInit
-	init := v.read(24)
-	if binary.BigEndian.Uint16(init[0:]) != 320 || binary.BigEndian.Uint16(init[2:]) != 200 {
-		t.Fatalf("ServerInit %v", init)
-	}
-	v.read(int(binary.BigEndian.Uint32(init[20:])))
-	v.write([]byte{3, 0, 0, 0, 0, 0, 1, 64, 0, 200}) // FramebufferUpdateRequest
-	v.read(4)                                        // the update arrives
-	v.write([]byte{5, 1, 0, 10, 0, 20})              // a tap
-	v.write([]byte{4, 1, 0, 0, 0, 0, 0, 'q'})        // a key
+	v.next("ready")
+	v.picture()
+	v.send([]byte{5, 1, 0, 10, 0, 20})       // a tap
+	v.send([]byte{4, 1, 0, 0, 0, 0, 0, 'q'}) // a key
 	// Watching accepts input: it reaches the screen, takes nothing from the
 	// agent, and the agent hears about it with its next answer.
 	deadline := time.Now().Add(3 * time.Second)
@@ -348,7 +249,7 @@ func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
 	}
 
 	service.StopAgent()
-	if got := readError(v); !strings.Contains(got, "agent is done") {
+	if got := v.errorText(); !strings.Contains(got, "agent is done") {
 		t.Fatalf("agent ended: %q", got)
 	}
 }
@@ -361,6 +262,7 @@ func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
 	service := screen.NewServiceWith(t.TempDir(), fake)
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
+	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
 	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
@@ -369,69 +271,36 @@ func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
 	fake.SetLocked(true)
 	header := http.Header{}
 	header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen-view"))
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer", header)
-	if err != nil {
-		t.Fatal(err)
+	v := dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer", viewerIdentity(priv, a, device))
+	var lockState struct {
+		Locked bool `json:"locked"`
 	}
-	defer conn.Close()
-	v := &screenViewerClient{t: t, conn: conn}
-	v.write([]byte("RFB 003.008\n"))
-	v.write([]byte{1})
-	v.write([]byte{1}) // ClientInit
-	// Tight, fences and continuous updates, as noVNC asks for them.
-	encodings := []int32{7, -312, -313}
-	msg := []byte{2, 0, 0, byte(len(encodings))}
-	for _, e := range encodings {
-		msg = binary.BigEndian.AppendUint32(msg, uint32(e))
+	_ = json.Unmarshal(v.next("state"), &lockState)
+	if !lockState.Locked {
+		t.Fatal("the viewer was not told the computer is locked")
 	}
-	v.write(msg)
-	v.write([]byte{150, 1, 0, 0, 0, 0, 1, 64, 0, 200})
-
-	var seen []string
-	locked := []bool{}
+	fake.SetLocked(false)
+	_ = json.Unmarshal(v.next("state"), &lockState)
+	if lockState.Locked {
+		t.Fatal("the viewer was not told the computer is unlocked")
+	}
+	v.picture()
 	var stats struct {
 		Path    string  `json:"path"`
+		Encoder string  `json:"encoder"`
 		Updates int     `json:"updates"`
 		Bytes   int     `json:"bytes"`
 		Encode  float64 `json:"encode_ms"`
-		Quality int     `json:"quality"`
+		Route   string  `json:"route"`
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	unlocked := false
-	// Lock polling and stream stats run independently; either can arrive first.
-	for stats.Path == "" || len(locked) < 2 {
+	deadline := time.Now().Add(10 * time.Second)
+	for stats.Updates == 0 {
 		if time.Now().After(deadline) {
-			t.Fatalf("waiting for stats and both lock states; saw %v (lock states %v)", seen, locked)
+			t.Fatalf("no stats with updates: %+v", stats)
 		}
-		_ = conn.SetReadDeadline(deadline)
-		kind, data, err := conn.ReadMessage()
-		if err != nil {
-			t.Fatalf("read: %v (saw %v)", err, seen)
-		}
-		if kind != websocket.TextMessage {
-			continue
-		}
-		var head struct {
-			Type   string `json:"type"`
-			Locked bool   `json:"locked"`
-		}
-		_ = json.Unmarshal(data, &head)
-		seen = append(seen, head.Type)
-		switch head.Type {
-		case "state":
-			locked = append(locked, head.Locked)
-			if !unlocked {
-				unlocked = true
-				fake.SetLocked(false)
-			}
-		case "stats":
-			_ = json.Unmarshal(data, &stats)
-		}
+		_ = json.Unmarshal(v.next("stats"), &stats)
 	}
-	if len(locked) < 2 || !locked[0] || locked[1] {
-		t.Fatalf("lock states %v, want locked then unlocked", locked)
-	}
-	if stats.Path != "loopback" || stats.Updates == 0 || stats.Bytes == 0 || stats.Encode <= 0 || stats.Quality == 0 {
+	if stats.Path != "loopback" || stats.Encoder == "" || stats.Bytes == 0 || stats.Encode <= 0 {
 		t.Fatalf("stats %+v", stats)
 	}
 }

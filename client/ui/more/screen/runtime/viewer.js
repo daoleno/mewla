@@ -1,11 +1,10 @@
-// Remote screen viewer: noVNC rendering plus touch gestures, local zoom and
-// key injection. It never opens a network connection: the host owns the
-// authenticated WebSocket and relays RFB bytes as base64 both ways.
-// scripts/generate-screen-viewer.mjs bundles it with noVNC for the native
-// WebView (via bootstrap.js) and for web; app code imports only the output.
-import RFB from "@novnc/novnc";
+// Remote screen viewer: the computer's screen as pushed video (video.js),
+// plus touch gestures, local zoom and key injection. The host owns the
+// authenticated WebSocket and relays the WebRTC signalling both ways; the
+// picture and the input go peer to peer. generate.mjs bundles it (with
+// noVNC's keyboard module, for desktop keys) for the native WebView and for
+// web; app code imports only the output.
 import Keyboard from "@novnc/novnc/core/input/keyboard.js";
-import { createRfbFeed } from "../../../../core/screen/rfbFeed.ts";
 import { createVideoPicture } from "./video.js";
 
 const XK = {
@@ -31,8 +30,7 @@ const KEYBOARD_MARGIN = 48;
 
 const STYLE = `
 .mewla-screen{position:absolute;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.mewla-screen .rfb,.mewla-screen .rfb>div{position:absolute!important;inset:0;display:block!important;overflow:hidden!important;background:transparent!important}
-.mewla-screen .rfb canvas,.mewla-screen video.picture{position:absolute;left:0;top:0;margin:0!important;transform-origin:0 0}
+.mewla-screen video.picture{position:absolute;left:0;top:0;margin:0!important;transform-origin:0 0}
 .mewla-screen video.picture{outline:none;background:#000;object-fit:fill;pointer-events:none}
 .mewla-screen .touch{position:absolute;inset:0;touch-action:none;z-index:2}
 .mewla-screen .cursor{position:absolute;left:0;top:0;width:18px;height:24px;display:none;pointer-events:none;z-index:3;margin:-1px 0 0 -1px}
@@ -69,15 +67,10 @@ export function mountScreenViewer(container, post) {
   root.appendChild(menuEl);
   container.appendChild(root);
 
-  let rfb = null;
-  // The picture as pushed video (WebRTC), instead of noVNC's canvas.
+  // The picture: pushed video (WebRTC) in a <video> element.
   let video = null;
   let keyboard = null;
-  // The host asked for video: the socket carries signalling, unless an older
-  // computer answers with RFB bytes instead.
-  let wantVideo = false;
-  let canvas = null;
-  let channel = null;
+  let picture = null;
   let fbW = 0;
   let fbH = 0;
   const view = { s: 1, tx: 0, ty: 0, fit: 1 };
@@ -89,82 +82,28 @@ export function mountScreenViewer(container, post) {
   const stats = { bytes: 0, updates: 0, since: performance.now() };
   let pendingInput = 0;
   const latencies = [];
-  // Where an update's time goes on this side: the hop from the app into this
-  // page (bridge), and from handing noVNC its bytes to the first redraw
-  // (decode and draw). Both are medians of the latest few.
-  const bridge = [];
-  const present = [];
-  let presentFrom = 0;
-
-
-  function bytesToBase64(bytes) {
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    }
-    return btoa(binary);
-  }
-
-  function base64ToBytes(text) {
-    const binary = atob(text);
-    const out = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-    return out;
-  }
-
-  // A WebSocket-shaped channel for noVNC. Writes go to the host; the host
-  // delivers server bytes through screenHost({type:"rfb"}).
-  function makeChannel() {
-    return {
-      binaryType: "arraybuffer",
-      protocol: "",
-      readyState: "open",
-      onopen: null,
-      onmessage: null,
-      onclose: null,
-      onerror: null,
-      send(data) {
-        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-        post({ type: "send", data: bytesToBase64(bytes) });
-      },
-      close() {
-        if (this.readyState === "closed") return;
-        this.readyState = "closed";
-        post({ type: "closed" });
-      },
-    };
-  }
-
-  function sendRaw(bytes) {
-    if (channel && channel.readyState === "open") channel.send(bytes);
-  }
 
   function live() {
-    return !!(rfb || video);
+    return !!video;
   }
 
   function sendPointer(x, y, mask) {
     const px = Math.max(0, Math.min(fbW - 1, Math.round(x)));
     const py = Math.max(0, Math.min(fbH - 1, Math.round(y)));
-    if (video) return video.sendPointer(px, py, mask);
-    sendRaw(new Uint8Array([5, mask, px >> 8, px & 255, py >> 8, py & 255]));
+    if (video) video.sendPointer(px, py, mask);
   }
 
   // A key press and release (down undefined), or one of them.
   function sendKey(keysym, code, down) {
-    if (video) {
-      if (down === undefined) {
-        video.key(keysym, true);
-        video.key(keysym, false);
-      } else video.key(keysym, down);
-      return;
-    }
-    if (rfb) rfb.sendKey(keysym, code, down);
+    if (!video) return;
+    if (down === undefined) {
+      video.key(keysym, true);
+      video.key(keysym, false);
+    } else video.key(keysym, down);
   }
 
   function paste(text) {
     if (video) video.paste(text);
-    else if (rfb) rfb.clipboardPasteFrom(text);
   }
 
   function markInput() {
@@ -174,8 +113,8 @@ export function mountScreenViewer(container, post) {
   // ---- view transform ----------------------------------------------------
 
   function applyView() {
-    if (!canvas) return;
-    canvas.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`;
+    if (!picture) return;
+    picture.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`;
     drawCursor();
   }
 
@@ -625,7 +564,7 @@ export function mountScreenViewer(container, post) {
   // picture the keyboard, and noVNC sends every key, modifiers and releases
   // included. (Phones type through the system keyboard, which the host owns.)
   function focusKeyboard() {
-    const target = canvas;
+    const target = picture;
     if (target && doc.activeElement !== target) target.focus({ preventScroll: true });
   }
 
@@ -748,13 +687,8 @@ export function mountScreenViewer(container, post) {
     return sorted[Math.floor(sorted.length / 2)];
   }
 
-  // Called when an update has been drawn, to time input → redraw and the
-  // viewer's own decode and draw.
+  // Called when a picture has been shown, to time input → picture.
   function onDrawn() {
-    if (presentFrom) {
-      remember(present, performance.now() - presentFrom);
-      presentFrom = 0;
-    }
     if (pendingInput) {
       const ms = performance.now() - pendingInput;
       pendingInput = 0;
@@ -767,7 +701,7 @@ export function mountScreenViewer(container, post) {
 
   const statsTimer = setInterval(async () => {
     if (!live()) return;
-    if (video) stats.bytes += await video.received();
+    stats.bytes += await video.received();
     if (!live()) return;
     const now = performance.now();
     const seconds = (now - stats.since) / 1000;
@@ -776,8 +710,6 @@ export function mountScreenViewer(container, post) {
       fps: stats.updates / seconds,
       kbps: (stats.bytes * 8) / 1000 / seconds,
       inputMs: median(latencies),
-      bridgeMs: median(bridge),
-      presentMs: median(present),
       width: fbW,
       height: fbH,
     });
@@ -802,14 +734,6 @@ export function mountScreenViewer(container, post) {
     fitView();
   }
 
-  function observeCanvas() {
-    canvas = root.querySelector("canvas");
-    if (!canvas) return;
-    const resize = () => pictureSized(canvas.width, canvas.height);
-    new MutationObserver(resize).observe(canvas, { attributes: true, attributeFilter: ["width", "height"] });
-    resize();
-  }
-
   // Pushed video: the computer offers, this page answers through the host.
   function startVideo() {
     const ticket = opening;
@@ -818,7 +742,7 @@ export function mountScreenViewer(container, post) {
       signal: (signal) => post({ type: "signal", signal }),
       resized: (width, height) => {
         if (ticket !== opening) return;
-        canvas = video.element;
+        picture = video.element;
         pictureSized(width, height);
         if (!connected) {
           connected = true;
@@ -835,7 +759,7 @@ export function mountScreenViewer(container, post) {
       },
     });
     root.prepend(video.element);
-    // The browser's keys, as noVNC reads them for its canvas: a click gives the picture the keyboard.
+    // The browser's keys, as noVNC reads them for its picture: a click gives the picture the keyboard.
     keyboard = new Keyboard(video.element);
     keyboard.onkeyevent = (keysym, code, down) => {
       sendKey(keysym, code, down);
@@ -844,151 +768,35 @@ export function mountScreenViewer(container, post) {
     keyboard.grab();
   }
 
-  // noVNC decides whether to offer H.264 when it first speaks, from a probe
-  // that settles a moment after the page loads; wait for it (briefly), so a
-  // phone that can decode video says so.
   let opening = 0;
-  // The daemon's ProtocolVersion can arrive in the same batch as "open", before the client below
-  // exists; the feed keeps it until then.
-  const feed = createRfbFeed();
-  function open(asVideo) {
+  function open() {
     close(false);
-    const ticket = ++opening;
-    wantVideo = asVideo;
-    if (asVideo) {
-      // RFB bytes before an offer mean an older computer: the feed keeps them for noVNC.
-      feed.opening();
-      startVideo();
-      return;
-    }
-    feed.opening();
-    const ready = globalThis.__mewlaH264Ready;
-    if (!ready) return start();
-    Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 800))]).then(() => {
-      if (ticket === opening) start();
-    });
-  }
-
-  function start() {
-    channel = makeChannel();
-    inbox = feed.opened();
-    const target = doc.createElement("div");
-    target.className = "rfb";
-    root.prepend(target);
-    rfb = new RFB(target, channel, { shared: true });
-    rfb.scaleViewport = false;
-    rfb.clipViewport = false;
-    rfb.focusOnClick = false;
-    rfb.background = "transparent";
-    // A FramebufferUpdate ends with one display flip, which draws at once
-    // unless decoded pictures are still queued; then noVNC flips again from
-    // the queue when it gets there. Count updates by the first, and time
-    // redraws by whichever draws.
-    const display = rfb._display;
-    if (display && typeof display.flip === "function") {
-      const flip = display.flip.bind(display);
-      display.flip = (...args) => {
-        const fromQueue = args[0] === true;
-        const queued = !fromQueue && display._renderQ && display._renderQ.length !== 0;
-        if (!fromQueue) stats.updates++;
-        const result = flip(...args);
-        if (!queued) onDrawn();
-        return result;
-      };
-    }
-    rfb.addEventListener("connect", () => {
-      observeCanvas();
-      post({ type: "connected", width: fbW, height: fbH });
-    });
-    rfb.addEventListener("disconnect", (e) => post({ type: "disconnected", clean: !!e.detail.clean }));
-    rfb.addEventListener("desktopname", (e) => post({ type: "name", name: e.detail.name }));
-    rfb.addEventListener("bell", () => haptic());
-    // noVNC attaches to the channel on a timer; hold bytes until it has.
-    setTimeout(() => deliver([]), 0);
+    ++opening;
+    startVideo();
   }
 
   function close(notify) {
     opening++;
-    feed.closed();
-    inbox = [];
-    wantVideo = false;
     if (keyboard) {
       try { keyboard.ungrab(); } catch {}
       keyboard = null;
     }
-    if (video) {
-      const old = video;
-      video = null;
-      canvas = null;
-      fbW = fbH = 0;
-      buttons = 0;
-      pointers.clear();
-      gesture = null;
-      old.close();
-      if (notify) post({ type: "disconnected", clean: true });
-      return;
-    }
-    if (!live()) return;
-    const old = rfb;
-    rfb = null;
-    canvas = null;
+    if (!video) return;
+    const old = video;
+    video = null;
+    picture = null;
     fbW = fbH = 0;
     buttons = 0;
     pointers.clear();
     gesture = null;
-    if (channel) {
-      channel.readyState = "closed";
-      if (channel.onclose) channel.onclose({ code: 1000, reason: "", wasClean: true });
-    }
-    channel = null;
-    inbox = [];
-    try { old.disconnect(); } catch {}
-    root.querySelectorAll(".rfb").forEach((el) => el.remove());
+    old.close();
     if (notify) post({ type: "disconnected", clean: true });
-  }
-
-  let inbox = [];
-  function deliver(chunks, sentAt) {
-    if (wantVideo && video && chunks.length) {
-      // An older computer speaks RFB on this socket: show it with noVNC.
-      const old = video;
-      video = null;
-      if (keyboard) { try { keyboard.ungrab(); } catch {} keyboard = null; }
-      old.close();
-      wantVideo = false;
-      feed.accept(chunks);
-      start();
-      return;
-    }
-    if (!channel) {
-      feed.accept(chunks);
-      return;
-    }
-    // Wall clock on both sides of the bridge: the same device.
-    if (typeof sentAt === "number" && chunks.length) {
-      const hop = Date.now() - sentAt;
-      if (hop >= 0 && hop < 5000) remember(bridge, hop);
-    }
-    inbox.push(...chunks);
-    if (!channel.onmessage) {
-      setTimeout(() => deliver([]), 10);
-      return;
-    }
-    const queued = inbox;
-    inbox = [];
-    if (queued.length && !presentFrom) presentFrom = performance.now();
-    for (const chunk of queued) {
-      const bytes = base64ToBytes(chunk);
-      stats.bytes += bytes.length;
-      channel.onmessage({ data: bytes.buffer });
-    }
   }
 
   function handle(message) {
     switch (message.type) {
-      case "open": open(message.video === true); break;
+      case "open": open(); break;
       case "close": close(false); break;
-      case "rfb": deliver(message.data, message.at); break;
       case "text": if (live()) typeText(message.text, message.mods); break;
       case "key": if (live()) withModifiers(message.mods, () => sendKey(keysymNamed(message.key), null)); break;
       case "signal": if (video) video.signal(message.signal); break;

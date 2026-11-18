@@ -127,13 +127,8 @@ export interface StreamReadout {
   inputMs: number | null;
   fps: number;
   kbps: number;
-  /** The viewer's own stages, from the page that draws. */
-  bridgeMs?: number | null;
-  presentMs?: number | null;
-  /** The daemon's stages; absent from a daemon that predates them. */
+  /** What the computer measured of the stream. */
   daemon?: ScreenStreamStats | null;
-  /** The JPEG level the viewer asked for, 0-9. */
-  viewerQuality?: number;
   /**
    * The path this phone chose, which it knows better than the daemon: the
    * daemon sees only the address a tunnel or proxy connected from.
@@ -147,27 +142,22 @@ export interface StreamReadout {
   directHint?: "announced" | "none" | null;
 }
 
-export type StreamStage = "network" | "encode" | "bridge" | "draw";
+export type StreamStage = "network" | "encode";
 
 const STAGE_LABELS: Record<StreamStage, string> = {
   network: "network",
   encode: "encode",
-  bridge: "app",
-  draw: "draw",
 };
 
 /**
  * The stage that takes longest between the screen changing and your phone
- * showing it. They don't overlap: the round trip (which includes bytes
- * waiting in the link), the daemon's encode, the hop into the viewer page,
- * and the viewer's decode and draw. Null until something is measured.
+ * showing it: the round trip (which includes bytes waiting in the link) or
+ * the computer's encode. Null until something is measured.
  */
 export function slowestStage(readout: StreamReadout): { stage: StreamStage; label: string; ms: number } | null {
   const stages: [StreamStage, number | null | undefined][] = [
     ["network", readout.rttMs],
     ["encode", readout.daemon && readout.daemon.updates > 0 ? readout.daemon.encodeMs : null],
-    ["bridge", readout.bridgeMs],
-    ["draw", readout.presentMs],
   ];
   let best: { stage: StreamStage; label: string; ms: number } | null = null;
   for (const [stage, ms] of stages) {
@@ -175,11 +165,6 @@ export function slowestStage(readout: StreamReadout): { stage: StreamStage; labe
     if (!best || ms > best.ms) best = { stage, label: STAGE_LABELS[stage], ms };
   }
   return best;
-}
-
-/** True while adaptive streaming holds the JPEG level below what the viewer asked for. */
-export function qualityReduced(daemon: ScreenStreamStats | null | undefined, viewerQuality = 6): boolean {
-  return !!daemon && daemon.quality > 0 && daemon.quality < viewerQuality;
 }
 
 /** Round trip (ms) from which the network is the problem, not a number to read. */
@@ -194,8 +179,7 @@ export const SLOW_SAMPLES = 3;
  * not reach; with none listed, nothing on the phone changes that.
  */
 export function connectionProblem(readout: StreamReadout): { title: string; fix: string | null } | null {
-  const slow = (readout.rttMs ?? 0) >= SLOW_NETWORK_MS || qualityReduced(readout.daemon, readout.viewerQuality);
-  if (!slow) return null;
+  if ((readout.rttMs ?? 0) < SLOW_NETWORK_MS) return null;
   const path = readout.viaPath ?? readout.daemon?.path;
   const fix = path === "relay" && readout.directHint === "announced" ? "Join your computer's Wi-Fi or Tailscale" : null;
   return { title: "Slow connection", fix };
@@ -230,12 +214,11 @@ export interface DiagnosticRow {
 export function diagnosticRows(readout: StreamReadout, power: string | null): DiagnosticRow[] {
   const rows: DiagnosticRow[] = [];
   const path = readout.viaPath ?? readout.daemon?.path;
-  if (path) rows.push({ label: "Route", value: (readout.daemon?.video ?? 0) > 0 ? `${PATH_LABELS[path]} · video` : PATH_LABELS[path] });
+  if (path) rows.push({ label: "Route", value: PATH_LABELS[path] });
   if (readout.rttMs !== null) rows.push({ label: "Network", value: `${Math.round(readout.rttMs)} ms` });
   if (readout.inputMs !== null) rows.push({ label: "To screen", value: `${Math.round(readout.inputMs)} ms` });
   rows.push({ label: "Frame rate", value: `${readout.fps < 10 ? readout.fps.toFixed(1) : Math.round(readout.fps)} fps` });
   rows.push({ label: "Data", value: readout.kbps >= 1000 ? `${(readout.kbps / 1000).toFixed(1)} Mb/s` : `${Math.round(readout.kbps)} kb/s` });
-  if (qualityReduced(readout.daemon, readout.viewerQuality)) rows.push({ label: "Quality", value: "Reduced" });
   const slowest = slowestStage(readout);
   if (slowest && slowest.stage !== "network") rows.push({ label: "Slowest", value: `${slowest.label} ${Math.round(slowest.ms)} ms` });
   if (power) rows.push({ label: "Computer", value: power });

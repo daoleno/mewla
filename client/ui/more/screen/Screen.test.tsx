@@ -292,12 +292,12 @@ describe("Screen: the live viewer", () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(status), [`POST ${SCREEN}`]: json({ ...status, keep_awake: true }) }));
     await goLive(app);
     expect(app.shows("label:Connection needs attention")).toBe(true);
-    await app.host.send("app.viewer", { type: "stats", fps: 24, kbps: 1800, inputMs: 45, bridgeMs: 3, presentMs: 70, width: 1280, height: 800 });
-    await app.host.send("app.socketPush", { message: { type: "stats", path: "lan", updates: 24, bytes: 200000, dirty_pct: 5, video: 24, capture_seq: 1, capture_ms: 4, encode_ms: 6, encode_max_ms: 9, ack_ms: 2, ack_max_ms: 4, quality: 3, in_flight: 1 } });
+    await app.host.send("app.viewer", { type: "stats", fps: 24, kbps: 1800, inputMs: 45, width: 1280, height: 800 });
+    await app.host.send("app.socketPush", { message: { type: "stats", path: "relay", route: "lan", transport: "webrtc", updates: 24, bytes: 200000, encode_ms: 6, encode_max_ms: 9, kbps: 3000 } });
     await app.press("id:screen-indicator");
     await app.waitFor("text:Connection");
     const texts = app.texts();
-    for (const text of ["Route", "LAN · video", "Network", "To screen", "45 ms", "Frame rate", "24 fps", "Data", "1.8 Mb/s", "Quality", "Reduced", "Slowest", "draw 70 ms", "Computer", "This computer may sleep"]) expect(texts).toContain(text);
+    for (const text of ["Route", "LAN", "Network", "To screen", "45 ms", "Frame rate", "24 fps", "Data", "1.8 Mb/s", "Computer", "This computer may sleep"]) expect(texts).toContain(text);
     expect(texts.some((t) => t.startsWith("Charger · 80%"))).toBe(true);
     await app.press("id:screen-keep-awake");
     await app.waitUntil(() => posted(app, SCREEN).length > 0);
@@ -592,7 +592,7 @@ describe("Screen in a browser", () => {
     const status = { ...base, keep_awake: false, power: { source: "ac", percent: 80, keeping_awake: false } };
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(status), [`POST ${SCREEN}`]: json({ ...status, keep_awake: true }) }, web));
     await goLive(app);
-    await app.host.send("app.viewer", { type: "stats", fps: 24, kbps: 1800, inputMs: 45, bridgeMs: 3, presentMs: 70, width: 1280, height: 800 });
+    await app.host.send("app.viewer", { type: "stats", fps: 24, kbps: 1800, inputMs: 45, width: 1280, height: 800 });
     await app.press("id:screen-indicator");
     await app.waitFor("text:Connection");
     for (const text of ["Frame rate", "24 fps", "This computer may sleep"]) expect(app.texts()).toContain(text);
