@@ -17,9 +17,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/keeper"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 )
@@ -36,6 +38,32 @@ type LinuxBackend struct {
 	Prepare func(userDataDir string) (extensionDir string, err error)
 	// Screens is the agent screen Chrome runs on.
 	Screens Screens
+
+	signInsLost atomic.Pointer[func(sites []string, at time.Time)]
+}
+
+// SetSignInsLost receives the sites the person was signed in to in the agent
+// browser that lost every cookie before it expired (see checkSignIns).
+func (b *LinuxBackend) SetSignInsLost(fn func(sites []string, at time.Time)) {
+	b.signInsLost.Store(&fn)
+}
+
+// noteSignIns checks the profile in root, which Chrome is not running on, for
+// lost sign-ins and says which.
+func (b *LinuxBackend) noteSignIns(root string) {
+	now := time.Now().UTC()
+	lost, err := checkSignIns(root, filepath.Join(root, "profile"), now)
+	if err != nil {
+		log.Printf("browser: %v", err)
+		return
+	}
+	if len(lost) == 0 {
+		return
+	}
+	diag.Report("browser.signins_lost", diag.SeverityError, "agents' Chrome", signInsLostDetail(lost))
+	if fn := b.signInsLost.Load(); fn != nil && *fn != nil {
+		(*fn)(lost, now)
+	}
 }
 
 // NewBackend is the Linux backend. prepare registers Mewla's native messaging
@@ -166,6 +194,53 @@ func credentialStore(ctx context.Context, root string) (string, error) {
 	return store, nil
 }
 
+// keepSessionCookies has Chrome keep the profile's session cookies (sign-ins
+// a site gives without an expiry) across its restarts: the browser stops
+// whenever no agent has a window, and each stop signed agents out of such
+// sites. Chrome keeps them when it would continue where it left off. The tabs
+// it would restore are dropped first: agents' tabs end with their agents, and
+// a restored one would open in the next agent's first window.
+func keepSessionCookies(profile string) error {
+	if err := os.RemoveAll(filepath.Join(profile, "Default", "Sessions")); err != nil {
+		return err
+	}
+	path := filepath.Join(profile, "Default", "Preferences")
+	prefs := map[string]any{}
+	raw, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		// Numbers stay as Chrome wrote them.
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&prefs); err != nil {
+			return fmt.Errorf("Chrome's preferences are unreadable: %w", err)
+		}
+	case errors.Is(err, os.ErrNotExist):
+		if err := privateDir(filepath.Dir(path)); err != nil {
+			return err
+		}
+	default:
+		return err
+	}
+	session, _ := prefs["session"].(map[string]any)
+	if session == nil {
+		session = map[string]any{}
+	}
+	if restore, ok := session["restore_on_startup"].(json.Number); ok && restore.String() == "1" {
+		return nil
+	}
+	session["restore_on_startup"] = chromeRestoreLastSession
+	prefs["session"] = session
+	out, err := json.Marshal(prefs)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(path, out, 0o600)
+}
+
+// chromeRestoreLastSession is Chrome's "Continue where you left off".
+const chromeRestoreLastSession = 1
+
 // ownerEnv marks every process of the agent browser with the keeper that runs
 // it, so a later daemon can tell what a crash left behind (reapStrays).
 const ownerEnv = "MEWLA_BROWSER_OWNER"
@@ -186,6 +261,10 @@ type linuxHost struct {
 	pid    int
 	closed bool
 	pipe   *pipeCDP
+	// root is the profile's directory, where Close checks the sign-ins for
+	// backend.
+	root    string
+	backend *LinuxBackend
 }
 
 // keepLinger is how long the agent browser outlives a daemon that does not
@@ -263,6 +342,7 @@ func (b *LinuxBackend) Adopt(ctx context.Context, root string) (Host, error) {
 			log.Printf("browser: couldn't register Mewla's native host again for the agent browser: %v", err)
 		}
 	}
+	h.root, h.backend = root, b
 	return h, nil
 }
 
@@ -306,6 +386,12 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	store, err := credentialStore(ctx, root)
 	if err != nil {
 		return nil, err
+	}
+	// Sign-ins lost while no daemon watched the browser (its keeper stopped
+	// it, or it crashed) show here, before Chrome opens the profile again.
+	b.noteSignIns(root)
+	if err := keepSessionCookies(profile); err != nil {
+		log.Printf("browser: the agents' session sign-ins may not outlast this browser: %v", err)
 	}
 	number, xauth, err := b.Screens.DisplayEnv(ctx)
 	if err != nil {
@@ -391,6 +477,7 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 		}
 	}
 	success = true
+	h.root, h.backend = root, b
 	return h, nil
 }
 
@@ -435,6 +522,11 @@ func (h *linuxHost) Close() error {
 	h.mu.Unlock()
 	err := keeper.Stop(h.socket)
 	h.pipe.close()
+	// Chrome has written the profile and quit: a site an agent signed the
+	// person out of shows now, not at the next start.
+	if err == nil && h.backend != nil {
+		h.backend.noteSignIns(h.root)
+	}
 	return err
 }
 
