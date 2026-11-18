@@ -56,6 +56,12 @@ func awaitingThread(hub *agentevents.Hub, worker classifier.Worker, now time.Tim
 	return !ok || !state.Bound
 }
 
+// ObserveProviderTranscript answers from the transcript alone
+// (watcher.ProviderTranscriptProbe).
+func (p *eventActivityProbe) ObserveProviderTranscript(worker classifier.Worker, now time.Time) watcher.ProviderActivityObservation {
+	return p.fallback.ObserveProviderActivity(worker, now)
+}
+
 // ForgetProviderActivity is the watcher saying a Worker has no turn in flight,
 // not that it is gone: the Hub keeps the Worker's binding for its next turn
 // and is pruned by the event service when the Worker disappears.

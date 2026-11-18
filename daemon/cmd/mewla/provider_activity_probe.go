@@ -87,6 +87,9 @@ func (p *workProviderActivityProbe) ObserveProviderActivity(
 		FallbackAllowed: true,
 		ProbeState:      watcher.ProbeStateOK,
 	}
+	observation.CompactedAt = parseProviderActivityTime(conversation.CompactedAt)
+	observation.CompactFailedAt = parseProviderActivityTime(conversation.CompactFailedAt)
+	observation.CompactFailure = conversation.CompactFailure
 	if conversation.Activity != nil {
 		observation.ID = strings.TrimSpace(conversation.Activity.ID)
 		observation.Status = string(conversation.Activity.Status)

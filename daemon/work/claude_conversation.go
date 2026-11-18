@@ -597,6 +597,12 @@ type claudeConversationBuilder struct {
 	// evicted counts the oldest events compactEvents dropped from a builder
 	// that keeps consuming a growing transcript.
 	evicted int
+	// compactedAt is the timestamp of the newest compact_boundary record;
+	// compactFailedAt that of the newest failed /compact, compactFailure its
+	// output.
+	compactedAt     string
+	compactFailedAt string
+	compactFailure  string
 }
 
 type claudePendingTaskTurn struct {
@@ -624,6 +630,7 @@ func isSupportedClaudeRecordType(recordType string) bool {
 func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 	var envelope struct {
 		Type        string `json:"type"`
+		Subtype     string `json:"subtype"`
 		UUID        string `json:"uuid"`
 		Timestamp   string `json:"timestamp"`
 		SessionID   string `json:"sessionId"`
@@ -653,7 +660,17 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		IsAPIErrorMessage bool   `json:"isApiErrorMessage"`
 		Error             string `json:"error"`
 		APIErrorStatus    int    `json:"apiErrorStatus"`
-		Message           struct {
+		// A system local_command record is the outcome of a slash command
+		// Claude ran itself (/compact): its name, how it ended, and its
+		// output as the content.
+		CommandRun struct {
+			Command string `json:"command"`
+		} `json:"commandRun"`
+		CommandOutcome struct {
+			Kind string `json:"kind"`
+		} `json:"commandOutcome"`
+		Content json.RawMessage `json:"content"`
+		Message struct {
 			Role       string          `json:"role"`
 			Content    json.RawMessage `json:"content"`
 			StopReason string          `json:"stop_reason"`
@@ -748,8 +765,19 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		// A notification delivered mid-turn rides along with the running turn;
 		// it never opens activity of its own.
 		b.consumeTaskNotificationAttachment(lineNumber, recordID, timestamp, envelope.Attachment)
+	case "system":
+		// Claude marks the start of a compacted conversation; the record
+		// itself stays off the shared conversation surface.
+		if envelope.Subtype == "compact_boundary" && timestamp != "" {
+			b.compactedAt = timestamp
+		}
+		if envelope.Subtype == "local_command" && envelope.CommandRun.Command == "compact" &&
+			envelope.CommandOutcome.Kind == "failed" && timestamp != "" {
+			b.compactFailedAt = timestamp
+			b.compactFailure = claudeLocalCommandOutput(envelope.Content)
+		}
 	default:
-		// Skip system/permission-mode/file-history-snapshot and other
+		// Skip permission-mode/file-history-snapshot and other
 		// provider-internal records from the shared conversation surface.
 	}
 }
@@ -1301,12 +1329,29 @@ func (b *claudeConversationBuilder) conversation() CodexConversation {
 		}
 	}
 	return conversationWithActivity(CodexConversation{
-		Available: true,
-		Source:    claudeConversationSource,
-		SessionID: firstNonEmpty(b.sessionID, b.sourceID),
-		CWD:       b.cwd,
-		Events:    b.events,
+		Available:       true,
+		Source:          claudeConversationSource,
+		SessionID:       firstNonEmpty(b.sessionID, b.sourceID),
+		CWD:             b.cwd,
+		Events:          b.events,
+		CompactedAt:     b.compactedAt,
+		CompactFailedAt: b.compactFailedAt,
+		CompactFailure:  b.compactFailure,
 	}, &b.activityLifecycle)
+}
+
+// claudeLocalCommandOutput is the text of a local_command record's content,
+// without the <local-command-stdout>/<local-command-stderr> wrapper.
+func claudeLocalCommandOutput(raw json.RawMessage) string {
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		return ""
+	}
+	text = strings.TrimSpace(text)
+	for _, tag := range []string{"local-command-stderr", "local-command-stdout"} {
+		text = strings.TrimSuffix(strings.TrimPrefix(text, "<"+tag+">"), "</"+tag+">")
+	}
+	return strings.TrimSpace(text)
 }
 
 func claudeToolInputJSON(raw json.RawMessage) string {
