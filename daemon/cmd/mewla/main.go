@@ -1903,6 +1903,7 @@ func runWorkerSend(args []string, stderr io.Writer) error {
 	fs.StringVar(&req.WorkerID, "id", "", "Worker session id")
 	fs.StringVar(&req.Text, "text", "", "text to send")
 	fs.StringVar(&req.WorkID, "work-id", "", "Work receiving this follow-up")
+	fs.StringVar(&req.ProviderCommand, "command", "", "the agent's own command to type outside any Turn: /compact [instructions] (Claude, Codex, pi)")
 	fs.BoolVar(&stdin, "stdin", false, "read text from stdin")
 	fs.BoolVar(&req.Submit, "submit", true, "submit after sending text")
 	fs.BoolVar(&req.Force, "force", false, "force send to a non-delegated external session")

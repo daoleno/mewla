@@ -20,7 +20,13 @@ import (
 // MaxRouteRequestBodyBytes is the rewriting-router parse budget. The router
 // must buffer and rewrite JSON, so this also bounds daemon memory. The
 // machine-level gateway does not rewrite and uses MaxGatewayRequestBodyBytes.
-const MaxRouteRequestBodyBytes = 8 << 20
+//
+// It sits above every upstream's own request limit (Anthropic: 32 MB), so the
+// provider decides what is too large and says so. At 8 MiB (until 11-19) Mewla
+// itself answered 413 to a Worker whose conversation had grown past 8 MB of
+// screenshots, and Claude Code showed it as "Request too large (max 32MB) …
+// Run /compact": the Worker stalled on Mewla's limit, not the provider's.
+const MaxRouteRequestBodyBytes = 64 << 20
 
 var hopByHopHeaderNames = []string{
 	"Connection",
