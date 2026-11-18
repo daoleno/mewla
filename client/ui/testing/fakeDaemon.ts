@@ -9,6 +9,8 @@ import type { SocketLike } from "../../core/platform";
  */
 export interface FakeDaemonState {
   calendar_items?: Record<string, unknown>[];
+  /** The computer's Triggers (`triggers_snapshot`); pause, resume, check and delete change them and broadcast. */
+  triggers?: Record<string, unknown>[];
   brain?: Record<string, unknown>;
   work_items?: Record<string, unknown>[];
   live?: Record<string, unknown>;
@@ -78,6 +80,7 @@ export class FakeDaemon {
       socket.onopen?.({});
       // What the daemon sends unasked on every connection.
       this.to(socket, { type: "calendar_items_snapshot", calendar_items: this.state.calendar_items ?? [] });
+      this.to(socket, { type: "triggers_snapshot", triggers: this.state.triggers ?? [] });
       this.to(socket, { type: "work_items_snapshot", work_items: this.state.work_items ?? [] });
       this.to(socket, { type: "brain_snapshot", brain: this.state.brain ?? {} });
       this.to(socket, { type: "worker_session_list", seq: this.seq, worker_sessions: this.state.worker_sessions ?? [] });
@@ -218,6 +221,29 @@ export class FakeDaemon {
         return reply("brain_snapshot", { brain: this.state.brain ?? {} });
       case "computers":
         return reply("computers", this.state.computers ?? { computers: [], open_requests: 0 });
+      case "list_triggers":
+        return reply("triggers_snapshot", { triggers: this.state.triggers ?? [] });
+      case "pause_trigger":
+      case "resume_trigger":
+      case "check_trigger": {
+        const existing = (this.state.triggers ?? []).find((t) => t.id === frame.id);
+        if (!existing) return fail("trigger not found");
+        const now = new Date().toISOString();
+        const patch: Record<string, unknown> =
+          frame.type === "pause_trigger" ? { paused: true, pause_reason: undefined, state: "paused" }
+          : frame.type === "resume_trigger" ? { paused: false, pause_reason: undefined, state: "watching", resumed_at: now }
+          : { last_checked_at: now, failing: false, failures: 0, state: "watching" };
+        const next: Record<string, unknown> = { ...existing, ...patch, revision: ++this.revision, updated_at: now };
+        this.state.triggers = (this.state.triggers ?? []).map((t) => (t.id === next.id ? next : t));
+        this.broadcast({ type: "trigger_changed", trigger: next });
+        return reply("trigger_updated", { trigger: next });
+      }
+      case "delete_trigger": {
+        if (!(this.state.triggers ?? []).some((t) => t.id === frame.id)) return fail("trigger not found");
+        this.state.triggers = (this.state.triggers ?? []).filter((t) => t.id !== frame.id);
+        this.broadcast({ type: "trigger_removed", trigger_id: frame.id });
+        return reply("trigger_removed", { trigger_id: frame.id });
+      }
       case "list_calendar_items":
         return reply("calendar_items_snapshot", { calendar_items: this.state.calendar_items ?? [] });
       case "get_calendar_item": {

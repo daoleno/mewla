@@ -60,8 +60,9 @@ export function rowKey(row: Pick<TrayRow, "target">): string {
  * The page a Needs you row opens in the right pane, as paneSelection names it, so the row is selected while that
  * page shows; null for a request answered in Brain's thread (its card) or a new device (a dialog).
  */
-export function requestPaneKey(request: Pick<TrayRequest, "where" | "workerId" | "workId" | "itemId">): string | null {
+export function requestPaneKey(request: Pick<TrayRequest, "where" | "workerId" | "workId" | "itemId" | "triggerId">): string | null {
   if (request.where === "session" && request.workerId) return `session:${request.workerId}`;
+  if (request.where === "trigger" && request.triggerId) return `trigger:${request.triggerId}`;
   if (request.where === "work" && request.workId) return `work:${request.workId}`;
   if (request.where !== "brain" && request.itemId) return `item:${request.itemId}`;
   return null;
@@ -79,6 +80,7 @@ export function paneSelection(routes: readonly { name: string; [key: string]: un
     case "session": return `session:${String(page.workerId)}`;
     case "workDetail": return `work:${String(page.workId)}`;
     case "item": return `item:${String(page.id)}`;
+    case "trigger": return `trigger:${String(page.id)}`;
     case "calendar": return "calendar";
     case "allSessions": return "all";
     case "computer": return "computer";

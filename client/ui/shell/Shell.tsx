@@ -110,6 +110,7 @@ function page(route: Route, index: () => number): JSX.Element {
     case "workDetail": return <WorkDetail workId={route.workId} nav={nav} links={workLinks} />;
     case "calendar":
     case "item":
+    case "trigger":
     case "run":
     case "workFile":
       return calendarRoute(route, nav);

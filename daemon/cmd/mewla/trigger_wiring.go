@@ -118,20 +118,31 @@ func (a *controlApp) handleTrigger(req control.Request) control.Response {
 		}
 		return respond(item, nil, confirmation)
 	case "trigger_delete":
-		item, err := engine.Store().Delete(id)
+		item, closeErr, err := a.deleteTrigger(id)
 		if err != nil {
 			return triggerControlError(err)
 		}
 		confirmation := "Deleted. It no longer watches."
-		if item.OwnsWork {
-			if closeErr := a.closeTriggerWork(item.WorkID, "Trigger "+item.Title+" deleted"); closeErr != nil {
-				confirmation += " Its Work stays open: " + closeErr.Error()
-			}
+		if closeErr != nil {
+			confirmation += " Its Work stays open: " + closeErr.Error()
 		}
 		view := trigger.ViewOf(item, time.Now())
 		return control.Response{OK: true, Trigger: &view, Confirmation: confirmation}
 	}
 	return control.ErrorResponse("unknown_request", req.Type)
+}
+
+// deleteTrigger removes a Trigger and closes the Work it created. closeErr
+// says why that Work stays open.
+func (a *controlApp) deleteTrigger(id string) (item trigger.Trigger, closeErr, err error) {
+	item, err = a.triggers.Store().Delete(id)
+	if err != nil {
+		return item, nil, err
+	}
+	if item.OwnsWork {
+		closeErr = a.closeTriggerWork(item.WorkID, "Trigger "+item.Title+" deleted")
+	}
+	return item, closeErr, nil
 }
 
 // createTrigger binds the Trigger to Work: the one it names, or a new

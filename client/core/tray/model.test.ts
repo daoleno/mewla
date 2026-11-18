@@ -71,6 +71,13 @@ describe("tray model", () => {
     expect(asks[0]).toMatchObject({ title: "Waiting for you", source: "Hello writer" });
   });
 
+  test("a Trigger that needs you is under Needs you by its name, with Open; it counts", () => {
+    const m = trayModel(input({ triggers: [{ id: "t1", title: "PR heads", ask: "Check keeps failing" }] }));
+    expect(m.needs).toHaveLength(1);
+    expect(m.needs[0]).toMatchObject({ kind: "trigger", where: "trigger", source: "PR heads", ask: "Check keeps failing", triggerId: "t1", opens: true });
+    expect(m.state.words).toBe("1 needs you");
+  });
+
   test("All quiet with nothing running", () => {
     const m = trayModel(input());
     expect(m.state).toMatchObject({ kind: "quiet", words: "All quiet", dot: null, ink: false, chevron: true });

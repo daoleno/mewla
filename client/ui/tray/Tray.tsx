@@ -11,7 +11,7 @@ import { isPromptGoneError, PROMPT_GONE_NOTICE } from "../../core/timeline/claud
 import { DONE_SHOWN, RUNNING_SHOWN, TODAY_SHOWN, type TrayNoticeAction, type TrayRequest, type TrayRow as Row, type TrayTile } from "../../core/tray/model";
 import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
-import { homeShown, openCalendarItem, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
+import { homeShown, openCalendarItem, openPage, openSession, openTrigger, openWorkDetail, trayOpen } from "../shell/nav";
 import { createMenuAnchor, showMenu } from "../kit/Menu";
 import { requestPaneKey, rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
@@ -25,6 +25,7 @@ export type TrayOpeners = {
   session: (workerId: string) => void;
   work: (workId: string) => void;
   item: (itemId: string) => void;
+  trigger: (triggerId: string) => void;
   calendar: () => void;
   allSessions: () => void;
   computer: () => void;
@@ -35,6 +36,7 @@ const PUSH: TrayOpeners = {
   session: (workerId) => openSession(workerId),
   work: (workId) => openWorkDetail(workId),
   item: (itemId) => openCalendarItem(itemId),
+  trigger: (triggerId) => openTrigger(triggerId),
   calendar: () => openPage({ name: "calendar" }),
   allSessions: () => openPage({ name: "allSessions" }),
   computer: () => openPage({ name: "computer" }),
@@ -117,7 +119,7 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected
   return (
     <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} selected={props.selected} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <If when={props.selected}><SelectedWell /></If>
-      <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
+      <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" || r().kind === "trigger" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
       <View class="min-w-0 flex-1">
         <Text testID="tray-request-title" class="text-body font-semibold line-clamp-1">{named() ? r().source : r().title}</Text>
         <Text testID="tray-request-line" class="text-sub text-muted-foreground line-clamp-1">{named() ? r().ask : r().source}</Text>
@@ -190,6 +192,7 @@ export function TrayBody(props: TrayBodyProps) {
     }
     if (request.where === "session" && request.workerId) return props.open.session(request.workerId);
     if (request.where === "work" && request.workId) return props.open.work(request.workId);
+    if (request.where === "trigger" && request.triggerId) return props.open.trigger(request.triggerId);
     if (request.deviceId) {
       props.onLeave?.();
       return showDeviceRequest(request.deviceId);

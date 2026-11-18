@@ -17,6 +17,7 @@ import { calendarLead } from "../../core/calendar/colour";
 import { ReminderBanner } from "./ReminderBanner";
 import type { Route } from "../shell/routes";
 import { calendar, calendarItems, calendarLoaded } from "./state";
+import { TriggerSection } from "./TriggerPage";
 
 type AgendaRow = { kind: "section"; title: string } | { kind: "item"; item: CalendarItem };
 
@@ -197,7 +198,7 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
         {/* About the whole Calendar, so above both pages. */}
         <ReminderBanner />
         <TabPages fill testID="calendar-pages" pager={pager} pages={{
-          today: () => <Agenda testID="agenda" day={() => null} header={() => <Heading day={() => null} />} onOpen={open} />,
+          today: () => <Agenda testID="agenda" day={() => null} header={() => <View><TriggerSection onOpen={(id) => props.nav.push({ name: "trigger", id })} /><Heading day={() => null} /></View>} onOpen={open} />,
           month: () => <Agenda testID="agenda-month" day={pickedDay} header={() => <View><Month /><Heading day={pickedDay} /></View>} onOpen={open} />,
         }} />
         <CalendarEditor />

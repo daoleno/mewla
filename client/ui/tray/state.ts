@@ -12,6 +12,8 @@ import { trayModel, type TraySort, type TrayTodayInput } from "../../core/tray/m
 import type { BrainCurrentWork, BrainOpenWork } from "../../core/work/types";
 import { clock } from "../calendar/clock";
 import { calendarItems } from "../calendar/state";
+import { triggers } from "../calendar/triggerState";
+import { triggersNeedingYou } from "../../core/triggers/model";
 import { deviceRequests } from "../enrollment/state";
 import { currentIssue } from "../more/settings/computers";
 import { currentDiagnosis } from "../computer/computers";
@@ -130,6 +132,7 @@ export const tray = computed(() => {
     openWork: snapshot?.open_work as BrainOpenWork[] | undefined,
     today: today(),
     alerts: openAlerts(calendarItems(), clock().now).map((item) => ({ id: item.id, title: item.title })),
+    triggers: triggersNeedingYou(triggers(), clock().now),
     devices: deviceRequests().map((request) => ({ id: request.id, name: request.deviceName })),
     opened: opened(),
     sort: traySort(),

@@ -54,6 +54,7 @@ import (
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/terminal"
+	"github.com/daoleno/mewla/daemon/trigger"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/whatsnew"
 	"github.com/daoleno/mewla/daemon/work"
@@ -201,6 +202,10 @@ type Server struct {
 	workSubID                   int
 	workSub                     <-chan work.Event
 	calendarSubID               int
+	triggers                    *trigger.Engine
+	triggerSubID                int
+	triggerSub                  <-chan trigger.Trigger
+	deleteTrigger               func(id string) error
 	calendarSub                 <-chan calendar.Event
 	brainWorkSubID              int
 	brainWorkSub                <-chan brain.WorkChange
@@ -267,6 +272,9 @@ func (s *Server) closeEventSubscriptions() {
 	}
 	if s.calendar != nil && s.calendarSub != nil {
 		s.calendar.Unsubscribe(s.calendarSubID)
+	}
+	if s.triggers != nil && s.triggerSub != nil {
+		s.triggers.Store().Unsubscribe(s.triggerSubID)
 	}
 	if s.brain != nil && s.brainWorkSub != nil {
 		s.brain.UnsubscribeWork(s.brainWorkSubID)
@@ -694,6 +702,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.calendar != nil {
 		s.sendCalendarSnapshot(conn, "")
+	}
+	if s.triggers != nil {
+		s.sendTriggersSnapshot(conn, "")
 	}
 	s.sendDirectEndpoints(conn)
 
@@ -1144,6 +1155,13 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleSnoozeCalendarItem(conn, raw)
 	case "done_calendar_item":
 		s.handleDoneCalendarItem(conn, raw)
+	case "list_triggers":
+		s.sendTriggersSnapshot(conn, raw.RequestID)
+	case "pause_trigger", "resume_trigger", "delete_trigger":
+		s.handleTriggerRequest(conn, raw)
+	case "check_trigger":
+		// A check runs up to its timeout: off the connection's read loop.
+		go s.handleTriggerRequest(conn, raw)
 	case "computers":
 		s.handleComputersList(conn, raw)
 	case "brain_snapshot":
@@ -3743,6 +3761,7 @@ func (s *Server) sendErrorWithRequestID(conn *websocket.Conn, requestID, code, m
 
 func (s *Server) broadcastEvents(ctx context.Context) {
 	calendarSub := s.calendarSub
+	triggerSub := s.triggerSub
 	brainWorkSub := s.brainWorkSub
 	for {
 		select {
@@ -3762,6 +3781,12 @@ func (s *Server) broadcastEvents(ctx context.Context) {
 				continue
 			}
 			s.handleCalendarEvent(event)
+		case item, ok := <-triggerSub:
+			if !ok {
+				triggerSub = nil
+				continue
+			}
+			s.handleTriggerEvent(item)
 		case _, ok := <-brainWorkSub:
 			if !ok {
 				brainWorkSub = nil
