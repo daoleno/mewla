@@ -25,7 +25,7 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	s.SetScreenLoopbackOnly(true)
 	h := httptest.NewServer(s.Handler())
 	defer h.Close()
-	wsURL := "ws" + strings.TrimPrefix(h.URL, "http") + "/screen/viewer"
+	wsURL := "ws" + strings.TrimPrefix(h.URL, "http") + "/screen/viewer?video=webrtc"
 	dial := func(purpose string) (*websocket.Conn, *http.Response, error) {
 		header := http.Header{}
 		if purpose != "" {
@@ -34,7 +34,7 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 		return websocket.DefaultDialer.Dial(wsURL, header)
 	}
 	call := func(method, body string) (screen.Status, int, string) {
-		req, _ := http.NewRequest(method, h.URL+"/screen", strings.NewReader(body))
+		req, _ := http.NewRequest(method, h.URL+"/screen?video=webrtc", strings.NewReader(body))
 		req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
 		req.Header.Set("Accept", "application/json")
 		resp, err := http.DefaultClient.Do(req)

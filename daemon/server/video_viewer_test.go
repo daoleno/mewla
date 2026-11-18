@@ -74,6 +74,11 @@ func dialVideoViewer(t *testing.T, url string, id videoIdentity) *videoViewer {
 	if strings.Contains(url, "/screen/viewer") {
 		header.Set("Authorization", id.sign("mewla-screen-view"))
 	}
+	if strings.Contains(url, "?") {
+		url += "&video=webrtc"
+	} else {
+		url += "?video=webrtc"
+	}
 	conn, _, err := websocket.DefaultDialer.Dial(url, header)
 	if err != nil {
 		t.Fatal(err)

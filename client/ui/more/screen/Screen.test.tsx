@@ -1,9 +1,10 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
 import { KEYBOARD_SENTINEL } from "../../../core/screen/screenPageModel";
+import { SCREEN_TOO_OLD } from "../../../core/screen/screen";
 import { pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "./testing/ScreenHarness.tsx";
-const SCREEN = "http://desk.test:9877/screen";
+const SCREEN = "http://desk.test:9877/screen?video=webrtc";
 const DISPLAY = "http://desk.test:9877/display";
 const IPHONE = "http://desk.test:9877/iphone";
 const VIEWER = "ws://desk.test:9877/screen/viewer";
@@ -170,6 +171,17 @@ describe("Screen: agents", () => {
     expect(app.shows("id:screen-lost")).toBe(false);
   });
 
+  test("an older computer (its RFB stream's first bytes) is told to update, once, also while watching", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
+    await app.waitFor("label:Watch Codex");
+    await app.press("label:Watch Codex");
+    await app.waitUntil(() => opened(app).length === 1);
+    await app.host.send("app.socketBytes", { text: "RFB 003.008\n" });
+    await app.waitFor(`text:${SCREEN_TOO_OLD}`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(opened(app).length).toBe(1);
+  });
+
   test("Take over opens the screen", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
     await app.waitFor("id:take-over");
@@ -255,7 +267,7 @@ describe("Screen: the live viewer", () => {
   });
 
   test("a switch of computer closes the viewer", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), "GET http://laptop.test:9877/screen": json({ ...base, name: "Laptop" }) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), "GET http://laptop.test:9877/screen?video=webrtc": json({ ...base, name: "Laptop" }) }));
     await goLive(app);
     await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://laptop.test:9877/ws" });
     await app.waitUntil(() => closed(app).length === 1);
@@ -442,7 +454,7 @@ describe("Screen: Linux agent displays", () => {
   });
 
   test("a switch of computer closes every display", async () => {
-    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true }), "GET http://laptop.test:9877/screen": json(base) }));
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(linux), [`GET ${DISPLAY}`]: json({ displays: [display("w1")], available: true }), "GET http://laptop.test:9877/screen?video=webrtc": json(base) }));
     await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
     await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://laptop.test:9877/ws" });
     await app.waitUntil(() => closed(app, DISPLAY_VIEWER).length === 1);

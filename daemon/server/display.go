@@ -125,6 +125,10 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	if !playsVideo(r) {
+		refuseOldApp(conn)
+		return
+	}
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
 

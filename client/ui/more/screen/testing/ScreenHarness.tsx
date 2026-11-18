@@ -7,7 +7,8 @@ import { RemoteSession } from "../RemoteView";
  * The More harness, with the computer's viewer sockets played by the test. Each socket
  * the app opens posts `app.socketOpened` ({url}) and `app.socketClosed` ({url}) when the
  * app closes it; pings are answered with a pong `host.params.rttMs` old (default 20).
- * `app.socketPush` ({message}) sends a text message to every open socket, `app.socketEnd`
+ * `app.socketPush` ({message}) sends a text message to every open socket, `app.socketBytes`
+ * ({text}) those bytes as a binary message (what an older computer's RFB stream sends), `app.socketEnd`
  * ({reason}) ends them as the computer would. `app.viewer` ({...message}) is what the
  * viewer page says to every session still connecting or live (`connected`, `stats`).
  */
@@ -62,6 +63,11 @@ installPlatform({ ...real, openSocket: (url) => new FakeSocket(url) });
 host.on("app.socketPush", (data) => {
   const { message } = data as { message: unknown };
   for (const socket of open) if (socket.readyState === 1) socket.onmessage?.({ data: JSON.stringify(message) });
+});
+host.on("app.socketBytes", (data) => {
+  const { text } = data as { text: string };
+  const bytes = new TextEncoder().encode(text).buffer;
+  for (const socket of open) if (socket.readyState === 1) socket.onmessage?.({ data: bytes });
 });
 host.on("app.socketEnd", (data) => {
   const { reason } = (data ?? {}) as { reason?: string };

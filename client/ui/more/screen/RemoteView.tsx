@@ -195,9 +195,9 @@ export class RemoteSession {
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
         reflow: (state) => attempt === this.attempt && this.reflow.set(state),
         streamStats: (stats) => attempt === this.attempt && this.stats.set(stats),
-        closed: (reason) => {
+        closed: (reason, outdated) => {
           if (attempt !== this.attempt) return;
-          if (this.options.onSocketClosed?.(reason)) this.disconnect();
+          if (!outdated && this.options.onSocketClosed?.(reason)) this.disconnect();
           else this.lose(reason);
         },
       },

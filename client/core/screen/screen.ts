@@ -100,12 +100,21 @@ async function readAnswer(response: Response): Promise<{ result: Record<string, 
   return { result, body, json: (response.headers.get("content-type") || "").includes("application/json") };
 }
 
+/** A computer whose Mewla serves Screen as RFB, or not at all: this app plays only pushed video. */
+export const SCREEN_TOO_OLD = "This server's Mewla is too old for Screen. Update it on that computer.";
+
+/**
+ * Says this app plays pushed video, on Screen requests and viewer sockets. A computer
+ * tells an app without it (a release from before the video) to update.
+ */
+const PLAYS_VIDEO = { video: "webrtc" } as const;
+
 /** Reads Screen status, or runs one action and returns the new status. */
 export async function screenRequest(server: StoredServer, action?: ScreenAction): Promise<ScreenStatus> {
-  const response = await signedFetch(server, action ? "POST" : "GET", "/screen", "mewla-screen", { body: action, timeoutMs: action && "action" in action && action.action === "enable" ? 300_000 : undefined });
+  const response = await signedFetch(server, action ? "POST" : "GET", "/screen", "mewla-screen", { body: action, query: PLAYS_VIDEO, timeoutMs: action && "action" in action && action.action === "enable" ? 300_000 : undefined });
   const { result, body, json } = await readAnswer(response);
   // An older daemon answers 404, or its web UI answers with HTML.
-  if (response.status === 404 || (response.ok && !json)) throw new ScreenRequestError("This server's Mewla is too old for Screen. Update it on that computer.", response.status);
+  if (response.status === 404 || (response.ok && !json)) throw new ScreenRequestError(SCREEN_TOO_OLD, response.status);
   if (!response.ok || !result) throw new ScreenRequestError((typeof result?.error === "string" && result.error) || screenFailureText(response.status, body), response.status);
   return result as unknown as ScreenStatus;
 }
@@ -194,8 +203,11 @@ export interface ScreenConnectionHandlers {
   reflow?(state: StageReflow): void;
   /** WebRTC signalling from the computer, for the viewer page. */
   signal?(signal: ScreenSignal): void;
-  /** The socket ended; `reason` is the daemon's explanation when it gave one. */
-  closed(reason: string | null): void;
+  /**
+   * The socket ended; `reason` is the daemon's explanation when it gave one. `outdated`:
+   * the computer's Mewla is from before the video (it spoke RFB), so looking again cannot help.
+   */
+  closed(reason: string | null, outdated: boolean): void;
 }
 
 const OPEN = 1;
@@ -210,6 +222,7 @@ export class ScreenConnection {
   private closed = false;
   private timer: ReturnType<typeof setInterval> | undefined;
   private reason: string | null = null;
+  private outdated = false;
 
   /**
    * watch: see the agent using the screen without taking over; input goes nowhere.
@@ -224,7 +237,7 @@ export class ScreenConnection {
   ) {}
 
   async connect(): Promise<void> {
-    const params: Record<string, string> = { ...(this.route?.params ?? {}) };
+    const params: Record<string, string> = { ...(this.route?.params ?? {}), ...PLAYS_VIDEO };
     if (!this.route && this.watch) params.watch = "1";
     if (!this.route && this.watch && this.worker) params.worker = this.worker;
     const url = viewerURL(this.server, this.route?.path ?? "/screen/viewer", params);
@@ -248,7 +261,13 @@ export class ScreenConnection {
     };
     socket.onmessage = (event) => {
       if (this.closed) return;
-      if (typeof event.data !== "string") return;
+      if (typeof event.data !== "string") {
+        // Only an older computer sends bytes: its RFB stream's version, first thing.
+        this.outdated = true;
+        this.reason = SCREEN_TOO_OLD;
+        this.finish();
+        return;
+      }
       let message: { type?: string; t?: number; error?: string; locked?: unknown };
       try {
         message = JSON.parse(event.data);
@@ -349,7 +368,7 @@ export class ScreenConnection {
   private finish(): void {
     const reason = this.reason;
     this.close();
-    this.handlers.closed(reason);
+    this.handlers.closed(reason, this.outdated);
   }
 
   close(): void {
