@@ -68,3 +68,27 @@ func TestOwnershipReproofLiftsOnlyTheControlGate(t *testing.T) {
 		t.Fatalf("reproof moved the Work: %+v, was %+v", after, before)
 	}
 }
+
+// The watcher learns that Mewla reclaimed a Session from the Turn it reads.
+func TestReclaimedMarkReachesTheWatchersTurn(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := time.Now().UTC()
+	store.now = func() time.Time { return base }
+	item := createSignalTestWork(t, store, "reclaimed", "worker")
+	bootstrapAdmittedTurnFixture(t, store, item.ID, watcher.AdmittedTurn{
+		SessionID: "worker", TurnID: "reclaimed-turn", AcceptedAt: base,
+	})
+	turn, found, err := store.Turn("worker")
+	if err != nil || !found || turn.Reclaimed {
+		t.Fatalf("before: %+v found=%v err=%v", turn, found, err)
+	}
+	if err := store.MarkTurnsReclaimed([]watcher.TurnSnapshot{turn}); err != nil {
+		t.Fatal(err)
+	}
+	if turn, found, err = store.Turn("worker"); err != nil || !found || !turn.Reclaimed {
+		t.Fatalf("after: %+v found=%v err=%v", turn, found, err)
+	}
+}
