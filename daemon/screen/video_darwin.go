@@ -21,7 +21,7 @@ import (
 // cross-compiled without cgo. It runs real-time with no B-frames, so each
 // frame comes out the moment it is encoded, and needs no permission.
 
-func init() { defaultVideo = newVTEncoder }
+func init() { defaultVideo, defaultVideoName = newVTEncoder, "VideoToolbox" }
 
 const (
 	vtCodecH264     = 0x61766331 // 'avc1'

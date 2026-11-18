@@ -177,8 +177,9 @@ func benchChrome(t *testing.T) string {
 		return path
 	}
 	candidates := map[string][]string{
-		"darwin":  {"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"},
-		"windows": {`C:\Program Files\Google\Chrome\Application\chrome.exe`, `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`},
+		"darwin": {"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"},
+		"windows": {`C:\Program Files\Google\Chrome\Application\chrome.exe`, `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+			`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, `C:\Program Files\Microsoft\Edge\Application\msedge.exe`},
 	}[runtime.GOOS]
 	for _, path := range candidates {
 		if _, err := os.Stat(path); err == nil {
