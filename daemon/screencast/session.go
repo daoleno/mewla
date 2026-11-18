@@ -85,6 +85,9 @@ type Signal struct {
 	SDPType   string                   `json:"sdp_type,omitempty"`
 	SDP       string                   `json:"sdp,omitempty"`
 	Candidate *webrtc.ICECandidateInit `json:"candidate,omitempty"`
+	// ICEServers, on the offer, are the STUN and TURN servers the viewer
+	// gathers through too (the relay's TURN, when there is one).
+	ICEServers []webrtc.ICEServer `json:"ice_servers,omitempty"`
 }
 
 const (
@@ -199,7 +202,8 @@ func (s *Session) setup() error {
 	}
 
 	var se webrtc.SettingEngine
-	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6})
+	// UDP, and TCP to a TURN server for networks that block UDP.
+	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6, webrtc.NetworkTypeTCP4})
 	se.SetICETimeouts(4*time.Second, 10*time.Second, time.Second)
 	if s.cfg.LoopbackOnly {
 		se.SetIncludeLoopbackCandidate(true)
@@ -279,7 +283,7 @@ func (s *Session) setup() error {
 	if err := pc.SetLocalDescription(offer); err != nil {
 		return err
 	}
-	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: pc.LocalDescription().SDP})
+	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: pc.LocalDescription().SDP, ICEServers: s.cfg.ICEServers})
 	return nil
 }
 
@@ -338,6 +342,30 @@ func (s *Session) readRTCP(sender *webrtc.RTPSender) {
 			}
 		}
 	}
+}
+
+// ICEServersFor turns a relay's TURN URLs and credential into the servers both
+// peers gather through: TURN as given, and STUN on each UDP TURN address (a
+// direct path through NAT when one exists).
+func ICEServersFor(urls []string, username, password string) []webrtc.ICEServer {
+	if len(urls) == 0 {
+		return nil
+	}
+	var stun []string
+	for _, u := range urls {
+		if strings.HasPrefix(u, "turn:") && !strings.Contains(u, "transport=tcp") {
+			host := strings.TrimPrefix(u, "turn:")
+			if i := strings.IndexByte(host, '?'); i >= 0 {
+				host = host[:i]
+			}
+			stun = append(stun, "stun:"+host)
+		}
+	}
+	servers := []webrtc.ICEServer{{URLs: urls, Username: username, Credential: password}}
+	if len(stun) > 0 {
+		servers = append(servers, webrtc.ICEServer{URLs: stun})
+	}
+	return servers
 }
 
 // ---- input --------------------------------------------------------------

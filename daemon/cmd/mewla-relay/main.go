@@ -57,6 +57,8 @@ func run(args []string) error {
 	var idleTimeout time.Duration
 	var sweepInterval time.Duration
 	var checkURL string
+	var turnPublicIP, turnUDP, turnTCP, turnTLS, turnTLSCert, turnTLSKey string
+	turnURLs := stringList{}
 
 	flags := flag.NewFlagSet("mewla-relay", flag.ContinueOnError)
 	flags.StringVar(&clientAddress, "client-addr", ":443", "raw L4 client listen address")
@@ -87,6 +89,13 @@ func run(args []string) error {
 	flags.DurationVar(&idleTimeout, "idle-timeout", defaults.IdleTimeout, "idle timeout only when neither stream direction makes progress")
 	flags.DurationVar(&sweepInterval, "sweep-interval", defaults.SweepInterval, "expired control-state cleanup interval")
 	flags.StringVar(&checkURL, "check", "", "check an existing relay health URL and exit")
+	flags.StringVar(&turnPublicIP, "turn-public-ip", "", "serve TURN for Screen's video: the relay's public IPv4 address (TURN is off without it)")
+	flags.StringVar(&turnUDP, "turn-udp-addr", ":3478", "TURN UDP listen address")
+	flags.StringVar(&turnTCP, "turn-tcp-addr", ":3478", "TURN TCP listen address (empty: none)")
+	flags.StringVar(&turnTLS, "turn-tls-addr", "", "TURN TLS listen address, such as 127.0.0.1:5349 behind -sni-route turn.<host>=127.0.0.1:5349 so it shares port 443 (empty: none)")
+	flags.StringVar(&turnTLSCert, "turn-tls-cert", "", "PEM certificate for TURN TLS (default: -tls-cert)")
+	flags.StringVar(&turnTLSKey, "turn-tls-key", "", "PEM private key for TURN TLS (default: -tls-key)")
+	flags.Var(&turnURLs, "turn-url", "a TURN URL computers and phones are told, such as turn:relay.example:3478?transport=udp (repeatable)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -121,7 +130,33 @@ func run(args []string) error {
 			tokenEnvironment,
 		)
 	}
+	var turnServer *relay.TURNServer
+	if strings.TrimSpace(turnPublicIP) != "" {
+		ip := net.ParseIP(strings.TrimSpace(turnPublicIP)).To4()
+		if ip == nil {
+			return fmt.Errorf("-turn-public-ip %q is not an IPv4 address", turnPublicIP)
+		}
+		var turnTLSConfig *tls.Config
+		if strings.TrimSpace(turnTLS) != "" {
+			certFile, keyPath := turnTLSCert, turnTLSKey
+			if certFile == "" {
+				certFile, keyPath = certificateFile, keyFile
+			}
+			cert, err := tls.LoadX509KeyPair(certFile, keyPath)
+			if err != nil {
+				return fmt.Errorf("load TURN TLS identity: %w", err)
+			}
+			turnTLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
+		}
+		started, err := relay.StartTURN(relay.TURNConfig{PublicIP: ip, UDPAddr: turnUDP, TCPAddr: turnTCP, TLSAddr: turnTLS, TLS: turnTLSConfig, URLs: turnURLs, Logf: log.Printf})
+		if err != nil {
+			return err
+		}
+		defer started.Close()
+		turnServer = started
+	}
 	server, err := relay.New(relay.Config{
+		TURN:                     turnServer,
 		ConnectorToken:           connectorToken,
 		GrantKeys:                grantKeys,
 		StaticRoutes:             staticRoutes,
@@ -277,4 +312,13 @@ func loadGrantKeys(path string) ([]ed25519.PublicKey, error) {
 		return nil, errors.New("grant public key file has no keys")
 	}
 	return keys, nil
+}
+
+type stringList []string
+
+func (l *stringList) String() string { return strings.Join(*l, ",") }
+
+func (l *stringList) Set(value string) error {
+	*l = append(*l, strings.TrimSpace(value))
+	return nil
 }
