@@ -33,6 +33,12 @@ const (
 	// restartStartAllowance is how long a restarting daemon may take, after
 	// its drain, to listen again.
 	restartStartAllowance = 2 * time.Minute
+	// sameStopWindow: a Ctrl-C in a terminal reaches the whole process group,
+	// so a supervisor that forwards it (mewla-dev) delivers the same stop a
+	// second time within milliseconds. Only a signal after this window is
+	// someone asking again; it used to cut every reply at once (11-19 03:25:
+	// "drained in 4ms: 2 cut").
+	sameStopWindow = time.Second
 )
 
 type relayStop struct {
@@ -72,17 +78,24 @@ func (r *relayStop) run(requested context.Context, endRuntime context.CancelCaus
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	// Asked again to stop: stop now.
+	started := time.Now()
 	again := make(chan os.Signal, 1)
 	signal.Notify(again, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		select {
-		case received := <-again:
-			log.Printf("mewla: %v again; not waiting for model replies", received)
-			cancel()
-		case <-ctx.Done():
+		for {
+			select {
+			case received := <-again:
+				if time.Since(started) < sameStopWindow {
+					continue
+				}
+				log.Printf("mewla: %v again; not waiting for model replies", received)
+				cancel()
+				return
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
-	started := time.Now()
 	result := drain(ctx)
 	signal.Stop(again)
 	cancel()
