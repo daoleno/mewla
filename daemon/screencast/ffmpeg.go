@@ -317,6 +317,7 @@ func (e *ffmpegEncoder) Name() string { return e.kind.name }
 
 // warm starts a spare process for this size and the current bit rate.
 func (e *ffmpegEncoder) warm(w, h int, rgb bool) {
+	e.dropSpare()
 	ch := make(chan *ffmpegProcess, 1)
 	e.spare = ch
 	bin, kind, kbps := e.bin, e.kind, e.kbps
@@ -343,7 +344,7 @@ func (e *ffmpegEncoder) takeSpare(w, h int, rgb bool) (*ffmpegProcess, error) {
 				p.close()
 			}
 		case <-time.After(2 * time.Second):
-			e.spare = nil
+			e.dropSpare()
 		}
 	}
 	return startFFmpeg(e.bin, e.kind, w, h, e.kbps, rgb)
@@ -398,13 +399,20 @@ func (e *ffmpegEncoder) Close() {
 		e.cur.close()
 		e.cur = nil
 	}
-	if e.spare != nil {
-		ch := e.spare
-		e.spare = nil
-		go func() {
-			if p := <-ch; p != nil {
-				p.close()
-			}
-		}()
+	e.dropSpare()
+}
+
+// dropSpare lets the spare go, closing (and so reaping) it once it has
+// started: a process left to the garbage collector exits unwaited.
+func (e *ffmpegEncoder) dropSpare() {
+	ch := e.spare
+	if ch == nil {
+		return
 	}
+	e.spare = nil
+	go func() {
+		if p := <-ch; p != nil {
+			p.close()
+		}
+	}()
 }
