@@ -90,7 +90,8 @@ var defaultDaemonRuntime = func() daemonRuntime {
 		alive:       platform.ProcessAlive,
 		startDirect: bootTaskStartDirect,
 		wait:        30 * time.Second,
-		inPlaceWait: 3 * time.Minute,
+		// The daemon first waits for model replies (restartDrainCap).
+		inPlaceWait: restartDrainCap + restartStartAllowance,
 		poll:        250 * time.Millisecond,
 		runWait:     3 * time.Second,
 	}
@@ -241,7 +242,17 @@ func (rt daemonRuntime) restart(stateDir string, daemon runningDaemon, want stri
 	if rt.goos == "windows" {
 		return rt.restartWindows(stateDir, daemon, want)
 	}
-	return rt.restartLinux(stateDir, daemon, want)
+	// Under the systemd unit too, the daemon restarts itself in place: the same
+	// PID (KillMode=process keeps the session host), and it first lets every
+	// Worker's model reply finish and keeps the relay's sockets open across
+	// the exec. systemctl restart would end the replies still streaming after
+	// the stop's short wait and refuse requests until the new daemon listens.
+	// Only a daemon too old to restart itself is restarted by systemd.
+	err := rt.restartInPlace(stateDir, daemon, want)
+	if errors.Is(err, errInPlaceUnsupported) {
+		return rt.restartLinux(stateDir, daemon, want)
+	}
+	return err
 }
 
 // supervised: the daemon was started by what `mewla boot install` set up

@@ -46,6 +46,7 @@ import (
 	"github.com/daoleno/mewla/daemon/keeper"
 	"github.com/daoleno/mewla/daemon/launchsh"
 	"github.com/daoleno/mewla/daemon/link"
+	"github.com/daoleno/mewla/daemon/listenhandoff"
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/outsideagents"
@@ -313,21 +314,27 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 	}
 
-	ctx, stopSignals := signal.NotifyContext(
+	stopRequested, stopSignals := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGINT,
 		syscall.SIGTERM,
 	)
 	defer stopSignals()
-	logStopSignal(ctx)
+	logStopSignal(stopRequested)
+	stopRequested, restartDaemon := context.WithCancelCause(stopRequested)
+	defer restartDaemon(nil)
+	// The daemon's runtime ends only after the model relay has drained, so a
+	// stop or restart never cuts a Worker's reply (relay_stop.go).
+	ctx, endRuntime := context.WithCancelCause(context.Background())
+	defer endRuntime(nil)
+	relay := &relayStop{}
+	go relay.run(stopRequested, endRuntime)
 	// Windows starts the daemon once at login: keep its environment the
 	// person's, so an agent installed or a variable set later is seen. A
 	// service-started daemon elsewhere gets the login shell's PATH before
 	// Brain looks for its agent.
 	platform.RefreshEnvironment()
 	go platform.KeepEnvironmentCurrent(ctx, 15*time.Second)
-	ctx, restartDaemon := context.WithCancelCause(ctx)
-	defer restartDaemon(nil)
 
 	brainRoot, err := brain.DefaultRoot()
 	if err != nil {
@@ -610,6 +617,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 		// app-server; the route table knows its socket.
 		codexFollow.SetSocketSource(profileOwner.CodexControlSocket)
 	}
+	// Every relay listener the previous daemon handed on is taken back by
+	// now; one no listener took back is closed, so it refuses rather than hangs.
+	listenhandoff.Release()
+	relay.set(profileOwner.Drain, controlPath)
 	for _, n := range profileOwner.RestoreContractNotices() {
 		log.Printf("WARN model settings changed for session %s; keeping its running configuration until an explicit model switch (%s)", n.SessionID, n.Reason)
 	}
@@ -737,6 +748,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	})
 	srv.SetAgentUse(agentUse)
 	srv.SetVersion(Version)
+	if dir := strings.TrimSpace(os.Getenv(devWebUIDirEnv)); dir != "" && releaseBuild != "1" {
+		// mewla-dev rebuilds the web UI there on a client/ edit and does not
+		// restart this daemon for it.
+		srv.SetWebUIFiles(os.DirFS(dir))
+	}
 	updater := newDaemonUpdater(Version, authManager.StorageDir(), cfg.addr, authManager.DaemonID(),
 		func() string {
 			return updateQuietPoint(
@@ -1271,6 +1287,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	return nil
 }
+
+// devWebUIDirEnv is set by mewla-dev (cmd/mewla-dev webUIDirEnv): serve the
+// web UI from that directory. Release builds ignore it.
+const devWebUIDirEnv = "MEWLA_DEV_WEB_UI_DIR"
 
 // errDaemonRestart ends the daemon with a failure so its service manager
 // starts it again.

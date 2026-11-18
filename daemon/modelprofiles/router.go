@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/codexctl"
@@ -48,6 +49,8 @@ type Router struct {
 	// issued, so switched routes forward only thinking the new upstream can
 	// verify.
 	thinking *issuedThinkingLedger
+	// active counts HTTP model requests from arrival to their last byte.
+	active atomic.Int64
 }
 
 // RouteModelCatalog describes the catalog available for request preflight.
@@ -145,6 +148,16 @@ func NewRouter(table *RouteTable, opts ...RouterOption) *Router {
 	return r
 }
 
+// InFlight is how many model replies the Router is passing now: HTTP
+// requests from arrival to their last byte, and responses in progress on its
+// WebSocket connections.
+func (r *Router) InFlight() int {
+	if r == nil {
+		return 0
+	}
+	return int(r.active.Load()) + r.ws.activeTurns()
+}
+
 // CloseWebSocketConnections drops every hijacked Responses WebSocket
 // connection. Called by Owner.Close after the HTTP server shutdown so no
 // long-lived socket survives the daemon process teardown; hijacked
@@ -191,6 +204,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.serveRouteWebSocket(w, req, parsed)
 		return
 	}
+	// From here until the last byte of the reply: a restart drains it.
+	r.active.Add(1)
+	defer r.active.Add(-1)
 
 	// GET /v1/models is the local catalog surface; every other admitted
 	// endpoint is a POST request path.
