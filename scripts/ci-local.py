@@ -53,6 +53,10 @@ JOB_PATHS = {
     "daemon-macos": ["daemon/*"],
     "client": ["client/*", "bun.lock", "package.json"],
     "client-ui": ["client/*"],
+    "web-ui": [
+        "client/*", "scripts/build-web-ui.sh", "scripts/web-splash.py", "scripts/web-page-root.py",
+        "scripts/build-libghostty-web.sh", "scripts/lib/*", "native/terminal-vt/*", "daemon/webui/*",
+    ],
     "native-contract": [
         "scripts/verify-libghostty.sh", "scripts/lib/*", "native/terminal-vt/*",
         "client/android/app/build.gradle.kts", "client/android/app/CMakeLists.txt", "client/ios/project.yml",

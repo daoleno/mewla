@@ -182,8 +182,8 @@ function pageOfSegments(first: string, rest: string[], params: URLSearchParams):
 
 /**
  * Where a place lives: its name (`/calendar`, `/sessions/<id>`), the same as the
- * daemon's app routes (`/screen`, `/resources`, `/friends`). The page carries
- * `<base href="/">`, so a deep path loads its assets from the root. `/plugins` is where the
+ * daemon's app routes (`/screen`, `/resources`, `/friends`). The page names every file from the
+ * site's root (nsh.json web.base "/"), so a deep path loads its assets from the root. `/plugins` is where the
  * daemon's OAuth callback returns a web sign-in (daemon/connections/oauth.go).
  */
 export function placePath(place: WebPlace): string {

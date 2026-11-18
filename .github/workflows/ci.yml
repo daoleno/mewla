@@ -1,10 +1,11 @@
 name: CI
 
 # The test track. Every push to main and every PR runs the checks: the daemon (Linux, macOS,
-# Windows), the session host's terminal engine, the NSH client's core and UI, the native terminal
-# contract and the release scripts. A release never runs them again: it ships a main commit this
-# workflow passed (scripts/release-green.py, docs/ci-release.md). The client's native hosts are
-# built by client.yml, and signed by release-artifacts.yml and ios-release.yml.
+# Windows), the session host's terminal engine, the NSH client's core and UI, the web UI the
+# daemons embed, the native terminal contract and the release scripts. A release never runs them
+# again: it ships a main commit this workflow passed (scripts/release-green.py,
+# docs/ci-release.md). The client's native hosts are built by client.yml, and signed by
+# release-artifacts.yml and ios-release.yml.
 on:
   push:
     branches: [main]
@@ -165,6 +166,31 @@ jobs:
         run: client/scripts/fetch-nsh.sh
       - name: UI tests
         run: python3 client/scripts/ui-test-shard.py --shard ${{ matrix.shard }}/4
+
+  # The web UI the daemons embed, built as a release builds it (release-artifacts.yml's web-ui
+  # job): NSH's web package, the splash, the browser terminal and the check that the page loads
+  # every file from the site's root. bf8e1fd4d moved NSH to 0.6.0, whose page has no <base> and
+  # no inline styles; build-web-ui.sh then failed on every dev daemon while this workflow was green.
+  web-ui:
+    name: Web UI build (the daemons' embedded client)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # The pinned Zig and the WebAssembly VT main's native-cache.yml built; build-web-ui.sh uses the
+      # VT only if its manifest matches the lock and the packer sources, and builds it otherwise.
+      - uses: ./.github/actions/desktop-release-cache
+        with:
+          web: "true"
+      # Restore only: client.yml's runs on main save it.
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.nsh
+          key: nsh-${{ runner.os }}-${{ hashFiles('client/scripts/fetch-nsh.sh') }}
+      - name: Build the web UI
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-web-ui.sh
 
   windows:
     name: Windows (daemon build, platform tests, install.ps1)
