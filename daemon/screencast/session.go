@@ -115,6 +115,9 @@ const (
 	startKbps = 6000
 	minKbps   = 300
 	maxKbps   = 20000
+	// blindBytes is a second's video that the estimator should have heard
+	// about (a still screen sends less).
+	blindBytes = 20_000
 )
 
 // Session is one viewer's stream.
@@ -205,9 +208,6 @@ func (s *Session) setup() error {
 	}
 	reg := &interceptor.Registry{}
 	reg.Add(playoutDelayFactory{})
-	if err := webrtc.ConfigureNack(m, reg); err != nil {
-		return err
-	}
 	if err := webrtc.ConfigureRTCPReports(reg); err != nil {
 		return err
 	}
@@ -230,6 +230,13 @@ func (s *Session) setup() error {
 	reg.Add(congestion)
 	// After the estimator, so its packets already carry the sequence numbers it reads.
 	if err := webrtc.ConfigureTWCCHeaderExtensionSender(m, reg); err != nil {
+		return err
+	}
+	// Outermost: a resent packet takes a new sequence number and passes the
+	// estimator, which then counts it. Inside them, a resend kept its first
+	// number, came a queue late, and read to the estimator as a link always
+	// overused (it held a thin link's rate at its floor).
+	if err := webrtc.ConfigureNack(m, reg); err != nil {
 		return err
 	}
 
@@ -526,7 +533,48 @@ func (s *Session) run() {
 		ceiling   = maxKbps
 		rateAt    time.Time
 		st        = statsWindow{start: time.Now()}
+		// blindCap holds the rate under what the link took while the
+		// estimator could not see it (see the stats tick).
+		blindCap = maxKbps
+		heard    string
+		minRTT   float64
+		deaf     bool // the estimator heard nothing new in the last second of video
+		// budget is what the link may take now, in bytes, at the rate the
+		// video is held to; below zero, what went over it. An encoder over
+		// its rate (VA-API at its coarsest on a screen in full motion) then
+		// sends fewer pictures, never more than the link carries.
+		budget   float64
+		budgetAt time.Time
 	)
+	// held is the rate the link is held to: what the estimator says it
+	// carries (an encoder's own rate may lag it, or overshoot), under the
+	// ceiling and blindCap.
+	held := func() int {
+		if estimator == nil {
+			return min(kbps, ceiling)
+		}
+		if deaf {
+			return max(minKbps, min(ceiling, blindCap))
+		}
+		return max(minKbps, min(ceiling, blindCap, estimator.GetTargetBitrate()/1000))
+	}
+	refill := func(now time.Time) {
+		rate := float64(held()) * 125 // bytes a second
+		if budgetAt.IsZero() {
+			budget = rate / 4
+		} else {
+			budget = min(rate/4, budget+now.Sub(budgetAt).Seconds()*rate)
+		}
+		budgetAt = now
+	}
+	// overBudget is how long until the link has taken what went over it.
+	overBudget := func(now time.Time) time.Duration {
+		refill(now)
+		if budget >= 0 {
+			return 0
+		}
+		return time.Duration(-budget / (float64(held()) * 125) * float64(time.Second))
+	}
 	tick := time.NewTicker(stillEvery)
 	defer tick.Stop()
 	statsTick := time.NewTicker(time.Second)
@@ -550,7 +598,7 @@ func (s *Session) run() {
 			s.enc.SetBitrate(kbps)
 		}
 		if estimator != nil {
-			target := max(minKbps, min(ceiling, estimator.GetTargetBitrate()/1000))
+			target := held()
 			// An encoder that changes its rate only with a key frame (ffmpeg)
 			// drops at most every 2 s, and rises only when a key frame is due
 			// anyway or the screen is still: a big key frame in the middle of
@@ -594,6 +642,10 @@ func (s *Session) run() {
 		if err := s.track.WriteSample(media.Sample{Data: au, Duration: dur}); err != nil {
 			return
 		}
+		// A key frame may go over, by a second's worth at most: a lost
+		// picture is always repaired, and the pictures after it wait.
+		refill(time.Now())
+		budget = max(budget-float64(len(au)), -float64(held())*125)
 		st.add(len(au), took, key || nalStartsKey(au))
 	}
 	var wait <-chan time.Time
@@ -604,7 +656,35 @@ func (s *Session) run() {
 		case e := <-s.bwe:
 			estimator = e
 		case <-statsTick.C:
+			// The estimator learns the link from the viewer's feedback on
+			// the last few hundred packets. A link that is thin from the start
+			// queues the video until the feedback comes too late for it to
+			// read, and after heavy loss it can stop reading for seconds: it
+			// then holds its rate while the picture freezes. While it hears
+			// nothing new as the video goes out, the round trip says instead:
+			// well over its lowest (a queue), the rate halves each second;
+			// near it, it rises a tenth. Once the estimator hears again, the
+			// rate rises a quarter a second and the estimator, which now sees
+			// a queue grow, takes over.
 			route, rtt := s.route()
+			if rtt > 0 && (minRTT == 0 || rtt < minRTT) {
+				minRTT = rtt
+			}
+			if estimator != nil {
+				m := estimator.GetStats()
+				now := fmt.Sprint(m["delayMeasurement"], m["delayEstimate"], m["averageLoss"])
+				deaf = now == heard && st.bytes > blindBytes
+				switch {
+				case now != heard:
+					blindCap = min(maxKbps, blindCap*5/4+1)
+				case !deaf:
+				case rtt > 0 && rtt < minRTT+max(30, minRTT/4):
+					blindCap = min(maxKbps, blindCap*11/10+1)
+				default:
+					blindCap = max(minKbps, held()/2)
+				}
+				heard = now
+			}
 			ceiling = maxKbps
 			if route == "relay" && s.cfg.RelayMaxKbps > 0 {
 				// Headroom for the packets' own headers (RTP, SRTP, UDP, TURN).
@@ -637,7 +717,8 @@ func (s *Session) run() {
 			s.mu.Lock()
 			needKey := s.needKey
 			s.mu.Unlock()
-			if last == nil || pending != nil || (time.Since(changedAt) > stillFor && !needKey) || time.Since(lastSent) < stillEvery {
+			if last == nil || pending != nil || (time.Since(changedAt) > stillFor && !needKey) || time.Since(lastSent) < stillEvery ||
+				(!needKey && overBudget(time.Now()) > 0) {
 				continue
 			}
 			send(last)
@@ -647,7 +728,7 @@ func (s *Session) run() {
 			if wait != nil {
 				continue // already due
 			}
-			if d := minInterval - time.Since(lastSent); d > 0 {
+			if d := max(minInterval-time.Since(lastSent), overBudget(time.Now())); d > 0 {
 				wait = time.After(d)
 				continue
 			}
@@ -655,6 +736,10 @@ func (s *Session) run() {
 			send(&p)
 		case <-wait:
 			wait = nil
+			if d := overBudget(time.Now()); d > 0 && pending != nil {
+				wait = time.After(d)
+				continue
+			}
 			if p := pending; p != nil {
 				pending = nil
 				send(p)
