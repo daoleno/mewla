@@ -643,7 +643,9 @@ Historical Turn rows remain evidence and are available by exact identity. They
 must not advertise a released Attempt as a currently steerable owner. For an
 explicit follow-up to a signal-protocol Session, the normal `worker send -id ...
 -work-id ... --stdin` path may prepare a fresh admission when the Work has no
-active Attempt. It still validates the exact owned process and provider generation,
+active Attempt. That holds also when the lost Turn's own row last said blocked
+(it asked and was then lost) and the provider's settled Activity binds it: only
+a Turn the ledger reads as live is steered. It still validates the exact owned process and provider generation,
 and only the new prompt-carried identity can admit the new Attempt. A conflicting
 current owner is rejected by the existing fence. Work updates cannot manually
 assign an Attempt Session; restarting a provider or editing durable state is not
