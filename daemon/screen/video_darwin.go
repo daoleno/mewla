@@ -61,7 +61,7 @@ var vt struct {
 	// used when a symbol is missing.
 	keyRealTime, keyProfile, keyReorder, keyBitrate, keyKeyInterval, keyFrameRate, keyRateLimits uintptr
 	keyRequireHW, keyForceKey, keyNotSync, keyIOSurface                                          uintptr
-	profileHigh, boolTrue                                                                        uintptr
+	profileCB, profileBase, boolTrue                                                             uintptr
 }
 
 var vtEncoders sync.Map // refcon -> *vtEncoder
@@ -130,7 +130,10 @@ func loadVTFunctions() error {
 	vt.keyForceKey = constant("VideoToolbox", "kVTEncodeFrameOptionKey_ForceKeyFrame", "ForceKeyFrame")
 	vt.keyNotSync = constant("CoreMedia", "kCMSampleAttachmentKey_NotSync", "NotSync")
 	vt.keyIOSurface = constant("CoreVideo", "kCVPixelBufferIOSurfacePropertiesKey", "IOSurfaceProperties")
-	vt.profileHigh = constant("VideoToolbox", "kVTProfileLevel_H264_High_AutoLevel", "H264_High_AutoLevel")
+	// Constrained baseline: what Screen's WebRTC offer names (profile-level-id
+	// 42e01f), which every phone's decoder takes.
+	vt.profileCB = constant("VideoToolbox", "kVTProfileLevel_H264_ConstrainedBaseline_AutoLevel", "H264_ConstrainedBaseline_AutoLevel")
+	vt.profileBase = constant("VideoToolbox", "kVTProfileLevel_H264_Baseline_AutoLevel", "H264_Baseline_AutoLevel")
 	if sym, err := purego.Dlsym(libs["CoreFoundation"], "kCFBooleanTrue"); err == nil {
 		vt.boolTrue = **(**uintptr)(unsafe.Pointer(&sym))
 	}
@@ -195,7 +198,6 @@ func (e *vtEncoder) open() error {
 	}{
 		{vt.keyRealTime, vt.boolTrue, "real time"},
 		{vt.keyReorder, uintptr(no), "frame reordering"},
-		{vt.keyProfile, vt.profileHigh, "profile"},
 		{vt.keyKeyInterval, uintptr(nsNumber(vtKeyInterval)), "key frame interval"},
 		{vt.keyFrameRate, uintptr(nsNumber(videoFPS)), "frame rate"},
 	} {
@@ -204,6 +206,12 @@ func (e *vtEncoder) open() error {
 		}
 		if status := vt.setProperty(e.session, p.key, p.value); status != 0 {
 			log.Printf("screen: video: could not set %s (status %d)", p.name, status)
+		}
+	}
+	// Baseline with no reordering is constrained baseline in all but the flag.
+	if status := vt.setProperty(e.session, vt.keyProfile, vt.profileCB); status != 0 {
+		if status := vt.setProperty(e.session, vt.keyProfile, vt.profileBase); status != 0 {
+			log.Printf("screen: video: could not set the baseline profile (status %d)", status)
 		}
 	}
 	e.applyBitrate(e.kbps)
