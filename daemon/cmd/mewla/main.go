@@ -2331,7 +2331,7 @@ func runBrainWorkEvent(args []string, stderr io.Writer) error {
 	fs.StringVar(&event.Kind, "kind", "", "event kind")
 	fs.StringVar(&event.DedupeKey, "dedupe", "", "stable dedupe key")
 	fs.StringVar(&event.PayloadRef, "payload", "", "optional payload/evidence reference")
-	fs.BoolVar(&event.Actionable, "actionable", false, "allow this event to wake Brain once")
+	fs.BoolVar(&event.Actionable, "actionable", false, "deliver this event to Brain now: it opens the Work's Review and wakes Brain once, or the command fails and says why")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

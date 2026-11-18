@@ -71,7 +71,16 @@ mewla brain work update -id <work> -status done
 mewla brain work update -id <work> -status waiting \
   -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
   -recommend "Newest wins"   # the phone tags that button "Brain's pick"
+mewla brain work event -id <work> -kind deploy.done -dedupe deploy-42 -payload <file> -actionable
 ```
+
+`mewla brain work event` adds an event to a Work from a script. With
+`-actionable` it is delivered: Brain is woken for that Work with the event, or
+the command fails and says why (for example, Brain still has an earlier event of
+that Work to handle; send it again with a new `-dedupe` once that is done).
+Without `-actionable` the event is only recorded. The same `-dedupe` key is the
+same event. To watch something and wake Brain when it changes, use a
+[Trigger](calendar.md#triggers) instead of a script loop.
 
 See [Brain and Work](brain-and-work.md).
 

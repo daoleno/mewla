@@ -1176,11 +1176,25 @@ func (a *controlApp) handleBrainWorkEvent(req control.Request) control.Response 
 	if a == nil || a.brainService == nil || req.BrainWorkEvent == nil {
 		return control.ErrorResponse("brain_unavailable", "Brain Work event routing is not configured.")
 	}
+	if req.BrainWorkEvent.Actionable {
+		// Actionable means delivered: the event opens its Work's Review and
+		// wakes Brain, or the request fails and says why. A plain append
+		// would be recorded and never delivered.
+		event, err := a.brainService.DeliverWorkEvent(*req.BrainWorkEvent)
+		if err != nil {
+			response := brainWorkControlError(err)
+			if event.ID != "" {
+				response.BrainWorkEvent = &event
+			}
+			return response
+		}
+		return control.Response{OK: true, BrainWorkEvent: &event, Confirmation: "Delivered: Brain is woken for this Work with the event."}
+	}
 	event, created, err := a.brainService.AppendWorkEvent(*req.BrainWorkEvent)
 	if err != nil {
 		return brainWorkControlError(err)
 	}
-	response := control.Response{OK: true, BrainWorkEvent: &event}
+	response := control.Response{OK: true, BrainWorkEvent: &event, Confirmation: "Recorded as history; Brain is not woken (pass -actionable to deliver it)."}
 	if !created {
 		response.Confirmation = "Duplicate event already recorded."
 	}
@@ -1243,6 +1257,8 @@ func brainWorkControlError(err error) control.Response {
 		code = "brain_work_event_handled"
 	case errors.Is(err, brain.ErrEventClaim):
 		code = "brain_work_event_claim_conflict"
+	case errors.Is(err, brain.ErrWorkEventNotDelivered):
+		code = "brain_work_event_not_delivered"
 	}
 	return control.ErrorResponse(code, err.Error())
 }

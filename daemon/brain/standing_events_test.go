@@ -1,9 +1,13 @@
 package brain
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 func TestRaiseWorkEventOpensTheReviewThatWakesBrain(t *testing.T) {
@@ -57,5 +61,71 @@ func TestRaiseWorkEventOpensTheReviewThatWakesBrain(t *testing.T) {
 	}
 	if _, found, _ := service.WorkEventHandled(item.ID, "missing"); found {
 		t.Fatal("a missing event was found")
+	}
+}
+
+// An actionable event from outside a Session (mewla brain work event
+// -actionable) reaches the Host as a <mewla_work_event> turn, or fails
+// saying why.
+func TestDeliverWorkEventReachesTheHost(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetHostSession("host", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
+		"host": {ID: "host", Hidden: true, State: classifier.StateRunning},
+	}}
+	service := NewService(store, fw, nil)
+	item, err := store.CreateWork(Work{Title: "PRLoopWatcher", Objective: "standing PR loop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostTexts := func() []string {
+		var texts []string
+		for _, call := range fw.sentCalls {
+			if call.sessionID == "host" && strings.Contains(call.text, "<mewla_work_event>") {
+				texts = append(texts, call.text)
+			}
+		}
+		return texts
+	}
+	event, err := service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "new-1", PayloadRef: "worklog/new.txt", Summary: "NEW perpetuo#1@aaaa"})
+	if err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	texts := hostTexts()
+	if len(texts) != 1 || !strings.Contains(texts[0], event.ID) || !strings.Contains(texts[0], "worklog/new.txt") || !strings.Contains(texts[0], "NEW perpetuo#1@aaaa") {
+		t.Fatalf("the Host was sent %q, want one work event %s with its payload", texts, event.ID)
+	}
+	lease := requireReviewDelivered(t, store, item.ID)
+
+	// The same dedupe key again is the same, delivered event: nothing new is sent.
+	again, err := service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "new-1"})
+	if err != nil || again.ID != event.ID || len(hostTexts()) != 1 {
+		t.Fatalf("redeliver: %v %s sent=%d", err, again.ID, len(hostTexts()))
+	}
+
+	// While Brain handles that one, another is refused with the reason.
+	_, err = service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "new-2"})
+	if !errors.Is(err, ErrWorkEventNotDelivered) || !strings.Contains(err.Error(), "Brain still has an earlier event of this Work") {
+		t.Fatalf("second event while one is with Brain: %v", err)
+	}
+	// Its key was used: retrying it says to pick a new one.
+	_, err = service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "new-2"})
+	if !errors.Is(err, ErrWorkEventNotDelivered) || !strings.Contains(err.Error(), "new -dedupe") {
+		t.Fatalf("retry of an undelivered key: %v", err)
+	}
+
+	resolveDeliveredReview(t, store, item.ID, WorkDispositionContinue)
+	settleCanonicalHostTurnForTest(t, store, "host", lease.ProviderTurnID)
+	third, err := service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "new-3", Summary: "NEW perpetuo#2@bbbb"})
+	if err != nil {
+		t.Fatalf("after Brain handled the first: %v", err)
+	}
+	if texts := hostTexts(); len(texts) != 2 || !strings.Contains(texts[1], third.ID) {
+		t.Fatalf("the Host was not sent the next event: %d", len(texts))
 	}
 }
