@@ -7,6 +7,7 @@ import { authSubprotocol } from "../webSocketAuth";
 import { screenFailureText } from "./screenFailure";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 import { parseReflow, type StageReflow } from "./stage";
+import { isSignal, type ScreenSignal } from "./screenViewerProtocol";
 
 /**
  * Screen: the computer's own screen (Mac, Windows) or an agent's display (Linux),
@@ -205,6 +206,8 @@ export interface ScreenConnectionHandlers {
   streamStats?(stats: ScreenStreamStats): void;
   /** An agent display's browser window was laid out for this view, or put back (the display viewer's `fit`). */
   reflow?(state: StageReflow): void;
+  /** WebRTC signalling from the computer, for the viewer page (video sockets). */
+  signal?(signal: ScreenSignal): void;
   /** The socket ended; `reason` is the daemon's explanation when it gave one. */
   closed(reason: string | null): void;
 }
@@ -234,10 +237,16 @@ export class ScreenConnection {
     private route?: ScreenRoute,
   ) {}
 
+  /** The picture comes as pushed video over WebRTC: an agent's display, for now. */
+  get video(): boolean {
+    return this.route?.purpose === "mewla-display-view";
+  }
+
   async connect(): Promise<void> {
     const params: Record<string, string> = { ...(this.route?.params ?? {}) };
     if (!this.route && this.watch) params.watch = "1";
     if (!this.route && this.watch && this.worker) params.worker = this.worker;
+    if (this.video) params.video = "webrtc";
     const url = viewerURL(this.server, this.route?.path ?? "/screen/viewer", params);
     const authorization = await deviceAuthorization(this.server, this.route?.purpose ?? "mewla-screen-view");
     if (this.closed) return;
@@ -282,7 +291,8 @@ export class ScreenConnection {
       } else if (message.type === "reflow") {
         const state = parseReflow(message as Record<string, unknown>);
         if (state) this.handlers.reflow?.(state);
-      } else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
+      } else if ((message.type === "rtc" || message.type === "ice") && isSignal(message)) this.handlers.signal?.(message);
+      else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
     };
     socket.onerror = () => {
       if (!this.closed) this.finish();

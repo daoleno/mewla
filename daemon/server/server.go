@@ -119,6 +119,7 @@ type Server struct {
 	browsers                   *browser.Manager
 	displays                   Displays
 	screen                     *screen.Service
+	screenLoopbackOnly         bool
 	phone                      *phone.Manager
 	phonePing                  time.Duration // the phone's ping interval; zero is the default
 	connections                *connections.Manager

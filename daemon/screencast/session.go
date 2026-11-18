@@ -1,0 +1,600 @@
+// Package screencast sends a screen to a viewer as pushed video over WebRTC.
+//
+// The computer encodes the picture as one low-latency H.264 stream and sends
+// each picture the moment it changes, without waiting to be asked; the viewer
+// plays it in a <video> element with the platform's decoder. Media and input
+// travel as SRTP and SCTP over UDP (DTLS-encrypted end to end, so a TURN relay
+// in the middle cannot read them); only the signalling (the offer, the answer
+// and the candidates) rides the authenticated Mewla link, which binds the
+// DTLS fingerprints in them to the paired device.
+//
+// The person's input comes back on two data channels as RFB client messages,
+// the same bytes every screen backend already takes: "input" (reliable,
+// ordered) carries keys, button changes, the wheel and the clipboard;
+// "pointer" (unordered, never retransmitted) carries pointer moves only.
+package screencast
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"log"
+	"net"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/clientaddr"
+	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/cc"
+	"github.com/pion/interceptor/pkg/gcc"
+	"github.com/pion/rtcp"
+	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
+)
+
+// Source is the picture a session sends.
+type Source interface {
+	// Picture is the current picture as B G R X rows and its size.
+	Picture() (pix []byte, width, height int)
+	// Watch is told whenever the picture may have changed; the func stops it.
+	Watch() (<-chan struct{}, func())
+}
+
+// Config is what a session needs from its caller.
+type Config struct {
+	Source Source
+	// Input takes the person's RFB client messages (KeyEvent, PointerEvent,
+	// ClientCutText), whole and in order. Nil: the view is for watching.
+	Input func(msg []byte) error
+	// Signal sends a signalling message to the viewer over the Mewla link.
+	Signal func(v any)
+	// Stats hears what the stream did, about once a second.
+	Stats func(Stats)
+	// LoopbackOnly offers this computer's loopback address only (a daemon
+	// reachable from this computer alone).
+	LoopbackOnly bool
+	// ICEServers are STUN and TURN servers to gather through, when any.
+	ICEServers []webrtc.ICEServer
+}
+
+// Stats is one second of the stream, in the fields the viewer's Connection
+// panel reads (the RFB stream's names where they mean the same).
+type Stats struct {
+	Transport string  `json:"transport"`
+	Route     string  `json:"route,omitempty"`
+	Encoder   string  `json:"encoder,omitempty"`
+	Updates   int     `json:"updates"`
+	Video     int     `json:"video"`
+	Bytes     int     `json:"bytes"`
+	EncodeMs  float64 `json:"encode_ms"`
+	EncodeMax float64 `json:"encode_max_ms"`
+	RTTMs     float64 `json:"rtt_ms"`
+	Kbps      int     `json:"kbps"`
+	Keys      int     `json:"key_frames"`
+	Width     int     `json:"width"`
+	Height    int     `json:"height"`
+}
+
+// Signal is a signalling message, in either direction.
+type Signal struct {
+	Type      string                   `json:"type"` // "rtc" or "ice"
+	SDPType   string                   `json:"sdp_type,omitempty"`
+	SDP       string                   `json:"sdp,omitempty"`
+	Candidate *webrtc.ICECandidateInit `json:"candidate,omitempty"`
+}
+
+const (
+	minInterval = time.Second / 60 // at most 60 pictures a second
+	// stillFor is how long a still picture keeps being sent after the last
+	// change, so the encoder sharpens it (each repeat refines what the last
+	// one left blurred); stillEvery is how often in that time.
+	stillFor   = time.Second
+	stillEvery = 100 * time.Millisecond
+	// Bit rates in kbit/s: where a session starts and its bounds.
+	startKbps = 6000
+	minKbps   = 300
+	maxKbps   = 20000
+)
+
+// Session is one viewer's stream.
+type Session struct {
+	cfg   Config
+	pc    *webrtc.PeerConnection
+	track *webrtc.TrackLocalStaticSample
+	enc   *ffmpegEncoder
+	bwe   chan cc.BandwidthEstimator
+
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+
+	mu        sync.Mutex
+	remoteSet bool
+	pending   []webrtc.ICECandidateInit
+	needKey   bool
+	lastKey   time.Time
+
+	// kick asks for a picture now (the viewer connected and needs a key frame).
+	kick chan struct{}
+
+	inMu    sync.Mutex
+	mask    byte
+	lastSeq uint32
+}
+
+// Start makes the peer, its video track and data channels, and sends the
+// offer through cfg.Signal. The session ends with ctx, Close, or a lost link.
+func Start(ctx context.Context, cfg Config) (*Session, error) {
+	enc, err := newFFmpegEncoder(startKbps)
+	if err != nil {
+		return nil, err
+	}
+	s := &Session{cfg: cfg, enc: enc, bwe: make(chan cc.BandwidthEstimator, 1), kick: make(chan struct{}, 1)}
+	s.ctx, s.cancel = context.WithCancelCause(ctx)
+	if err := s.setup(); err != nil {
+		enc.Close()
+		s.cancel(err)
+		return nil, err
+	}
+	go func() {
+		<-s.ctx.Done()
+		_ = s.pc.Close()
+	}()
+	go s.run()
+	return s, nil
+}
+
+// Done is closed when the session ends; Err says why.
+func (s *Session) Done() <-chan struct{} { return s.ctx.Done() }
+
+func (s *Session) Err() error { return context.Cause(s.ctx) }
+
+// Close ends the session.
+func (s *Session) Close() { s.cancel(errors.New("closed")) }
+
+func (s *Session) setup() error {
+	m := &webrtc.MediaEngine{}
+	feedback := []webrtc.RTCPFeedback{{Type: "nack"}, {Type: "nack", Parameter: "pli"}, {Type: "ccm", Parameter: "fir"}, {Type: "transport-cc"}}
+	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90000,
+			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f", RTCPFeedback: feedback},
+		PayloadType: 102,
+	}, webrtc.RTPCodecTypeVideo); err != nil {
+		return err
+	}
+	if err := m.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: playoutDelayURI}, webrtc.RTPCodecTypeVideo); err != nil {
+		return err
+	}
+	reg := &interceptor.Registry{}
+	reg.Add(playoutDelayFactory{})
+	if err := webrtc.ConfigureNack(m, reg); err != nil {
+		return err
+	}
+	if err := webrtc.ConfigureRTCPReports(reg); err != nil {
+		return err
+	}
+	// The link's capacity, from the viewer's transport-wide feedback. No
+	// pacer: a picture leaves at once, the encoder's rate is what follows the
+	// link.
+	congestion, err := cc.NewInterceptor(func() (cc.BandwidthEstimator, error) {
+		return gcc.NewSendSideBWE(gcc.SendSideBWEInitialBitrate(startKbps*1000), gcc.SendSideBWEMinBitrate(minKbps*1000),
+			gcc.SendSideBWEMaxBitrate(maxKbps*1000), gcc.SendSideBWEPacer(gcc.NewNoOpPacer()))
+	})
+	if err != nil {
+		return err
+	}
+	congestion.OnNewPeerConnection(func(_ string, e cc.BandwidthEstimator) {
+		select {
+		case s.bwe <- e:
+		default:
+		}
+	})
+	reg.Add(congestion)
+	// After the estimator, so its packets already carry the sequence numbers it reads.
+	if err := webrtc.ConfigureTWCCHeaderExtensionSender(m, reg); err != nil {
+		return err
+	}
+
+	var se webrtc.SettingEngine
+	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6})
+	se.SetICETimeouts(4*time.Second, 10*time.Second, time.Second)
+	if s.cfg.LoopbackOnly {
+		se.SetIncludeLoopbackCandidate(true)
+		se.SetIPFilter(func(ip net.IP) bool { return ip.IsLoopback() })
+	} else {
+		se.SetInterfaceFilter(func(name string) bool {
+			for _, skip := range []string{"docker", "br-", "veth", "virbr", "vmnet", "vboxnet"} {
+				if strings.HasPrefix(name, skip) {
+					return false
+				}
+			}
+			return true
+		})
+	}
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(reg), webrtc.WithSettingEngine(se))
+	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: s.cfg.ICEServers})
+	if err != nil {
+		return err
+	}
+	s.pc = pc
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		switch state {
+		case webrtc.PeerConnectionStateConnected:
+			// Pictures sent before this went nowhere: start with a key frame.
+			s.mu.Lock()
+			s.needKey = true
+			s.lastKey = time.Time{}
+			s.mu.Unlock()
+			select {
+			case s.kick <- struct{}{}:
+			default:
+			}
+		case webrtc.PeerConnectionStateFailed:
+			s.cancel(errors.New("the connection to the viewer failed"))
+		case webrtc.PeerConnectionStateClosed:
+			s.cancel(errors.New("closed"))
+		}
+	})
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c == nil {
+			return
+		}
+		init := c.ToJSON()
+		s.cfg.Signal(Signal{Type: "ice", Candidate: &init})
+	})
+
+	track, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeH264, ClockRate: 90000}, "video", "screen")
+	if err != nil {
+		return err
+	}
+	s.track = track
+	sender, err := pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
+	if err != nil {
+		return err
+	}
+	go s.readRTCP(sender.Sender())
+
+	if s.cfg.Input != nil {
+		ordered := true
+		input, err := pc.CreateDataChannel("input", &webrtc.DataChannelInit{Ordered: &ordered})
+		if err != nil {
+			return err
+		}
+		input.OnMessage(func(msg webrtc.DataChannelMessage) { s.reliable(msg.Data) })
+		unordered, none := false, uint16(0)
+		pointer, err := pc.CreateDataChannel("pointer", &webrtc.DataChannelInit{Ordered: &unordered, MaxRetransmits: &none})
+		if err != nil {
+			return err
+		}
+		pointer.OnMessage(func(msg webrtc.DataChannelMessage) { s.move(msg.Data) })
+	}
+
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		return err
+	}
+	if err := pc.SetLocalDescription(offer); err != nil {
+		return err
+	}
+	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: pc.LocalDescription().SDP})
+	return nil
+}
+
+// HandleSignal takes the viewer's answer and candidates.
+func (s *Session) HandleSignal(raw []byte) error {
+	var msg Signal
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return err
+	}
+	switch msg.Type {
+	case "rtc":
+		if msg.SDPType != "answer" {
+			return errors.New("expected an answer")
+		}
+		if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: msg.SDP}); err != nil {
+			return err
+		}
+		s.mu.Lock()
+		s.remoteSet = true
+		pending := s.pending
+		s.pending = nil
+		s.mu.Unlock()
+		for _, c := range pending {
+			_ = s.pc.AddICECandidate(c)
+		}
+	case "ice":
+		if msg.Candidate == nil {
+			return nil
+		}
+		s.mu.Lock()
+		if !s.remoteSet {
+			s.pending = append(s.pending, *msg.Candidate)
+			s.mu.Unlock()
+			return nil
+		}
+		s.mu.Unlock()
+		return s.pc.AddICECandidate(*msg.Candidate)
+	}
+	return nil
+}
+
+// readRTCP turns the viewer's requests for a picture it can decode from (a
+// lost one) into a key frame.
+func (s *Session) readRTCP(sender *webrtc.RTPSender) {
+	for {
+		pkts, _, err := sender.ReadRTCP()
+		if err != nil {
+			return
+		}
+		for _, p := range pkts {
+			switch p.(type) {
+			case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
+				s.mu.Lock()
+				s.needKey = true
+				s.mu.Unlock()
+			}
+		}
+	}
+}
+
+// ---- input --------------------------------------------------------------
+
+// reliable takes a sequence number and whole RFB messages.
+func (s *Session) reliable(data []byte) {
+	if len(data) < 4 {
+		return
+	}
+	seq := binary.BigEndian.Uint32(data)
+	msgs := data[4:]
+
+	s.inMu.Lock()
+	defer s.inMu.Unlock()
+	s.lastSeq = seq
+	for len(msgs) > 0 {
+		n := rfbLength(msgs)
+		if n <= 0 || n > len(msgs) {
+			return // not a message this channel carries: drop the rest
+		}
+		msg := msgs[:n]
+		msgs = msgs[n:]
+		if msg[0] == 5 {
+			s.mask = msg[1]
+		}
+		if err := s.cfg.Input(msg); err != nil {
+			s.cancel(err)
+			return
+		}
+	}
+}
+
+// move takes a pointer move: a sequence number, x and y. One sent before the
+// last reliable message arrived late and is dropped; the buttons are the ones
+// the reliable channel last set, never the move's own.
+func (s *Session) move(data []byte) {
+	if len(data) != 8 {
+		return
+	}
+	seq := binary.BigEndian.Uint32(data)
+	s.inMu.Lock()
+	defer s.inMu.Unlock()
+	if int32(seq-s.lastSeq) < 0 {
+		return
+	}
+	msg := []byte{5, s.mask, data[4], data[5], data[6], data[7]}
+	if err := s.cfg.Input(msg); err != nil {
+		s.cancel(err)
+	}
+}
+
+// rfbLength is the length of the RFB client message msg starts with, or 0.
+func rfbLength(msg []byte) int {
+	switch msg[0] {
+	case 4: // KeyEvent
+		return 8
+	case 5: // PointerEvent
+		return 6
+	case 6: // ClientCutText
+		if len(msg) < 8 {
+			return 0
+		}
+		n := binary.BigEndian.Uint32(msg[4:])
+		if n > 1<<20 {
+			return 0
+		}
+		return 8 + int(n)
+	}
+	return 0
+}
+
+// ---- pictures -------------------------------------------------------------
+
+func (s *Session) run() {
+	defer s.enc.Close()
+	changed, stop := s.cfg.Source.Watch()
+	defer stop()
+	var (
+		last      []byte
+		lastW     int
+		lastH     int
+		lastSent  time.Time
+		changedAt time.Time
+		estimator cc.BandwidthEstimator
+		kbps      = startKbps
+		rateAt    time.Time
+		st        = statsWindow{start: time.Now()}
+	)
+	tick := time.NewTicker(stillEvery)
+	defer tick.Stop()
+	statsTick := time.NewTicker(time.Second)
+	defer statsTick.Stop()
+	send := func(force bool) {
+		pix, srcW, srcH := s.cfg.Source.Picture()
+		w, h := srcW&^1, srcH&^1
+		if w <= 0 || h <= 0 || len(pix) < srcW*srcH*4 {
+			return
+		}
+		pix = evenCrop(pix, srcW, w, h)
+		now := time.Now()
+		same := w == lastW && h == lastH && bytes.Equal(pix, last)
+		if same && !force {
+			return
+		}
+		if !same {
+			changedAt = now
+		}
+		s.mu.Lock()
+		key := s.needKey && now.Sub(s.lastKey) > 300*time.Millisecond
+		if key {
+			s.needKey = false
+			s.lastKey = now
+		}
+		s.mu.Unlock()
+		// Follow the link: a lower rate at once, a higher one when it holds.
+		if estimator != nil {
+			target := max(minKbps, min(maxKbps, estimator.GetTargetBitrate()/1000))
+			drop := target < kbps*6/10 && now.Sub(rateAt) > 500*time.Millisecond
+			rise := target > kbps*14/10 && now.Sub(rateAt) > 3*time.Second
+			if drop || rise {
+				kbps = target
+				rateAt = now
+				s.enc.SetBitrate(kbps)
+			}
+		}
+		start := time.Now()
+		au, err := s.enc.Encode(pix, w, h, key)
+		took := time.Since(start)
+		if err != nil {
+			log.Printf("screencast: encode: %v", err)
+			s.cancel(err)
+			return
+		}
+		var dur time.Duration
+		if !lastSent.IsZero() {
+			dur = now.Sub(lastSent)
+		}
+		lastSent = now
+		last, lastW, lastH = pix, w, h
+		if err := s.track.WriteSample(media.Sample{Data: au, Duration: dur}); err != nil {
+			return
+		}
+		st.add(len(au), took, key || nalStartsKey(au))
+	}
+	var wait <-chan time.Time
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case e := <-s.bwe:
+			estimator = e
+			continue
+		case <-statsTick.C:
+			if s.cfg.Stats != nil {
+				out := st.flush(kbps)
+				out.Encoder = s.enc.Kind
+				out.Width, out.Height = lastW, lastH
+				out.Route, out.RTTMs = s.route()
+				s.cfg.Stats(out)
+			}
+			continue
+		case <-s.kick:
+			send(true)
+			continue
+		case <-tick.C:
+			// The first second of stillness: send the still picture again
+			// so it sharpens, and a key frame when the viewer lost one.
+			s.mu.Lock()
+			needKey := s.needKey
+			s.mu.Unlock()
+			if last == nil || (time.Since(changedAt) > stillFor && !needKey) {
+				continue
+			}
+			if time.Since(lastSent) < stillEvery {
+				continue
+			}
+			send(true)
+			continue
+		case <-changed:
+			if wait != nil {
+				continue // already due
+			}
+			if d := minInterval - time.Since(lastSent); d > 0 {
+				wait = time.After(d)
+				continue
+			}
+		case <-wait:
+		}
+		wait = nil
+		send(last == nil)
+	}
+}
+
+func nalStartsKey(au []byte) bool { return len(au) > 4 && au[4]&0x1f == 7 }
+
+// evenCrop drops a last odd column or row (4:2:0 needs even sizes).
+func evenCrop(pix []byte, srcW, w, h int) []byte {
+	if srcW == w {
+		return pix[:w*h*4]
+	}
+	out := make([]byte, w*h*4)
+	for y := range h {
+		copy(out[y*w*4:(y+1)*w*4], pix[y*srcW*4:y*srcW*4+w*4])
+	}
+	return out
+}
+
+// route names the path the picture takes (as clientaddr does for requests)
+// and the link's round trip.
+func (s *Session) route() (string, float64) {
+	sctp := s.pc.SCTP()
+	if sctp == nil {
+		return "", 0
+	}
+	pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair()
+	if err != nil || pair == nil {
+		return "", 0
+	}
+	route := "direct"
+	if pair.Local.Typ == webrtc.ICECandidateTypeRelay || pair.Remote.Typ == webrtc.ICECandidateTypeRelay {
+		route = "relay"
+	} else if ip := net.ParseIP(pair.Remote.Address); ip != nil {
+		route = clientaddr.Kind(ip)
+	}
+	var rtt float64
+	for _, v := range s.pc.GetStats() {
+		if p, ok := v.(webrtc.ICECandidatePairStats); ok && p.Nominated && p.CurrentRoundTripTime > 0 {
+			rtt = p.CurrentRoundTripTime * 1000
+		}
+	}
+	return route, rtt
+}
+
+type statsWindow struct {
+	start  time.Time
+	frames int
+	keys   int
+	bytes  int
+	encode []time.Duration
+}
+
+func (w *statsWindow) add(n int, took time.Duration, key bool) {
+	w.frames++
+	w.bytes += n
+	if key {
+		w.keys++
+	}
+	w.encode = append(w.encode, took)
+}
+
+func (w *statsWindow) flush(kbps int) Stats {
+	out := Stats{Transport: "webrtc", Updates: w.frames, Video: w.frames, Bytes: w.bytes, Kbps: kbps, Keys: w.keys}
+	if len(w.encode) > 0 {
+		sort.Slice(w.encode, func(i, j int) bool { return w.encode[i] < w.encode[j] })
+		out.EncodeMs = float64(w.encode[len(w.encode)/2].Microseconds()) / 1000
+		out.EncodeMax = float64(w.encode[len(w.encode)-1].Microseconds()) / 1000
+	}
+	*w = statsWindow{start: time.Now(), encode: w.encode[:0]}
+	return out
+}

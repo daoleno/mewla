@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/clientaddr"
+	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/gorilla/websocket"
 )
@@ -31,6 +33,10 @@ type Displays interface {
 	Halt(worker string) error
 	Resume(worker string) error
 }
+
+// SetScreenLoopbackOnly keeps Screen's video on this computer's loopback
+// address, for a daemon reachable from this computer only.
+func (s *Server) SetScreenLoopbackOnly(on bool) { s.screenLoopbackOnly = on }
 
 // SetDisplays installs the agents' displays.
 func (s *Server) SetDisplays(service Displays) { s.displays = service }
@@ -155,6 +161,15 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
+	// video=webrtc: the picture is pushed video over WebRTC (package
+	// screencast) and this socket carries only its signalling beside the
+	// control messages; otherwise it carries RFB.
+	var cast *screencast.Session
+	castReady := make(chan struct{})
+	if r.URL.Query().Get("video") != "webrtc" || view.Picture == nil {
+		close(castReady)
+	}
+
 	viewerReader, viewerWriter := io.Pipe()
 	defer viewerReader.Close()
 	conn.SetReadLimit(1 << 20)
@@ -195,6 +210,13 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 				switch msg.Type {
+				case "rtc", "ice":
+					<-castReady
+					if cast != nil {
+						if err := cast.HandleSignal(data); err != nil {
+							log.Printf("display: viewer for %s: signalling: %v", worker, err)
+						}
+					}
 				case "ping":
 					raw, _ := json.Marshal(map[string]any{"type": "pong", "t": msg.T})
 					_ = write(websocket.TextMessage, raw)
@@ -220,6 +242,10 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		_ = viewerReader.CloseWithError(context.Cause(ctx))
 	}()
 
+	if r.URL.Query().Get("video") == "webrtc" && view.Picture != nil {
+		s.castDisplay(ctx, cancel, worker, r, view, sendJSON, &cast, castReady)
+		return
+	}
 	if err := vdisplay.AcceptViewer(displayViewerStream{reader: viewerReader, write: write}); err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return
@@ -248,6 +274,67 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// castDisplay streams an agent's display as video until the viewer leaves.
+// The person's input goes through the display's own relay, which tells the
+// agent what they did (never what they typed), as the RFB path does.
+func (s *Server) castDisplay(ctx context.Context, cancel context.CancelCauseFunc, worker string, r *http.Request, view *vdisplay.Viewer, sendJSON func(any), cast **screencast.Session, castReady chan struct{}) {
+	// The relay reads a viewer's RFB stream: ClientInit, then messages. The
+	// display's own RFB view answers ClientInit with its ServerInit; nothing
+	// reads it here.
+	go func() { _, _ = io.Copy(io.Discard, view.Conn) }()
+	inputReader, inputWriter := io.Pipe()
+	defer inputWriter.Close()
+	go func() {
+		err := view.Relay(inputReader)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) && ctx.Err() == nil {
+			log.Printf("display: viewer for %s: input ended: %v", worker, err)
+		}
+		_ = inputReader.CloseWithError(err)
+	}()
+	if _, err := inputWriter.Write([]byte{1}); err != nil {
+		close(castReady)
+		return
+	}
+	path := clientaddr.Path(r)
+	session, err := screencast.Start(ctx, screencast.Config{
+		Source: displaySource{view},
+		Input: func(msg []byte) error {
+			_, err := inputWriter.Write(msg)
+			return err
+		},
+		Signal: func(v any) { sendJSON(v) },
+		Stats: func(st screencast.Stats) {
+			sendJSON(struct {
+				Type string `json:"type"`
+				Path string `json:"path"`
+				screencast.Stats
+			}{"stats", path, st})
+		},
+		LoopbackOnly: s.screenLoopbackOnly,
+	})
+	*cast = session
+	close(castReady)
+	if err != nil {
+		sendJSON(map[string]string{"type": "error", "error": err.Error()})
+		return
+	}
+	defer session.Close()
+	sendJSON(map[string]string{"type": "ready"})
+	select {
+	case <-ctx.Done():
+	case <-session.Done():
+		if ctx.Err() == nil {
+			sendJSON(map[string]string{"type": "error", "error": "The connection to the display was lost"})
+			cancel(session.Err())
+		}
+	}
+}
+
+type displaySource struct{ view *vdisplay.Viewer }
+
+func (d displaySource) Picture() ([]byte, int, int)      { return d.view.Picture() }
+func (d displaySource) Watch() (<-chan struct{}, func()) { return d.view.Watch() }
 
 type displayViewerStream struct {
 	reader io.Reader

@@ -1,7 +1,14 @@
 // Messages between the Screen page and its viewer (runtime/viewer.js).
 
+/** WebRTC signalling for the pushed-video picture, as the computer and the viewer page exchange it. */
+export type ScreenSignal =
+  | { type: "rtc"; sdp_type: "offer" | "answer"; sdp: string }
+  | { type: "ice"; candidate: Record<string, unknown> | null };
+
 export type ScreenHostMessage =
-  | { type: "open" }
+  /** `video`: the socket asked for pushed video; the computer answers with an offer (or, when older, RFB). */
+  | { type: "open"; video?: boolean }
+  | { type: "signal"; signal: ScreenSignal }
   | { type: "close" }
   /** `at` is when the app handed the bytes over, for timing the bridge. */
   | { type: "rfb"; data: string[]; at: number }
@@ -25,6 +32,7 @@ export type ScreenPointerMode = "touch" | "trackpad";
 export type ScreenViewerMessage =
   | { type: "ready" }
   | { type: "send"; data: string }
+  | { type: "signal"; signal: ScreenSignal }
   | { type: "closed" }
   | { type: "connected"; width: number; height: number }
   | { type: "disconnected"; clean: boolean }
@@ -46,7 +54,7 @@ export type ScreenViewerMessage =
       height: number;
     };
 
-const VIEWER_TYPES = new Set(["ready", "send", "closed", "connected", "disconnected", "name", "zoom", "haptic", "stats", "size"]);
+const VIEWER_TYPES = new Set(["ready", "send", "signal", "closed", "connected", "disconnected", "name", "zoom", "haptic", "stats", "size"]);
 
 /** Parses a viewer message; anything unexpected is dropped. */
 export function parseScreenViewerMessage(raw: string): ScreenViewerMessage | null {
@@ -55,9 +63,19 @@ export function parseScreenViewerMessage(raw: string): ScreenViewerMessage | nul
     const value = JSON.parse(raw);
     if (!value || typeof value.type !== "string" || !VIEWER_TYPES.has(value.type)) return null;
     if (value.type === "send" && (typeof value.data !== "string" || !/^[A-Za-z0-9+/=]*$/.test(value.data))) return null;
+    if (value.type === "signal" && !isSignal(value.signal)) return null;
     if (value.type === "size" && ![value.width, value.height, value.dpr].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return null;
     return value as ScreenViewerMessage;
   } catch {
     return null;
   }
+}
+
+/** Whether a value is a signalling message (from the viewer page or the computer). */
+export function isSignal(value: unknown): value is ScreenSignal {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (v.type === "rtc") return (v.sdp_type === "offer" || v.sdp_type === "answer") && typeof v.sdp === "string" && v.sdp.length < 64_000;
+  if (v.type === "ice") return v.candidate === null || (typeof v.candidate === "object" && JSON.stringify(v.candidate).length < 4_000);
+  return false;
 }

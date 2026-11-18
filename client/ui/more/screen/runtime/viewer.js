@@ -4,7 +4,9 @@
 // scripts/generate-screen-viewer.mjs bundles it with noVNC for the native
 // WebView (via bootstrap.js) and for web; app code imports only the output.
 import RFB from "@novnc/novnc";
+import Keyboard from "@novnc/novnc/core/input/keyboard.js";
 import { createRfbFeed } from "../../../../core/screen/rfbFeed.ts";
+import { createVideoPicture } from "./video.js";
 
 const XK = {
   BackSpace: 0xff08, Tab: 0xff09, Return: 0xff0d, Escape: 0xff1b, Delete: 0xffff,
@@ -30,7 +32,8 @@ const KEYBOARD_MARGIN = 48;
 const STYLE = `
 .mewla-screen{position:absolute;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .mewla-screen .rfb,.mewla-screen .rfb>div{position:absolute!important;inset:0;display:block!important;overflow:hidden!important;background:transparent!important}
-.mewla-screen .rfb canvas{position:absolute;left:0;top:0;margin:0!important;transform-origin:0 0}
+.mewla-screen .rfb canvas,.mewla-screen video.picture{position:absolute;left:0;top:0;margin:0!important;transform-origin:0 0}
+.mewla-screen video.picture{outline:none;background:#000;object-fit:fill;pointer-events:none}
 .mewla-screen .touch{position:absolute;inset:0;touch-action:none;z-index:2}
 .mewla-screen .cursor{position:absolute;left:0;top:0;width:18px;height:24px;display:none;pointer-events:none;z-index:3;margin:-1px 0 0 -1px}
 .mewla-screen .ring{position:absolute;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:2px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;z-index:3;animation:mewla-ring .32s ease-out forwards}
@@ -67,6 +70,12 @@ export function mountScreenViewer(container, post) {
   container.appendChild(root);
 
   let rfb = null;
+  // The picture as pushed video (WebRTC), instead of noVNC's canvas.
+  let video = null;
+  let keyboard = null;
+  // The host asked for video: the socket carries signalling, unless an older
+  // computer answers with RFB bytes instead.
+  let wantVideo = false;
   let canvas = null;
   let channel = null;
   let fbW = 0;
@@ -130,10 +139,32 @@ export function mountScreenViewer(container, post) {
     if (channel && channel.readyState === "open") channel.send(bytes);
   }
 
+  function live() {
+    return !!(rfb || video);
+  }
+
   function sendPointer(x, y, mask) {
     const px = Math.max(0, Math.min(fbW - 1, Math.round(x)));
     const py = Math.max(0, Math.min(fbH - 1, Math.round(y)));
+    if (video) return video.sendPointer(px, py, mask);
     sendRaw(new Uint8Array([5, mask, px >> 8, px & 255, py >> 8, py & 255]));
+  }
+
+  // A key press and release (down undefined), or one of them.
+  function sendKey(keysym, code, down) {
+    if (video) {
+      if (down === undefined) {
+        video.key(keysym, true);
+        video.key(keysym, false);
+      } else video.key(keysym, down);
+      return;
+    }
+    if (rfb) rfb.sendKey(keysym, code, down);
+  }
+
+  function paste(text) {
+    if (video) video.paste(text);
+    else if (rfb) rfb.clipboardPasteFrom(text);
   }
 
   function markInput() {
@@ -337,7 +368,7 @@ export function mountScreenViewer(container, post) {
     const act = e.target?.dataset?.act;
     const at = menuAt;
     hideMenu();
-    if (!at || !rfb) return;
+    if (!at || !live()) return;
     if (act === "right") click(at.x, at.y, "right");
     else if (act === "double") {
       click(at.x, at.y, "left");
@@ -538,7 +569,7 @@ export function mountScreenViewer(container, post) {
   overlay.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     if (menuAt) hideMenu();
-    if (!rfb) return;
+    if (!live()) return;
     try { overlay.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === "mouse") {
       focusKeyboard();
@@ -549,7 +580,7 @@ export function mountScreenViewer(container, post) {
     else if (pointers.size === 2) startTwo();
   });
   overlay.addEventListener("pointermove", (e) => {
-    if (!rfb) return;
+    if (!live()) return;
     if (e.pointerType === "mouse") return mouseEvent(e, "move");
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, pointerInfo(e));
@@ -558,7 +589,7 @@ export function mountScreenViewer(container, post) {
     else if (pointers.size === 2 && gesture.kind === "two") moveTwo();
   });
   const finish = (e, cancelled) => {
-    if (!rfb) return;
+    if (!live()) return;
     if (e.pointerType === "mouse") return mouseEvent(e, "up");
     if (!pointers.has(e.pointerId)) return;
     const p = pointerInfo(e);
@@ -574,7 +605,7 @@ export function mountScreenViewer(container, post) {
   overlay.addEventListener("contextmenu", (e) => e.preventDefault());
   overlay.addEventListener("wheel", (e) => {
     e.preventDefault();
-    if (!rfb) return;
+    if (!live()) return;
     if (e.ctrlKey) {
       const l = local(e.clientX, e.clientY);
       zoomAt(view.s * Math.exp(-e.deltaY / 200), l.x, l.y);
@@ -610,13 +641,13 @@ export function mountScreenViewer(container, post) {
   const heldCodes = new Set();
   const borrowed = new Map(); // key code -> modifier keysyms sent on its behalf
   root.addEventListener("keydown", (e) => {
-    if (!rfb) return;
+    if (!live()) return;
     if (e.code) heldCodes.add(e.code);
     if (/^(Control|Alt|Meta|Shift)/.test(e.code) || !e.code || borrowed.has(e.code)) return;
     const sent = [];
     for (const [flag, codes, keysym] of MODIFIER_KEYS) {
       if (e[flag] && !codes.some((c) => heldCodes.has(c))) {
-        rfb.sendKey(keysym, codes[0], true);
+        sendKey(keysym, codes[0], true);
         sent.push([keysym, codes[0]]);
       }
     }
@@ -628,7 +659,7 @@ export function mountScreenViewer(container, post) {
     if (!sent) return;
     borrowed.delete(e.code);
     // The shortcut fired on the key's press; the modifier need not outlast it.
-    if (rfb) for (const [keysym, code] of sent.reverse()) rfb.sendKey(keysym, code, false);
+    if (live()) for (const [keysym, code] of sent.reverse()) sendKey(keysym, code, false);
   }, true);
 
   // The remote's paste reads the remote's clipboard, so the person's text goes
@@ -639,15 +670,15 @@ export function mountScreenViewer(container, post) {
   function releasePaste(text) {
     const held = heldPaste;
     heldPaste = null;
-    if (!held || !rfb) return;
+    if (!held || !live()) return;
     clearTimeout(held.timer);
-    if (text) rfb.clipboardPasteFrom(text);
-    rfb.sendKey(0x76, "KeyV", true);
-    rfb.sendKey(0x76, "KeyV", false);
+    if (text) paste(text);
+    sendKey(0x76, "KeyV", true);
+    sendKey(0x76, "KeyV", false);
     markInput();
   }
   root.addEventListener("keydown", (e) => {
-    if (!rfb || e.key.toLowerCase() !== "v" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat) return;
+    if (!live() || e.key.toLowerCase() !== "v" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat) return;
     if (!navigator.clipboard && !("onpaste" in doc)) return;
     e.stopPropagation(); // not to noVNC
     heldPaste = { timer: setTimeout(() => releasePaste(""), 250) };
@@ -691,16 +722,16 @@ export function mountScreenViewer(container, post) {
 
   function withModifiers(mods, action) {
     const held = (mods || []).map(keysymNamed).filter(Boolean);
-    for (const k of held) rfb.sendKey(k, null, true);
+    for (const k of held) sendKey(k, null, true);
     action();
-    for (const k of held.reverse()) rfb.sendKey(k, null, false);
+    for (const k of held.reverse()) sendKey(k, null, false);
     markInput();
   }
 
   function typeText(text, mods) {
     for (const ch of text) {
       const keysym = keysymFor(ch);
-      withModifiers(mods, () => rfb.sendKey(keysym, null));
+      withModifiers(mods, () => sendKey(keysym, null));
     }
   }
 
@@ -734,8 +765,10 @@ export function mountScreenViewer(container, post) {
     }
   }
 
-  const statsTimer = setInterval(() => {
-    if (!rfb) return;
+  const statsTimer = setInterval(async () => {
+    if (!live()) return;
+    if (video) stats.bytes += await video.received();
+    if (!live()) return;
     const now = performance.now();
     const seconds = (now - stats.since) / 1000;
     post({
@@ -758,21 +791,57 @@ export function mountScreenViewer(container, post) {
 
   // ---- lifecycle -----------------------------------------------------------
 
+  function pictureSized(width, height) {
+    if (width === fbW && height === fbH) return;
+    fbW = width;
+    fbH = height;
+    // A new picture (a window laid out for the phone, or put back): nothing tapped on the old one counts.
+    lastTap = { at: 0, x: 0, y: 0 };
+    beforeKeyboard = null;
+    if (!cursor.x && !cursor.y) cursor = { x: fbW / 2, y: fbH / 2 };
+    fitView();
+  }
+
   function observeCanvas() {
     canvas = root.querySelector("canvas");
     if (!canvas) return;
-    const resize = () => {
-      if (canvas.width === fbW && canvas.height === fbH) return;
-      fbW = canvas.width;
-      fbH = canvas.height;
-      // A new picture (a window laid out for the phone, or put back): nothing tapped on the old one counts.
-      lastTap = { at: 0, x: 0, y: 0 };
-      beforeKeyboard = null;
-      if (!cursor.x && !cursor.y) cursor = { x: fbW / 2, y: fbH / 2 };
-      fitView();
-    };
+    const resize = () => pictureSized(canvas.width, canvas.height);
     new MutationObserver(resize).observe(canvas, { attributes: true, attributeFilter: ["width", "height"] });
     resize();
+  }
+
+  // Pushed video: the computer offers, this page answers through the host.
+  function startVideo() {
+    const ticket = opening;
+    let connected = false;
+    video = createVideoPicture(doc, {
+      signal: (signal) => post({ type: "signal", signal }),
+      resized: (width, height) => {
+        if (ticket !== opening) return;
+        canvas = video.element;
+        pictureSized(width, height);
+        if (!connected) {
+          connected = true;
+          post({ type: "connected", width, height });
+        }
+      },
+      frame: () => {
+        if (ticket !== opening) return;
+        stats.updates++;
+        onDrawn();
+      },
+      failed: () => {
+        if (ticket === opening) post({ type: "disconnected", clean: false });
+      },
+    });
+    root.prepend(video.element);
+    // The browser's keys, as noVNC reads them for its canvas: a click gives the picture the keyboard.
+    keyboard = new Keyboard(video.element);
+    keyboard.onkeyevent = (keysym, code, down) => {
+      sendKey(keysym, code, down);
+      if (down) markInput();
+    };
+    keyboard.grab();
   }
 
   // noVNC decides whether to offer H.264 when it first speaks, from a probe
@@ -782,9 +851,16 @@ export function mountScreenViewer(container, post) {
   // The daemon's ProtocolVersion can arrive in the same batch as "open", before the client below
   // exists; the feed keeps it until then.
   const feed = createRfbFeed();
-  function open() {
+  function open(asVideo) {
     close(false);
     const ticket = ++opening;
+    wantVideo = asVideo;
+    if (asVideo) {
+      // RFB bytes before an offer mean an older computer: the feed keeps them for noVNC.
+      feed.opening();
+      startVideo();
+      return;
+    }
     feed.opening();
     const ready = globalThis.__mewlaH264Ready;
     if (!ready) return start();
@@ -835,7 +911,24 @@ export function mountScreenViewer(container, post) {
     opening++;
     feed.closed();
     inbox = [];
-    if (!rfb) return;
+    wantVideo = false;
+    if (keyboard) {
+      try { keyboard.ungrab(); } catch {}
+      keyboard = null;
+    }
+    if (video) {
+      const old = video;
+      video = null;
+      canvas = null;
+      fbW = fbH = 0;
+      buttons = 0;
+      pointers.clear();
+      gesture = null;
+      old.close();
+      if (notify) post({ type: "disconnected", clean: true });
+      return;
+    }
+    if (!live()) return;
     const old = rfb;
     rfb = null;
     canvas = null;
@@ -856,6 +949,17 @@ export function mountScreenViewer(container, post) {
 
   let inbox = [];
   function deliver(chunks, sentAt) {
+    if (wantVideo && video && chunks.length) {
+      // An older computer speaks RFB on this socket: show it with noVNC.
+      const old = video;
+      video = null;
+      if (keyboard) { try { keyboard.ungrab(); } catch {} keyboard = null; }
+      old.close();
+      wantVideo = false;
+      feed.accept(chunks);
+      start();
+      return;
+    }
     if (!channel) {
       feed.accept(chunks);
       return;
@@ -882,11 +986,12 @@ export function mountScreenViewer(container, post) {
 
   function handle(message) {
     switch (message.type) {
-      case "open": open(); break;
+      case "open": open(message.video === true); break;
       case "close": close(false); break;
       case "rfb": deliver(message.data, message.at); break;
-      case "text": if (rfb) typeText(message.text, message.mods); break;
-      case "key": if (rfb) withModifiers(message.mods, () => rfb.sendKey(keysymNamed(message.key), null)); break;
+      case "text": if (live()) typeText(message.text, message.mods); break;
+      case "key": if (live()) withModifiers(message.mods, () => sendKey(keysymNamed(message.key), null)); break;
+      case "signal": if (video) video.signal(message.signal); break;
       case "mode":
         mode = message.mode === "trackpad" ? "trackpad" : "touch";
         drawCursor();

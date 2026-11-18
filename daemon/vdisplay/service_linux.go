@@ -933,11 +933,13 @@ func (s *Service) View(worker string) (*Viewer, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, monitorRelay, closeView := NewMonitorView(w.screen.client, func() image.Rectangle {
+	rect := func() image.Rectangle {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 		return viewRect(w.rect, w.reflowed)
-	})
+	}
+	client := w.screen.client
+	conn, monitorRelay, closeView := NewMonitorView(client, rect)
 	w.mu.Lock()
 	w.viewers++
 	w.nextView++
@@ -991,7 +993,12 @@ func (s *Service) View(worker string) (*Viewer, error) {
 				}
 			})
 		},
-		Hold: hold,
+		Picture: func() ([]byte, int, int) {
+			r := rect()
+			return client.Crop(r), r.Dx(), r.Dy()
+		},
+		Watch: client.Watch,
+		Hold:  hold,
 		Fit: func(width, height int, dpr float64) Reflow {
 			fitMu.Lock()
 			defer fitMu.Unlock()
