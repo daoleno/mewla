@@ -595,21 +595,35 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 			let()
 		})
 	}
+	observe := func(in vdisplay.Input) {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		if holding {
+			return // the agent is held off: it hears how long, not what
+		}
+		owner.input = owner.input.Add(in)
+		owner.last = a.now()
+		if owner.acting > 0 {
+			owner.during = true
+		}
+	}
 	return &vdisplay.Viewer{
 		Conn: conn,
 		Relay: func(src io.Reader) error {
-			return vdisplay.RelayViewer(conn, src, func(in vdisplay.Input) {
-				a.mu.Lock()
-				defer a.mu.Unlock()
-				if holding {
-					return // the agent is held off: it hears how long, not what
-				}
-				owner.input = owner.input.Add(in)
-				owner.last = a.now()
-				if owner.acting > 0 {
-					owner.during = true
-				}
-			})
+			return vdisplay.RelayViewer(conn, src, observe)
+		},
+		// Pushed video: pictures straight from the window's view and input
+		// straight to it; the RFB server on conn never starts.
+		Next: func(ctx context.Context, after uint64) (vdisplay.Picture, error) {
+			f, err := view.Frame(ctx, after)
+			if err != nil {
+				return vdisplay.Picture{}, err
+			}
+			img := f.Image
+			return vdisplay.Picture{Pix: img.Pix, Width: img.Rect.Dx(), Height: img.Rect.Dy(), Stride: img.Stride, RGB: true, Seq: f.Seq}, nil
+		},
+		Input: func(src io.Reader) error {
+			return vdisplay.RelayViewer(sessionInput{view}, src, observe)
 		},
 		Hold:  hold,
 		Close: closeView,

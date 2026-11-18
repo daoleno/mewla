@@ -40,7 +40,7 @@ func TestFFmpegEncoders(t *testing.T) {
 		kind := &ffmpegKinds[i]
 		t.Run(kind.name, func(t *testing.T) {
 			const w, h = 960, 600
-			p, err := startFFmpeg(bin, kind, w, h, 4000)
+			p, err := startFFmpeg(bin, kind, w, h, 4000, false)
 			if err != nil {
 				t.Skip(err)
 			}
@@ -81,7 +81,7 @@ func TestEncoderKeyFrameOnDemand(t *testing.T) {
 	const w, h = 320, 240
 	for n := range 6 {
 		start := time.Now()
-		au, err := enc.Encode(testPicture(w, h, n), w, h, n == 3)
+		au, err := enc.Encode(Picture{Pix: testPicture(w, h, n), Width: w, Height: h, Stride: w * 4}, n == 3)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -90,6 +90,6 @@ func TestEncoderKeyFrameOnDemand(t *testing.T) {
 		if key != (n == 0 || n == 3) {
 			t.Fatalf("picture %d: key %v, NALs %v", n, key, types)
 		}
-		t.Logf("%s picture %d key=%v %d bytes in %v", enc.Kind, n, key, len(au), time.Since(start))
+		t.Logf("%s picture %d key=%v %d bytes in %v", enc.Name(), n, key, len(au), time.Since(start))
 	}
 }

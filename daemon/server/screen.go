@@ -13,6 +13,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/screen"
+	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/gorilla/websocket"
 )
 
@@ -232,12 +233,34 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 				device.ID, path, sum.Updates, sum.Refines, sum.Video, sum.Bytes>>10, sum.EncodeP50, sum.EncodeP95, sum.AckP50, sum.AckP95, sum.LowestQuality, sum.ViewerQuality, sum.MaxInFlight)
 		},
 	}
-	upstream, err := open(ctx, device.ID, observer)
+	// video=webrtc: the screen is pushed video over WebRTC (package
+	// screencast); this socket carries its signalling beside the control
+	// messages. Otherwise it carries RFB.
+	var cast *screen.Cast
+	var upstream net.Conn
+	if r.URL.Query().Get("video") == "webrtc" {
+		if watch {
+			cast, err = s.screen.WatchWorkerCast(ctx, device.ID, r.URL.Query().Get("worker"))
+		} else {
+			cast, err = s.screen.OpenCast(ctx, device.ID, observer)
+		}
+	} else {
+		upstream, err = open(ctx, device.ID, observer)
+	}
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
-	defer upstream.Close()
+	if cast != nil {
+		defer cast.Close()
+	} else {
+		defer upstream.Close()
+	}
+	var session *screencast.Session
+	castReady := make(chan struct{})
+	if cast == nil {
+		close(castReady)
+	}
 	name := device.Name
 	if name == "" {
 		name = "A paired device"
@@ -290,6 +313,9 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 			}
 			switch kind {
 			case websocket.BinaryMessage:
+				if cast != nil {
+					break // video: input rides the data channels
+				}
 				if _, err := viewerWriter.Write(data); err != nil {
 					cancel(err)
 					return
@@ -299,17 +325,73 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 					Type string          `json:"type"`
 					T    json.RawMessage `json:"t"`
 				}
-				if json.Unmarshal(data, &msg) == nil && msg.Type == "ping" {
+				if json.Unmarshal(data, &msg) != nil {
+					break
+				}
+				switch msg.Type {
+				case "ping":
 					sendJSON(map[string]any{"type": "pong", "t": msg.T})
+				case "rtc", "ice":
+					<-castReady
+					if session != nil {
+						if err := session.HandleSignal(data); err != nil {
+							log.Printf("screen: device %s signalling: %v", device.ID, err)
+						}
+					}
 				}
 			}
 		}
 	}()
 	go func() {
 		<-ctx.Done()
-		_ = upstream.Close()
+		if upstream != nil {
+			_ = upstream.Close()
+		}
 		_ = viewerReader.CloseWithError(context.Cause(ctx))
 	}()
+
+	if cast != nil {
+		var input func([]byte) error
+		if !watch { // watching, input goes nowhere
+			input = cast.Input
+		}
+		session, err = screencast.Start(ctx, screencast.Config{
+			Source:     cast,
+			Input:      input,
+			NewEncoder: screen.CastEncoder(),
+			Signal:     func(v any) { sendJSON(v) },
+			Stats: func(st screencast.Stats) {
+				fromScreen.Add(int64(st.Bytes))
+				advise(struct {
+					Type   string `json:"type"`
+					Path   string `json:"path"`
+					Locked bool   `json:"locked"`
+					screencast.Stats
+				}{"stats", path, locked.Load(), st})
+			},
+			LoopbackOnly: s.screenLoopbackOnly,
+			ICEServers:   s.screenICE(ctx),
+		})
+		close(castReady)
+		if err != nil {
+			sendJSON(map[string]string{"type": "error", "error": err.Error()})
+			return
+		}
+		defer session.Close()
+		sendJSON(map[string]string{"type": "ready"})
+		select {
+		case <-ctx.Done():
+		case <-session.Done():
+			if ctx.Err() == nil {
+				message := "The connection to the screen was lost"
+				if watch {
+					message = "The agent is done with the screen"
+				}
+				sendJSON(map[string]string{"type": "error", "error": message})
+			}
+		}
+		return
+	}
 
 	handshake := screenViewerStream{reader: viewerReader, send: send}
 	if err := screen.AcceptClient(handshake); err != nil {

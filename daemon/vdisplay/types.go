@@ -1,6 +1,8 @@
 package vdisplay
 
 import (
+	"bytes"
+	"context"
 	"image"
 	"io"
 	"net"
@@ -76,16 +78,53 @@ type Reflower interface {
 	Restore(worker string) error
 }
 
+// Picture is one picture of a view: rows of 4 bytes a pixel, B G R X (or
+// R G B X when RGB), Stride bytes apart, numbered in order.
+type Picture struct {
+	Pix           []byte
+	Width, Height int
+	Stride        int
+	RGB           bool
+	Seq           uint64
+}
+
+// Pictures numbers what get returns, a new number each time it differs, and
+// waits on changed between: a Viewer's Next for a display that tells when it
+// may have changed but not what.
+func Pictures(get func() ([]byte, int, int), changed <-chan struct{}) func(ctx context.Context, after uint64) (Picture, error) {
+	var last []byte
+	var size [2]int
+	var seq uint64
+	return func(ctx context.Context, after uint64) (Picture, error) {
+		for {
+			pix, w, h := get()
+			if seq == 0 || [2]int{w, h} != size || !bytes.Equal(pix, last) {
+				seq++
+				last, size = pix, [2]int{w, h}
+			}
+			if seq > after {
+				return Picture{Pix: last, Width: w, Height: h, Stride: w * 4, Seq: seq}, nil
+			}
+			select {
+			case <-changed:
+			case <-ctx.Done():
+				return Picture{}, context.Cause(ctx)
+			}
+		}
+	}
+}
+
 // Viewer is a person's connection to a Worker's display.
 type Viewer struct {
 	// Conn is the display's RFB stream, past the handshake with no security:
 	// the next bytes in either direction are ClientInit and then updates.
 	Conn net.Conn
-	// Picture is what the view shows now, as B G R X rows, and its size; Watch
-	// is told when it may have changed. Nil where the display has no picture
-	// of its own to give (its view is RFB only).
-	Picture func() ([]byte, int, int)
-	Watch   func() (<-chan struct{}, func())
+	// Next is the view's next picture after the one numbered after (0: what
+	// it shows now), waiting for it: what Screen pushes as video.
+	Next func(ctx context.Context, after uint64) (Picture, error)
+	// Input is Relay for a view shown by Next: the same messages (from
+	// ClientInit on), counted the same, with no RFB pictures sent back.
+	Input func(src io.Reader) error
 	// Relay passes the person's messages to the display and counts them.
 	Relay func(src io.Reader) error
 	// Hold holds the agent off (true) or lets it go on (false). A held view

@@ -2,9 +2,9 @@ package screencast
 
 import (
 	"context"
-	"net"
 	"encoding/binary"
 	"encoding/json"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -20,13 +20,21 @@ type fakeSource struct {
 	ch   chan struct{}
 }
 
-func (f *fakeSource) Picture() ([]byte, int, int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return testPicture(f.w, f.h, f.n), f.w, f.h
+func (f *fakeSource) Next(ctx context.Context, after uint64) (Picture, error) {
+	for {
+		f.mu.Lock()
+		n := f.n
+		f.mu.Unlock()
+		if uint64(n+1) > after {
+			return Picture{Pix: testPicture(f.w, f.h, n), Width: f.w, Height: f.h, Stride: f.w * 4, Seq: uint64(n + 1)}, nil
+		}
+		select {
+		case <-f.ch:
+		case <-ctx.Done():
+			return Picture{}, ctx.Err()
+		}
+	}
 }
-
-func (f *fakeSource) Watch() (<-chan struct{}, func()) { return f.ch, func() {} }
 
 func (f *fakeSource) change() {
 	f.mu.Lock()

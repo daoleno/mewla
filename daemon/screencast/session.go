@@ -15,7 +15,6 @@
 package screencast
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -36,17 +35,12 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media"
 )
 
-// Source is the picture a session sends.
-type Source interface {
-	// Picture is the current picture as B G R X rows and its size.
-	Picture() (pix []byte, width, height int)
-	// Watch is told whenever the picture may have changed; the func stops it.
-	Watch() (<-chan struct{}, func())
-}
-
 // Config is what a session needs from its caller.
 type Config struct {
 	Source Source
+	// NewEncoder makes this computer's encoder (VideoToolbox on a Mac); nil
+	// uses ffmpeg.
+	NewEncoder func(kbps int) (Encoder, error)
 	// Input takes the person's RFB client messages (KeyEvent, PointerEvent,
 	// ClientCutText), whole and in order. Nil: the view is for watching.
 	Input func(msg []byte) error
@@ -108,7 +102,7 @@ type Session struct {
 	cfg   Config
 	pc    *webrtc.PeerConnection
 	track *webrtc.TrackLocalStaticSample
-	enc   *ffmpegEncoder
+	enc   Encoder
 	bwe   chan cc.BandwidthEstimator
 
 	ctx    context.Context
@@ -131,7 +125,13 @@ type Session struct {
 // Start makes the peer, its video track and data channels, and sends the
 // offer through cfg.Signal. The session ends with ctx, Close, or a lost link.
 func Start(ctx context.Context, cfg Config) (*Session, error) {
-	enc, err := newFFmpegEncoder(startKbps)
+	var enc Encoder
+	var err error
+	if cfg.NewEncoder != nil {
+		enc, err = cfg.NewEncoder(startKbps)
+	} else {
+		enc, err = newFFmpegEncoder(startKbps)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -441,12 +441,31 @@ func rfbLength(msg []byte) int {
 
 func (s *Session) run() {
 	defer s.enc.Close()
-	changed, stop := s.cfg.Source.Watch()
-	defer stop()
+	// The newest picture, pulled from the source as it changes; an older one
+	// not yet sent is replaced, never queued.
+	pictures := make(chan Picture, 1)
+	go func() {
+		var after uint64
+		for {
+			p, err := s.cfg.Source.Next(s.ctx, after)
+			if err != nil {
+				if s.ctx.Err() == nil {
+					s.cancel(err)
+				}
+				return
+			}
+			after = p.Seq
+			p.Pix = append([]byte(nil), p.Pix[:p.Height*p.Stride]...)
+			select {
+			case <-pictures:
+			default:
+			}
+			pictures <- p
+		}
+	}()
 	var (
-		last      []byte
-		lastW     int
-		lastH     int
+		last      *Picture
+		pending   *Picture
 		lastSent  time.Time
 		changedAt time.Time
 		estimator cc.BandwidthEstimator
@@ -458,21 +477,8 @@ func (s *Session) run() {
 	defer tick.Stop()
 	statsTick := time.NewTicker(time.Second)
 	defer statsTick.Stop()
-	send := func(force bool) {
-		pix, srcW, srcH := s.cfg.Source.Picture()
-		w, h := srcW&^1, srcH&^1
-		if w <= 0 || h <= 0 || len(pix) < srcW*srcH*4 {
-			return
-		}
-		pix = evenCrop(pix, srcW, w, h)
+	send := func(p *Picture) {
 		now := time.Now()
-		same := w == lastW && h == lastH && bytes.Equal(pix, last)
-		if same && !force {
-			return
-		}
-		if !same {
-			changedAt = now
-		}
 		s.mu.Lock()
 		key := s.needKey && now.Sub(s.lastKey) > 300*time.Millisecond
 		if key {
@@ -492,19 +498,22 @@ func (s *Session) run() {
 			}
 		}
 		start := time.Now()
-		au, err := s.enc.Encode(pix, w, h, key)
+		au, err := s.enc.Encode(*p, key)
 		took := time.Since(start)
 		if err != nil {
 			log.Printf("screencast: encode: %v", err)
 			s.cancel(err)
 			return
 		}
+		if len(au) == 0 {
+			return // the encoder skipped it; the stream is as it was
+		}
 		var dur time.Duration
 		if !lastSent.IsZero() {
 			dur = now.Sub(lastSent)
 		}
 		lastSent = now
-		last, lastW, lastH = pix, w, h
+		last = p
 		if err := s.track.WriteSample(media.Sample{Data: au, Duration: dur}); err != nil {
 			return
 		}
@@ -517,34 +526,36 @@ func (s *Session) run() {
 			return
 		case e := <-s.bwe:
 			estimator = e
-			continue
 		case <-statsTick.C:
 			if s.cfg.Stats != nil {
 				out := st.flush(kbps)
-				out.Encoder = s.enc.Kind
-				out.Width, out.Height = lastW, lastH
+				out.Encoder = s.enc.Name()
+				if last != nil {
+					out.Width, out.Height = last.Width&^1, last.Height&^1
+				}
 				out.Route, out.RTTMs = s.route()
 				s.cfg.Stats(out)
 			}
-			continue
 		case <-s.kick:
-			send(true)
-			continue
+			if p := pending; p != nil {
+				pending, wait = nil, nil
+				send(p)
+			} else if last != nil {
+				send(last)
+			}
 		case <-tick.C:
 			// The first second of stillness: send the still picture again
 			// so it sharpens, and a key frame when the viewer lost one.
 			s.mu.Lock()
 			needKey := s.needKey
 			s.mu.Unlock()
-			if last == nil || (time.Since(changedAt) > stillFor && !needKey) {
+			if last == nil || pending != nil || (time.Since(changedAt) > stillFor && !needKey) || time.Since(lastSent) < stillEvery {
 				continue
 			}
-			if time.Since(lastSent) < stillEvery {
-				continue
-			}
-			send(true)
-			continue
-		case <-changed:
+			send(last)
+		case p := <-pictures:
+			changedAt = time.Now()
+			pending = &p
 			if wait != nil {
 				continue // already due
 			}
@@ -552,26 +563,19 @@ func (s *Session) run() {
 				wait = time.After(d)
 				continue
 			}
+			pending = nil
+			send(&p)
 		case <-wait:
+			wait = nil
+			if p := pending; p != nil {
+				pending = nil
+				send(p)
+			}
 		}
-		wait = nil
-		send(last == nil)
 	}
 }
 
 func nalStartsKey(au []byte) bool { return len(au) > 4 && au[4]&0x1f == 7 }
-
-// evenCrop drops a last odd column or row (4:2:0 needs even sizes).
-func evenCrop(pix []byte, srcW, w, h int) []byte {
-	if srcW == w {
-		return pix[:w*h*4]
-	}
-	out := make([]byte, w*h*4)
-	for y := range h {
-		copy(out[y*w*4:(y+1)*w*4], pix[y*srcW*4:y*srcW*4+w*4])
-	}
-	return out
-}
 
 // route names the path the picture takes (as clientaddr does for requests)
 // and the link's round trip.
