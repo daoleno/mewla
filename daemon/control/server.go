@@ -40,6 +40,8 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	defer listener.Close()
 	defer os.Remove(s.Path)
+	// Listening again: commands waiting out a restart reach this daemon.
+	ClearRestarting(s.Path)
 
 	var connectionMu sync.Mutex
 	connections := make(map[net.Conn]struct{})

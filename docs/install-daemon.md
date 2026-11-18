@@ -227,10 +227,19 @@ does, from GitHub's `releases/latest` redirect, so it needs no GitHub API call
 and API rate limits don't apply. Betas are not offered; install one with
 `MEWLA_VERSION`. It checks the release's signed manifest and the archive
 checksum before it replaces the binary, then restarts the running Mewla onto
-it: through the logon task on Windows, the systemd user service on Linux, and
-on macOS by replacing `Mewla.app` and restarting its service, keeping your
-address, directories and `PATH`. Your Sessions and agents keep running: they
-live in the session host, not in the daemon.
+it: through the logon task on Windows, on macOS by replacing `Mewla.app` and
+restarting its service, and on Linux in place (below), under the systemd user
+service too, keeping your address, directories and `PATH`. Your Sessions and
+agents keep running: they live in the session host, not in the daemon.
+
+A restart never cuts an agent's model reply. Agents reach their model through
+Mewla, so before it restarts, Mewla lets every reply in progress finish (for up
+to five minutes) while it keeps running, and keeps its model listeners open
+across the restart: a request an agent makes meanwhile waits for the new Mewla
+instead of failing, and a `mewla` command waits too instead of saying Mewla is
+not running. Ctrl+C during that wait stops Mewla at once. A plain stop (Ctrl+C,
+`systemctl --user stop`) waits up to 15 seconds for replies. On Windows the
+listeners close for the few seconds a restart takes, and agents retry.
 
 A Mewla you started yourself, in a terminal or detached, restarts itself in
 place: it checks that the new binary runs as the new version, shuts down as it

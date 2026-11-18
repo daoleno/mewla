@@ -396,18 +396,23 @@ func TestRestartTakesADaemonStartedDetached(t *testing.T) {
 	}
 }
 
-func TestRestartUsesTheSystemdUnitOnlyWhenItRunsTheDaemon(t *testing.T) {
+// Under the systemd unit the daemon restarts itself in place too (it drains
+// Workers' model replies and keeps the relay's sockets open across the exec);
+// systemd restarts only a daemon too old to do that.
+func TestRestartUsesTheSystemdUnitOnlyForADaemonThatCannotRestartItself(t *testing.T) {
 	stateDir, daemonID := restartStateDir(t)
 	for _, test := range []struct {
 		name    string
 		mainPID string
-		restart bool
+		refuse  error
+		systemd bool
 	}{
-		{"unit runs it", "500", true},
-		{"started by hand", "0", false},
+		{"unit runs it", "500", nil, false},
+		{"unit runs an old one", "500", errInPlaceUnsupported, true},
+		{"started by hand", "0", nil, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			daemon := &fakeDaemon{daemonID: daemonID, pid: 500, version: "0.4.5", running: true}
+			daemon := &fakeDaemon{daemonID: daemonID, pid: 500, version: "0.4.5", running: true, refuse: test.refuse}
 			runner := &fakeBootRunner{
 				responses: map[string]string{
 					"systemctl --user is-active mewla.service":               "active",
@@ -426,12 +431,15 @@ func TestRestartUsesTheSystemdUnitOnlyWhenItRunsTheDaemon(t *testing.T) {
 			rt.image = func(int) (string, error) { return "/home/p/.local/bin/mewla (deleted)", nil }
 			var out bytes.Buffer
 			err := restartAfterUpdate(rt, stateDir, "0.4.5", "0.4.6", &out)
-			restarted := runner.count("systemctl --user restart mewla.service") == 1
-			if restarted != test.restart || err != nil {
-				t.Fatalf("restarted %t, want %t (err %v)", restarted, test.restart, err)
+			systemd := runner.count("systemctl --user restart mewla.service") == 1
+			if systemd != test.systemd || err != nil {
+				t.Fatalf("systemd restart %t, want %t (err %v)", systemd, test.systemd, err)
 			}
-			if !test.restart && (len(daemon.upgrades) != 1 || daemon.version != "0.4.6") {
-				t.Fatalf("started by hand: upgrades %v, version %s", daemon.upgrades, daemon.version)
+			if daemon.version != "0.4.6" {
+				t.Fatalf("daemon runs %s after the restart", daemon.version)
+			}
+			if !test.systemd && len(daemon.upgrades) != 1 {
+				t.Fatalf("in-place restarts %v", daemon.upgrades)
 			}
 		})
 	}

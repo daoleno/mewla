@@ -104,8 +104,12 @@ type Handover struct {
 	Version   string   // the version Staged must report
 	Args      []string // the daemon's own arguments, repeated for the child
 	Env       []string
-	StateDir  string
-	BrainRoot string
+	// ExtraFiles are passed to the child from fd 3 on: the model relay's
+	// listening sockets, so a Worker's request in the handover waits instead
+	// of being refused (listenhandoff.ForChild).
+	ExtraFiles []*os.File
+	StateDir   string
+	BrainRoot  string
 	// Gate is how long the child has to answer before it is given up on.
 	Gate time.Duration
 	// Healthy returns nil once the child answers as Version.
@@ -148,6 +152,7 @@ func (h Handover) Run(ctx context.Context) Outcome {
 	child := exec.Command(h.Staged, h.Args...)
 	child.Env = append(append([]string(nil), h.Env...), ChildEnv+"=1")
 	child.Stdout, child.Stderr = h.Stdout, h.Stderr
+	child.ExtraFiles = h.ExtraFiles
 	if err := child.Start(); err != nil {
 		return fail(true, "the new version could not start: "+err.Error())
 	}

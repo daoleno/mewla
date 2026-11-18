@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -82,6 +83,13 @@ func prefersHTML(accept string) bool {
 		}
 	}
 	return html > 0 && html >= json
+}
+
+// SetWebUIFiles serves the web UI from files instead of the build embedded in
+// this binary: the dev runner's daemon/webui/dist, which it rebuilds on a
+// client/ edit without restarting the daemon. Set it before serving.
+func (s *Server) SetWebUIFiles(files fs.FS) {
+	s.webUIFiles = files
 }
 
 // webUIHandler serves the browser app only where the operator expects it:

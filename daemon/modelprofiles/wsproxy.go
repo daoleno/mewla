@@ -29,6 +29,10 @@ const wsProxyMaxMessage = 64 << 20
 const websocketCloseGoingAway = 1001
 const wsProxyUpstreamDialTimeout = 15 * time.Second
 
+// wsDrainReason closes a Codex connection at a turn boundary while Mewla
+// restarts; Codex opens a new one for its next response.
+const wsDrainReason = "mewla restarting"
+
 var wsProxyConnectionSequence atomic.Uint64
 
 type wsConnRegistry struct {
@@ -40,10 +44,63 @@ type wsConnRegistry struct {
 	closed      bool
 	closeCode   int
 	closeReason string
+	// draining is closed when the daemon stops: each connection ends at its
+	// next turn boundary (at once when no response is in progress), so a
+	// restart never cuts a response mid-stream.
+	draining  chan struct{}
+	drainOnce sync.Once
+	// turns counts responses in progress on these connections.
+	turns atomic.Int64
 }
 
 func newWSConnRegistry() *wsConnRegistry {
-	return &wsConnRegistry{conns: map[*websocket.Conn]struct{}{}}
+	return &wsConnRegistry{conns: map[*websocket.Conn]struct{}{}, draining: make(chan struct{})}
+}
+
+// drain asks every connection to end at its next turn boundary and refuses
+// new ones.
+func (r *wsConnRegistry) drain() {
+	if r == nil {
+		return
+	}
+	r.drainOnce.Do(func() { close(r.draining) })
+}
+
+func (r *wsConnRegistry) drainSignal() <-chan struct{} {
+	if r == nil {
+		return nil
+	}
+	return r.draining
+}
+
+func (r *wsConnRegistry) isDraining() bool {
+	if r == nil {
+		return false
+	}
+	select {
+	case <-r.draining:
+		return true
+	default:
+		return false
+	}
+}
+
+// open is how many connections are still proxied.
+func (r *wsConnRegistry) open() int {
+	if r == nil {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.conns)
+}
+
+// activeTurns is how many responses are in progress.
+func (r *wsConnRegistry) activeTurns() int {
+	if r == nil {
+		return 0
+	}
+	return int(r.turns.Load())
 }
 func (r *wsConnRegistry) add(c *websocket.Conn) bool {
 	if r == nil || c == nil {
@@ -54,6 +111,11 @@ func (r *wsConnRegistry) add(c *websocket.Conn) bool {
 		code, reason := r.closeCode, r.closeReason
 		r.mu.Unlock()
 		closeWebSocket(c, code, reason)
+		return false
+	}
+	if r.isDraining() {
+		r.mu.Unlock()
+		closeWebSocket(c, websocketCloseGoingAway, wsDrainReason)
 		return false
 	}
 	r.conns[c] = struct{}{}
@@ -222,14 +284,33 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 	clientStop := make(chan struct{})
 	defer close(clientStop)
 	clientRead := startWSProxyReader(clientConn, clientStop)
-	var turnActive, completedForwarded bool
+	var turnActive, completedForwarded, drainAfterTurn bool
 	var finishTurn func(bool)
+	drain := registry.drainSignal()
+	setTurn := func(active bool) {
+		if active != turnActive {
+			if active {
+				registry.turns.Add(1)
+			} else {
+				registry.turns.Add(-1)
+			}
+		}
+		turnActive = active
+	}
+	defer setTurn(false)
 	for {
 		var upstreamRead <-chan wsProxyRead
 		if leg != nil {
 			upstreamRead = leg.read
 		}
 		select {
+		case <-drain:
+			drain = nil
+			if !turnActive {
+				wsProxyClose(clientConn, websocketCloseGoingAway, wsDrainReason)
+				return
+			}
+			drainAfterTurn = true
 		case item := <-clientRead:
 			if item.err != nil {
 				code, reason, category := wsCloseDetails(item.err)
@@ -273,7 +354,7 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 					}
 				}
 				finishTurn = target.done
-				turnActive = true
+				setTurn(true)
 				completedForwarded = false
 			}
 			if kind == "response.processed" && leg == nil {
@@ -315,7 +396,7 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 			}
 			if wsJSONType(item.messageType, item.payload) == "response.completed" {
 				completedForwarded = true
-				turnActive = false
+				setTurn(false)
 				if finishTurn != nil {
 					finishTurn(true)
 					finishTurn = nil
@@ -325,6 +406,10 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 				// resolves and dials the current provider without an EOF race.
 				leg.close()
 				leg = nil
+				if drainAfterTurn {
+					wsProxyClose(clientConn, websocketCloseGoingAway, wsDrainReason)
+					return
+				}
 			}
 		}
 	}

@@ -114,9 +114,15 @@ cd daemon && go build ./cmd/mewla
 
 For development, `cd daemon && go run ./cmd/mewla-dev` builds the current web
 sources before its first daemon build. It watches `client/ui`, `client/core`,
-`scripts/build-web-ui.sh` and daemon sources. Client changes rebuild the web UI
-before rebuilding the daemon; generated bundles and dependencies do not trigger
-another rebuild. A failed web build keeps the previous daemon running.
+`scripts/build-web-ui.sh` and daemon sources. A change only to web sources
+rebuilds the web UI and nothing else: the dev daemon serves `daemon/webui/dist`
+from disk (`MEWLA_DEV_WEB_UI_DIR`, which release builds ignore), so it keeps
+running and every Worker's model stream through it keeps going.
+`build-web-ui.sh` swaps the new package in with one rename, so a page loaded
+mid-build never meets a half-copied folder. A batch with daemon sources rebuilds
+the web UI, then the daemon, and restarts it in place. Generated bundles and
+dependencies do not trigger another rebuild. A failed web build keeps the
+previous daemon running.
 
 An already running dev watcher keeps its own compiled code until its next launch.
 When changing the watcher itself, stage the web bundle with `bun run web:build`
