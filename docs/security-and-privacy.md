@@ -26,9 +26,13 @@ devices you trust with a terminal on that computer.**
 
 [Screen](screen.md) lets a paired device see and control the computer's
 screen, but only after someone at the computer allows that device. The daemon
-captures the screen itself and serves it over the device's signed connection;
-no screen-sharing port is opened. `mewla screen disable` at the computer closes
-every viewer and forgets every allowed device.
+captures the screen itself and sends it as video over WebRTC, set up over the
+device's signed connection: directly on the LAN or Tailscale (UDP on those
+interfaces, for the time a view is open), otherwise through Mewla Relay's TURN.
+The video and input are encrypted between the device and the computer, each
+side's certificate signed by its paired key, so the relay forwards what it
+cannot read. No screen-sharing port stays open. `mewla screen disable` at the
+computer closes every viewer and forgets every allowed device.
 
 ## Your other computers
 

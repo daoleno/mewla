@@ -13,7 +13,7 @@ import { isSignal, type ScreenSignal } from "./screenViewerProtocol";
 /**
  * Screen: the computer's own screen (Mac, Windows) or an agent's display (Linux),
  * over the computer's HTTP doors `/screen` and `/display` and two viewer sockets
- * that carry RFB bytes (binary) beside JSON control (text).
+ * that carry JSON: WebRTC signalling for the pushed video beside control.
  */
 
 export interface ScreenPower {
