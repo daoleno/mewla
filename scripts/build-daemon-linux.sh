@@ -30,7 +30,7 @@
 # build-libghostty-desktop.sh wrote for the same pinned release and Zig is used
 # as it is. --web-ui prebuilt skips scripts/build-web-ui.sh and embeds the
 # daemon/webui/dist it staged earlier (the release workflow builds it once for
-# every target); it must be there, with its <base href="/">.
+# every target); it must be there, its page naming every file from the site's root (scripts/web-page-root.py).
 
 set -euo pipefail
 
@@ -150,7 +150,7 @@ else
   # What build-web-ui.sh stages: gzip-only files with the page at the root.
   WEB_DIST="$ROOT/daemon/webui/dist"
   [[ -f "$WEB_DIST/index.html.gz" ]] || { echo "error: --web-ui prebuilt: no $WEB_DIST/index.html.gz (run scripts/build-web-ui.sh)" >&2; exit 1; }
-  gzip -dc "$WEB_DIST/index.html.gz" | grep -q '^<base href="/">$' || { echo "error: --web-ui prebuilt: $WEB_DIST/index.html.gz has no <base href=\"/\">" >&2; exit 1; }
+  python3 -I "$ROOT/scripts/web-page-root.py" "$WEB_DIST/index.html.gz" >/dev/null || { echo "error: --web-ui prebuilt: $WEB_DIST/index.html.gz does not load its files from the site's root" >&2; exit 1; }
   [[ -f "$WEB_DIST/terminal/mewla-vt.wasm.gz" ]] || { echo "error: --web-ui prebuilt: no terminal/mewla-vt.wasm.gz in $WEB_DIST" >&2; exit 1; }
   echo "Web UI: the prebuilt one in $WEB_DIST ($(du -sh "$WEB_DIST" | cut -f1) gzip)"
 fi

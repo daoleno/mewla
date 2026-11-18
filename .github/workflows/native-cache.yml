@@ -145,7 +145,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p daemon/webui/dist/terminal
-          echo '<base href="/">' | gzip -9 -n > daemon/webui/dist/index.html.gz
+          printf '%s\n' '<link rel="stylesheet" href="/stand-in.css">' '<script type="application/json" id="nsh-app">{"base":"/"}</script>' | gzip -9 -n > daemon/webui/dist/index.html.gz
           printf 'stand-in' | gzip -9 -n > daemon/webui/dist/terminal/mewla-vt.wasm.gz
       - name: Build the daemon as a release does
         env:

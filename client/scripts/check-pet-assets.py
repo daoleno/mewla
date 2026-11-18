@@ -34,8 +34,9 @@ def named() -> list[str]:
 
 def web(folder: Path, wanted: list[str]) -> list[str]:
     html = (folder / "index.html").read_text()
-    # The asset map: "assets/pets/p05/waking.webp":"assets/assets/pets/p05/waking.cbc7fa95db.webp".
-    mapped = dict(re.findall(r'"(assets/pets/[^"]+)":"([^"]+)"', html))
+    # The asset map: "assets/pets/p05/waking.webp":"/assets/assets/pets/p05/waking.cbc7fa95db.webp", from the
+    # site's root (NSH 0.6; 0.5 wrote it relative, without the leading "/").
+    mapped = {name: url.lstrip("/") for name, url in re.findall(r'"(assets/pets/[^"]+)":"([^"]+)"', html)}
     missing = []
     for path in wanted:
         target = mapped.get(path)
