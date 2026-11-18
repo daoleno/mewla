@@ -34,8 +34,8 @@ func requireVideo(t *testing.T) {
 	enc, err := factory(1000)
 	if err == nil {
 		defer enc.Close()
-		pix := make([]byte, 64*64*4)
-		_, err = enc.Encode(screencast.Picture{Pix: pix, Width: 64, Height: 64, Stride: 64 * 4, RGB: true, Seq: 1}, true)
+		pix := make([]byte, 320*240*4)
+		_, err = enc.Encode(screencast.Picture{Pix: pix, Width: 320, Height: 240, Stride: 320 * 4, RGB: true, Seq: 1}, true)
 	}
 	if err != nil {
 		t.Skipf("this %s's H.264 encoder does not start here: %v", runtime.GOOS, err)

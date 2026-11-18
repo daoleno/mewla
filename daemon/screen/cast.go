@@ -104,6 +104,13 @@ func CastEncoder() func(kbps int) (screencast.Encoder, error) {
 	}
 	factory := defaultVideo
 	return func(kbps int) (screencast.Encoder, error) {
+		// The encoder starts at the first picture's size; trying one now makes
+		// a computer without one (a Windows N edition) say so to the viewer.
+		probe, err := factory(320, 240, kbps)
+		if err != nil {
+			return nil, err
+		}
+		probe.Close()
 		return &castEncoder{factory: factory, kbps: kbps}, nil
 	}
 }
