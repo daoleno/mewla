@@ -17,8 +17,9 @@
 // VT) sits above the screen; wheel and touch drags scroll it by the pixel, and with none,
 // or with the program on the alternate screen, they go to the app as `scroll` lines. A
 // hidden textarea at the cursor takes the keyboard and the input method: keys are encoded
-// by libghostty-vt for the program's modes, a composition is drawn at the cursor and sent
-// once it is committed.
+// by libghostty-vt for the program's modes, except that a key which only types its text
+// leaves that text to the textarea (so an input method can make it something else); a
+// composition is drawn at the cursor and sent once it is committed.
 
 (function () {
   "use strict";
@@ -220,8 +221,55 @@
     return m ? parseInt(m[1], 16) : 0;
   }
 
+  /**
+   * The keyboard and the input method: the textarea's events in, text for the program out.
+   * `encode(event)` is libghostty-vt's bytes for a key ("" for none), `send(text)` gives text to
+   * the program. A key whose bytes are only the text it types is the browser's: that text comes
+   * with the textarea's `input` event, after the input method had its say, so what goes is what
+   * the input method made of the key (a Chinese one's ，。、, a composition it starts after the
+   * key) and never the bare letter too. Keys without text (Enter, arrows), with Ctrl or Alt, or
+   * that the program asked for as escape codes (kitty's report-all) are encoded at the key.
+   * A composition sends nothing until it is committed, then the committed text, once.
+   * `keydown` says whether it took the key (the page then keeps it from the browser).
+   */
+  function keyboard(encode, send) {
+    var composing = false, preedit = "";
+    return {
+      composing: function () { return composing; },
+      preedit: function () { return preedit; },
+      keydown: function (event) {
+        if (composing || event.isComposing || event.keyCode === 229) return false;
+        if (event.key === "Dead" || event.key === "Process" || event.key === "Unidentified") return false;
+        var bytes = encode(event);
+        if (!bytes) return false;
+        var text = keyText(event);
+        if (text && bytes === text) return false;
+        send(bytes);
+        return true;
+      },
+      input: function (event) {
+        if (composing || event.isComposing || /Composition/.test(event.inputType || "")) return;
+        if (event.inputType === "insertText" && event.data) send(event.data);
+        else if (event.inputType === "insertLineBreak") send("\r");
+      },
+      compositionstart: function () {
+        composing = true;
+        preedit = "";
+      },
+      compositionupdate: function (event) {
+        preedit = event.data || "";
+      },
+      compositionend: function (event) {
+        composing = false;
+        preedit = "";
+        // Committed once: the input events around it are the composition's, not more text.
+        if (event.data) send(event.data);
+      },
+    };
+  }
+
   var helpers = { keyAction: keyAction, keyCode: keyCode, KEY_NAMES: KEY_NAMES, unshiftedOf: unshiftedOf, modsOf: modsOf, keyText: keyText,
-    gather: gather, cellsText: cellsText, selectionText: selectionText, wordAt: wordAt, lineSpan: lineSpan, textIndex: textIndex,
+    keyboard: keyboard, gather: gather, cellsText: cellsText, selectionText: selectionText, wordAt: wordAt, lineSpan: lineSpan, textIndex: textIndex,
     viewportOf: viewportOf, palette256: palette256, rgbOf: rgbOf };
   if (typeof module === "object" && module && module.exports) {
     module.exports = helpers;
@@ -275,7 +323,8 @@
   var cursor = { col: 0, row: 0, visible: false, style: 1, blinking: false };
   var scrollPx = 0, pending = 0, lastViewport = "";
   var sel = null, focused = false, blinkOn = true, blinkTimer = 0;
-  var composing = false, preedit = "";
+  // The keyboard and the input method (keyboard(), above); its composition is drawn at the cursor.
+  var keys = keyboard(function (e) { return encodeKey(e); }, function (data) { input_(data); });
 
   function fail(error) {
     failed = true;
@@ -692,7 +741,8 @@
     var line = history.length + cursor.row;
     var x0 = padX + cursor.col * cellW, y = lineY(line);
     if (y + cellH <= 0 || y >= canvas.height) return;
-    if (composing && preedit) {
+    var preedit = keys.preedit();
+    if (keys.composing() && preedit) {
       // The composition, at the cursor, over the cells it covers, underlined.
       setFace(face(0));
       var w = Math.max(cellW, Math.ceil(ctx.measureText(preedit).width / cellW) * cellW);
@@ -1007,8 +1057,18 @@
     send({ type: "input", data: data });
   }
 
+  /** libghostty-vt's bytes for a key, for the program's modes ("" for none). */
+  function encodeKey(e) {
+    if (!vt) return "";
+    var mods = modsOf(e, mac);
+    var sent = withBytes(enc.encode(keyText(e)), function (p, n) {
+      return x.mewla_vt_key(vt, keyCode(e.code), mods, e.repeat ? KEY_REPEAT : KEY_PRESS, p, n, unshiftedOf(e.code), outBuf, outBuf + 4);
+    });
+    return sent ? outText() : "";
+  }
+
   input.addEventListener("keydown", function (e) {
-    if (e.isComposing || e.keyCode === 229 || composing) return;
+    if (e.isComposing || e.keyCode === 229 || keys.composing()) return;
     var action = keyAction(e, hasSelection(), mac);
     if (action.kind === "native") {
       var at = Date.now();
@@ -1024,43 +1084,27 @@
       if (action.kind === "copy") copySelection();
       return;
     }
-    if (!vt || e.key === "Dead" || e.key === "Process" || e.key === "Unidentified") return;
     // ⌘ shortcuts on a Mac are the browser's and the app's (⌘K, ⌘N...), not the program's.
     if (mac && e.metaKey) return;
-    var text = keyText(e);
-    var mods = modsOf(e, mac);
-    var bytes = enc.encode(text);
-    var sent = withBytes(bytes, function (p, n) {
-      return x.mewla_vt_key(vt, keyCode(e.code), mods, e.repeat ? KEY_REPEAT : KEY_PRESS, p, n, unshiftedOf(e.code), outBuf, outBuf + 4);
-    });
-    if (sent) {
-      e.preventDefault();
-      input_(outText());
-    }
+    if (keys.keydown(e)) e.preventDefault();
   });
 
-  // Text that comes without a key the encoder knows (a dictation, an emoji picker): as typed.
+  // Typed text (a plain key's, after the input method had it; a dictation, an emoji picker): as typed.
   input.addEventListener("input", function (e) {
-    if (composing || e.isComposing || /Composition/.test(e.inputType || "")) return;
-    if (e.inputType === "insertText" && e.data) input_(e.data);
-    else if (e.inputType === "insertLineBreak") input_("\r");
-    if (!composing) input.value = "";
+    keys.input(e);
+    if (!keys.composing()) input.value = "";
   });
   input.addEventListener("compositionstart", function () {
-    composing = true;
-    preedit = "";
+    keys.compositionstart();
     placeInput();
     schedule();
   });
   input.addEventListener("compositionupdate", function (e) {
-    preedit = e.data || "";
+    keys.compositionupdate(e);
     schedule();
   });
   input.addEventListener("compositionend", function (e) {
-    composing = false;
-    preedit = "";
-    // Committed once: the input events around it are the composition's, not more text.
-    input_(e.data || "");
+    keys.compositionend(e);
     input.value = "";
     schedule();
   });
