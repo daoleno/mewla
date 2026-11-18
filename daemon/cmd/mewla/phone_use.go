@@ -28,7 +28,9 @@ func (a *controlApp) liveWorker(id string) bool {
 	w := a.watcher.GetWorker(id)
 	live := w != nil && a.watcher.HasSession(id)
 	if live {
-		_, err := a.watcher.ResolveOwnedGeneration(id)
+		// Whether it may act is a read: only typing input is a mutation
+		// boundary, and a read here must never take a live Turn's control.
+		_, err := a.watcher.ResolveDelegatedControl(id)
 		live = err == nil && !(w.Delegated && (w.State == classifier.StateDone || w.State == classifier.StateFailed))
 	}
 	return live

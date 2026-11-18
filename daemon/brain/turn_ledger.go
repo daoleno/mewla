@@ -211,6 +211,7 @@ func (t TurnRecord) snapshot() watcher.TurnSnapshot {
 		LeaseDeadline:          t.LeaseDeadline,
 		SignalProtocol:         t.SignalProtocol,
 		PayloadSHA256:          t.PayloadSHA256,
+		Reclaimed:              t.Reclaimed,
 		UpdatedAt:              t.UpdatedAt,
 	}
 	return snapshot
@@ -929,6 +930,24 @@ func reduceTurnFact(turn *TurnRecord, fact watcher.TurnFact, now time.Time) (tur
 		return mutation, fmt.Errorf("invalid fact evidence class %q", fact.Class)
 	}
 	controlOwnershipLoss := fact.Class == watcher.EvidenceLiveness && fact.Kind == "ownership_lost"
+	if fact.Class == watcher.EvidenceLiveness && fact.Kind == watcher.TurnFactOwnershipReproved {
+		// The watcher proved the gated Turn's own process is still the one in
+		// the Session: the loss was a misreading, so the control gate lifts.
+		// Status, settlement and Work are untouched; the fact stays as audit.
+		if turn.ControlState != watcher.TurnControlOwnershipLost {
+			return mutation, nil
+		}
+		mutation.status = turn.Status
+		mutation.attention = turn.Attention
+		mutation.controlState = watcher.TurnControlOwned
+		mutation.settledAt = turn.SettledAt
+		mutation.summary = turn.Summary
+		if turn.Status == watcher.TurnUnknown {
+			mutation.summary = "Delegated Session control was proven again; this turn's outcome is unknown"
+		}
+		mutation.changed = true
+		return mutation, nil
+	}
 	switch turn.Status {
 	case watcher.TurnDone, watcher.TurnFailed:
 		// Provider outcome is globally final. A later ownership-loss observation
@@ -1264,6 +1283,9 @@ func reduceTurnFact(turn *TurnRecord, fact watcher.TurnFact, now time.Time) (tur
 				status = watcher.TurnUnknown
 				attention = ""
 				summary = "Delegated Session control ownership was lost; outcome is unknown"
+				if reason := strings.TrimSpace(fact.Summary); reason != "" && reason != watcher.OwnershipLostSummary {
+					summary = reason + "; outcome is unknown"
+				}
 				settledAt = &now
 			}
 			mutation.changed = true
@@ -1867,8 +1889,11 @@ func (s *Store) applyTurnFactOutcome(fact watcher.TurnFact, delegatedSignal bool
 			return watcher.TurnSnapshot{}, false, fmt.Errorf("persist queued provider promotion: %w", err)
 		}
 	}
-	if err := s.fsmTranslateCanonicalTransition(&turn, fact, mutation.status, mutation.eventKind); err != nil {
-		return watcher.TurnSnapshot{}, false, err
+	reproved := fact.Class == watcher.EvidenceLiveness && fact.Kind == watcher.TurnFactOwnershipReproved
+	if !reproved {
+		if err := s.fsmTranslateCanonicalTransition(&turn, fact, mutation.status, mutation.eventKind); err != nil {
+			return watcher.TurnSnapshot{}, false, err
+		}
 	}
 
 	// Apply the mutation to the ledger row.

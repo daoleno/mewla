@@ -30,6 +30,12 @@ func TestWorkerDisplayOutlastsItsTurn(t *testing.T) {
 	if !app.workerOpen("mh-run") || !app.liveWorker("mh-run") {
 		t.Fatal("a running Worker is not open")
 	}
+	// Whether a Worker may use this computer's tools is a read, polled every
+	// few seconds while it does: it must never reach the mutation boundary,
+	// which takes a live Turn's control on any doubt (mh-e30d4425, 11-18).
+	if len(w.mutationChecks) != 0 {
+		t.Fatalf("liveWorker checked control at the mutation boundary: %v", w.mutationChecks)
+	}
 	if app.workerOpen("mh-gone") {
 		t.Fatal("a closed Worker kept its display")
 	}

@@ -616,7 +616,27 @@ A watcher inventory is authoritative only when every required observation
 succeeds on the daemon's session host socket. An unavailable host during the
 inventory or an ownership probe is Unknown: retain remembered Sessions and their
 resources, and do not publish removal or end-of-identity evidence. A later
-successful inventory can confirm actual absence.
+successful inventory can confirm actual absence. A Session the session host runs
+as Mewla's but the inventory has not listed yet (the first poll after a daemon
+start) is undecided too, never lost.
+
+Control ownership is decided only where input is typed (`worker send`, a
+continuation, a computer reply). Checks that only ask whether a Worker may act,
+such as its computer, phone and screen tools, are reads and never change it.
+A Turn keeps control while its own process is the Session's. The same pane,
+foreground and provider pids and start times count as the same process, even
+when the launch recorded only the bare command because the kernel had not made
+the command line readable yet. A command line that reads empty is undecided, not
+an identity, so a launch waits until it is readable. Control is lost only on
+proof of a different lifecycle: the terminal was replaced, another process now
+holds the Session, or the session host no longer runs it. The loss, its Work
+event and the Worker status say which, with the process now in the Session.
+A Turn that lost control, and whose own process is later proven to still be the
+Session's, gets control back on the next send. That send records an
+`ownership_reproved` fact, and the Turn's outcome and Work stay as they were. A
+Session that Mewla tore down after its Work was completed is reported that way
+(`Mewla closed this Session after its Work was completed`), not as lost
+ownership. Reopening that Work does not bring the Session back.
 
 Native activity and canonical Attempt ownership can diverge after loss or release.
 Historical Turn rows remain evidence and are available by exact identity. They

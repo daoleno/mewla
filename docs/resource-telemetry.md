@@ -301,6 +301,8 @@ grow with the size of a transcript or of the machine:
 - `/proc` is walked once per tick at most: the panes' own process trees are read
   afresh, every other process at most every 30 seconds, and an ownership
   decision (which processes a Worker owns) takes records up to 10 seconds old.
+  A command line that read back empty (a program exec is still setting up) is
+  never kept; the next read takes it again.
   Only a decision that a process is gone, such as stopping a Worker, reads every
   process again.
 - The daemon's I/O counters include what its reaped child processes read, so a

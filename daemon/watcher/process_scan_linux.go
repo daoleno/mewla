@@ -27,11 +27,12 @@ const cmdlineRefresh = 10 * time.Second
 // /proc/<pid>/stat, args the command line; each carries the time it was read
 // so a scan can leave an unchanged-looking process alone.
 type cachedProc struct {
-	start  int64
-	info   processInfo
-	args   string
-	statAt time.Time
-	argsAt time.Time
+	start      int64
+	info       processInfo
+	args       string
+	argsUnread bool
+	statAt     time.Time
+	argsAt     time.Time
 }
 
 var procSnapshots struct {
@@ -97,7 +98,7 @@ func scanProcessTable(roots []int, coldAge time.Duration) (map[int]processInfo, 
 		if seen && !hot[pid] && coldAge > 0 && now.Sub(cached.statAt) < coldAge {
 			next[pid] = cached
 			info := cached.info
-			info.args = cached.args
+			info.args, info.argsUnread = cached.args, cached.argsUnread
 			processes[pid] = info
 			continue
 		}
@@ -118,12 +119,16 @@ func scanProcessTable(roots []int, coldAge time.Duration) (map[int]processInfo, 
 			// instead of repeating them all in the same poll.
 			statAt = now.Add(-time.Duration(pid%64) * coldAge / 64)
 		}
-		if !seen || cached.start != start || cached.info.comm != info.comm || now.Sub(cached.argsAt) >= cmdlineRefresh {
-			cached = cachedProc{start: start, args: readCmdline(entry.Name(), info.comm), argsAt: now}
+		// An unread command line is never kept: right after exec it is
+		// empty for a moment, and keeping that reading made a just-started
+		// agent look like one without its arguments for cmdlineRefresh.
+		if !seen || cached.argsUnread || cached.start != start || cached.info.comm != info.comm || now.Sub(cached.argsAt) >= cmdlineRefresh {
+			args := readCmdline(entry.Name(), info.comm)
+			cached = cachedProc{start: start, args: args, argsUnread: cmdlineUnread(pid, info, args), argsAt: now}
 		}
 		cached.start, cached.info, cached.statAt = start, info, statAt
 		next[pid] = cached
-		info.args = cached.args
+		info.args, info.argsUnread = cached.args, cached.argsUnread
 		processes[pid] = info
 	}
 	procSnapshots.procs = next
@@ -186,6 +191,16 @@ func parseProcStatLine(raw []byte) (processInfo, int64, bool) {
 		tpgid: tpgid,
 		comm:  string(raw[open+1 : end]),
 	}, start, true
+}
+
+// cmdlineUnread reports a user process whose command line read back empty:
+// one being exec'd, exiting, or a zombie. Kernel threads (kthreadd and its
+// children) never have one, so theirs is not unread.
+func cmdlineUnread(pid int, info processInfo, args string) bool {
+	if pid == 2 || info.ppid == 2 {
+		return false
+	}
+	return args == "" || args == "["+info.comm+"]"
 }
 
 func readCmdline(pid, comm string) string {

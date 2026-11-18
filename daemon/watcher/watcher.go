@@ -637,19 +637,22 @@ func (w *Watcher) targetForSessionProbe(sessionID string) (targetProcessIdentity
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	w.mu.RLock()
-	_, owned := w.workers[sessionID]
+	_, listed := w.workers[sessionID]
 	identityResolver := w.targetProcessResolver
 	resolver := w.targetCommandResolver
 	w.mu.RUnlock()
-	if !owned {
-		return targetProcessIdentity{}, false, fmt.Errorf("%w: %s", ErrUnownedSession, sessionID)
-	}
 	durablyOwned, err := w.targetIsDurablyOwned(sessionID)
 	if err != nil {
 		return targetProcessIdentity{}, false, errors.Join(ErrOwnershipProbeUnavailable, err)
 	}
 	if !durablyOwned {
 		return targetProcessIdentity{}, false, fmt.Errorf("%w: %s", ErrUnownedSession, sessionID)
+	}
+	if !listed {
+		// The session host runs it as Mewla's, but the Session inventory has
+		// not listed it yet (the first poll after a daemon start): undecided,
+		// never a loss.
+		return targetProcessIdentity{}, false, fmt.Errorf("%w: %s is not in the Session inventory yet", ErrOwnershipProbeUnavailable, sessionID)
 	}
 	if identityResolver != nil {
 		identity, known := identityResolver(sessionID)
@@ -674,18 +677,29 @@ func (w *Watcher) targetForSessionProbe(sessionID string) (targetProcessIdentity
 
 // ResolveOwnedGeneration proves one current Mewla-owned target generation and
 // checks it against the canonical Turn or pending submission. This is the
-// mutation/foreground boundary: a mismatch can invalidate the current Turn
-// because sending input to a different lifecycle would be unsafe.
+// mutation/foreground boundary: a proven different lifecycle invalidates the
+// current Turn because sending input to it would be unsafe. A Turn whose own
+// process is proven to still be the Session's keeps (or gets back) control.
 func (w *Watcher) ResolveOwnedGeneration(sessionID string) (OwnedGeneration, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return OwnedGeneration{}, fmt.Errorf("missing session id")
 	}
-	owned, err := w.resolveOwnedTarget(sessionID)
+	owned, identity, err := w.resolveOwnedTargetIdentity(sessionID)
+	lossReason, observed := "", ""
 	if err == nil {
+		observed = owned.ProcessIdentity
 		turn, hasTurn, turnErr := w.ledgerTurnAuthoritative(sessionID, time.Now().UTC())
 		if turnErr != nil {
 			err = turnErr
+		}
+		if err == nil && hasTurn && turn.ControlState == TurnControlOwnershipLost {
+			if turn.PaneGeneration == owned.PaneGeneration && sameRecordedProcess(turn.ProcessIdentity, identity) {
+				turn, hasTurn, err = w.reproveOwnership(sessionID, turn, owned.ProcessIdentity)
+			} else {
+				err = fmt.Errorf("delegated Session control ownership was lost: %s",
+					generationLossReason(identity, owned.PaneGeneration, turn.PaneGeneration))
+			}
 		}
 		var pendingList []InputAdmission
 		if err == nil {
@@ -696,10 +710,7 @@ func (w *Watcher) ResolveOwnedGeneration(sessionID string) (OwnedGeneration, err
 			}
 		}
 		expectedProcess, expectedPane := "", ""
-		if err == nil && hasTurn &&
-			turn.ControlState == TurnControlOwnershipLost {
-			err = fmt.Errorf("delegated Session control ownership was lost")
-		} else if err == nil && len(pendingList) > 0 {
+		if err == nil && len(pendingList) > 0 {
 			// Several distinct pending transactions may coexist; the newest
 			// one is the current mutation attempt and owns the expected
 			// generation. Older pending rows never gate the owned generation.
@@ -708,22 +719,85 @@ func (w *Watcher) ResolveOwnedGeneration(sessionID string) (OwnedGeneration, err
 		} else if err == nil && hasTurn && !TurnTerminal(turn.Status) {
 			expectedProcess, expectedPane = turn.ProcessIdentity, turn.PaneGeneration
 		}
-		if err == nil && expectedProcess != "" && (owned.ProcessIdentity != expectedProcess || owned.PaneGeneration != expectedPane) {
+		if err == nil && expectedProcess != "" &&
+			(owned.PaneGeneration != expectedPane || !sameRecordedProcess(expectedProcess, identity)) {
+			lossReason = generationLossReason(identity, owned.PaneGeneration, expectedPane)
 			err = fmt.Errorf(
-				"%w: owned Session generation no longer matches its canonical turn",
-				ErrOwnedGenerationMismatch,
+				"%w: owned Session generation no longer matches its canonical turn: %s",
+				ErrOwnedGenerationMismatch, lossReason,
 			)
 		}
 	}
 	if err == nil {
 		return owned, nil
 	}
+	if errors.Is(err, ErrUnownedSession) {
+		if turn, found, turnErr := w.ledgerTurn(sessionID); turnErr == nil && found && turn.Reclaimed {
+			// Mewla itself closed this Session when its Work was completed;
+			// that is not a loss of control and records none.
+			return OwnedGeneration{}, fmt.Errorf("%w: %s", ErrSessionReclaimed, sessionID)
+		}
+		lossReason = "Mewla's session host no longer runs this Session as Mewla's"
+	}
 	if errors.Is(err, ErrUnownedSession) || errors.Is(err, ErrOwnedGenerationMismatch) {
-		if deprojectionErr := w.deprojectOwnershipLoss(sessionID); deprojectionErr != nil {
+		if deprojectionErr := w.deprojectOwnershipLoss(sessionID, lossReason, observed); deprojectionErr != nil {
 			err = errors.Join(err, fmt.Errorf("persist ownership-loss deprojection: %w", deprojectionErr))
 		}
 	}
 	return OwnedGeneration{}, err
+}
+
+// ownershipLostSourceID names one observed loss: the Turn's recorded process
+// and, when one was observed, the process found in its place, so a loss after
+// a re-proof is recorded again rather than deduplicated.
+func ownershipLostSourceID(recorded, observed string) string {
+	id := "liveness\x00" + recorded + "\x00ownership-lost"
+	if observed = strings.TrimSpace(observed); observed != "" {
+		id += "\x00" + observed
+	}
+	return id
+}
+
+// generationLossReason says what differs between the Session now and the
+// Turn's recorded generation, for the owner and Brain.
+func generationLossReason(current targetProcessIdentity, currentPane, recordedPane string) string {
+	if strings.TrimSpace(recordedPane) != "" && currentPane != recordedPane {
+		return "the Session's terminal was replaced after this turn began"
+	}
+	return fmt.Sprintf(
+		"the agent process now in the Session (%s, pid %d, started %s) is not the process this turn was given to",
+		bareProcessCommand(current.Command), current.ProcessID,
+		time.Unix(0, current.ProcessStart).UTC().Format(time.RFC3339),
+	)
+}
+
+// reproveOwnership lifts the ownership-loss gate of a Turn whose own process
+// was just proven to still be the Session's, and returns the Turn as it is now.
+func (w *Watcher) reproveOwnership(sessionID string, turn TurnSnapshot, observed string) (TurnSnapshot, bool, error) {
+	if w.turnLedger == nil {
+		return turn, true, fmt.Errorf("canonical turn ledger is unavailable")
+	}
+	at := time.Now().UTC()
+	if _, _, err := w.turnLedger.ApplyTurnFact(TurnFact{
+		SessionID: sessionID, TurnID: turn.TurnID,
+		Class: EvidenceLiveness, Kind: TurnFactOwnershipReproved,
+		SourceID: "liveness\x00" + turn.ProcessIdentity + "\x00ownership-reproved\x00" + observed,
+		At:       at, Summary: "Delegated Session control proven again: the turn's own process is still the Session's",
+	}); err != nil {
+		return turn, true, err
+	}
+	log.Printf("delegated Session %s: turn %s control proven again (its own process is still the Session's)", sessionID, turn.TurnID)
+	if _, err := w.RebindDelegatedTurnProjection(sessionID); err != nil {
+		log.Printf("delegated Session %s projection rebind after control proof failed: %v", sessionID, err)
+	}
+	return w.ledgerTurnAuthoritative(sessionID, at)
+}
+
+func (w *Watcher) ledgerTurn(sessionID string) (TurnSnapshot, bool, error) {
+	if w == nil || w.turnLedger == nil {
+		return TurnSnapshot{}, false, nil
+	}
+	return w.turnLedger.Turn(sessionID)
 }
 
 // ResolveDelegatedControl proves that a read/control target is still a
@@ -748,18 +822,23 @@ func (w *Watcher) ResolveBrainHostGeneration(sessionID string) (OwnedGeneration,
 // not compare the observation with a canonical Turn, so read-only control
 // calls remain observational and cannot deproject a live Work owner.
 func (w *Watcher) resolveOwnedTarget(sessionID string) (OwnedGeneration, error) {
+	owned, _, err := w.resolveOwnedTargetIdentity(sessionID)
+	return owned, err
+}
+
+func (w *Watcher) resolveOwnedTargetIdentity(sessionID string) (OwnedGeneration, targetProcessIdentity, error) {
 	identity, known, probeErr := w.targetForSessionProbe(sessionID)
 	if !known {
 		if probeErr != nil {
-			return OwnedGeneration{}, probeErr
+			return OwnedGeneration{}, targetProcessIdentity{}, probeErr
 		}
-		return OwnedGeneration{}, ErrOwnershipProbeUnavailable
+		return OwnedGeneration{}, targetProcessIdentity{}, ErrOwnershipProbeUnavailable
 	}
 	paneGeneration := strings.TrimSpace(w.currentPaneGeneration(sessionID))
 	if paneGeneration == "" {
-		return OwnedGeneration{}, fmt.Errorf("%w: Session generation is temporarily unavailable for %s", ErrOwnershipProbeUnavailable, sessionID)
+		return OwnedGeneration{}, targetProcessIdentity{}, fmt.Errorf("%w: Session generation is temporarily unavailable for %s", ErrOwnershipProbeUnavailable, sessionID)
 	}
-	return ownedGenerationForTarget(sessionID, identity, paneGeneration), nil
+	return ownedGenerationForTarget(sessionID, identity, paneGeneration), identity, nil
 }
 
 func ownedGenerationForTarget(sessionID string, identity targetProcessIdentity, paneGeneration string) OwnedGeneration {
@@ -771,7 +850,7 @@ func ownedGenerationForTarget(sessionID string, identity targetProcessIdentity, 
 	}
 }
 
-func (w *Watcher) deprojectOwnershipLoss(sessionID string) error {
+func (w *Watcher) deprojectOwnershipLoss(sessionID, reason, observed string) error {
 	if w == nil || w.turnLedger == nil {
 		return fmt.Errorf("canonical turn ledger is unavailable")
 	}
@@ -779,17 +858,28 @@ func (w *Watcher) deprojectOwnershipLoss(sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if !found || turn.ControlState == TurnControlOwnershipLost {
+	if !found || turn.ControlState == TurnControlOwnershipLost || TurnImmutable(turn.Status) {
+		// A finished turn has no control left to lose; the next turn proves
+		// its own.
 		return nil
+	}
+	summary := OwnershipLostSummary
+	if reason = strings.TrimSpace(reason); reason != "" {
+		summary += ": " + reason
 	}
 	_, _, err = w.turnLedger.ApplyTurnFact(TurnFact{
 		SessionID: sessionID, TurnID: turn.TurnID,
 		Class: EvidenceLiveness, Kind: "ownership_lost", SessionReplaced: true,
-		SourceID: "liveness\x00" + turn.ProcessIdentity + "\x00ownership-lost",
-		At:       time.Now().UTC(), Summary: "Delegated Session control ownership was lost",
+		SourceID: ownershipLostSourceID(turn.ProcessIdentity, observed),
+		At:       time.Now().UTC(), Summary: summary,
 	})
 	if err != nil {
 		return err
+	}
+	log.Printf("delegated Session %s: turn %s %s", sessionID, turn.TurnID, strings.ToLower(summary[:1])+summary[1:])
+	if w.GetWorker(sessionID) == nil {
+		// Nothing listed to re-project.
+		return nil
 	}
 	_, err = w.RebindDelegatedTurnProjection(sessionID)
 	return err
@@ -1441,6 +1531,11 @@ var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe
 // lacks Mewla's durable ownership marker. Mutating it would cross the lifecycle
 // boundary into an ambient user session.
 var ErrUnownedSession = errors.New("Session is not owned by Mewla")
+
+// ErrSessionReclaimed is input refused because Mewla closed the Session
+// after its Work was completed. Reopening the Work does not bring the Session
+// back; a new Worker carries the Work on.
+var ErrSessionReclaimed = errors.New("Mewla closed this Session after its Work was completed; reopening the Work does not reopen it, start a new Worker")
 
 // ErrSessionEnded is input refused because the Session's program has ended.
 var ErrSessionEnded = errors.New("the program in this Session has ended")
@@ -2177,7 +2272,11 @@ func projectDelegatedTurn(worker *classifier.Worker, turn TurnSnapshot) (classif
 			worker.Attention = "ownership_lost"
 			worker.NeedsAttention = true
 		}
-		return classifier.StateUnknown, "Delegated Session control ownership was lost; inspect and recover"
+		summary := strings.TrimSpace(turn.Summary)
+		if !strings.HasPrefix(summary, OwnershipLostSummary) {
+			summary = OwnershipLostSummary + "; outcome is unknown"
+		}
+		return classifier.StateUnknown, strings.TrimSuffix(summary, "; outcome is unknown") + "; inspect and recover"
 	}
 	switch turn.Status {
 	case TurnAdmitted:
@@ -4589,7 +4688,7 @@ func (w *Watcher) guardCompletedOwnedIdentity(sessionID string, turn TurnSnapsho
 	}
 	paneGeneration := strings.TrimSpace(w.currentPaneGeneration(sessionID))
 	if known {
-		if delegatedTurnIdentity(identity) != turn.ProcessIdentity {
+		if !sameRecordedProcess(turn.ProcessIdentity, identity) {
 			return completedGenerationChanged(sessionID)
 		}
 		if turn.PaneGeneration == "" {

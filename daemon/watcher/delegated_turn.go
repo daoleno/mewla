@@ -106,6 +106,36 @@ func delegatedTurnIdentity(identity targetProcessIdentity) string {
 	return fmt.Sprintf("%x", sum[:])
 }
 
+// sameRecordedProcess reports whether a recorded Turn identity names the
+// process observed now. Besides an exact match it accepts the one other
+// reading the same process can have produced: the same pane, foreground and
+// provider pids and start times with only the bare command name, which is
+// what a launch records when it reads the process before the kernel has made
+// its command line readable ("claude" for "claude --session-id X"). Any other
+// difference is a different process.
+func sameRecordedProcess(recorded string, current targetProcessIdentity) bool {
+	recorded = strings.TrimSpace(recorded)
+	if recorded == "" {
+		return false
+	}
+	if recorded == delegatedTurnIdentity(current) {
+		return true
+	}
+	bare := current
+	bare.Command = bareProcessCommand(current.Command)
+	return bare.Command != current.Command && recorded == delegatedTurnIdentity(bare)
+}
+
+// bareProcessCommand is the command an identity carries when its process's
+// command line could not be read: the provider name alone.
+func bareProcessCommand(command string) string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
 // ProviderFactSourceID derives the stable provider source identity for the
 // frozen deterministic FactID formula (C.3.1): the adapter's native durable
 // event/message identity plus its monotone cursor. No wall-clock observation
