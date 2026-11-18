@@ -1474,6 +1474,9 @@ func workerOwnershipErrorCode(err error) string {
 	if errors.Is(err, watcher.ErrOwnershipProbeUnavailable) {
 		return "worker_control_unavailable"
 	}
+	if errors.Is(err, watcher.ErrSessionReclaimed) {
+		return "worker_session_reclaimed"
+	}
 	return "worker_ownership_lost"
 }
 

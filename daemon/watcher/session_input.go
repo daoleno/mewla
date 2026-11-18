@@ -376,7 +376,7 @@ func (owner *sessionInputOwner) receiptOutcome(
 			}
 			for _, pending := range pendingList {
 				if pending.Receipt == result.Receipt &&
-					(pending.ProcessIdentity != delegatedTurnIdentity(expected) ||
+					(!sameRecordedProcess(pending.ProcessIdentity, expected) ||
 						pending.PaneGeneration != baseline.generation) {
 					return fmt.Errorf("pending submission target identity no longer matches; receipt absence is ambiguous")
 				}
@@ -509,7 +509,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 				case InputAdmissionRetired:
 					return ambiguousSubmission(result.Receipt, fmt.Errorf("the prior submission authority was retired and cannot be replayed or adopted"))
 				case InputAdmissionPending:
-					if submission.ProcessIdentity != delegatedTurnIdentity(expected) ||
+					if !sameRecordedProcess(submission.ProcessIdentity, expected) ||
 						submission.PaneGeneration != baseline.generation {
 						return ambiguousSubmission(result.Receipt, fmt.Errorf("pending submission target identity no longer matches; input will not be replayed"))
 					}
@@ -681,7 +681,7 @@ func (owner *sessionInputOwner) submitWithTurn(
 					if len(ledger.Entries) >= sessionInputReceiptLedgerLimit {
 						return definitelyNotSubmitted(result.Receipt, fmt.Errorf("unmarked preparation cannot be resolved from a full receipt history"))
 					}
-					if prior.ProcessIdentity != delegatedTurnIdentity(expected) || prior.PaneGeneration != current.generation {
+					if !sameRecordedProcess(prior.ProcessIdentity, expected) || prior.PaneGeneration != current.generation {
 						return definitelyNotSubmitted(result.Receipt, fmt.Errorf("unmarked preparation belongs to another process/pane generation"))
 					}
 					if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
