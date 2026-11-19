@@ -269,19 +269,38 @@ class FrameCheckTest {
 
 class TypingRunsTest {
     private val ascii = { c: Char -> c.code in 0x20..0x7e }
+    private fun shape(text: String) = TypingRuns.split(text, ascii).map { it.text to it.keys }
+    private fun pastes(text: String) = TypingRuns.split(text, ascii).count { !it.keys }
 
     @Test
-    fun mixedTextIsCutInOrderIntoKeyedAndPastedRuns() {
-        // 11-20 小红书: "#AI编程" must reach the field as "#AI" typed, then "编程" pasted right after it.
-        val runs = TypingRuns.split("#AI编程 and @X", ascii)
-        assertEquals(listOf("#AI" to true, "编程" to false, " and @X" to true), runs.map { it.text to it.keys })
-        assertEquals("#AI编程 and @X", runs.joinToString("") { it.text })
+    fun aTriggerGoesAsKeysUpToItsFirstCharacterTheKeyboardLacksAndTheRestIsOnePaste() {
+        // 11-20 小红书: "#AI编程" reaches the field as "#AI" typed, so the picker opens, then "编程" pasted right after it.
+        assertEquals(listOf("#AI" to true, "编程 and " to false, "@X" to true), shape("#AI编程 and @X"))
+        assertEquals("#AI编程 and @X", TypingRuns.split("#AI编程 and @X", ascii).joinToString("") { it.text })
     }
 
     @Test
-    fun aLineBreakIsPastedSoItNeverSubmitsAndAnEmojiStaysWhole() {
-        val runs = TypingRuns.split("hi\n👋ok", ascii)
-        assertEquals(listOf("hi" to true, "\n👋" to false, "ok" to true), runs.map { it.text to it.keys })
+    fun mixedTextWithNoTriggerIsOnePasteAndPlainKeyboardTextNone() {
+        // Every paste makes the phone say "pasted from your clipboard": a mixed paragraph is one, not one per run.
+        assertEquals(listOf("受够了手动管AI，我重写了Mewla" to false), shape("受够了手动管AI，我重写了Mewla"))
+        assertEquals(listOf("hi\n👋ok" to false), shape("hi\n👋ok"))
+        assertEquals(listOf("plain words, 100% ok" to true), shape("plain words, 100% ok"))
+        // A # or @ inside a word (an address, C#) opens no picker, so it does not split the paste.
+        assertEquals(1, pastes("写信给 a@b.com 讲 C# 吧"))
+    }
+
+    @Test
+    fun theXiaohongshuPostNeedsFivePastesInsteadOfTwentyOne() {
+        val title = "受够了手动管AI，我重写了Mewla"
+        val body = "受够了手动管理一个个 agent session，每一步都要人盯着、不停介入。\n\n" +
+            "所以我把 Mewla 从头重写了一遍，这次是原生的：一个开源 App，在你自己的电脑上带一队 AI 编程 agent（Claude Code、Codex、Pi）干活。\n\n" +
+            "现在我用手机就能同时跑 10 个以上的任务，只有真需要我拍板的时候才叫我。\n\n" +
+            "iPhone、Android、网页都能用；电脑端支持 macOS、Linux、Windows（Beta）。\n\n" +
+            "#AI编程 #AIAgent #ClaudeCode #独立开发 #开源"
+        assertEquals(1, pastes(title))
+        // The body in one paste, then one for each tag with Chinese after its typed #.
+        assertEquals(4, pastes(body))
+        assertEquals(body, TypingRuns.split(body, ascii).joinToString("") { it.text })
     }
 
     @Test
