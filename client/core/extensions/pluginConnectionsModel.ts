@@ -62,6 +62,15 @@ export function accountSignInInput(account: Pick<PluginAccount, "id" | "integrat
 }
 
 /**
+ * Reconnect on a card signed in through a browser: the same sign-in as
+ * connecting, naming the card so the computer renews it in place (same ID,
+ * name and tool choices) when the same account signs in.
+ */
+export function reconnectInput(account: PluginAccount): { integration: string; account_id: string; allow_writes: boolean } {
+  return { integration: account.integration, account_id: account.id, allow_writes: reconnectsWithWrites(account) };
+}
+
+/**
  * The address a sign-in ended on, if text from the clipboard could be one: the
  * server's own http address with the sign-in's state in it. Anything else
  * returns "", so a stray clipboard never fills the field.

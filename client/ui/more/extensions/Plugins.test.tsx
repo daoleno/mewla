@@ -515,7 +515,8 @@ describe("Slack sign-ins made before Mewla read files and DMs (11-19)", () => {
     expect(app.texts()).toContain("Reconnect");
     await app.press("id:connect-slack");
     await app.waitUntil(() => c.asked.some((r) => r.action === "connect_start"));
-    expect(c.asked.find((r) => r.action === "connect_start")).toMatchObject({ input: { integration: "slack", allow_writes: true } });
+    // It names the card, so the computer renews that account in place (same ID).
+    expect(c.asked.find((r) => r.action === "connect_start")).toEqual({ action: "connect_start", input: { integration: "slack", account_id: "s1", allow_writes: true } });
   });
 
   test("the account card says what Reconnect brings", async () => {
