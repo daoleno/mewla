@@ -343,6 +343,39 @@ func TestAnAgentThatGoesQuietGivesTheDisplayBack(t *testing.T) {
 	}
 }
 
+// 11-20 00:33:41 → 00:35:22: a Worker looked at a 小红书 cover for 101 s between two taps, the minute
+// ran out, and the release closed the editor with the draft open in it. A Worker that still runs keeps
+// its display through a quiet spell; it goes back when the Worker ends, or after DefaultIdleRunning.
+func TestARunningWorkersQuietSpellKeepsItsDisplay(t *testing.T) {
+	clock := newClock()
+	m := NewManager(Options{Clock: clock})
+	m.SetAlive(func(string) bool { return true })
+	_, conn := connect(t, m, StateReady, okResult(nil))
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	for waited := time.Duration(0); waited < 101*time.Second; waited += DefaultAliveEvery {
+		clock.Advance(DefaultAliveEvery)
+	}
+	if st := m.Status(); st.Active == nil || strings.Join(conn.ops(), ",") != "tap" {
+		t.Fatalf("a running Worker's display went after a quiet spell: %+v %v", st.Active, conn.ops())
+	}
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	// Another agent is told how long it may wait.
+	if _, err := tap(m, "w2"); err == nil || !strings.Contains(err.Error(), "finishes") {
+		t.Fatalf("another agent was told %v", err)
+	}
+	for waited := time.Duration(0); waited < DefaultIdleRunning; waited += DefaultAliveEvery {
+		clock.Advance(DefaultAliveEvery)
+	}
+	eventually(t, "release", func() bool { return strings.Join(conn.ops(), ",") == "tap,tap,release" })
+	if st := m.Status(); st.Active != nil {
+		t.Fatalf("still active %+v", st.Active)
+	}
+}
+
 func TestAWorkerThatEndsGivesTheDisplayBackAtOnce(t *testing.T) {
 	clock := newClock()
 	m := NewManager(Options{Clock: clock})
