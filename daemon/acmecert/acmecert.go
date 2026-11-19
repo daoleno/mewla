@@ -1,8 +1,11 @@
-// Package acmecert keeps one host name's certificate valid by itself: it
-// issues and renews it from an ACME CA by DNS-01 (the account service's DNS
-// providers write the challenge), stores it in a directory, and serves the
-// current one through GetCertificate, so a renewal reaches new TLS connections
-// without a restart and without closing the ones already open.
+// Package acmecert keeps one host name's certificate valid. A Keeper issues
+// and renews it from an ACME CA by DNS-01 (the account service's DNS providers
+// write the challenge) and stores it, with a status file, in a directory; it
+// holds the DNS credential and needs no listener. A Watcher serves what that
+// directory holds through GetCertificate and reloads it when it changes, so a
+// renewal reaches new TLS connections without a restart and without closing
+// the ones already open, and the process that serves TLS never holds the DNS
+// credential.
 package acmecert
 
 import (
@@ -14,6 +17,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -36,6 +40,8 @@ const (
 	AccountKeyFile = "account.pem"
 	CertFile       = "cert.pem"
 	KeyFile        = "key.pem"
+	// StatusFile is the Keeper's report for whoever serves the certificate.
+	StatusFile = "status.json"
 )
 
 // DNS writes and removes the DNS-01 challenge record (account/dns.Provider
@@ -48,8 +54,11 @@ type DNS interface {
 type Config struct {
 	// Domain is the one name on the certificate.
 	Domain string
-	// Dir holds the ACME account key and the issued certificate and key.
+	// Dir holds the issued certificate and key and the status file.
 	Dir string
+	// AccountKey is the ACME account key's file (default Dir/account.pem);
+	// keep it outside a Dir that a TLS server reads.
+	AccountKey string
 	// Directory is the ACME directory URL (default LetsEncrypt).
 	Directory string
 	// HTTPClient talks to the CA (default: the system roots).
@@ -76,14 +85,17 @@ type Config struct {
 	issue func(ctx context.Context) ([]byte, []byte, error)
 }
 
-// Status is what the keeper reports for health and metrics.
+// Status is what the keeper reports for health and metrics, and writes to
+// Dir/status.json.
 type Status struct {
-	Domain   string
-	NotAfter time.Time // zero: no certificate
+	Domain   string    `json:"domain"`
+	NotAfter time.Time `json:"not_after"` // zero: no certificate
 	// Failures counts renewals that failed since the last success.
-	Failures  int
-	LastError string
-	Renewed   time.Time // the last successful renewal (zero: none yet)
+	Failures  int       `json:"renewal_failures"`
+	LastError string    `json:"last_error,omitempty"`
+	Renewed   time.Time `json:"renewed,omitzero"` // the last successful renewal
+	// Checked is when the keeper last looked at the expiry or renewed.
+	Checked time.Time `json:"checked,omitzero"`
 }
 
 // DaysLeft is the days until NotAfter (negative once expired).
@@ -104,6 +116,7 @@ type Keeper struct {
 	failures  int
 	lastError string
 	renewed   time.Time
+	checked   time.Time
 }
 
 // New loads the certificate of Dir (or the seed) without renewing anything;
@@ -139,6 +152,9 @@ func New(cfg Config) (*Keeper, error) {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.AccountKey == "" {
+		cfg.AccountKey = filepath.Join(cfg.Dir, AccountKeyFile)
 	}
 	if err := os.MkdirAll(cfg.Dir, 0o700); err != nil {
 		return nil, fmt.Errorf("acmecert: %w", err)
@@ -177,7 +193,21 @@ func (k *Keeper) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) 
 func (k *Keeper) Status() Status {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	return Status{Domain: k.cfg.Domain, NotAfter: k.notAfter, Failures: k.failures, LastError: k.lastError, Renewed: k.renewed}
+	return Status{Domain: k.cfg.Domain, NotAfter: k.notAfter, Failures: k.failures, LastError: k.lastError, Renewed: k.renewed, Checked: k.checked}
+}
+
+// report stamps the look and writes the status file.
+func (k *Keeper) report() {
+	k.mu.Lock()
+	k.checked = k.cfg.Now()
+	k.mu.Unlock()
+	raw, err := json.MarshalIndent(k.Status(), "", "  ")
+	if err == nil {
+		err = atomicfile.Write(filepath.Join(k.cfg.Dir, StatusFile), append(raw, '\n'), 0o600)
+	}
+	if err != nil {
+		k.cfg.Logf("acmecert: %s: writing the status file: %v", k.cfg.Domain, err)
+	}
 }
 
 // RenewNow asks Run to renew at once, whatever the expiry.
@@ -214,12 +244,14 @@ func (k *Keeper) Run(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
+				k.report()
 				if !k.wait(ctx, k.cfg.RetryAfter, &forced) {
 					return
 				}
 				continue
 			}
 		}
+		k.report()
 		st := k.Status()
 		wait := k.cfg.CheckEvery
 		if until := k.due().Sub(k.cfg.Now()); until < wait {
@@ -380,7 +412,10 @@ func (k *Keeper) authorize(ctx context.Context, client *acme.Client, authzURL st
 }
 
 func (k *Keeper) accountKey() (crypto.Signer, error) {
-	path := filepath.Join(k.cfg.Dir, AccountKeyFile)
+	path := k.cfg.AccountKey
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
 	if raw, err := os.ReadFile(path); err == nil {
 		block, _ := pem.Decode(raw)
 		if block == nil {

@@ -145,10 +145,10 @@ accessories:
   # UDP and TCP on 3478 face the internet; TLS listens only on the kamal
   # bridge's gateway (172.18.0.1), where the relay's SNI route for
   # turn.connect.mewla.ai on :443 sends it with a PROXY header.
-  # Its certificate renews itself (DNS-01 through Cloudflare, 30 days before
-  # expiry, served to new connections without a restart; SIGHUP renews at
-  # once) and is kept in its acme directory; the uploaded turn.crt/key are
-  # served only until that holds a later one. Health and days until expiry:
+  # It serves the certificate turncert keeps (read only, reloaded within a
+  # minute of a change, no restart) and never holds the DNS token; the
+  # uploaded turn.crt/key are served only while that directory holds no
+  # valid pair. Health, days until expiry and turncert's report:
   # 127.0.0.1:9181/healthz and /metrics on the host.
   # Its own version (MEWLA_TURN_VERSION, else MEWLA_LINK_VERSION): the relay
   # and turn upgrade separately.
@@ -170,22 +170,16 @@ accessories:
       -turn-max-port=49671
       -turn-kbps=8000
       -turn-total-kbps=200000
-      -turn-tls-acme-dir=/var/lib/mewla-turn
-      -turn-tls-acme-domain=turn.connect.mewla.ai
-      -turn-tls-acme-cloudflare-zone-id=338037db978d5f7b2ae75f151022ad66
+      -turn-tls-cert-dir=/var/lib/mewla-turn
       -operator-addr=127.0.0.1:9181
-    env:
-      secret:
-        # The account service's token (DNS edit on the mewla.ai zone).
-        - MEWLA_TURN_CLOUDFLARE_TOKEN:MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
-    directories:
-      # ACME account key, certificate and key; written by the process (uid 1000).
-      - acme:/var/lib/mewla-turn
+    volumes:
+      # turncert's certificate directory only (not its account key), read only.
+      - /home/ubuntu/mewla-link-turncert/acme/cert:/var/lib/mewla-turn:ro
     files:
       - local: .kamal/files/turn.secret
         remote: /run/mewla-link/turn.secret
         mode: "0600"
-      # The first Let's Encrypt certificate (runbook); later ones are in acme/.
+      # The first Let's Encrypt certificate (runbook); later ones come from turncert.
       - local: .kamal/files/turn.crt
         remote: /run/mewla-link/turn.crt
         mode: "0644"
@@ -196,6 +190,34 @@ accessories:
       user: "1000:1000"
       # The image's healthcheck asks 127.0.0.1:8080, which on the host
       # network is the host's own loopback, not this process.
+      no-healthcheck: true
+
+  # Renews TURN's certificate (Let's Encrypt, DNS-01 through Cloudflare, 30
+  # days before expiry; SIGHUP renews at once) into acme/cert, which turn
+  # reads; the ACME account key stays in acme/account. It holds the DNS token
+  # and listens on nothing (no port published, no listener in the process):
+  # the internet-facing turn process never holds the token.
+  turncert:
+    image: localhost:5555/daoleno/mewla-link:<%= ENV.fetch("MEWLA_TURN_VERSION") { ENV.fetch("MEWLA_LINK_VERSION", "latest") } %>
+    host: 167.114.116.27
+    cmd: >-
+      /usr/local/bin/mewla-relay -turn-cert-renew
+      -turn-tls-acme-dir=/var/lib/mewla-turncert/cert
+      -turn-tls-acme-account-key=/var/lib/mewla-turncert/account/account.pem
+      -turn-tls-acme-domain=turn.connect.mewla.ai
+      -turn-tls-acme-cloudflare-zone-id=338037db978d5f7b2ae75f151022ad66
+    env:
+      secret:
+        # The account service's token (DNS edit on the mewla.ai zone).
+        - MEWLA_TURN_CLOUDFLARE_TOKEN:MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
+    directories:
+      # /home/ubuntu/mewla-link-turncert/acme: cert/ (turn reads it) and
+      # account/; written by the process (uid 1000).
+      - acme:/var/lib/mewla-turncert
+    options:
+      user: "1000:1000"
+      # No listener to ask: its health is turn's /healthz (renewer_checked,
+      # renewal_failures, last_error from its status.json).
       no-healthcheck: true
 
 deploy_timeout: 60

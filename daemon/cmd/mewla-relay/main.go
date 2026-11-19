@@ -119,6 +119,14 @@ func run(args []string) error {
 	}
 	operatorSet := false
 	flags.Visit(func(f *flag.Flag) { operatorSet = operatorSet || f.Name == "operator-addr" })
+	if turnCert.renewOnly {
+		return runTURNCertRenewer(turnCert, turnTLSCert, turnTLSKey)
+	}
+	if strings.TrimSpace(turnCert.dir) != "" {
+		// The TURN server never holds the DNS credential: a separate
+		// -turn-cert-renew process renews, and this one reads its directory.
+		return errors.New("-turn-tls-acme-dir is for -turn-cert-renew; a TURN server reads that directory with -turn-tls-cert-dir")
+	}
 
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
@@ -152,7 +160,7 @@ func run(args []string) error {
 	}
 	var turnSecret []byte
 	var turnServer *relay.TURNServer
-	var turnKeeper *acmecert.Keeper
+	var turnWatcher *acmecert.Watcher
 	if turnSecretFile != "" {
 		secret, err := relay.ReadTURNSecret(turnSecretFile)
 		if err != nil {
@@ -171,32 +179,36 @@ func run(args []string) error {
 		if ip == nil {
 			return fmt.Errorf("-turn-public-ip %q is not an IPv4 address", turnPublicIP)
 		}
-		keeper, err := turnCert.keeper(turnTLSCert, turnTLSKey, log.Printf)
-		if err == nil && keeper != nil && strings.TrimSpace(turnTLS) == "" {
-			err = errors.New("-turn-tls-acme-dir needs -turn-tls-addr")
-		}
-		if err != nil {
-			return err
+		var watcher *acmecert.Watcher
+		if dir := strings.TrimSpace(turnCert.certDir); dir != "" {
+			if strings.TrimSpace(turnTLS) == "" {
+				return errors.New("-turn-tls-cert-dir needs -turn-tls-addr")
+			}
+			w, err := acmecert.NewWatcher(dir, turnTLSCert, turnTLSKey, time.Minute, log.Printf)
+			if err != nil {
+				return err
+			}
+			watcher = w
 		}
 		started, err := startTURN(relay.TURNConfig{
 			PublicIP: ip, UDPAddr: turnUDP, TCPAddr: turnTCP, TLSAddr: turnTLS, ProxyProtocol: turnTLSProxy,
 			Secret: turnSecret, MinPort: uint16(turnMinPort), MaxPort: uint16(turnMaxPort), Limits: turnLimits, Logf: log.Printf,
-		}, turnTLSCert, turnTLSKey, certificateFile, keyFile, keeper)
+		}, turnTLSCert, turnTLSKey, certificateFile, keyFile, watcher)
 		switch {
 		case err == nil:
 			defer started.Close()
-			turnServer, turnKeeper = started, keeper
-			if keeper != nil {
-				keeperCtx, stopKeeper := context.WithCancel(context.Background())
-				defer stopKeeper()
-				go keeper.Run(keeperCtx)
+			turnServer, turnWatcher = started, watcher
+			if watcher != nil {
+				watchCtx, stopWatch := context.WithCancel(context.Background())
+				defer stopWatch()
+				go watcher.Run(watchCtx)
 				hup := make(chan os.Signal, 1)
 				signal.Notify(hup, syscall.SIGHUP)
 				defer signal.Stop(hup)
 				go func() {
 					for range hup {
-						log.Printf("turn: SIGHUP: renewing the TLS certificate now")
-						keeper.RenewNow()
+						log.Printf("turn: SIGHUP: reading the TLS certificate again")
+						watcher.Reload()
 					}
 				}()
 			}
@@ -221,7 +233,7 @@ func run(args []string) error {
 			if err != nil {
 				return fmt.Errorf("listen for operator probes: %w", err)
 			}
-			operator := &http.Server{Handler: turnOperatorHandler(turnServer, turnKeeper), ReadHeaderTimeout: 5 * time.Second}
+			operator := &http.Server{Handler: turnOperatorHandler(turnServer, turnWatcher), ReadHeaderTimeout: 5 * time.Second}
 			go func() { _ = operator.Serve(listener) }()
 			defer operator.Close()
 			log.Printf("turn: operator health and metrics on %s", listener.Addr())
@@ -411,11 +423,11 @@ func (l *stringList) Set(value string) error {
 
 // startTURN starts the TURN server, its TLS identity from -turn-tls-cert/-key
 // or else the relay's own.
-func startTURN(config relay.TURNConfig, certFile, keyPath, relayCert, relayKey string, keeper *acmecert.Keeper) (*relay.TURNServer, error) {
-	if strings.TrimSpace(config.TLSAddr) != "" && keeper != nil {
+func startTURN(config relay.TURNConfig, certFile, keyPath, relayCert, relayKey string, watcher *acmecert.Watcher) (*relay.TURNServer, error) {
+	if strings.TrimSpace(config.TLSAddr) != "" && watcher != nil {
 		// Renewed in place: new connections get the new certificate, open
 		// ones keep theirs.
-		config.TLS = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: keeper.GetCertificate}
+		config.TLS = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: watcher.GetCertificate}
 	} else if strings.TrimSpace(config.TLSAddr) != "" {
 		if certFile == "" {
 			certFile, keyPath = relayCert, relayKey
