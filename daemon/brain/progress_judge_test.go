@@ -48,7 +48,7 @@ func newProgressJudgeFixture(t *testing.T, answers ...string) *progressJudgeFixt
 	t.Helper()
 	base := newProgressBindingFixture(t)
 	base.send(t, "turn:1")
-	service := NewService(base.store, nil, nil)
+	service := newTestService(t, base.store, nil, nil)
 	model := &fakeProgressModel{answers: answers}
 	service.SetProgressAsker(model.ask)
 	f := &progressJudgeFixture{progressBindingFixture: base, service: service, model: model, clock: time.Now().UTC()}

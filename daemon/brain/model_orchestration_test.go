@@ -59,7 +59,7 @@ func TestProviderResultPersistsAndReachesBrainWithoutImplicitAcceptance(t *testi
 			}
 			fw := &fakeWatcher{sessions: map[string]*classifier.Worker{"host": {ID: "host", Hidden: true, State: classifier.StateDone}},
 				ownedGenerations: map[string]string{"host": "generation"}, outcomes: map[string]watcher.InputOutcome{}, turnStore: store}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			if delivered, err := service.ReconcileHostLane(); err != nil || !delivered {
 				t.Fatalf("delivery=%v %v", delivered, err)
 			}

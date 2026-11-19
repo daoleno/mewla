@@ -257,7 +257,7 @@ func hostHandlingFixtureOnThread(t *testing.T, threadID string) (*Store, *Servic
 		"host":   {ID: "host", Hidden: true, State: classifier.StateRunning},
 		"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, err := fw.SubmitDelegatedWorkInput("worker", "deploy", item.ID, "turn:first", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}

@@ -376,7 +376,7 @@ func TestHostLaneReducerModelBindsProduction(t *testing.T) {
 				ownedGenerations: map[string]string{hostID: "host-generation-model"},
 				providerEvidence: map[string]watcher.ProviderActivityObservation{},
 			}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			row.setup(t, store, fw, service)
 			baseline := len(fw.sentCalls)
 			woke, err := service.ReconcileHostLane()

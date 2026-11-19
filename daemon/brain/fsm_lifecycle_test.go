@@ -810,7 +810,7 @@ func TestOverdueSweepProjectsAndAutomaticallyDeliversOneCanonicalEvent(t *testin
 		ownedGenerations: map[string]string{hostID: "host-generation"},
 		outcomes:         map[string]watcher.InputOutcome{}, turnStore: store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if delivered, err := service.ReconcileHostLane(); err != nil || !delivered {
 		t.Fatalf("idle Host delivery=%v err=%v", delivered, err)
 	}
@@ -850,7 +850,7 @@ func TestOverdueSweepProjectsAndAutomaticallyDeliversOneCanonicalEvent(t *testin
 	if err := reopened.SweepLifecycle(); err != nil {
 		t.Fatal(err)
 	}
-	if delivered, err := NewService(reopened, fw, nil).ReconcileHostLane(); err != nil || delivered {
+	if delivered, err := newTestService(t, reopened, fw, nil).ReconcileHostLane(); err != nil || delivered {
 		t.Fatalf("reload delivery=%v err=%v", delivered, err)
 	}
 	reloaded, _ := reopened.FSM().State(lifecycle.WorkID(item.ID))
@@ -898,7 +898,7 @@ func TestIdleHostDeliversOpenReviewsInOldestFirstOrder(t *testing.T) {
 		ownedGenerations: map[string]string{hostID: "host-generation"},
 		outcomes:         map[string]watcher.InputOutcome{}, turnStore: store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if delivered, deliverErr := service.ReconcileHostLane(); deliverErr != nil || !delivered {
 		t.Fatalf("oldest delivery=%v err=%v", delivered, deliverErr)
 	}
@@ -1040,7 +1040,7 @@ func TestUntilDoneTerminalSweepsNeverCreateSessionsAndBrainAdmitsOneScopedAttemp
 	}
 
 	fw := &fakeWatcher{turnStore: store}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	const sweeps = 64
 	errs := make(chan error, sweeps)
 	var wg sync.WaitGroup
@@ -1084,7 +1084,7 @@ func TestUntilDoneTerminalSweepsNeverCreateSessionsAndBrainAdmitsOneScopedAttemp
 		t.Fatal(err)
 	}
 	fw = &fakeWatcher{turnStore: store}
-	service = NewService(store, fw, nil)
+	service = newTestService(t, store, fw, nil)
 	for i := 0; i < sweeps; i++ {
 		if err := store.FSM().Sweep(); err != nil {
 			t.Fatal(err)

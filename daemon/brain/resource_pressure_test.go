@@ -18,7 +18,7 @@ func TestResourcePressureUsesDurableEventLaneAndKeepsPayload(t *testing.T) {
 	if err = store.SetChatState(ChatState{ThreadID: "resource-test-thread"}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	now := time.Now().UTC()
 	event := watcher.ResourcePressureEvent{State: "elevated", PreviousState: "normal", SampledAt: now, SnapshotEndpoint: "get_resource_telemetry", Memory: &watcher.MemoryResource{TotalBytes: 32 << 30, AvailableBytes: 4 << 30}, Consumers: []watcher.ProcessConsumer{{WorkerID: "worker1", Owner: "worker", Commands: []string{"qemu-system-x86"}, RSSBytes: 700}}}
 	// A missing host leaves the event pending; no user-input path is involved.
@@ -85,7 +85,7 @@ func TestResourcePressureSupersedesOnlyUnengagedEarlierWork(t *testing.T) {
 	if err = store.SetChatState(ChatState{ThreadID: "resource-test-thread"}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	now := time.Now().UTC()
 	route := func(state watcher.PressureState, at time.Time) string {
 		_ = service.RouteResourcePressure(watcher.ResourcePressureEvent{State: state, PreviousState: "normal", SampledAt: at, SnapshotEndpoint: "get_resource_telemetry"})

@@ -51,7 +51,7 @@ func TestHostBoundConversationIsNotRebuiltWhileTheTranscriptHoldsStill(t *testin
 	if err := store.ReplaceHostSessionBinding("host", "claude", "bound-session", path, filepath.Join(home, ".claude")); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 
 	first, err := service.HostBoundProviderConversation()
 	if err != nil || !first.Available || len(first.Events) == 0 {

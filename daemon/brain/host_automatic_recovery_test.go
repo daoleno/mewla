@@ -52,7 +52,7 @@ func TestAutomaticHostContinuityCapturesNativeSwitchAndResumesAfterExit(t *testi
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{
 		hostID: {ID: hostID, Name: "Brain", Command: "codex", Hidden: true, ProcessID: cmd.Process.Pid, Cwd: store.WorkspacePath()},
 	}}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Command: `codex --model old-default -c 'model_reasoning_effort="low"'`, Kind: "codex"},
 	}))
 	// No transcript subscription or user input is needed to persist identity.
@@ -131,7 +131,7 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 			}
 			before, _ := os.ReadFile(store.HostSessionPath())
 			fw := &fakeWatcher{probeErr: tc.probeErr}
-			service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+			service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 			if changed, err := service.ReconcileHostContinuity(); err == nil || changed {
 				t.Fatalf("unsafe recovery: %v %v", changed, err)
 			}
@@ -164,7 +164,7 @@ func TestAutomaticHostContinuityStartsFreshForALegacyHost(t *testing.T) {
 	SetHostAuthProbe(func(string) HostAuthState { return HostAuthUnauthenticated })
 	t.Cleanup(func() { SetHostAuthProbe(nil) })
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	if changed, err := service.ReconcileHostContinuity(); err != nil || !changed {
 		t.Fatalf("legacy Host not replaced: %v %v", changed, err)
 	}
@@ -211,7 +211,7 @@ func TestHostAtSignInScreenOpensAgainAfterSignIn(t *testing.T) {
 	SetHostAuthProbe(func(string) HostAuthState { return auth })
 	t.Cleanup(func() { SetHostAuthProbe(nil) })
 	fw := &fakeWatcher{sendErr: watcher.ErrWorkerInputNotReady}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	if _, err := service.ReconcileHostContinuity(); !errors.Is(err, watcher.ErrWorkerInputNotReady) {
 		t.Fatalf("first launch: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestAdoptedHostAtSignInScreenOpensAgainOnce(t *testing.T) {
 			sendErr:  watcher.ErrWorkerInputNotReady,
 			sessions: map[string]*classifier.Worker{adopted: {ID: adopted, Name: "Brain", Hidden: true, Command: "codex", Cwd: store.WorkspacePath()}},
 		}
-		service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+		service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 		_, _ = service.ReconcileHostContinuity()
 		if len(fw.killed) != 0 || len(fw.created) != 0 {
 			t.Fatalf("held=%v: reopened within the grace: killed %#v created %#v", held, fw.killed, fw.created)
@@ -327,7 +327,7 @@ func TestAutomaticHostContinuityResumesABrainWhoseProgramEnded(t *testing.T) {
 	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() { hostLookPath = previous })
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{"mh-brain": {ID: "mh-brain", Name: "Brain", Command: "codex"}}}
-	service := NewService(store, exitedSessionWatcher{fakeWatcher: fw, exited: "mh-brain"}, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := newTestService(t, store, exitedSessionWatcher{fakeWatcher: fw, exited: "mh-brain"}, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	// Nothing reports the Session removed; the recovery tick finds it.
 	if !service.HostRecoveryDue() {
 		t.Fatal("a Brain whose program ended is not due for recovery")
@@ -357,7 +357,7 @@ func TestAutomaticHostContinuityRestartsAHostThatNeverHeldAConversation(t *testi
 	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	t.Cleanup(func() { hostLookPath = previous })
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	if changed, err := service.ReconcileHostContinuity(); err != nil || !changed {
 		t.Fatalf("restart after reboot: %v %v", changed, err)
 	}
@@ -383,7 +383,7 @@ func TestAutomaticHostContinuityAmbiguousActivationDoesNotDisableLaterRecovery(t
 		t.Fatal(err)
 	}
 	fw.setReceiptOutcome(hostActivationReceipt(hostID, owned.Generation, brainHostContractDigest()), watcher.InputAmbiguous)
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 	for i := 0; i < 3; i++ {
 		if changed, err := service.ReconcileHostContinuity(); changed || !errors.Is(err, ErrHostActivationAmbiguous) {
 			t.Fatalf("ambiguous reconcile: %v %v", changed, err)

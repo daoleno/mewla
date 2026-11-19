@@ -50,7 +50,7 @@ func switchFixture(t *testing.T) (*Service, *fakeWatcher, *Store, string) {
 		oldHostID: {ID: oldHostID, Name: "Brain", State: classifier.StateRunning, Cwd: store.WorkspacePath(),
 			Command: "grok --no-alt-screen --permission-mode bypassPermissions", Hidden: true},
 	}}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok"},
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 		"ghost": {Name: "ghost", Command: "ghost-agent", Kind: "grok"},

@@ -25,7 +25,7 @@ func TestReconcileDelegatedSessionsObservationGapKeepsLiveTurn(t *testing.T) {
 		SessionID: "worker", TurnID: "worker-turn", AcceptedAt: base,
 	})
 	fw := &fakeWatcher{turnStore: store, probeErr: errors.New("session host unavailable")}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	service.now = func() time.Time { return base }
 
 	// The inventory gap omits the worker and the server cannot be read.
@@ -98,7 +98,7 @@ func TestReconcileDelegatedSessionsProvenAbsenceEndsTurn(t *testing.T) {
 	})
 	// nil sessions => ProbeSession Absent => ResolveDelegatedAbsence true.
 	fw := &fakeWatcher{turnStore: store}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	service.now = func() time.Time { return base }
 
 	service.ReconcileDelegatedSessions(nil)

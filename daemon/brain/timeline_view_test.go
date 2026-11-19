@@ -185,7 +185,7 @@ func TestWorkResultLifecyclesFollowEveryCommittedChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	var ids []string
 	check := func(step string) {
 		t.Helper()

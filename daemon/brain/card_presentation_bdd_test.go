@@ -37,7 +37,7 @@ func TestBDD_BrainCardUnicodeDeliveryHistoryAndAcceptance(t *testing.T) {
 	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
 		"host": {ID: "host", Hidden: true, State: classifier.StateDone}, "worker": {ID: "worker", Delegated: true, State: classifier.StateDone},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, err := fw.SubmitDelegatedWorkInput("worker", item.Objective, item.ID, "unicode-turn", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestBDD_BrainCardUnicodeDeliveryHistoryAndAcceptance(t *testing.T) {
 	if err != nil || closed.Status != WorkDone {
 		t.Fatal("acceptance not durable")
 	}
-	reconnect := project(NewService(reopened, fw, nil))
+	reconnect := project(newTestService(t, reopened, fw, nil))
 	rows, err := reopened.ThreadTimeline(thread, 0)
 	if err != nil {
 		t.Fatal(err)

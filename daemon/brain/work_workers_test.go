@@ -27,7 +27,7 @@ func TestWorkListsEveryWorkerSessionInJoinOrder(t *testing.T) {
 	}
 	host := &classifier.Worker{ID: hostID, Hidden: true, State: classifier.StateDone}
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{hostID: host}, ownedGenerations: map[string]string{hostID: "host-generation"}, outcomes: map[string]watcher.InputOutcome{}, turnStore: store}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	store.now = func() time.Time { return now }
 	service.now = func() time.Time { return now }

@@ -32,7 +32,7 @@ func newUserActionService(t *testing.T) (*Store, *Service, *fakeWatcher, string)
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	return store, NewService(store, fw, nil), fw, threadID
+	return store, newTestService(t, store, fw, nil), fw, threadID
 }
 
 func askUser(t *testing.T, store *Store, title string, choices ...string) Work {

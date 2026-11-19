@@ -95,7 +95,7 @@ func TestLiveCaseNamedWaitSurvivesChatRestartAndJudgment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restartedService := NewService(restarted, &fakeWatcher{turnStore: restarted}, nil)
+	restartedService := newTestService(t, restarted, &fakeWatcher{turnStore: restarted}, nil)
 	restartedService.SetWorkJudge(judge)
 	assertKept(t, restarted, restartedService)
 }
@@ -194,7 +194,7 @@ func TestFinishedRunSessionIsReclaimedOnlyWithoutOpenWork(t *testing.T) {
 		"mh-used": {ID: "mh-used", Delegated: true, State: classifier.StateDone},
 		"mh-busy": {ID: "mh-busy", Delegated: true, State: classifier.StateUnknown},
 	}, busy: map[string]bool{"mh-busy": true}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	item, err := store.CreateWork(Work{Title: "follow-up", Objective: "Brain reused a finished run's Session"})
 	if err != nil {
 		t.Fatal(err)

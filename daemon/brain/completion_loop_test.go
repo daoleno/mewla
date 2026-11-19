@@ -29,7 +29,7 @@ func TestBDD_001_DurableDecisionCleanup(t *testing.T) {
 				workerID:     {ID: workerID, Delegated: true, State: classifier.StateDone},
 				"user:@keep": {ID: "user:@keep", State: classifier.StateDone},
 			}, outcomes: map[string]watcher.InputOutcome{}, turnStore: store}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			item, err := store.CreateWork(Work{Title: scenario, Objective: "Brain decides", CompletionPolicy: CompletionUntilDone, DoneCriteriaRef: "verified result accepted"})
 			if err != nil {
 				t.Fatal(err)
@@ -119,7 +119,7 @@ func TestBDD_001_DurableDecisionCleanup(t *testing.T) {
 				t.Fatal(err)
 			}
 			fw.turnStore = reopened
-			service = NewService(reopened, fw, nil)
+			service = newTestService(t, reopened, fw, nil)
 			if err := service.ReconcileCompletedSessions(); err != nil {
 				t.Fatal(err)
 			}
@@ -172,7 +172,7 @@ func testCompletionLoopStaleDeliveredHandler(t *testing.T, replaced bool) {
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{
 		hostID: {ID: hostID, Hidden: true, State: classifier.StateDone},
 	}, outcomes: map[string]watcher.InputOutcome{}, turnStore: store}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	now := time.Date(2026, 9, 6, 17, 12, 27, 0, time.UTC)
 	store.now = func() time.Time { return now }
 	service.now = store.now
@@ -193,7 +193,7 @@ func testCompletionLoopStaleDeliveredHandler(t *testing.T, replaced bool) {
 		}
 		fw.turnStore = store
 		fw.providerEvidence = map[string]watcher.ProviderActivityObservation{hostID: {ID: "replacement-idle-activity", Status: "completed"}}
-		service = NewService(store, fw, nil)
+		service = newTestService(t, store, fw, nil)
 		store.now = func() time.Time { return now }
 		service.now = store.now
 	} else {
@@ -248,7 +248,7 @@ func TestBDD_006_UnrelatedCleanupCannotInvalidateDecision(t *testing.T) {
 		"historical": {ID: "historical", Delegated: true, State: classifier.StateDone},
 		"current":    {ID: "current", Delegated: true, State: classifier.StateDone},
 	}}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	for _, sessionID := range []string{"historical", "current"} {
 		item, err := store.CreateWork(Work{Title: sessionID, Objective: "decision scope"})
 		if err != nil {
@@ -297,7 +297,7 @@ func TestBDD_018_StartupReconciliationAbsentCompletedIsIdempotent(t *testing.T) 
 		}},
 		unowned: map[string]bool{"ambient:@1": true},
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	for _, sessionID := range []string{"gone:@1", "ambient:@1"} {
 		item, err := store.CreateWork(Work{Title: sessionID, Objective: "startup cleanup"})
 		if err != nil {

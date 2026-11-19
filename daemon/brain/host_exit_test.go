@@ -44,7 +44,7 @@ func TestABrainThatExitsAtStartShowsHowAndIsNotRespawned(t *testing.T) {
 		fakeWatcher: &fakeWatcher{sendErr: errors.New("Session input was definitely not submitted: target provider could not be proven")},
 		exit:        watcher.SessionExit{Code: &code, Ran: 400_000_000, Tail: "\x1b[8mmewla-origin 1234\nmewla sh: claude: argument 4 holds a character a .cmd program cannot be given safely (%, \", CR or LF)\n"},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
@@ -80,7 +80,7 @@ func TestABrainThatExitsAtStartShowsHowAndIsNotRespawned(t *testing.T) {
 
 	// A daemon that starts again finds the ended Host and says how it ended,
 	// without starting the same launch again in the same breath.
-	restarted := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	restarted := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
@@ -106,7 +106,7 @@ func TestABrainThatExitsTheSameWayTwiceIsNotStartedAgainByItself(t *testing.T) {
 		fakeWatcher: &fakeWatcher{sendErr: errors.New("Session input was definitely not submitted: target provider could not be proven")},
 		exit:        watcher.SessionExit{Code: &code, Ran: 300_000_000, Tail: "Error: boom from fake claude: cannot start\n"},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 	}))
 	if _, err := service.SetHostExecutor("claude"); !HostExitedAtStart(err) {

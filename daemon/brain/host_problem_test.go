@@ -36,7 +36,7 @@ func hostFixture(t *testing.T, installed map[string]bool, auth map[string]HostAu
 		return HostAuthUnknown
 	}
 	t.Cleanup(func() { hostLookPath, hostAuth = previousLook, previousAuth })
-	return NewService(store, nil, work.NewExecutorConfig(map[string]work.Executor{
+	return newTestService(t, store, nil, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Command: "claude", Kind: "claude"},
 		"codex":  {Command: "codex", Kind: "codex"},
 		"grok":   {Command: "grok --no-alt-screen", Kind: "grok"},

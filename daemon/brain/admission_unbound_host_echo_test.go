@@ -81,7 +81,7 @@ func newUnboundHostStore(t *testing.T) (*Store, *Service) {
 	if err := store.SetHostSession(unboundHostID, "codex"); err != nil {
 		t.Fatal(err)
 	}
-	return store, NewService(store, nil, nil)
+	return store, newTestService(t, store, nil, nil)
 }
 
 func assertOneBubblePerSend(t *testing.T, store *Store, sends []unboundHostSend) {
@@ -148,7 +148,7 @@ func TestUnboundCodexHostEchoesShowOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, send := range sends {
-		if _, created, err := NewService(reopened, nil, nil).PrepareHostUserInput(unboundHostID, send.receipt, send.body, "brain-thread:"+unboundBrainThread); err != nil || created {
+		if _, created, err := newTestService(t, reopened, nil, nil).PrepareHostUserInput(unboundHostID, send.receipt, send.body, "brain-thread:"+unboundBrainThread); err != nil || created {
 			t.Fatalf("retry %s created=%v err=%v", send.receipt, created, err)
 		}
 	}

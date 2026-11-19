@@ -24,7 +24,7 @@ func newRefusingService(t *testing.T, dir string, sessions ...string) (*Store, *
 		refuse:      map[string]error{},
 		calls:       map[string]int{},
 	}
-	return store, NewService(store, fw, nil), fw
+	return store, newTestService(t, store, fw, nil), fw
 }
 
 // A Session whose teardown finished is not torn down again on the next pass,

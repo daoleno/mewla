@@ -72,7 +72,7 @@ func TestCodexBrainBindsItsConversationFromCodexsRecords(t *testing.T) {
 			t.Fatal(err)
 		}
 		fw := &fakeWatcher{sessions: map[string]*classifier.Worker{"mh-brain": {ID: "mh-brain", Name: "Brain", Command: command, Cwd: workspace, StartedAt: started}}}
-		service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+		service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
 		identity, err := service.BindHostProviderTranscript()
 		if err != nil {
 			t.Fatal(err)

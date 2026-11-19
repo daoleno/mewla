@@ -56,7 +56,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 		t.Fatal(err)
 	}
 
-	service := NewService(store, nil, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, nil, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok"},
 	}))
@@ -115,7 +115,7 @@ func TestHostSwitchBindsNewProviderConversationNotPreviousCodexIdentity(t *testi
 			},
 		},
 	}
-	service = NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service = newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok"},
 	}))
@@ -364,7 +364,7 @@ func TestHostSwitchGrokWorkEventAmbiguousReceiptSettlesWithoutQuarantine(t *test
 		},
 		outcomes: map[string]watcher.InputOutcome{},
 	}
-	service := NewService(store, fw, execs)
+	service := newTestService(t, store, fw, execs)
 	snapshot, err := service.SetHostExecutor("grok")
 	if err != nil {
 		t.Fatal(err)

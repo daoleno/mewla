@@ -65,7 +65,7 @@ func newIdleWorkerFixture(t *testing.T, lease int) *idleWorkerFixture {
 	f.fake = &backgroundWaitFake{fakeWatcher: &fakeWatcher{providerEvidence: map[string]watcher.ProviderActivityObservation{
 		"worker": {ID: "activity", Status: "completed", StartedAt: f.now, ProgressAt: f.now, SettledAt: f.now.Add(15 * time.Second)},
 	}}}
-	f.service = NewService(store, f.fake, nil)
+	f.service = newTestService(t, store, f.fake, nil)
 	f.service.now = func() time.Time { return f.now }
 	f.workers = []*classifier.Worker{{ID: "worker", PaneAlive: true, ProcessID: 123, State: classifier.StateUnknown}}
 	return f

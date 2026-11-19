@@ -135,8 +135,12 @@ type Service struct {
 	// is guarded by workTranscriptMu.
 	resolveWorkerTranscript func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error)
 	recordTranscriptSync    bool // tests: run the turn-end link inline
-	workTranscriptMu        sync.Mutex
-	workTranscriptWatch     map[string]workTranscriptWatch
+	// background joins the writers a fact or a lane pass leaves running (progress
+	// evidence, the turn-end transcript link, the settle judge); a test waits for
+	// them before its store's directory goes.
+	background          sync.WaitGroup
+	workTranscriptMu    sync.Mutex
+	workTranscriptWatch map[string]workTranscriptWatch
 
 	reconcileMu sync.Mutex
 	// reclaimRefused holds the completed Sessions this process was refused
@@ -4794,4 +4798,9 @@ func executorProgram(executor work.WorkerExecutor) string {
 		return executor.BareCommand
 	}
 	return executor.Command
+}
+
+// waitBackground returns once the background writers started so far are done.
+func (s *Service) waitBackground() {
+	s.background.Wait()
 }

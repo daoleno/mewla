@@ -285,7 +285,7 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 		record()
 		return
 	}
-	go record()
+	s.background.Go(record)
 }
 
 // SessionConversation names the provider conversation Session sessionID last

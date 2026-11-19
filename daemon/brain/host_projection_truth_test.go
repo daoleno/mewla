@@ -24,7 +24,7 @@ func TestHostActivationCannotFabricateRunningAfterDisappearance(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := &disappearingHostWatcher{fakeWatcher: &fakeWatcher{}}
-	service := NewService(store, w, nil)
+	service := newTestService(t, store, w, nil)
 	executor := work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex"})
 	ref, err := service.ensureHostWorker(executor)
 	if err == nil || !strings.Contains(err.Error(), "not observable") || ref.ID != "" {
@@ -40,7 +40,7 @@ func TestHostPendingObservationHasNoInventedActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	ref := hostBootstrapRef(service, hostDiscovery{id: "host:@1", command: "codex"})
 	if ref.Status != string(classifier.StateUnknown) || !ref.Updated.IsZero() {
 		t.Fatalf("pending observation invented activity: %+v", ref)

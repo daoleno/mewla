@@ -212,7 +212,7 @@ func TestPressureWorkWhoseHandlingEndedIsSupersededByANewerSample(t *testing.T) 
 	if err = store.SetChatState(ChatState{ThreadID: "resource-test-thread"}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	now := time.Now().UTC()
 	route := func(at time.Time) string {
 		_ = service.RouteResourcePressure(watcher.ResourcePressureEvent{State: "elevated", PreviousState: "normal", SampledAt: at, SnapshotEndpoint: "get_resource_telemetry"})
@@ -345,7 +345,7 @@ func TestJudgeFailureLeavesAWorkWithoutAReadResultAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	service.SetWorkJudge(judge)
 	later := time.Now().Add(settleDebounce + time.Minute)
 	service.now = func() time.Time { return later }
@@ -455,7 +455,7 @@ func TestStaleListNamesDelegatedSessionsLeftWithoutOpenWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	now := time.Now()
 	service.now = func() time.Time { return now }
 	old := now.Add(-staleSessionAfter - time.Minute)

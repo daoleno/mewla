@@ -26,7 +26,7 @@ func TestFirstBrainHostUsesAnInstalledExecutor(t *testing.T) {
 		return "", exec.ErrNotFound
 	}
 	t.Cleanup(func() { hostLookPath = previous })
-	service := NewService(store, nil, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, nil, work.NewExecutorConfig(map[string]work.Executor{
 		"codex":  {Command: "codex", Kind: "codex"},
 		"claude": {Command: "claude", Kind: "claude"},
 	}))

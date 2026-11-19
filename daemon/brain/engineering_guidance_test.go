@@ -66,7 +66,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	}
 	for _, provider := range []string{"pi", "codex"} {
 		t.Run(provider, func(t *testing.T) {
-			service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
+			service := newTestService(t, store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 				provider: {Name: provider, Command: provider, Kind: provider},
 			}))
 			bootstrap := service.hostBootstrapPrompt(service.hostExecutor())
@@ -128,7 +128,7 @@ func TestEngineeringMethodDeltaSeedDelivery(t *testing.T) {
 					if repair == "startup" {
 						store, err = NewStore(root)
 					} else {
-						_, err = NewService(store, nil, nil).Housekeeping()
+						_, err = newTestService(t, store, nil, nil).Housekeeping()
 					}
 					if err != nil {
 						t.Fatal(err)
@@ -139,7 +139,7 @@ func TestEngineeringMethodDeltaSeedDelivery(t *testing.T) {
 					if got := mustReadFile(t, path); !bytes.Equal(got, want) {
 						t.Fatal("seed delivery did not preserve ownership or install current default")
 					}
-					report, err := NewService(store, nil, nil).Housekeeping()
+					report, err := newTestService(t, store, nil, nil).Housekeeping()
 					if err != nil || len(report.ChangedPaths) != 0 || !bytes.Equal(mustReadFile(t, path), want) {
 						t.Fatalf("repeat repair not idempotent: %+v, %v", report, err)
 					}
@@ -189,7 +189,7 @@ func TestEngineeringGuidanceRepairsManagedHomeWithOverlays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewService(store, nil, nil).Housekeeping(); err != nil {
+	if _, err := newTestService(t, store, nil, nil).Housekeeping(); err != nil {
 		t.Fatal(err)
 	}
 	after, err := workspaceContentIdentity(store)
@@ -213,7 +213,7 @@ func TestEngineeringGuidanceRefreshesExistingHost(t *testing.T) {
 		},
 		ownedGenerations: map[string]string{hostID: generation},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 	// Previous releases hashed only the role, so a method-only update was invisible.
@@ -224,7 +224,7 @@ func TestEngineeringGuidanceRefreshesExistingHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		if _, err := NewService(store, fw, service.execs).EnsureHostSnapshot(); err != nil {
+		if _, err := newTestService(t, store, fw, service.execs).EnsureHostSnapshot(); err != nil {
 			t.Fatal(err)
 		}
 	}

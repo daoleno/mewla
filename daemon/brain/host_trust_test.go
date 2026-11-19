@@ -53,7 +53,7 @@ func claudeHostService(t *testing.T) (*Service, *fakeWatcher, *Store) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
@@ -140,7 +140,7 @@ func TestNonClaudeHostLeavesClaudeConfigAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}}))
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}}))
 	if _, err := service.EnsureHostSnapshot(); err != nil || len(fw.created) != 1 {
 		t.Fatalf("host launch err=%v created=%#v", err, fw.created)
 	}

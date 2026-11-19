@@ -78,7 +78,7 @@ func TestSubmitExternalUserInputUsesCanonicalAdmissionAndReceipt(t *testing.T) {
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if disposition, err := service.SubmitExternalUserInputInThread("stale-media", body, "old-thread"); err == nil || disposition != ExternalInputNotSubmitted || len(fw.sentCalls) != 0 {
 		t.Fatal("staged input migrated from an old Brain thread")
 	}
@@ -135,7 +135,7 @@ func TestSubmitExternalUserInputAmbiguousIsDurableAndNotReplayed(t *testing.T) {
 			Cause:  errors.New("provider outcome unknown"),
 		},
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	disposition, err := service.SubmitExternalUserInput(receipt, "Maybe accepted")
 	if err != nil || disposition != ExternalInputUncertain {
 		t.Fatalf("submission disposition=%q err=%v", disposition, err)
@@ -262,7 +262,7 @@ func TestRouteSessionEventWithoutCanonicalTurnNeverCreatesLifecycleEvents(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			service := NewService(store, &fakeWatcher{}, nil)
+			service := newTestService(t, store, &fakeWatcher{}, nil)
 			for attempt := 0; attempt < 2; attempt++ {
 				if woke, routeErr := service.RouteSessionEvent(test.event); routeErr != nil || woke {
 					t.Fatalf("route woke=%v err=%v", woke, routeErr)
@@ -315,7 +315,7 @@ func TestReconcileDelegatedSessionsWithoutTurnNeverRoutesRawState(t *testing.T) 
 		Delegated: true, PaneAlive: true,
 		ExpectedNextCheckAt: &now, // long-expired cross-turn lease must not stale a turnless session
 	}}
-	service := NewService(store, &fakeWatcher{sessions: map[string]*classifier.Worker{workers[0].ID: workers[0]}}, nil)
+	service := newTestService(t, store, &fakeWatcher{sessions: map[string]*classifier.Worker{workers[0].ID: workers[0]}}, nil)
 	service.ReconcileDelegatedSessions(workers)
 	events, err := store.ListWorkEvents(item.ID)
 	if err != nil {
@@ -359,7 +359,7 @@ func TestRouteSessionEventWithCanonicalTurnRedispatchesOnly(t *testing.T) {
 		TurnID:     "turn-one",
 		AcceptedAt: now,
 	})
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	worker := &classifier.Worker{
 		ID: sessionID, State: classifier.StateFailed, Summary: "Session starting",
 		Delegated: true, PaneAlive: true,
@@ -723,7 +723,7 @@ func TestHostInputAdmissionLiveCriticalSectionAndRestartSettlement(t *testing.T)
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	prepared, created, err := service.PrepareHostUserInput(
 		hostID, requestID, "do not race the provider call", "brain-thread:"+threadID,
 	)
@@ -746,7 +746,7 @@ func TestHostInputAdmissionLiveCriticalSectionAndRestartSettlement(t *testing.T)
 		t.Fatal(err)
 	}
 	fw.turnStore = reopened
-	if woke, err := NewService(reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
+	if woke, err := newTestService(t, reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("restart settlement woke=%v err=%v", woke, err)
 	}
 	settled, found, err := reopened.BrainInputAdmission(requestID, threadID)
@@ -759,14 +759,14 @@ func TestHostInputAdmissionLiveCriticalSectionAndRestartSettlement(t *testing.T)
 		t.Fatal(err)
 	}
 	fw.turnStore = reopenedAgain
-	if woke, err := NewService(reopenedAgain, fw, nil).ReconcileHostLane(); err != nil || woke {
+	if woke, err := newTestService(t, reopenedAgain, fw, nil).ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("second restart woke=%v err=%v", woke, err)
 	}
 	// The same logical input retried after a proven non-mutation is re-armed
 	// (same identity, same payload, current generation): the retry may cross
 	// the mutation boundary again, and no provider input is replayed by the
 	// reconciliation itself.
-	duplicate, duplicateCreated, err := NewService(reopenedAgain, fw, nil).PrepareHostUserInput(
+	duplicate, duplicateCreated, err := newTestService(t, reopenedAgain, fw, nil).PrepareHostUserInput(
 		hostID, requestID, "do not race the provider call", "brain-thread:"+threadID,
 	)
 	if err != nil || !duplicateCreated || duplicate.State != BrainInputAdmissionPending {
@@ -808,7 +808,7 @@ func TestHostInputAdmissionDifferentPayloadNeverRearmsSameIdentity(t *testing.T)
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	prepared, created, err := service.PrepareHostUserInput(
 		hostID, requestID, "original message", "brain-thread:"+threadID,
 	)
@@ -859,7 +859,7 @@ func TestHostInputAdmissionRestartUsesExactAcceptedReceipt(t *testing.T) {
 		ownedGenerations: map[string]string{hostID: "host-generation-accepted"},
 		outcomes:         map[string]watcher.InputOutcome{requestID: watcher.InputAccepted},
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, created, err := service.PrepareHostUserInput(
 		hostID, requestID, "accepted before process loss", "brain-thread:"+threadID,
 	); err != nil || !created {
@@ -871,7 +871,7 @@ func TestHostInputAdmissionRestartUsesExactAcceptedReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw.turnStore = reopened
-	if woke, err := NewService(reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
+	if woke, err := newTestService(t, reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("accepted restart reconcile woke=%v err=%v", woke, err)
 	}
 	accepted, found, err := reopened.BrainInputAdmission(requestID, threadID)
@@ -893,7 +893,7 @@ func TestHostInputAdmissionRestartUsesExactAcceptedReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw.turnStore = reopenedAgain
-	if woke, err := NewService(reopenedAgain, fw, nil).ReconcileHostLane(); err != nil || woke {
+	if woke, err := newTestService(t, reopenedAgain, fw, nil).ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("accepted second restart woke=%v err=%v", woke, err)
 	}
 	items, err = reopenedAgain.ThreadTimeline(threadID, 0)
@@ -929,7 +929,7 @@ func TestHostInputAdmissionReplacementBecomesUncertainAndFreesLane(t *testing.T)
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, created, err := service.PrepareHostUserInput(
 		hostID, requestID, "outcome lost with old pane", "brain-thread:"+threadID,
 	); err != nil || !created {
@@ -960,7 +960,7 @@ func TestHostInputAdmissionReplacementBecomesUncertainAndFreesLane(t *testing.T)
 		t.Fatal(err)
 	}
 	fw.turnStore = recovered
-	if woke, err := NewService(recovered, fw, nil).ReconcileHostLane(); err != nil || !woke {
+	if woke, err := newTestService(t, recovered, fw, nil).ReconcileHostLane(); err != nil || !woke {
 		t.Fatalf("replacement convergence woke=%v err=%v", woke, err)
 	}
 	settled, found, err := recovered.BrainInputAdmission(requestID, threadID)
@@ -981,7 +981,7 @@ func TestHostInputAdmissionReplacementBecomesUncertainAndFreesLane(t *testing.T)
 		t.Fatal(err)
 	}
 	fw.turnStore = reopened
-	if woke, err := NewService(reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
+	if woke, err := newTestService(t, reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("uncertain reopen woke=%v err=%v", woke, err)
 	}
 	items, err = reopened.ThreadTimeline(threadID, 0)
@@ -1017,7 +1017,7 @@ func TestHostBindingReplacementRetiresExactForegroundAndDispatches(t *testing.T)
 		outcomes:  map[string]watcher.InputOutcome{},
 		turnStore: store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	oldAdmission, created, err := service.PrepareHostUserInput(
 		oldHost, "old-host-input", "finish on the old Host", "brain-thread:"+threadID,
 	)
@@ -1138,7 +1138,7 @@ func TestHostGenerationReplacementRetiresForegroundAndAllowsNextTurn(t *testing.
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	first, created, err := service.PrepareHostUserInput(
 		hostID, "generation-one-input", "first pane", "brain-thread:"+threadID,
 	)
@@ -1206,7 +1206,7 @@ func TestBDD_003_BusyBrainDefersUntilProviderTurnEnds(t *testing.T) {
 			hostID: {ID: activityID, Status: "running", StartedAt: now},
 		},
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	admission, created, err := service.PrepareHostUserInput(
 		hostID, "foreground-user-input", "foreground user turn", "brain-thread:"+threadID,
 	)
@@ -1287,7 +1287,7 @@ func TestSameReviewEventRequiresExplicitReplayAfterHandlingEnds(t *testing.T) {
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	item := createSignalTestWork(t, store, "Redeliver one canonical review", "mewla-worker-worker:@1")
 	event := appendSignalTestEvent(t, store, item, "review-redelivery")
 
@@ -1370,7 +1370,7 @@ func TestServiceSnapshotHasNoResultEventsChannel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snapshot, err := NewService(store, nil, nil).Snapshot()
+	snapshot, err := newTestService(t, store, nil, nil).Snapshot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1401,7 +1401,7 @@ func TestServiceSnapshotCreatesHiddenHostSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 
 	snapshot, err := service.EnsureHostSnapshot()
 	if err != nil {
@@ -1439,7 +1439,7 @@ func TestServiceSnapshotReusesMatchingHostSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		},
@@ -1475,7 +1475,7 @@ func TestServiceSnapshotAndContextDoNotMutateThreadRegistryForHost(t *testing.T)
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		},
@@ -1533,7 +1533,7 @@ func TestServiceSnapshotReusesGrokHostEvenWhenClassifiedBlocked(t *testing.T) {
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[hostID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex"},
@@ -1583,7 +1583,7 @@ func TestServiceSnapshotReplacesHostWhenSessionMissing(t *testing.T) {
 	}
 	// HasSession false: no sessions map entry and no worker list entry.
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok": {Name: "grok", Command: "grok", Kind: "grok"},
 		},
@@ -1637,7 +1637,7 @@ func TestServiceSnapshotResumesProviderSessionWhenSessionMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 
@@ -1686,7 +1686,7 @@ func TestServiceSnapshotResumesCodexFromTranscriptPathOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	if _, err := service.EnsureHostSnapshot(); err != nil {
@@ -1730,7 +1730,7 @@ func TestServiceSnapshotMissingSessionResumePreservesChatThreadIdentity(t *testi
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 
@@ -1808,7 +1808,7 @@ func TestServiceMissingSessionUnresumableStartsFresh(t *testing.T) {
 				t.Fatal(err)
 			}
 			fw := &fakeWatcher{createErr: tc.createErr}
-			service := NewService(store, fw, &work.ExecutorConfig{
+			service := newTestService(t, store, fw, &work.ExecutorConfig{
 				ByName: map[string]work.Executor{
 					tc.executorID: {Name: tc.executorID, Command: tc.command, Kind: tc.kind},
 					"codex":       {Name: "codex", Command: "codex", Kind: "codex"},
@@ -1911,7 +1911,7 @@ func TestServiceSnapshotDoesNotRebindUnrelatedHostAsContinuity(t *testing.T) {
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions["main:@0"])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 
@@ -2020,7 +2020,7 @@ func TestServiceSnapshotResumeBindFailureKillsNewHostKeepsOld(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	store.replaceHostBindingWrite = func(string, any) error {
@@ -2075,7 +2075,7 @@ func TestProjectionSnapshotAbsentHostDoesNotMutate(t *testing.T) {
 	}
 	fw := &fakeWatcher{} // recorded host Absent
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -2120,7 +2120,7 @@ func TestServiceSnapshotProbeUnknownPreservesBindingCreatesZero(t *testing.T) {
 	}
 	fw := &fakeWatcher{probeErr: fmt.Errorf("injected session host probe failure")}
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -2181,7 +2181,7 @@ func TestServiceSnapshotRecoverCandidateProbeUnknownCreatesZero(t *testing.T) {
 			aliveID: fmt.Errorf("injected candidate probe failure"),
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 
@@ -2249,7 +2249,7 @@ func TestServiceSnapshotRecoverLiveMigratesProviderBindingAtomically(t *testing.
 				},
 			}
 			fw.workers = append(fw.workers, fw.sessions[aliveID])
-			service := NewService(store, fw, &work.ExecutorConfig{
+			service := newTestService(t, store, fw, &work.ExecutorConfig{
 				ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 			})
 
@@ -2311,7 +2311,7 @@ func TestServiceSnapshotRecoverLiveBindFailureKeepsOldDoesNotKill(t *testing.T) 
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	store.replaceHostBindingWrite = func(string, any) error {
@@ -2364,7 +2364,7 @@ func TestServiceSnapshotAdoptsLiveHostProviderWhenExecutorIDEmpty(t *testing.T) 
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[hostID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
@@ -2421,7 +2421,7 @@ func TestServiceSnapshotRebindsAliveHostWhenRecordedTargetMissing(t *testing.T) 
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 		},
@@ -2475,7 +2475,7 @@ func TestServiceSnapshotAuditsProviderMismatchReplacement(t *testing.T) {
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[oldID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
@@ -2518,7 +2518,7 @@ func TestServiceSnapshotNamesTheFirstAgentInOrderButLaunchesNothingUninstalled(t
 	hostLookPath = func(string) (string, error) { return "", exec.ErrNotFound }
 	t.Cleanup(func() { hostLookPath = previous })
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
@@ -2568,7 +2568,7 @@ func TestHostStartsEvenWhenMewlaSeesTheAgentSignedOut(t *testing.T) {
 	SetHostAuthProbe(func(string) HostAuthState { return HostAuthUnauthenticated })
 	t.Cleanup(func() { SetHostAuthProbe(nil) })
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude"},
 	}))
 
@@ -2587,7 +2587,7 @@ func TestServiceSnapshotHonorsHostExecutorOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex":  {Name: "codex", Command: "codex"},
 		"claude": {Name: "claude", Command: "claude"},
 	}))
@@ -2625,7 +2625,7 @@ func TestBrainHostAndDefaultWorkerCommandsCarryFullAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{}))
+	service := newTestService(t, store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{}))
 	for _, tc := range []struct{ executor, command, want string }{
 		{"claude", "claude", "--permission-mode bypassPermissions"},
 		{"claude", "claude --permission-mode auto", "--permission-mode bypassPermissions"},
@@ -2656,7 +2656,7 @@ func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -2701,7 +2701,7 @@ func TestServiceBootstrapPromptReferencesPrivateWorkspaceWithoutEmbeddingIt(t *t
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -2740,7 +2740,7 @@ func TestServiceSetHostExecutorPersistsAndStartsSelectedHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex":  {Name: "codex", Command: "codex"},
 		"claude": {Name: "claude", Command: "claude"},
 	}))
@@ -2797,7 +2797,7 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"grok":  {Name: "grok", Command: "grok --no-alt-screen --permission-mode bypassPermissions", Kind: "grok"},
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
@@ -2894,7 +2894,7 @@ func TestServiceHousekeepingRepairsWorkspaceAndReportsDelegatedWorkers(t *testin
 			},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
 	}))
 
@@ -2982,7 +2982,7 @@ func TestServiceNewChatReplacesHostAndStartsFreshThread(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude", Kind: "claude"},
 	}))
 
@@ -3057,7 +3057,7 @@ func TestServiceSetHostExecutorRejectsUnknownAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -3088,7 +3088,7 @@ func TestServiceSnapshotReplacesMismatchedHostSession(t *testing.T) {
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[oldID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"codex": {Name: "codex", Command: "codex"},
 		},
@@ -3131,7 +3131,7 @@ func TestServiceSnapshotPreservesCodexHostWithoutFullAuthorization(t *testing.T)
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[oldID])
-	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 
@@ -3170,7 +3170,7 @@ func TestServiceSnapshotFiltersHiddenHostFromVisibleWorkers(t *testing.T) {
 			Summary: "working",
 		}},
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 
 	snapshot, err := service.EnsureHostSnapshot()
 	if err != nil {
@@ -3258,7 +3258,7 @@ func TestStoreContextAndHousekeepingFailClosedOnCorruptTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	if _, err := service.Context(); err != nil {
 		t.Fatalf("empty timeline context: %v", err)
 	}
@@ -3274,7 +3274,7 @@ func TestStoreContextAndHousekeepingFailClosedOnCorruptTimeline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service = NewService(reopened, nil, nil)
+	service = newTestService(t, reopened, nil, nil)
 	_, contextErr := service.Context()
 	_, housekeepingErr := service.Housekeeping()
 	if contextErr == nil || housekeepingErr == nil ||
@@ -3338,7 +3338,7 @@ func TestServiceHousekeepingRepairsCalendarContractWithoutOverwritingUserContent
 	if err := os.WriteFile(store.workspaceInstructionsPath(), []byte(customInstructions), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
+	service := newTestService(t, store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
 		"codex": {Name: "codex", Command: "codex"},
 	}))
 

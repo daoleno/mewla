@@ -38,7 +38,7 @@ func TestSubmitExternalUserInputDedupesReceiptAcrossThreadChange(t *testing.T) {
 		outcomes:         map[string]watcher.InputOutcome{},
 		turnStore:        store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if disposition, err := service.SubmitExternalUserInput(receipt, body); err != nil || disposition != ExternalInputAccepted {
 		t.Fatalf("first delivery disposition=%q err=%v", disposition, err)
 	}
@@ -115,7 +115,7 @@ func TestStartupReconciliationSurvivesRepeatedAndConflictingAdmissions(t *testin
 
 	acceptedReplayTestAdmission(t, store, laterID, "thread-b", "session-b", "later text", base.Add(4*time.Hour))
 
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	if err := store.ProjectBrainInputAdmission(mustAdmission(t, store, replayID, "thread-b")); err != nil {
 		t.Fatalf("replay projection must be a no-op: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestStartupReconciliationSurvivesRepeatedAndConflictingAdmissions(t *testin
 		t.Fatal(err)
 	}
 	acceptedReplayTestAdmission(t, clean, replayID, "thread-b", "session-b", "same text", base.Add(time.Hour))
-	if complete, err := NewService(clean, &fakeWatcher{}, nil).ReconcileSignalSystemStartup(nil, 64); !complete || err != nil {
+	if complete, err := newTestService(t, clean, &fakeWatcher{}, nil).ReconcileSignalSystemStartup(nil, 64); !complete || err != nil {
 		t.Fatalf("a replayed receipt must not leave the pass failing: complete=%v err=%v", complete, err)
 	}
 }

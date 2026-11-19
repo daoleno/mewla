@@ -268,7 +268,7 @@ func TestManagedWorkspaceLateFailureNeverWritesEarlierDocument(t *testing.T) {
 		if err := os.Chtimes(agentsPath, fixed, fixed); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := NewService(store, nil, nil).Housekeeping(); err == nil {
+		if _, err := newTestService(t, store, nil, nil).Housekeeping(); err == nil {
 			t.Fatal("Housekeeping accepted a foreign handoff marker")
 		}
 		assertBytesAndMtime(t, agentsPath, original, fixed)
@@ -362,7 +362,7 @@ func TestHousekeepingReportsOnlySortedChangedPaths(t *testing.T) {
 	if err := os.Remove(store.currentPath()); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 
 	first, err := service.Housekeeping()
 	if err != nil {
@@ -399,7 +399,7 @@ func TestUnmanagedWorkspaceEntriesAreReportedAndLeftAlone(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(workspace, "downloads"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	report, err := NewService(store, nil, nil).Housekeeping()
+	report, err := newTestService(t, store, nil, nil).Housekeeping()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +418,7 @@ func TestContextReportsNoteBudgetsWithoutInliningPrivateNotes(t *testing.T) {
 	if err := os.WriteFile(store.currentPath(), []byte(large), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	context, err := service.Context()
 	if err != nil {
 		t.Fatal(err)

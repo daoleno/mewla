@@ -111,7 +111,7 @@ func TestBDD_010_IncompleteInventoryDoesNotDeclareOriginalLost(t *testing.T) {
 			if mode == "absent" {
 				delete(fw.sessions, "worker")
 			}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			// When the inventory snapshot is incomplete, consult authoritative presence.
 			service.ReconcileDelegatedSessions(nil)
 			state, _ := store.FSM().State(lifecycle.WorkID(item.ID))

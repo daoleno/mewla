@@ -112,7 +112,7 @@ func (s *Service) noteProgressFact(fact watcher.TurnFact, reported bool) {
 		return // what the pane shows while a turn runs is not evidence
 	}
 	turnID := strings.TrimSpace(fact.TurnID)
-	go func() {
+	s.background.Go(func() {
 		var kept *ProgressReport
 		if reported && (report.Summary != "" || report.Phase != "") {
 			kept = &report
@@ -125,7 +125,7 @@ func (s *Service) noteProgressFact(fact watcher.TurnFact, reported bool) {
 		if due {
 			s.requestProgress(item.ID, turnID, turnEnd)
 		}
-	}()
+	})
 }
 
 // requestProgress marks a Work as having new evidence from the turn turnID.
