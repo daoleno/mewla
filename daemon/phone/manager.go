@@ -146,6 +146,8 @@ type Status struct {
 	// last fell into setup. Both are empty while the phone is ready.
 	Problem    string     `json:"problem,omitempty"`
 	SetupSince *time.Time `json:"setup_since,omitempty"`
+	// Warning is what the phone says, while ready, will stop it later.
+	Warning string `json:"warning,omitempty"`
 }
 
 // Reply is the phone's answer to one op. When the phone answered but refused, Do returns it
@@ -225,6 +227,7 @@ type Link struct {
 	hello   Hello
 	state   string // the phone's last report
 	problem string // why a phone in setup is not ready, as it said
+	warning string // what a ready phone said will stop it later
 	// setupSince is when the phone last reported setup after being anything else; zero while it is not in setup.
 	setupSince time.Time
 	stopped    bool // latched by Stop, cleared only by give_back
@@ -380,6 +383,12 @@ func (m *Manager) onState(l *Link, s State) {
 	}
 	l.state = s.State
 	l.problem = problem
+	if warning := trimTo(s.Warning, 400); warning != l.warning {
+		if warning != "" {
+			log.Printf("phone: warns: %s", warning)
+		}
+		l.warning = warning
+	}
 	// The phone says whose hands the agent's screen is in; a stop it reports is latched until
 	// give_back, like one the person pressed.
 	l.person = s.State == StatePersonInCharge
@@ -528,12 +537,14 @@ func sentence(problem string) string {
 }
 
 // trimProblem keeps the phone's reason to a sentence: it goes into an agent's error.
-func trimProblem(problem string) string {
-	problem = strings.TrimSpace(problem)
-	if r := []rune(problem); len(r) > 240 {
-		return string(r[:240])
+func trimProblem(problem string) string { return trimTo(problem, 240) }
+
+func trimTo(text string, runes int) string {
+	text = strings.TrimSpace(text)
+	if r := []rune(text); len(r) > runes {
+		return string(r[:runes])
 	}
-	return problem
+	return text
 }
 
 func problemSuffix(problem string) string {
@@ -641,6 +652,9 @@ func (m *Manager) Status() Status {
 	status := Status{State: StateOffline}
 	if l := m.link; l != nil {
 		status = Status{Connected: true, State: l.effectiveLocked(), Model: l.hello.Model, SDK: l.hello.SDK, AppVersion: l.hello.AppVersion, W: l.w, H: l.h, Display: l.display}
+		if l.state == StateReady {
+			status.Warning = l.warning
+		}
 		if l.state == StateSetup {
 			status.Problem = l.problem
 			if !l.setupSince.IsZero() {

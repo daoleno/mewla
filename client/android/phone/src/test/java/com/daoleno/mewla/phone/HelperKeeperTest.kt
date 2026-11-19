@@ -19,12 +19,13 @@ class HelperKeeperTest {
         var pausedUntil = 0L
         var helper = true
         var grantResult: String? = null
+        var refusedEarlier: String? = null
         var startError: String? = null
         var reason: String? = "unset"
         var starts = 0
         var grants = 0
 
-        override fun facts() = Facts(enabled, paired, pairing, wifi, wirelessOn, granted, pausedUntil, now)
+        override fun facts() = Facts(enabled, paired, pairing, wifi, wirelessOn, granted, pausedUntil, now, refusedEarlier)
         override fun helperUp() = helper
         override fun startHelper() {
             starts += 1
@@ -118,6 +119,13 @@ class HelperKeeperTest {
         phone.wirelessOn = false
         keeper.step()
         assertTrue(phone.reason!!, phone.reason!!.contains("Android refused: SecurityException"))
+    }
+
+    @Test fun aGrantTheFirstStartWasRefusedIsNamedWhenWirelessDebuggingGoesOff() {
+        // 11-19 23:20: the owner was told only that the permission was missing, never why the first connection did not get it.
+        val phone = Phone().apply { helper = false; wirelessOn = false; granted = false; refusedEarlier = "the phone refused the grant: Security exception" }
+        keeper(phone).step()
+        assertTrue(phone.reason!!, phone.reason!!.contains("the phone refused the grant: Security exception"))
     }
 
     @Test fun theAppKilledAndStartedAgainAdoptsTheHelperThatKeptRunning() {

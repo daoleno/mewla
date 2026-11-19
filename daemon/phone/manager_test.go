@@ -788,3 +788,16 @@ func TestAPhoneThatConnectsInSetupIsInSetupSinceItConnected(t *testing.T) {
 		t.Fatalf("since: %+v", st)
 	}
 }
+
+func TestAReadyPhonesWarningIsInItsStatusOnlyWhileReady(t *testing.T) {
+	m := NewManager(Options{})
+	link, _ := connect(t, m, StateReady, okResult(nil))
+	sendFrame(t, link, State{Type: TypeState, State: StateReady, Warning: "no grant"})
+	if st := m.Status(); st.Warning != "no grant" {
+		t.Fatalf("status %+v", st)
+	}
+	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "not on Wi-Fi", Warning: "no grant"})
+	if st := m.Status(); st.Warning != "" || st.Problem != "not on Wi-Fi" {
+		t.Fatalf("status %+v", st)
+	}
+}

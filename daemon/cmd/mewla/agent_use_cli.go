@@ -163,6 +163,9 @@ func printPhone(w io.Writer, status agentuse.Status) {
 		line += "the phone is not connected (open Mewla on it)"
 	case phone.State == "ready":
 		line += "connected (" + phone.Model + "); Workers here have mewla_phone"
+		if phone.Warning != "" {
+			line += ". " + phone.Warning
+		}
 	case phone.State == "setup":
 		line += "connected (" + phone.Model + "), not ready" + setupSince(phone.SetupSince, time.Now()) + ": " + setupReason(phone.Problem)
 	default:

@@ -255,6 +255,7 @@ object PhoneController {
             mayEnableWireless = selfHealing,
             pausedUntil = promptGuard.pausedUntil,
             now = System.currentTimeMillis(),
+            grantFailure = grantFailure,
         )
         override fun helperUp() = client?.isClosed == false
         override fun startHelper() {
@@ -324,6 +325,7 @@ object PhoneController {
             .put("accessibility", SettingsReading.serviceRunning)
             .put("restricted", accessibilityRestricted())
             .put("self_healing", selfHealing)
+            .put("warning", grantWarning() ?: JSONObject.NULL)
             .put("guide", guide())
             .put("notifications", PhoneNotifier.canShowCodeBox(app))
             .put("state", state())
@@ -771,6 +773,17 @@ object PhoneController {
         grantFailure = "no connection to Wireless debugging to ask: ${e.message ?: e.javaClass.simpleName}".take(160)
         grantFailure
     }.also { if (it == null) publish() }
+
+    /**
+     * While the phone is ready, what will stop it later that the person can see to now: the phone refused the grant,
+     * so leaving Wi-Fi turns Wireless debugging off for good until someone switches it on by hand.
+     */
+    private fun grantWarning(): String? {
+        val refused = grantFailure ?: return null
+        if (selfHealing || state() != "ready") return null
+        return "Mewla could not give itself the one-time permission to switch Wireless debugging back on ($refused), " +
+            "so when the phone leaves Wi-Fi someone has to switch Wireless debugging on again in Developer options."
+    }
 
     /** Whether this App may write secure settings (the grant above happened). */
     val selfHealing: Boolean

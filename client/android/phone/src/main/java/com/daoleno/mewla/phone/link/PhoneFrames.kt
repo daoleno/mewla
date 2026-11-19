@@ -26,12 +26,13 @@ object PhoneFrames {
         status.optInt("h").takeIf { it > 0 }?.let { frame.put("h", it) }
         problem(status)?.let { frame.put("problem", it) }
         text(status, "display_info")?.let { frame.put("display", it) }
+        warning(status)?.let { frame.put("warning", it) }
         return frame
     }
 
     /** What makes two statuses the same to the computer: a state frame goes out only when it changes. */
     fun stateKey(status: JSONObject): String =
-        "${status.optString("state")}:${status.optInt("w")}:${status.optInt("h")}:${problem(status).orEmpty()}:${text(status, "display_info").orEmpty()}"
+        "${status.optString("state")}:${status.optInt("w")}:${status.optInt("h")}:${problem(status).orEmpty()}:${text(status, "display_info").orEmpty()}:${warning(status).orEmpty()}"
 
     fun event(kind: String, id: String? = null): JSONObject =
         JSONObject().put("type", "event").put("kind", kind).apply { id?.let { put("id", it) } }
@@ -55,6 +56,8 @@ object PhoneFrames {
     fun restartsOnForeground(state: String): Boolean = state == "replaced"
 
     private fun problem(status: JSONObject): String? = if (status.optString("state") == "setup") text(status, "problem") else null
+
+    private fun warning(status: JSONObject): String? = if (status.optString("state") == "ready") text(status, "warning") else null
 
     private fun text(status: JSONObject, name: String): String? =
         if (status.isNull(name)) null else status.optString(name).takeIf { it.isNotEmpty() }

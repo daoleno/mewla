@@ -20,6 +20,8 @@ data class Facts(
     /** Until when Mewla leaves the system's network prompt alone, after the person dismissed it twice; 0 for not at all. */
     val pausedUntil: Long = 0,
     val now: Long = 0,
+    /** Why the phone refused the grant when Mewla last asked for it, whichever way it asked; null when it did not. */
+    val grantFailure: String? = null,
 )
 
 /** What to do about a helper that is not up. */
@@ -134,7 +136,7 @@ class HelperKeeper(private val env: Env) {
             return IDLE_MS
         }
         if (facts.mayEnableWireless) grantFailure = null
-        return when (val plan = SetupRecovery.plan(facts, grantFailure)) {
+        return when (val plan = SetupRecovery.plan(facts, grantFailure ?: facts.grantFailure)) {
             is Plan.Blocked -> { env.report(plan.reason); IDLE_MS }
             is Plan.Wait -> { env.report(plan.reason); IDLE_MS }
             Plan.TryNow -> try {

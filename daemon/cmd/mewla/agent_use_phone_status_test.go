@@ -37,3 +37,13 @@ func TestAgentUseStatusSaysWhenThePhoneGaveNoReason(t *testing.T) {
 		t.Fatalf("%q", line)
 	}
 }
+
+// 11-19: the grant was missing for hours while the phone was ready, and the owner heard of it only
+// once Wi-Fi was gone and Wireless debugging with it.
+func TestAgentUseStatusSaysWhatWillStopAReadyPhoneLater(t *testing.T) {
+	warning := "Mewla could not give itself the one-time permission to switch Wireless debugging back on (the phone refused the grant), so when the phone leaves Wi-Fi someone has to switch Wireless debugging on again in Developer options."
+	line := phoneLine(t, phone.Status{Connected: true, State: phone.StateReady, Model: "PYR110", Warning: warning})
+	if !strings.Contains(line, "Workers here have mewla_phone") || !strings.Contains(line, warning) {
+		t.Fatalf("%q", line)
+	}
+}
