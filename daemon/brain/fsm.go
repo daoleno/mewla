@@ -152,6 +152,16 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 		item.Wake = fsmWakeFromState(st)
 		item.UpdatedAt = now
 	}
+	// A keep verdict holds only for the revision the judge saw; while it
+	// holds, the Work waits on what the judge named.
+	if kept := item.Kept; kept != nil {
+		switch {
+		case kept.Revision != st.Revision || st.TerminalAt != nil:
+			item.Kept = nil
+		case st.Attempt == nil && st.Wake == nil && strings.TrimSpace(item.Question) == "":
+			item.Status, item.WaitFor = WorkWaiting, kept.Reason
+		}
+	}
 
 	// Review projection: the engine owns event lifecycle and the handler
 	// lease; the row keeps its content pointer (EventID) so action
@@ -337,7 +347,10 @@ func fsmProjectAttempt(st *lifecycle.State) (string, bool) {
 
 // fsmProjectLifecycle derives presentation status, next-action prose, and wait
 // prose from canonical state plus the evidence ledger. The engine remains the
-// only writer of lifecycle truth; this mapping is a read model.
+// only writer of lifecycle truth; this mapping is a read model. Brain's own
+// note is st.NextAction; the row's NextAction is this function's last output
+// and is never read back, so runtime prose cannot outlive the state it
+// described.
 func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, item Work) (WorkStatus, string, string) {
 	sessionProse := func(sessionID string) string {
 		if sessionID == "" {
@@ -349,7 +362,7 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 	case st.TerminalAt != nil:
 		return workStatusFromLifecycle(st.Status), "", ""
 	case st.Wake != nil && st.Attempt == nil:
-		return WorkWaiting, firstNonEmpty(item.NextAction, "Wait for the named external condition."), st.Wake.Ref
+		return WorkWaiting, firstNonEmpty(st.NextAction, "Wait for the named external condition."), st.Wake.Ref
 	}
 	if st.Review != nil {
 		// An open canonical event is the actionable obligation. Lease expiry
@@ -387,7 +400,7 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 		if fsmAttentionPending(database, st.Attempt.SessionID) {
 			return WorkNeedsInput, "Resolve the delegated Session request.", waitFor
 		}
-		next := firstNonEmpty(item.NextAction, "Wait for the delegated Session.")
+		next := firstNonEmpty(st.NextAction, "Wait for the delegated Session.")
 		if hint := fsmLiveTurnHint(database, st.Attempt.SessionID); hint != "" {
 			next = hint
 		}
@@ -398,7 +411,7 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 		}
 		return WorkRunning, next, waitFor
 	default:
-		return workStatusFromLifecycle(st.Status), item.NextAction, ""
+		return workStatusFromLifecycle(st.Status), st.NextAction, ""
 	}
 }
 
@@ -419,7 +432,10 @@ func fsmLiveTurnHint(database *presentationDatabase, sessionID string) string {
 		return ""
 	}
 	turn, found := currentTurnForSession(*database, sessionID)
-	if !found || len(turn.Hints) == 0 || turn.SignalProtocol && watcher.TurnTerminal(turn.Status) {
+	// A signal Turn is settled only by its Worker's own report: the provider
+	// saying done is evidence, and an ended turn without a report has its
+	// own projection (fsmTurnEndedWithoutReport).
+	if !found || len(turn.Hints) == 0 || turn.SignalProtocol {
 		return ""
 	}
 	for _, hint := range turn.Hints {

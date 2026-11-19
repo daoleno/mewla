@@ -228,6 +228,30 @@ func (s *Store) Running() []Item {
 	return out
 }
 
+// FinishedRunSessions lists the Worker Sessions of scheduled-action runs that
+// finished (completed or failed) at or after since. A finished run is done
+// with its Session; the caller reclaims those still alive once idle.
+func (s *Store) FinishedRunSessions(since time.Time) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []string
+	for _, item := range s.items {
+		if item.Kind != KindScheduledAction {
+			continue
+		}
+		for _, run := range item.Runs {
+			session := strings.TrimSpace(run.WorkerSession)
+			if session == "" || run.FinishedAt == nil || run.FinishedAt.Before(since) ||
+				(run.Status != StatusCompleted && run.Status != StatusFailed) {
+				continue
+			}
+			out = append(out, session)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (s *Store) Get(id string) (Item, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

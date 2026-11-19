@@ -346,10 +346,21 @@ progress row. Repeated terminal Control/provider reports are idempotent for the
 current Turn; superseded identities cannot mutate a reused Session.
 
 `work update`, typed disposition and explicit Work close share cleanup. Cleanup
-is derived from closed Work and current terminal delegated Turns rather than a
-second persisted workflow; the only record kept is a `reclaimed` mark on the
-exact Turn once its teardown finished, so finished Sessions are not torn down
-again on every reconcile. A refused, failed or retryable teardown is never
+is derived from closed Work and each Session's current delegated Turn rather
+than a second persisted workflow; the only record kept is a `reclaimed` mark on
+the exact Turn once its teardown finished, so finished Sessions are not torn
+down again on every reconcile. The Turn need not have reported its end: a
+Worker that stopped without a report, was released as lost, or had its Work
+closed under it is reclaimed too, once its Session sits idle at its prompt
+(its agent's record says the turn settled, the screen shows the input prompt
+with no spinner and no background shells, agents or monitors) and the screen
+has stayed unchanged for 60 s. Until then the teardown waits, which is not an
+error. Besides Work changes and startup, the 10 s supervision pass runs this
+cleanup, so a Session that goes idle after its Work closed is reclaimed then;
+a Session the pass was refused is asked again only by a later Work close or
+restart. A finished scheduled-action run (Calendar) reclaims its Worker
+Session the same way: once the run is completed or failed and the Session is
+idle at its prompt. A refused, failed or retryable teardown is never
 marked. A completed Session whose pane id now belongs to another process or
 pane generation is a final refusal for that record, so it ends the startup
 retry instead of repeating every 10 seconds. Releasing a Session that has no
@@ -393,10 +404,37 @@ Host lane lock.
 
 `done` and `cancelled` close the Work as actor `runtime`, pinned to the Work
 revision the judge saw, so a Brain or user action in the meantime wins.
-`keep` records `brain.settle_kept` for that revision and the Work is judged
-again only after a new fact. If no judge is available, or the call fails or
-returns anything but the three outcomes, nothing changes and the call is
-retried after 10 minutes. There is no fallback rule.
+
+`keep` is a state, not an end. It records `brain.settle_kept` and saves the
+verdict on the Work (`kept`: the judge's reason, the revision and the time).
+While that revision stands, the Work shows `waiting` with `wait_for` in the
+judge's words (for example "owner decision on the rate-limit options"). It is
+judged again when something happens on the Work: a lifecycle change, a new
+Work event, or a Brain message that names the Work by id or title. It is also
+judged again once a day. No timer ever closes a kept Work; Brain closes or
+continues it from the stale list below.
+
+**When the judge cannot answer** (the route refuses it, it is killed, rate
+limited or times out, or its reply is not a verdict), AGENTS.md's promise
+holds: a Work whose result Brain read (its handling of a delivered result
+ended) with no Attempt, wait, question or prompt left closes as actor
+`runtime`, and its Sessions are reclaimed. A follow-up or `work update`
+reopens it. A Work with no read result, or one the judge kept, stays as it
+is. One failure stands for every Work for 10 minutes, so a route that refuses
+is asked once, not once per Work. The log line names the route the judge's
+headless Claude used (the base URL from the user's Claude settings, which is
+Mewla's gateway when the Claude takeover is on) and what that route answered,
+e.g. `the model route http://127.0.0.1:3427 … answered HTTP 403: Insufficient
+account balance`. Claude Code prints any upstream 403 as "Failed to
+authenticate", whatever the upstream meant.
+
+**Stale list.** `mewla brain context --json` carries `stale`, information for
+Brain and never a gate. `stale.work` holds open Works with nothing live on
+them: `kept` (listed at once, with `wait_for`), `result_read` (Brain read the
+result over 2 hours ago and recorded nothing) and `idle` (no result, quiet
+for 2 hours). `stale.sessions` holds delegated Sessions unchanged for 30
+minutes whose Work is closed or that have none. Each list is oldest first,
+at most eight entries.
 
 **Undo.** A runtime close is the only reopenable close. Brain's `work update`
 or `worker send -work-id` on such a Work reopens it first (`work.reopened`).

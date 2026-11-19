@@ -3,6 +3,7 @@ package brain
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -115,4 +116,64 @@ func TestGenerationChangedEndsStartupRetryButTransientDoesNot(t *testing.T) {
 
 func completedGenerationErr(id string) error {
 	return fmt.Errorf("completed Session %s %w", id, watcher.ErrCompletedSessionGenerationChanged)
+}
+
+// closeWorkUnderRunningTurn leaves a Worker's turn running without a report (it stopped
+// silently, or kept going) and then closes its Work the way Brain does.
+func closeWorkUnderRunningTurn(t *testing.T, store *Store, service *Service, fw *refusingCleanupWatcher, sessionID string) {
+	t.Helper()
+	item, err := store.CreateWork(Work{Title: sessionID, Objective: "turn never reported"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.SubmitDelegatedWorkInput(sessionID, "task", item.ID, sessionID+"-turn", "", "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ApplyDelegatedTurnProgress(watcher.TurnFact{SessionID: sessionID, TurnID: sessionID + "-turn", Class: watcher.EvidenceControl, Kind: "running", SourceID: "r", At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	done := WorkDone
+	if _, err := store.UpdateWork(item.ID, WorkUpdate{Status: &done}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// DpSeekAlphaBudget and ZeroGSandboxDb (11-18/19): their Work closed while
+// the Session's turn had never reported done, so the Session was never in the
+// cleanup set and stayed alive for hours. Now it is, and its teardown waits
+// only while the watcher says the Worker is still at work.
+func TestClosedWorkReclaimsASessionWhoseTurnNeverReported(t *testing.T) {
+	store, service, fw := newRefusingService(t, t.TempDir(), "%21")
+	closeWorkUnderRunningTurn(t, store, service, fw, "%21")
+	turns, err := store.CompletedOwnedTurns("")
+	if err != nil || len(turns) != 1 || turns[0].SessionID != "%21" {
+		t.Fatalf("closed Work's unreported Session is not in the cleanup set: %+v %v", turns, err)
+	}
+	fw.refuse["%21"] = watcher.ErrSessionNotIdle
+	if err := service.ReconcileCompletedSessions(); err != nil {
+		t.Fatalf("a Worker still at work is a wait, not an error: %v", err)
+	}
+	if turns, _ := store.CompletedOwnedTurns(""); len(turns) != 1 {
+		t.Fatalf("a Session still at work was marked reclaimed: %+v", turns)
+	}
+	delete(fw.refuse, "%21")
+	if err := service.ReconcileCompletedSessions(); err != nil {
+		t.Fatal(err)
+	}
+	if turns, _ := store.CompletedOwnedTurns(""); len(turns) != 0 || fw.calls["%21"] != 2 {
+		t.Fatalf("idle Session was not reclaimed: %+v calls=%v", turns, fw.calls)
+	}
+}
+
+func TestPeriodicReclaimAsksARefusedSessionOnce(t *testing.T) {
+	store, service, fw := newRefusingService(t, t.TempDir(), "%22")
+	fw.refuse["%22"] = fmt.Errorf("Session %%22 is %w", watcher.ErrNotOwnedDelegatedWorker)
+	completeWorkOn(t, store, service, fw, "%22")
+	fw.calls = map[string]int{}
+	for pass := 0; pass < 3; pass++ {
+		_ = service.reconcileCompletedSessionsPeriodic()
+	}
+	if fw.calls["%22"] != 1 {
+		t.Fatalf("periodic pass asked a refused Session %d times", fw.calls["%22"])
+	}
 }

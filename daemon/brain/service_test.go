@@ -19,6 +19,8 @@ import (
 )
 
 type fakeWatcher struct {
+	// busy are Sessions whose Worker is still at work (not idle at its prompt).
+	busy             map[string]bool
 	workers          []*classifier.Worker
 	sessions         map[string]*classifier.Worker
 	created          []createdCall
@@ -626,11 +628,16 @@ func (w *fakeWatcher) KillCompletedSession(sessionID, turnID string) error {
 	if err != nil {
 		return err
 	}
-	if !found || turn.TurnID != turnID || !watcher.TurnImmutable(turn.Status) {
+	if !found || turn.TurnID != turnID {
 		return fmt.Errorf("completed Session ownership changed")
 	}
 	if worker := w.GetWorker(sessionID); worker != nil && (worker.Hidden || !worker.Delegated) {
 		return fmt.Errorf("not a delegated Worker")
+	}
+	// As the watcher does: a turn that never reported its end waits until
+	// its Session sits idle at its prompt.
+	if !watcher.TurnImmutable(turn.Status) && w.busy[sessionID] {
+		return watcher.ErrSessionNotIdle
 	}
 	return w.KillSession(sessionID)
 }

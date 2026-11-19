@@ -360,6 +360,7 @@ func providerActivitySignalFor(observation ProviderActivityObservation) provider
 
 // Watcher monitors Mewla's Sessions and classifies agent states.
 type Watcher struct {
+	idle              idleTracker
 	promptEnrich      promptEnrichment
 	quickTunnels      *serviceTunnels
 	tunnelResolveHost func(context.Context, string) ([]net.IPAddr, error)
@@ -4685,10 +4686,13 @@ func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
 		if err != nil {
 			return err
 		}
-		if !found || turn.TurnID != turnID || !turn.SignalProtocol ||
-			(turn.Status != TurnDone && turn.Status != TurnFailed) {
+		if !found || turn.TurnID != turnID || !turn.SignalProtocol {
 			return fmt.Errorf("completed Session %s ownership changed", sessionID)
 		}
+		// A turn whose Worker never reported its end (it stopped silently, was
+		// released as lost, or its Work was closed under it) is removed only
+		// once the Session has settled idle at its prompt.
+		reported := turn.Status == TurnDone || turn.Status == TurnFailed
 		pending, err := w.pendingInputAdmissions(sessionID)
 		if err != nil {
 			return err
@@ -4713,6 +4717,9 @@ func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
 			if err := w.guardCompletedOwnedIdentity(sessionID, turn); err != nil {
 				return err
 			}
+		}
+		if !reported && !w.SessionSettledIdle(sessionID, time.Now().UTC()) {
+			return ErrSessionNotIdle
 		}
 		return w.KillSession(sessionID)
 	})

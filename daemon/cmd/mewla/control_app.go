@@ -41,6 +41,8 @@ type controlWatcher interface {
 	Workers() []*classifier.Worker
 	GetWorker(id string) *classifier.Worker
 	HasSession(target string) bool
+	// SessionIdleAtPrompt: nothing runs in the Session (watcher/session_idle.go).
+	SessionIdleAtPrompt(sessionID string) bool
 	ProbeSession(target string) (watcher.SessionPresence, error)
 	ResolveDelegatedAbsence(target string) (bool, error)
 	CreateSession(preferredTarget string, opts watcher.CreateSessionOptions) (string, error)
@@ -1002,7 +1004,6 @@ func (a *controlApp) prepareSpawnWork(req control.Request, name, prompt string) 
 		Status:           brain.WorkOpen,
 		CompletionPolicy: policy,
 		DoneCriteriaRef:  doneCriteria,
-		NextAction:       "Start the delegated Session.",
 		ContextRef:       contextRef,
 	})
 }
@@ -1580,6 +1581,12 @@ func (a *controlApp) handleWorkerClose(req control.Request) control.Response {
 		if turn, hasTurn, turnErr := a.brainStore.Turn(workerID); turnErr == nil && hasTurn {
 			requiresForce = canonicalCloseAdmission(turn, hasTurn)
 		}
+	}
+	// A Session sitting idle at its prompt has nothing running, whatever its
+	// last report said (a Worker that stopped without one, or a scheduled run
+	// whose lease lapsed to unknown): closing it interrupts nothing.
+	if requiresForce && a.watcher.SessionIdleAtPrompt(workerID) {
+		requiresForce = false
 	}
 	if requiresForce {
 		return control.ErrorResponse("worker_running_requires_force", "Worker is still running or unresolved. Send it a cancellation request first, wait for done/failed/blocked, or close with force.")

@@ -97,7 +97,11 @@ type BrainContext struct {
 	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`
 	Executors    []work.WorkerExecutor `json:"executors"`
 	Workers      []WorkerRef           `json:"workers"`
-	GeneratedAt  time.Time             `json:"generated_at"`
+	// Stale lists open Work nothing live is pending on (kept by the closure
+	// judge, a read result, or plain idle) and delegated Sessions left idle
+	// with no open Work, for Brain to close or continue (stale.go).
+	Stale       *StaleList `json:"stale,omitempty"`
+	GeneratedAt time.Time  `json:"generated_at"`
 }
 
 // WorkspaceNote locates a private Brain note without inlining it; Brain reads
