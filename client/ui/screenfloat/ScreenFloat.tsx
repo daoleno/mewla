@@ -55,6 +55,8 @@ export interface ScreenFloatProps {
   menu: () => FloatMenuItem[];
   /** Opens this screen's full view. */
   onOpen: () => void;
+  /** Closes the window for this screen's Worker. */
+  onHide: () => void;
   /** Keyboard toggle for a screen the person can type on, while there is one. */
   keyboard?: () => { open: boolean; toggle: () => void } | null;
   /** Room under the picture the hosted view needs (its key bar while the system keyboard is up). */
@@ -251,6 +253,9 @@ export function ScreenFloat(props: ScreenFloatProps) {
         </Button>
         <Button testID="screen-float-open" accessibilityLabel="Open" onPress={props.onOpen} class="size-7 items-center justify-center">
           <Icon name="expand" size={15} tone="canvas" />
+        </Button>
+        <Button testID="screen-float-hide" accessibilityLabel="Hide" onPress={props.onHide} class="size-7 items-center justify-center">
+          <Icon name="close" size={15} tone="canvas" />
         </Button>
       </View>
       <View class="bg-popover" style={{ width: picture().width, height: picture().height + extra() }}>{props.children(picture)}</View>

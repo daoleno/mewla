@@ -1,22 +1,27 @@
-import { cleanup, computed, effect, signal, Text, untracked, View, type JSX, lifecycle } from "nsh";
+import { cleanup, computed, effect, signal, Storage, Text, untracked, View, type JSX, lifecycle } from "nsh";
 import { Button } from "nsh/base";
 import { floatPlaceholder, phoneMode } from "../../core/phone/setup";
 import {
   displayShown,
   displaySource,
+  FLOAT_HIDDEN_KEY,
+  floatRetryDelay,
   floatSources,
+  hideKey,
   macSource,
+  parseHiddenKeys,
+  unhiddenOn,
+  withHidden,
   phoneSource,
   pickSource,
   screenTarget,
   type FloatPage,
   type ScreenSource,
 } from "../../core/screen/float";
-import { haltDisplay, listDisplays, screenRequest, ScreenRequestError, type ScreenAgent } from "../../core/screen/screen";
+import { haltDisplay, listDisplays, SCREEN_TOO_OLD, screenRequest, ScreenRequestError, type ScreenAgent } from "../../core/screen/screen";
 import { floatedScreenAgents } from "../../core/screen/screenPageModel";
 import { isWorkerActivelyRunning } from "../../core/sessions/workerStatusPresentation";
 import type { StoredServer } from "../../core/storedServerContract";
-import { Icon } from "../kit/Icon";
 import { Spinner } from "../kit/kit";
 import { LINUX_MODIFIERS, MAC_MODIFIERS, RemoteSession, RemoteView } from "../more/screen/RemoteView";
 import { PhoneLiveView } from "../phone/contract";
@@ -159,14 +164,68 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     for (const agent of mac()) out.push(macSource({ ...agent, name: agent.name || list.find((candidate) => candidate.id === agent.worker)?.name }));
     return out;
   });
-  const sources = computed(() => floatSources(all(), props.page()));
-  const source = () => pickSource(sources(), picked());
+  // Up stays up while hidden or under Screen: brought back, a display is still the one that was up.
   effect(() => {
-    const keys = sources().filter((s) => s.kind === "display").map((s) => s.key);
+    const keys = all().filter((s) => s.kind === "display").map((s) => s.key);
     untracked(() => {
       shown = new Set(keys);
     });
   });
+
+  // What the person hid, per computer and kept across launches; it comes back from the screen's own page.
+  const hidden = signal<readonly string[]>([]);
+  const hiddenSet = computed(() => new Set(hidden()));
+  let hiddenServer = "";
+  const keepHidden = (server: string, keys: readonly string[]) => {
+    hidden.set(keys);
+    void Storage.setItem(`${FLOAT_HIDDEN_KEY}:${server}`, JSON.stringify(keys)).catch(() => undefined);
+  };
+  effect(() => {
+    const server = current()?.id ?? "";
+    untracked(() => {
+      if (server === hiddenServer) return;
+      hiddenServer = server;
+      hidden.set([]);
+      if (!server) return;
+      void Storage.getItem(`${FLOAT_HIDDEN_KEY}:${server}`)
+        .then((saved) => {
+          if (hiddenServer === server) hidden.set(unhiddenOn(parseHiddenKeys(saved), props.page()));
+        })
+        .catch(() => undefined);
+    });
+  });
+  const hide = (source: ScreenSource) => {
+    const server = current()?.id;
+    if (server) keepHidden(server, withHidden(hidden(), hideKey(source)));
+  };
+  // A window that closed itself (its view could not come back): until the screen goes and comes again, its page opens,
+  // the app comes back to the front, or another computer is current.
+  const closed = signal<ReadonlySet<string>>(new Set());
+  const reopen = (keep: (key: string) => boolean) => {
+    const now = closed();
+    const next = new Set([...now].filter(keep));
+    if (next.size !== now.size) closed.set(next);
+  };
+  effect(() => {
+    const page = props.page();
+    untracked(() => {
+      const server = current()?.id;
+      const kept = unhiddenOn(hidden(), page);
+      if (server && kept !== hidden()) keepHidden(server, kept);
+      reopen((key) => !(key === "phone" ? page.phonePage : page.screenPage));
+    });
+  });
+  effect(() => {
+    const keys = new Set(all().map((s) => s.key));
+    untracked(() => reopen((key) => keys.has(key)));
+  });
+  effect(() => {
+    current();
+    if (lifecycle() === "active") untracked(() => reopen(() => false));
+  });
+
+  const sources = computed(() => floatSources(all(), props.page(), hiddenSet(), closed()));
+  const source = () => pickSource(sources(), picked());
 
   const cycle = () => {
     const list = sources();
@@ -184,7 +243,8 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     const first = untracked(source);
     if (!server || !first) return <View />;
     const live = () => sources().find((s) => s.key === first.key) ?? first;
-    if (first.kind === "phone") return <PhoneContent source={live} {...shared(first.key)} onOpen={props.onOpenPhone} bottomInset={props.bottomInset} leftInset={props.leftInset} />;
+    const onHide = () => hide(untracked(live));
+    if (first.kind === "phone") return <PhoneContent source={live} {...shared(first.key)} onOpen={props.onOpenPhone} onHide={onHide} bottomInset={props.bottomInset} leftInset={props.leftInset} />;
     return (
       <RemoteContent
         server={server}
@@ -193,6 +253,8 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
         onOpen={() => props.onOpenScreen(first.kind === "display" ? first.owner : null)}
         onTakeOver={() => props.onOpenScreen(first.kind === "display" ? first.owner : null, first.kind === "display")}
         onChanged={refresh}
+        onHide={onHide}
+        onGiveUp={() => closed.set(new Set([...closed(), first.key]))}
         bottomInset={props.bottomInset}
         leftInset={props.leftInset}
         key={key}
@@ -213,6 +275,8 @@ interface FloatProps {
   index: () => number;
   onCycle: () => void;
   onOpen: () => void;
+  /** The person closed the window: it stays closed for this Worker until they open the screen's own page. */
+  onHide: () => void;
   bottomInset?: () => number;
   leftInset?: () => number;
 }
@@ -244,6 +308,7 @@ function PhoneContent(props: FloatProps) {
       index={props.index}
       onCycle={props.onCycle}
       onOpen={props.onOpen}
+      onHide={props.onHide}
       menu={menu}
       attention={() => mode() === "handoff"}
       bottomInset={props.bottomInset}
@@ -270,6 +335,8 @@ interface RemoteContentProps extends FloatProps {
   onTakeOver: () => void;
   /** The agent's display or control changed here: read the computer again. */
   onChanged: () => void;
+  /** The view ended and cannot come back: the window closes itself. */
+  onGiveUp: () => void;
   key?: string;
 }
 
@@ -283,15 +350,52 @@ function RemoteContent(props: RemoteContentProps) {
   const display = first.kind === "display";
   const session = new RemoteSession(props.server, { watch: target?.watch, worker: target?.worker, route: target?.route, align: "center" });
   session.connect();
-  // A phone that leaves the app gives its viewers up; coming back reconnects them.
+  // A view that ends while the app is in front tries again by itself (floatRetryDelay), and the window closes itself
+  // when it cannot come back: never a dark window waiting for a tap.
+  let failures = 0;
+  let everLive = false;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  const cancelRetry = () => {
+    if (retry !== null) clearTimeout(retry);
+    retry = null;
+  };
+  effect(() => {
+    const phase = session.phase();
+    untracked(() => {
+      if (phase === "live") {
+        failures = 0;
+        everLive = true;
+        return;
+      }
+      if (phase !== "lost" || lifecycle() !== "active" || retry !== null) return;
+      failures += 1;
+      const delay = floatRetryDelay(failures, { everLive, outdated: session.reason() === SCREEN_TOO_OLD });
+      if (delay === null) {
+        props.onGiveUp();
+        return;
+      }
+      retry = setTimeout(() => {
+        retry = null;
+        if (lifecycle() === "active") session.connect();
+      }, delay);
+    });
+  });
+  // A phone that leaves the app gives its viewers up; coming back reconnects them, afresh.
   effect(() => {
     const active = lifecycle() === "active";
     untracked(() => {
+      cancelRetry();
       if (!active) session.lose(null);
-      else if (session.phase() === "lost") session.connect();
+      else if (session.phase() === "lost") {
+        failures = 0;
+        session.connect();
+      }
     });
   });
-  cleanup(() => session.disconnect());
+  cleanup(() => {
+    cancelRetry();
+    session.disconnect();
+  });
 
   const stop = async () => {
     try {
@@ -305,7 +409,6 @@ function RemoteContent(props: RemoteContentProps) {
   const menu = (): FloatMenuItem[] => [
     { id: "take-over", label: "Take over", run: props.onTakeOver },
     { id: "stop", label: "Stop", destructive: true, run: () => void stop() },
-    ...(session.phase() === "lost" ? [{ id: "reconnect", label: "Reconnect", run: () => session.connect() }] : []),
   ];
   return (
     <ScreenFloat
@@ -315,6 +418,7 @@ function RemoteContent(props: RemoteContentProps) {
       index={props.index}
       onCycle={props.onCycle}
       onOpen={props.onOpen}
+      onHide={props.onHide}
       menu={menu}
       bottomInset={props.bottomInset}
       leftInset={props.leftInset}
@@ -326,10 +430,9 @@ function RemoteContent(props: RemoteContentProps) {
           </View>
           {/* The picture is for watching: a tap opens the stage. */}
           <Button testID="screen-float-picture" accessibilityLabel={`Open ${props.source().title}`} onPress={props.onOpen} class="absolute inset-x-0 top-0" style={{ height: picture().height }} />
-          <If when={session.phase() !== "live"}><View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: session.phase() === "lost" ? "box-none" : "none" }}>
-              <If when={session.phase() === "connecting"} else={<Button testID="screen-float-reconnect" accessibilityLabel="Reconnect" onPress={() => session.connect()} class="size-12 items-center justify-center rounded-full bg-secondary">
-                  <Icon name="refresh" size={22} />
-                </Button>}><Spinner size={20} tone="faint" /></If>
+          {/* Until the picture comes (again), a spinner: it reconnects by itself or the window closes. */}
+          <If when={session.phase() !== "live"}><View testID="screen-float-cover" class="absolute inset-x-0 top-0 items-center justify-center" style={{ height: picture().height, pointerEvents: "none" }}>
+              <Spinner size={20} tone="faint" />
             </View></If>
         </View>
       )}
