@@ -18,6 +18,7 @@ const (
 	CodeBusy         = "busy"          // another agent is using the phone
 	CodeTimeout      = "timeout"       // the phone did not answer in time
 	CodeLost         = "connection_lost"
+	CodeStandby      = "standby" // another install on the phone has Phone use and is ready
 )
 
 // StateOffline is Status.State while no phone is connected.
@@ -80,6 +81,8 @@ var (
 	ErrTimeout      = &Error{CodeTimeout, "The phone did not answer in time. It may be asleep or offline; report this instead of retrying in a loop."}
 	ErrLost         = &Error{CodeLost, "The phone disconnected while this was running. Read the screen again once it is back."}
 	ErrReplaced     = &Error{CodeLost, "The phone reconnected while this was running. Read the screen again."}
+	// ErrStandby refuses a connection from another device that is not ready while a ready phone has Phone use.
+	ErrStandby = &Error{CodeStandby, "Another Mewla on this phone has Phone use and is ready; this one takes it once it is ready itself."}
 )
 
 // Conn is the daemon's end of the phone's WebSocket. The server writes it as one JSON text frame
@@ -266,6 +269,11 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 		state = StateSetup
 	}
 	m.mu.Lock()
+	if cur := m.link; cur != nil && standsBy(cur, hello.Device, state) {
+		m.mu.Unlock()
+		log.Printf("phone: device %s (state %s) waits: device %s has Phone use and is ready", hello.Device, state, cur.hello.Device)
+		return nil, ErrStandby
+	}
 	m.gen++
 	l := &Link{m: m, gen: m.gen, conn: conn, hello: hello, state: state}
 	l.stopped = state == StateStopped
@@ -287,6 +295,14 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 		old.conn.Close(CloseReplaced, "Another connection from your phone took this one's place.")
 	}
 	return l, nil
+}
+
+// standsBy says whether a connection from device in state waits instead of taking cur's place: a
+// newer connection replaces the older one, except that another install on the phone (another paired
+// device) that is not ready never takes the place of one that is.
+func standsBy(cur *Link, device, state string) bool {
+	return device != "" && cur.hello.Device != "" && device != cur.hello.Device &&
+		cur.state == StateReady && !cur.person && !cur.stopped && state != StateReady
 }
 
 // Detach tells the manager the connection ended.

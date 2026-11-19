@@ -232,6 +232,9 @@ object PhoneController {
                 if (state() != shown) {
                     shown = state()
                     publish()
+                    // A computer keeps another install's ready link over this one while this one is not ready
+                    // (it is told it was replaced): now that this one is ready too, it asks again.
+                    if (shown == "ready" && linkState == "replaced") retryLinkNow()
                 }
                 if (client?.isClosed == false && staleHelper) replaceStaleHelper()
                 val wait = helperKeeper.step()
