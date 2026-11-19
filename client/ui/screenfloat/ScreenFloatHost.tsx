@@ -14,6 +14,7 @@ import {
   withHidden,
   phoneSource,
   pickSource,
+  requestId,
   screenTarget,
   type FloatPage,
   type ScreenSource,
@@ -149,10 +150,14 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     };
   });
 
+  // The agent on the phone asks the person to take over: each request has its own id, so one hidden in an earlier
+  // request comes back for the next.
+  let requests = 0;
+  const phoneRequest = computed<{ text: string; id: string } | null>((previous) => requestId(previous ?? null, phoneStatus()?.handoff ?? null, () => `${++requests}`));
   const all = computed<ScreenSource[]>(() => {
     const list = workers();
     const out: ScreenSource[] = [];
-    const phone = phoneAvailable() ? phoneSource(phoneStatus(), list) : null;
+    const phone = phoneAvailable() ? phoneSource(phoneStatus(), list, phoneRequest()?.id ?? null) : null;
     if (phone) out.push(phone);
     for (const display of displays()) {
       const worker = list.find((candidate) => candidate.id === display.id);
@@ -186,6 +191,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
       if (server === hiddenServer) return;
       hiddenServer = server;
       hidden.set([]);
+      hiddenDuring.set(new Map());
       if (!server) return;
       void Storage.getItem(`${FLOAT_HIDDEN_KEY}:${server}`)
         .then((saved) => {
@@ -194,9 +200,14 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
         .catch(() => undefined);
     });
   });
+  // The request each window was hidden in: hidden while its agent asks, it stays hidden until the next request.
+  const hiddenDuring = signal<ReadonlyMap<string, string>>(new Map());
   const hide = (source: ScreenSource) => {
     const server = current()?.id;
-    if (server) keepHidden(server, withHidden(hidden(), hideKey(source)));
+    if (!server) return;
+    const key = hideKey(source);
+    keepHidden(server, withHidden(hidden(), key));
+    if (source.asking) hiddenDuring.set(new Map([...hiddenDuring(), [key, source.asking]]));
   };
   // A window that closed itself (its view could not come back): until the screen goes and comes again, its page opens,
   // the app comes back to the front, or another computer is current.
@@ -224,7 +235,7 @@ export function ScreenFloatHost(props: ScreenFloatHostProps) {
     if (lifecycle() === "active") untracked(() => reopen(() => false));
   });
 
-  const sources = computed(() => floatSources(all(), props.page(), hiddenSet(), closed()));
+  const sources = computed(() => floatSources(all(), props.page(), hiddenSet(), closed(), hiddenDuring()));
   const source = () => pickSource(sources(), picked());
 
   const cycle = () => {

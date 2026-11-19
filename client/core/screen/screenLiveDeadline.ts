@@ -4,7 +4,8 @@
  * A picture normally arrives within a second or two, over a relay a few more.
  */
 export const LIVE_DEADLINE_MS = 20_000;
-export const LIVE_DEADLINE_REASON = "The screen did not answer. Try again.";
+/** Said under Disconnected on Screen's stage and the Mac's Screen, where a floating window that gave up leads. */
+export const LIVE_DEADLINE_REASON = "The picture could not reach this device.";
 
 export interface DeadlineTimers {
   set(callback: () => void, ms: number): unknown;

@@ -122,8 +122,8 @@ computer's screen never changes size; an agent's browser window does while you
 take it over from a phone (see [below](#agents-displays)).
 
 A connection that does not show a picture within about twenty seconds is
-treated as lost: Screen says **Disconnected** and offers to reconnect, rather
-than spinning for good.
+treated as lost: Screen says **Disconnected**, that the picture could not reach
+this device, and offers to reconnect, rather than spinning for good.
 
 ### How the picture travels
 
@@ -512,11 +512,14 @@ with the screen, and on that screen's own page.
 
 - **Hide it** with the close button in its title bar. It stays hidden for that
   agent, also after the app restarts, while another agent's screen still
-  floats by itself. Opening Screen (Phone use for the phone) brings it back.
+  floats by itself. Opening Screen (Phone use for the phone) brings it back, and
+  so does the agent asking you to take over (on the phone): hidden again during
+  that request, it stays hidden until the next one.
 - **When the picture drops** it reconnects by itself, with a spinner in place.
   A picture that cannot come back (the video cannot reach the phone, or the
   agent is gone) closes the window; it floats again when the app comes back to
-  the front or the agent uses a screen anew.
+  the front or the agent uses a screen anew. Screen then says why: open it
+  from the Work card or the Screen list.
 - **Move it** by dragging: it snaps to a corner and remembers its corner and
   size. It starts at the bottom right, above the composer; on a wide window,
   in the right pane's bottom-right corner. It stays above the composer and the

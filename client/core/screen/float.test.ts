@@ -17,6 +17,7 @@ import {
   floatSources,
   hideKey,
   parseHiddenKeys,
+  requestId,
   unhiddenOn,
   withHidden,
   FLOAT_HIDDEN_MAX,
@@ -143,6 +144,27 @@ describe("hiding the window", () => {
     const next = phoneSource({ ...phoneStatus, agent: "Coder-ish" } as never, workers)!;
     expect(floatSources([next], page, new Set([hideKey(phone)]))).toHaveLength(1);
     expect(floatSources([phone], page, new Set([hideKey(phone)]))).toHaveLength(0);
+  });
+  test("a take-over request brings a hidden window back; hidden again in that request, it stays out until the next one", () => {
+    const asking = phoneSource({ ...phoneStatus, handoff: "Sign in" } as never, workers, "r1")!;
+    expect(asking.asking).toBe("r1");
+    const hidden = new Set([hideKey(asking)]);
+    expect(floatSources([asking], page, hidden)).toHaveLength(1);
+    expect(floatSources([asking], page, hidden, new Set(), new Map([[hideKey(asking), "r1"]]))).toHaveLength(0);
+    // The request over, it stays hidden; the next one brings it back.
+    expect(floatSources([phone], page, hidden, new Set(), new Map([[hideKey(asking), "r1"]]))).toHaveLength(0);
+    const next = phoneSource({ ...phoneStatus, handoff: "Sign in" } as never, workers, "r2")!;
+    expect(floatSources([next], page, hidden, new Set(), new Map([[hideKey(asking), "r1"]]))).toHaveLength(1);
+  });
+  test("a request keeps its id while the agent asks the same thing, and gets a new one for a new ask", () => {
+    let n = 0;
+    const fresh = () => `r${++n}`;
+    const first = requestId(null, "Sign in", fresh);
+    expect(first).toEqual({ text: "Sign in", id: "r1" });
+    expect(requestId(first, "Sign in", fresh)).toBe(first);
+    expect(requestId(first, "Pay", fresh)?.id).toBe("r2");
+    expect(requestId(first, null, fresh)).toBeNull();
+    expect(requestId(null, "Sign in", fresh)?.id).toBe("r3");
   });
   test("a window that closed itself stays out by its screen", () => {
     expect(floatSources(all, page, new Set(), new Set(["display:%2"])).map((s) => s.key)).toEqual(["phone", "display:%1", "mac:%2"]);

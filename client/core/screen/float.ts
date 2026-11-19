@@ -22,6 +22,8 @@ export interface ScreenSource {
   /** The screen's own size; the shape of the window. */
   width: number;
   height: number;
+  /** The agent asks the person to take over: that request, by an id new for each one, or null. */
+  asking?: string | null;
 }
 
 /** A display counts as in use from its agent's last action for this long; once shown it stays while the agent works. */
@@ -30,11 +32,20 @@ export const DISPLAY_STAY_S = 15 * 60;
 
 export { phoneOwner };
 
-/** The phone's screen while an agent works it and the screen has a size, or null. */
-export function phoneSource(status: PhoneStatus | null, workers: readonly { id: string; name: string }[]): ScreenSource | null {
+/** The phone's screen while an agent works it and the screen has a size, or null; `request` names the handoff it asks for now. */
+export function phoneSource(status: PhoneStatus | null, workers: readonly { id: string; name: string }[], request: string | null = null): ScreenSource | null {
   if (!status || !phoneAgentWorking(status) || status.w <= 0 || status.h <= 0) return null;
   const agent = status.agent ?? "";
-  return { key: "phone", kind: "phone", owner: phoneOwner(agent, workers), title: agent || "Phone", width: status.w, height: status.h };
+  return { key: "phone", kind: "phone", owner: phoneOwner(agent, workers), title: agent || "Phone", width: status.w, height: status.h, asking: status.handoff ? request ?? status.handoff : null };
+}
+
+/**
+ * The id of the take-over request the agent makes now: kept while it asks the same thing, new for a new ask (another
+ * text, or the same after none), null while it asks nothing. `fresh` mints one.
+ */
+export function requestId(previous: { text: string; id: string } | null, asked: string | null, fresh: () => string): { text: string; id: string } | null {
+  if (!asked) return null;
+  return previous?.text === asked ? previous : { text: asked, id: fresh() };
 }
 
 /**
@@ -85,17 +96,22 @@ export interface FloatPage {
 /**
  * The screens the window may show on this page: those of the Worker whose Session or Work file is open (and any whose
  * Worker is unknown), or every one on a page that belongs to no Worker. A screen is never floated over its own full view,
- * nor one the person hid (`hidden`, by `hideKey`) or whose window closed itself (`closed`, by `key`).
+ * nor one whose window closed itself (`closed`, by `key`), nor one the person hid (`hidden`, by `hideKey`) unless its
+ * agent asks them to take over: that request brings it back, until they hide it during that same request
+ * (`hiddenDuring`, the request each was hidden in).
  */
 export function floatSources(
   all: readonly ScreenSource[],
   page: FloatPage,
   hidden: ReadonlySet<string> = new Set(),
   closed: ReadonlySet<string> = new Set(),
+  hiddenDuring: ReadonlyMap<string, string> = new Map(),
 ): ScreenSource[] {
   return all.filter((source) => {
     if (source.kind === "phone" ? page.phonePage : page.screenPage) return false;
-    if (hidden.has(hideKey(source)) || closed.has(source.key)) return false;
+    if (closed.has(source.key)) return false;
+    const key = hideKey(source);
+    if (hidden.has(key) && !(source.asking && hiddenDuring.get(key) !== source.asking)) return false;
     return page.owner === null || source.owner === null || source.owner === page.owner;
   });
 }
