@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -25,8 +24,7 @@ func TestScreenViewerAsVideo(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +61,7 @@ func TestScreenVideoNeedsTheDevicesSignedAnswer(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +93,7 @@ func TestARevokedSilentViewerIsCutOff(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +124,7 @@ func TestScreenViewerHearsAFailedEncoder(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
 		t.Fatal(err)
 	}

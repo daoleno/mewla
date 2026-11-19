@@ -1,11 +1,14 @@
 package codex
 
 import (
+	"net"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/codextrust"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
@@ -113,4 +116,32 @@ func TestPrepareLaunchGivesTheAppServerTheMCPTools(t *testing.T) {
 	if strings.Count(launch.Command, shellquote.Word(chrome)) != 2 {
 		t.Fatalf("tool should be on the app-server and the TUI:\n%s", launch.Command)
 	}
+}
+
+// A control directory too deep for a unix socket used to leave the daemon
+// unable to reach the app-server ("connect: invalid argument"); the socket
+// gets a short name instead, with its pid and log beside it.
+func TestPrepareLaunchKeepsTheControlSocketShortUnderALongStateDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), strings.Repeat("a-very-long-state-directory-name/", 3), "codex-ctl")
+	launch, err := Adapter{ControlDir: dir}.PrepareLaunch("codex -m gpt-6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Control == "" || len(launch.Control) >= 104 || filepath.Dir(launch.Control) != platform.ShortSocketDir() {
+		t.Fatalf("control = %q (%d bytes)", launch.Control, len(launch.Control))
+	}
+	for _, want := range []string{
+		"app-server --listen unix://" + launch.Control,
+		"exec codex --remote unix://" + launch.Control,
+		"echo $! > " + launch.Control + ".pid",
+	} {
+		if !strings.Contains(launch.Command, want) {
+			t.Errorf("command lacks %q:\n%s", want, launch.Command)
+		}
+	}
+	listener, err := net.Listen("unix", launch.Control)
+	if err != nil {
+		t.Fatalf("the app-server could not bind %q: %v", launch.Control, err)
+	}
+	listener.Close()
 }

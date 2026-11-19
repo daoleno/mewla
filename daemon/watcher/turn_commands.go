@@ -1,8 +1,10 @@
 package watcher
 
 import (
+	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
@@ -38,6 +40,10 @@ type TurnCommandScope struct {
 	// Report receives what the Stop did to each command it found; it is not
 	// called when the turn started none.
 	Report func(stopped []agentevents.StoppedCommand)
+	// Agent names the agent and its version for the warning logged when
+	// Match recognizes none of the turn's processes (see
+	// unrecognizedTurnChildren).
+	Agent func() string
 }
 
 // SetTurnCommandStop installs how a keystroke Stop finds the turn it
@@ -123,6 +129,84 @@ func turnCommandGroups(agentPID int, processes map[int]processInfo, since time.T
 	return groups
 }
 
+// unrecognizedTurnChildren are the agent's direct children that look like
+// this turn's commands (a process group of their own, started this turn) but
+// that match does not read as one, leaving out Mewla's own (its hooks, its MCP
+// servers), named by mewla, the daemon's executable. Some are the agent's
+// other helpers (a person's own hook); when the turn has no recognized
+// command at all, they can also mean the agent changed how it runs commands
+// and match no longer knows the form.
+func unrecognizedTurnChildren(agentPID int, processes map[int]processInfo, since time.Time, match func(string) (string, bool), startOf func(int) (time.Time, bool), mewla string) []turnUnrecognized {
+	floor := since.Add(-turnCommandStartSlack)
+	var found []turnUnrecognized
+	for _, child := range processes {
+		if child.ppid != agentPID || child.pid == agentPID || child.pid <= 0 {
+			continue
+		}
+		if processGroupsAreReal && child.pgid != child.pid {
+			continue
+		}
+		if _, ok := match(child.args); ok {
+			continue
+		}
+		if mewla != "" && strings.Contains(child.args, mewla) {
+			continue
+		}
+		start, ok := startOf(child.pid)
+		if !ok || start.Before(floor) {
+			continue
+		}
+		found = append(found, turnUnrecognized{process: turnCommandProcess{pid: child.pid, start: start}, args: child.args})
+	}
+	sort.Slice(found, func(i, j int) bool { return found[i].process.pid < found[j].process.pid })
+	return found
+}
+
+// turnUnrecognized is one process unrecognizedTurnChildren found.
+type turnUnrecognized struct {
+	process turnCommandProcess
+	args    string
+}
+
+// turnUnrecognizedShown bounds how much of a command line the warning logs.
+const turnUnrecognizedShown = 200
+
+// reportUnrecognized waits out the grace a command would get, so a hook that
+// was only passing through is gone, and then, for what is still running,
+// logs a warning naming the agent's version and tells the chat that so many
+// commands may still be running: a Stop that recognizes nothing is never
+// silent.
+func reportUnrecognized(unknown []turnUnrecognized, scope TurnCommandScope, alive func(turnCommandProcess) bool, sleep func(time.Duration)) {
+	sleep(turnCommandGrace)
+	var left []string
+	for _, process := range unknown {
+		if alive(process.process) {
+			args := process.args
+			if runes := []rune(args); len(runes) > turnUnrecognizedShown {
+				args = string(runes[:turnUnrecognizedShown]) + "…"
+			}
+			left = append(left, fmt.Sprintf("pid %d: %q", process.process.pid, args))
+		}
+	}
+	if len(left) == 0 {
+		return
+	}
+	agent := "the agent"
+	if scope.Agent != nil {
+		if named := strings.TrimSpace(scope.Agent()); named != "" {
+			agent = named
+		}
+	}
+	log.Printf("WARN stop: %s has %d child process(es) in their own process group, started this turn, that are not commands Mewla recognizes, and none that are; it may have changed how it runs commands, so Stop left them running: %s", agent, len(left), strings.Join(left, "; "))
+	if scope.Report != nil {
+		stopped := make([]agentevents.StoppedCommand, len(left))
+		for i := range stopped {
+			stopped[i] = agentevents.StoppedCommand{Unrecognized: true}
+		}
+		scope.Report(stopped)
+	}
+}
+
 // commandGroupMembers are the processes a command's group holds: those with
 // its process group where groups are real, and its process tree elsewhere.
 func commandGroupMembers(leader processInfo, processes map[int]processInfo) []processInfo {
@@ -149,6 +233,9 @@ func (w *Watcher) stopTurnCommands(agentPID int, scope TurnCommandScope) {
 	}
 	groups := turnCommandGroups(agentPID, processes, scope.Since, scope.Match, preciseProcessStart)
 	if len(groups) == 0 {
+		if unknown := unrecognizedTurnChildren(agentPID, processes, scope.Since, scope.Match, preciseProcessStart, ExecutablePath()); len(unknown) > 0 {
+			go reportUnrecognized(unknown, scope, processStillThere, time.Sleep)
+		}
 		return
 	}
 	for i := range groups {

@@ -6,7 +6,6 @@ import (
 	"image"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -98,8 +97,7 @@ func TestMacAgentWindowsAreServedAsDisplays(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetDisplays(windows)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	defer s.shutdownAuthenticatedClients()
 	auth := func(purpose string) string { return calendarAuthHeader(priv, a.DaemonID(), device, purpose) }
 	list := func() (out struct {
