@@ -18,9 +18,9 @@ internal class Injector {
     private val inject = manager.javaClass.getMethod("injectInputEvent", InputEvent::class.java, Int::class.javaPrimitiveType)
     private val setDisplayId = InputEvent::class.java.getMethod("setDisplayId", Int::class.javaPrimitiveType)
 
-    private fun send(event: InputEvent, displayId: Int): Boolean {
+    private fun send(event: InputEvent, displayId: Int, mode: Int = INJECT_MODE_ASYNC): Boolean {
         setDisplayId.invoke(event, displayId)
-        return inject.invoke(manager, event, INJECT_MODE_ASYNC) as Boolean
+        return inject.invoke(manager, event, mode) as Boolean
     }
 
     private fun touch(action: Int, downTime: Long, x: Float, y: Float, displayId: Int): Boolean {
@@ -83,15 +83,33 @@ internal class Injector {
     /** Paste the clipboard into the focused field. */
     fun paste(displayId: Int): Boolean = key(displayId, KeyEvent.KEYCODE_PASTE)
 
+    /**
+     * Paste at the cursor and return once the app has handled the key, so the clipboard can be given back
+     * after the field read it, and every key sent before it has landed first.
+     */
+    fun pasteAndWait(displayId: Int): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_PASTE, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD)
+        if (!send(down, displayId, INJECT_MODE_WAIT_FOR_FINISH)) return false
+        val up = KeyEvent(now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, KeyEvent.KEYCODE_PASTE, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD)
+        return send(up, displayId, INJECT_MODE_WAIT_FOR_FINISH)
+    }
+
+    private val keyMap by lazy { KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD) }
+
+    /** Whether [c] can be typed as key events on the virtual keyboard. */
+    fun keyed(c: Char): Boolean = keyMap.getEvents(charArrayOf(c)) != null
+
     /** Types [text] as key events, which only characters a keyboard has can be; false when one is not. */
     fun typeKeys(displayId: Int, text: String): Boolean {
-        val events = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray()) ?: return false
+        val events = keyMap.getEvents(text.toCharArray()) ?: return false
         for (event in events) if (!send(event, displayId)) return false
         return true
     }
 
     private companion object {
         const val INJECT_MODE_ASYNC = 0
+        const val INJECT_MODE_WAIT_FOR_FINISH = 2
         const val TAP_MS = 50L
         const val STEP_MS = 16L
     }

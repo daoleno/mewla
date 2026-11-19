@@ -259,43 +259,59 @@ internal class PhoneHelper(
     }
 
     /**
-     * Types into the focused field the most direct way that works, and checks the field took it:
-     * set its text, else paste through the clipboard, else key events. Apps that draw their own
-     * field (WeChat's search) can accept a set-text and show nothing; the check reads the field back.
+     * Types into the focused field at its cursor, the way a keyboard does, so apps that react to typing do (a `#`
+     * topic picker opens, its search sees what follows): keys for what the virtual keyboard has, a paste at the cursor
+     * for the rest (Chinese, emoji, line breaks), in order. No input method is involved, so the person's own keyboard
+     * and focused field are never touched, and their clipboard is put back after each paste. A field that did not take
+     * it that way (some apps ignore key events) gets its text set whole; a password never goes through the clipboard.
      */
     private fun typeText(value: String, replace: Boolean): JSONObject {
         val s = screen ?: return fail("no display")
         val d = s.displayId
         val field = reader.focusedField(d)
-        // Without a readable field the existing text is unknown: add to it at the caret, never replace it.
-        val next = if (field == null) value else if (replace) value else field.text + value
-        val replaceAll = field != null || replace
-        val verifiable = field != null && !field.password
-        fun landed(): Boolean {
-            Thread.sleep(TEXT_READBACK_MS)
-            return TextCheck.landed(next, reader.focusedField(d)?.text)
-        }
-        if (field != null && reader.setFocusedText(d, next) && (!verifiable || landed())) return typed("set_text", verifiable)
-        // Never through the clipboard for a password: it would sit in the keyboard's clipboard history.
-        if (field?.password != true) {
-            var pasted = false
-            val used = clipboard.with(if (replaceAll) next else value) {
-                if (replaceAll) injector.selectAll(d)
-                pasted = injector.paste(d)
-                // The field reads the clipboard a moment after the key: put it back only once it has.
-                Thread.sleep(TEXT_READBACK_MS)
-            }
-            if (used && pasted && (!verifiable || landed())) return typed("paste", verifiable)
-        }
-        if (replaceAll) {
+        if (replace && field != null && field.text.isNotEmpty()) {
             injector.selectAll(d)
             injector.key(d, KeyEvent.KEYCODE_DEL)
         }
-        if (injector.typeKeys(d, if (replaceAll) next else value) && (!verifiable || landed())) return typed("keys", verifiable)
-        return fail(
-            if (field == null) "no field has focus, and the text did not go in by paste or keys either"
-            else "the field did not take the text by set text, paste or keys",
-        )
+        val before = if (field == null) null else if (replace) "" else field.text
+        val password = field?.password == true
+        val readable = field != null && !password
+        if (!password || TypingRuns.split(value, injector::keyed).all { it.keys }) {
+            if (typeAtCursor(d, value, pasteAllowed = !password)) {
+                if (!readable) return typed("typed", false)
+                if (insertedWithin(d, before!!, value)) return typed("typed", true)
+            }
+        }
+        if (field == null) return fail("no field has focus, and the text could not be typed there")
+        // Whatever the keys left, the field ends up holding what was meant.
+        val next = before + value
+        if (reader.setFocusedText(d, next) && (!readable || landed(d, next))) return typed("set_text", readable)
+        return fail("the field did not take the text, typed or set")
+    }
+
+    /** Sends [value] in its runs; false when a run could not be sent (no key, or no clipboard to paste through). */
+    private fun typeAtCursor(d: Int, value: String, pasteAllowed: Boolean): Boolean {
+        for (run in TypingRuns.split(value, injector::keyed)) {
+            val sent = if (run.keys) injector.typeKeys(d, run.text)
+            else pasteAllowed && clipboard.with(run.text) { injector.pasteAndWait(d) }
+            if (!sent) return false
+        }
+        return true
+    }
+
+    /** Whether the focused field came to hold [value] put in at its cursor, waiting a little for keys still on their way. */
+    private fun insertedWithin(d: Int, before: String, value: String): Boolean {
+        val deadline = android.os.SystemClock.uptimeMillis() + TYPE_SETTLE_MS
+        while (true) {
+            Thread.sleep(TEXT_READBACK_MS)
+            if (TextCheck.insertedAt(before, value, reader.focusedField(d)?.text)) return true
+            if (android.os.SystemClock.uptimeMillis() > deadline) return false
+        }
+    }
+
+    private fun landed(d: Int, expected: String): Boolean {
+        Thread.sleep(TEXT_READBACK_MS)
+        return TextCheck.landed(expected, reader.focusedField(d)?.text)
     }
 
     private fun typed(method: String, verified: Boolean) = ok().put("method", method).put("verified", verified)
@@ -510,6 +526,7 @@ internal class PhoneHelper(
         private const val LONG_PRESS_MS = 700L
         private const val DRAW_WAIT_MS = 3_000L
         private const val TEXT_READBACK_MS = 150L
+        private const val TYPE_SETTLE_MS = 2_000L
         /** Bumped when the app and helper stop understanding each other; the app restarts a helper that differs. */
         const val PROTOCOL = 1
 

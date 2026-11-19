@@ -6,6 +6,7 @@ import com.daoleno.mewla.phone.helper.FrameCheck
 import com.daoleno.mewla.phone.helper.PhoneUser
 import com.daoleno.mewla.phone.helper.SettlePolicy
 import com.daoleno.mewla.phone.helper.TextCheck
+import com.daoleno.mewla.phone.helper.TypingRuns
 import com.daoleno.mewla.phone.helper.Wire
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -263,5 +264,47 @@ class FrameCheckTest {
         assertFalse(FrameCheck.dark(frame(200, 400) { _, _ -> 0xFFFFFF }, 200 * 4 + 16, 4, 200, 400))
         // Dark theme: a near-black background with lines of text across it.
         assertFalse(FrameCheck.dark(frame(200, 400) { _, y -> if (y % 40 < 6) 0xE0E0E0 else 0x121212 }, 200 * 4 + 16, 4, 200, 400))
+    }
+}
+
+class TypingRunsTest {
+    private val ascii = { c: Char -> c.code in 0x20..0x7e }
+
+    @Test
+    fun mixedTextIsCutInOrderIntoKeyedAndPastedRuns() {
+        // 11-20 小红书: "#AI编程" must reach the field as "#AI" typed, then "编程" pasted right after it.
+        val runs = TypingRuns.split("#AI编程 and @X", ascii)
+        assertEquals(listOf("#AI" to true, "编程" to false, " and @X" to true), runs.map { it.text to it.keys })
+        assertEquals("#AI编程 and @X", runs.joinToString("") { it.text })
+    }
+
+    @Test
+    fun aLineBreakIsPastedSoItNeverSubmitsAndAnEmojiStaysWhole() {
+        val runs = TypingRuns.split("hi\n👋ok", ascii)
+        assertEquals(listOf("hi" to true, "\n👋" to false, "ok" to true), runs.map { it.text to it.keys })
+    }
+
+    @Test
+    fun emptyTextHasNoRuns() {
+        assertTrue(TypingRuns.split("", ascii).isEmpty())
+    }
+}
+
+class InsertedAtTest {
+    @Test
+    fun textPutInAtTheCursorIsSeenWhereverTheCursorWas() {
+        assertTrue(TextCheck.insertedAt("", "#AI编程", "#AI编程"))
+        assertTrue(TextCheck.insertedAt("ab", "XY", "abXY"))
+        assertTrue(TextCheck.insertedAt("ab", "XY", "XYab"))
+        assertTrue(TextCheck.insertedAt("ab", "XY", "aXYb"))
+        assertTrue(TextCheck.insertedAt("aa", "a", "aaa"))
+    }
+
+    @Test
+    fun anythingElseIsNot() {
+        assertFalse(TextCheck.insertedAt("ab", "XY", "abX"))
+        assertFalse(TextCheck.insertedAt("ab", "XY", "XY"))
+        assertFalse(TextCheck.insertedAt("ab", "XY", "aYXb"))
+        assertFalse(TextCheck.insertedAt("ab", "XY", null))
     }
 }
