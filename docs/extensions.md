@@ -225,8 +225,14 @@ Each download clears that account's files older than seven days.
 
 An account connected before Mewla read files and private conversations shows
 **Reconnect to read files and DMs** with one **Reconnect**: Slack asks you once
-more for the new permissions, and the account keeps its name, its switches and
-whether it may make changes. Until then it reads public channels as before, and
+more for the new permissions, and the account keeps its ID, its name, its
+switches and each tool you allowed or blocked. Signing in to the same Slack
+account again, even after disconnecting it, renews that card instead of adding
+one; signing in to another workspace from a card's Reconnect adds that
+workspace. A card an older Mewla left behind (the same workspace and user,
+disconnected next to a working one) is folded into the working one when Mewla
+starts, and its old ID keeps reaching the account, so Triggers and notes that
+named it still work. Until then it reads public channels as before, and
 Brain is told plainly to ask you to reconnect when it asks for a file or a
 thread.
 
