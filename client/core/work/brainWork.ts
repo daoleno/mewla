@@ -50,6 +50,22 @@ export async function workAction(
   }
 }
 
+/** A field of a Work's row the person sets (⋯ › Rename, Move to project, Merge with…). */
+export type WorkShownField = "title" | "project" | "merged_into";
+
+/**
+ * Sets how a Work reads in the person's list (`brain_work_shown_set`): their title or project, which the judge
+ * then keeps, or the Work it shows under. An empty value hands it back. The list follows from the next snapshot.
+ */
+export async function setWorkShown(transport: CalendarTransport, workId: string, field: WorkShownField, value: string): Promise<void> {
+  try {
+    await transport.request<Frame>("brain_work_shown_set", { id: workId, name: field, text: value }, { reply: "brain_work_shown_set", errors: ["error", "brain_work_shown_set_failed"], timeoutMs: 15_000 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    throw new Error(/timed out/.test(message) ? "Timed out. It may still have been saved." : message || "The computer could not save that.");
+  }
+}
+
 /** One Work's page, current or closed (`brain_work_detail`): who worked on it. */
 export async function workDetail(transport: CalendarTransport, workId: string): Promise<BrainWorkDetail> {
   const frame = await transport.request<Frame>("brain_work_detail", { id: workId }, { reply: "brain_work_detail", errors: ["error", "brain_work_detail_failed"], timeoutMs: 15_000 });

@@ -1,9 +1,9 @@
 import { elapsedNow } from "../kit/elapsedClock";
 import { cleanup, computed, effect, Scroll, signal, Text, untracked, View } from "nsh";
-import { Button } from "nsh/base";
+import { Button, Input } from "nsh/base";
 import { capsuleScrollTop, NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
-import { markWorkRead, workAction, workDetail } from "../../core/work/brainWork";
+import { markWorkRead, setWorkShown, workAction, workDetail, type WorkShownField } from "../../core/work/brainWork";
 import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
 import { workDetailWorkerRow, workProject, workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
 import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
@@ -27,6 +27,8 @@ import { Caption, DISPLAY_TITLE_AWAY } from "../kit/kit";
 import { AttachmentTray } from "../more/files/Attachments";
 import { showAlert } from "../shell/alert";
 import { bottomBarInset } from "../shell/below";
+import { createMenuAnchor, showMenu, type MenuItem } from "../kit/Menu";
+import { AppSheet } from "../shell/AppSheet";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
@@ -318,6 +320,12 @@ const ACTION_ICON: Partial<Record<BrainWorkAction["kind"], IconName>> = {
   snooze: "time", stop: "stop", dismiss: "close", close: "check", read: "check", open: "terminal",
 };
 
+/** What the edit sheet sets: the row's title (Rename) or its project (Move to project). */
+const EDIT_COPY: Record<"title" | "project", { heading: string; note: string; button: string }> = {
+  title: { heading: "Rename", note: "Your name for this Work. It stays as you write it; empty lets Mewla name it again.", button: "Rename" },
+  project: { heading: "Move to project", note: "The project this Work is listed under. It stays as you write it; empty lets Mewla choose again.", button: "Move" },
+};
+
 export function WorkDetail(props: { workId: string; nav: NavStackState<any>; links: WorkLinks }) {
   const slip = () => workSurface().slips.find((s) => s.workId === props.workId);
   // A Work no longer open: its page from the computer, with who worked on it.
@@ -359,6 +367,47 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
     read = true;
     markWorkRead(transport, shown.workId);
   });
+  // ⋯ (mock round 2): Rename, Move to project, Merge with…; what the person sets there stays theirs.
+  const menuAnchor = createMenuAnchor();
+  const editing = signal<"title" | "project" | null>(null);
+  const editValue = signal("");
+  const mergeTargets = () => workSurface().slips.filter((other) => other.workId !== props.workId && !other.closed && !other.mergedInto);
+  const menuItems = (): MenuItem[] => [
+    { id: "rename", label: "Rename" },
+    { id: "move", label: "Move to project" },
+    ...(slip()?.mergedInto ? [{ id: "unmerge", label: "Show on its own" }] : mergeTargets().length && !mergedHere().length ? [{ id: "merge", label: "Merge with…" }] : []),
+  ];
+  const save = async (field: WorkShownField, value: string, done: string) => {
+    const transport = connection() === "connected" ? currentTransport() : null;
+    if (!transport) return say("Offline", { failed: true });
+    try {
+      await setWorkShown(transport, props.workId, field, value.trim());
+      haptic.notification("success");
+      say(done);
+    } catch (error) {
+      say("Not saved", { detail: error instanceof Error ? error.message : undefined, failed: true });
+    }
+  };
+  const merge = async () => {
+    const targets = untracked(mergeTargets);
+    const target = await showMenu({ title: "Show this Work under", items: targets.map((other) => ({ id: other.workId, label: other.title })), anchor: menuAnchor.node(), testID: "work-merge-popover" });
+    if (target) await save("merged_into", target, "Merged");
+  };
+  const menu = async () => {
+    const action = await showMenu({ title: untracked(title), items: untracked(menuItems), anchor: menuAnchor.node(), testID: "work-menu-popover" });
+    if (action === "rename" || action === "move") {
+      const field = action === "rename" ? "title" : "project";
+      editValue.set(field === "title" ? untracked(title) : untracked(project) ?? "");
+      editing.set(field);
+    } else if (action === "merge") await merge();
+    else if (action === "unmerge") await save("merged_into", "", "Shown on its own");
+  };
+  const saveEdit = () => {
+    const field = untracked(editing);
+    if (!field) return;
+    editing.set(null);
+    void save(field, untracked(editValue), field === "title" ? "Renamed" : "Moved");
+  };
   // The nav bar names the Work once its display title has scrolled away (SPEC §11).
   const titleAway = signal(false);
   const title = () => slip()?.title ?? closed()?.title ?? "";
@@ -418,7 +467,10 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const nowLine = () => (slip()?.closed && slip()!.shownStatus !== "done" ? "" : slip()?.shownLine) || slip()?.summary || "";
 
   return (
-    <NavPage title={titleAway() ? title() : ""} testID="work-detail" capsuleUnder>
+    <NavPage title={titleAway() ? title() : ""} testID="work-detail" capsuleUnder
+      headerRight={<If when={slip()}><Button ref={menuAnchor.ref} testID="work-menu" accessibilityLabel="Work menu" onPress={() => void menu()} class="size-[44px] items-center justify-center rounded-full active:bg-accent">
+          <Icon name="more-horizontal" size={22} tone="ink" />
+        </Button></If>}>
       <View class="flex-1 bg-background">
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pt-2" contentStyle={{ paddingTop: capsuleScrollTop() ? capsuleScrollTop() + 8 : undefined, paddingBottom: 32 + (docked() ? 0 : bottomBarInset()) }}
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
@@ -491,6 +543,18 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
             <If when={attachFailure()}><View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View></If>
           </Composer></If>
       </View>
+      <AppSheet open={editing() !== null} onOpenChange={({ open }) => { if (!open) editing.set(null); }} popupClass="rounded-t-2xl bg-background py-4 gap-3" sidePadding={16} backdropClass="bg-black/40">
+        <If when={editing()}>{(field) => <View class="gap-3 pb-6">
+            <Text class="text-lg font-semibold">{EDIT_COPY[field()].heading}</Text>
+            <Text class="text-sm text-muted-foreground">{EDIT_COPY[field()].note}</Text>
+            <Input testID="work-edit-input" value={editValue()} placeholder={field() === "title" ? title() : project() ?? ""} onChange={({ value }) => editValue.set(value)}
+              class="rounded-xl border border-border bg-card px-3.5 py-2.5 text-base" />
+            <View class="flex-row justify-end gap-4">
+              <Button onPress={() => editing.set(null)}><Text class="text-base text-muted-foreground">Cancel</Text></Button>
+              <Button testID="work-edit-save" onPress={saveEdit}><Text class="text-base font-semibold text-primary">{EDIT_COPY[field()].button}</Text></Button>
+            </View>
+          </View>}</If>
+      </AppSheet>
     </NavPage>
   );
 }
