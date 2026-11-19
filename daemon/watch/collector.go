@@ -309,6 +309,11 @@ type Status struct {
 	Errors      map[string]string         `json:"errors,omitempty"`
 }
 
+// JudgeDay is what judgment did in the last 24 hours, for Brain's context.
+func (c *Collector) JudgeDay() brain.WatchJudgeDay {
+	return c.judge.day(c.judge.now())
+}
+
 // Status reports counts per source and project and the last pass.
 func (c *Collector) Status() Status {
 	status := Status{Config: c.store.Config(), BySource: map[string]map[string]int{}, Placed: map[string]Placement{}}

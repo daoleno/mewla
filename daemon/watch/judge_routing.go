@@ -16,7 +16,7 @@ import (
 // the executors that can judge and are installed, and read again whenever it
 // changes. A missing or invalid row falls back to the automatic choice, and
 // the status says why. The row picks only who judges: the no-tools, no-hooks,
-// no-session, redaction, batch, daily and cost limits hold whatever it says.
+// no-session, redaction, batch and per-run cost limits hold whatever it says.
 
 const routingTask = "Watch judgment"
 

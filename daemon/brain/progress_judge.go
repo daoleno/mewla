@@ -340,6 +340,21 @@ type ProgressJudgeDay struct {
 	Works     int     `json:"works"`
 }
 
+// WatchJudgeDay is what Watch's judgment did in the last 24 hours, from its
+// run log: runs, failed runs, signals judged and dollars.
+type WatchJudgeDay struct {
+	Runs    int     `json:"runs"`
+	Failed  int     `json:"failed,omitempty"`
+	Signals int     `json:"signals"`
+	USD     float64 `json:"usd"`
+}
+
+// SetWatchJudgeDay lets Brain's context show Watch's last 24 hours; nil
+// leaves it out (Watch unavailable).
+func (s *Service) SetWatchJudgeDay(day func() WatchJudgeDay) {
+	s.watchJudgeDay = day
+}
+
 func progressJudgeDay(items []Work, now time.Time) ProgressJudgeDay {
 	var day ProgressJudgeDay
 	for _, item := range items {
