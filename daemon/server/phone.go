@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -152,7 +153,13 @@ func (s *Server) handlePhoneDevice(w http.ResponseWriter, r *http.Request) {
 		conn.Close(phone.CloseProtocol, "The first message must be the phone's hello.")
 		return
 	}
+	hello.Device = device.ID
 	link, err := s.phone.Attach(hello, conn)
+	if errors.Is(err, phone.ErrStandby) {
+		// Replaced, not unsupported: every App stops on that until it is opened or ready, instead of retrying.
+		conn.Close(phone.CloseReplaced, err.Error())
+		return
+	}
 	if err != nil {
 		conn.Close(phone.CloseUnsupported, err.Error())
 		return

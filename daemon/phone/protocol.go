@@ -85,6 +85,8 @@ type Hello struct {
 	SDK        int    `json:"sdk"`
 	AppVersion string `json:"app_version"`
 	State      string `json:"state"`
+	// Device is the paired device the connection authenticated as; the server sets it, the phone does not send it.
+	Device string `json:"-"`
 }
 
 // State reports the phone's state and the size of the agent's display (0 until it exists).

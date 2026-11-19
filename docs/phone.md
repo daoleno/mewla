@@ -118,6 +118,9 @@ refused rather than tapped.
 - Brain has agents ask you before they send, pay, delete or change an account,
   and treats text on the screen as data. Logins, captchas and payments are
   handed to you.
+- With two Mewla apps paired on one phone (Mewla and Mewla Dev), the newer
+  connection has Phone use, except that one still setting up never takes it
+  from one that is ready. It takes over once it is ready itself.
 - One agent uses the phone at a time. Its screen is kept while its Worker runs,
   up to 10 minutes after its last action, so an agent that thinks between steps
   finds its app as it left it; it is released as soon as the Worker ends.

@@ -200,6 +200,51 @@ func TestStoppingEndsTheRequestInFlight(t *testing.T) {
 	}
 }
 
+// 11-19 22:35: a second Mewla on the owner's phone (another device id, still in setup) took the
+// ready one's place, and agents were told "not paired" while the ready one sat replaced.
+func TestAnotherDeviceInSetupDoesNotTakeAReadyPhonesPlace(t *testing.T) {
+	m := NewManager(Options{})
+	ready := hello(StateReady)
+	ready.Device = "dev-a"
+	a := &fakeConn{handle: okResult(nil)}
+	la, err := m.Attach(ready, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.link = la
+	other := hello(StateSetup)
+	other.Device = "dev-b"
+	b := &fakeConn{handle: okResult(nil)}
+	if _, err := m.Attach(other, b); !errors.Is(err, ErrStandby) {
+		t.Fatalf("the device in setup was let in: %v", err)
+	}
+	if len(a.closes()) != 0 {
+		t.Fatalf("the ready phone was closed: %v", a.closes())
+	}
+	if st := m.Status(); st.State != StateReady {
+		t.Fatalf("status %+v", st)
+	}
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatalf("the ready phone could not be used: %v", err)
+	}
+	// Once it is ready itself it takes over, as any newer connection does.
+	other.State = StateReady
+	lb, err := m.Attach(other, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.link = lb
+	if closes := a.closes(); len(closes) != 1 || closes[0].code != CloseReplaced {
+		t.Fatalf("the old connection was told %v", closes)
+	}
+	// The same device coming back in setup is that phone now, not another one.
+	again := hello(StateSetup)
+	again.Device = "dev-b"
+	if _, err := m.Attach(again, &fakeConn{handle: okResult(nil)}); err != nil {
+		t.Fatalf("the same device was refused: %v", err)
+	}
+}
+
 func TestANewConnectionReplacesTheOldAndSaysWhy(t *testing.T) {
 	m := NewManager(Options{})
 	first, a := connect(t, m, StateReady, func(Request) *Result { return nil })
