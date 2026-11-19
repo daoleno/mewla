@@ -328,6 +328,17 @@ the screen or the agent's files:
 | Cursor | The chat is created before Cursor starts and resumed, so its transcript is known from the first moment; turns are read from the transcript and the screen | Typed into the Terminal |
 | Grok, dsh | The agent's transcript and the screen | Typed into the Terminal |
 
+Stop means the work stops. It ends the running turn, and also the commands
+that turn started and left running in the agent's background terminal: a
+Codex command still running after its tool call returned is ended through
+Codex's app-server, and a Claude Code Bash command (run in the background or
+not) is ended by its process group. Commands an earlier turn started keep
+running. The chat says what was ended in one line under the turn, such as
+"Stopped 1 command this turn started: seq 1 30", or "1 command could not be
+stopped: …" when one could not be. OpenCode and Pi end their running command
+when they stop, and have no background commands. The line is not kept when
+the daemon restarts.
+
 A Worker that Mewla did not start, or that started with its own settings, is
 followed from the transcript and the screen, and the app offers only what that
 supports. For Codex that is the one case still found by looking: a Codex you
