@@ -669,11 +669,11 @@ func bootUnitControlGroup(runner bootRunner) (string, error) {
 }
 
 func bootLifecycleLockPath(stateDir string) (string, error) {
-	socketPath, err := control.DefaultSocketPath(stateDir)
+	runDir, err := control.RunDir(stateDir)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(filepath.Dir(socketPath), bootLifecycleLockName), nil
+	return filepath.Join(runDir, bootLifecycleLockName), nil
 }
 
 // bootStateLockPID returns the PID actually holding the state's lifecycle

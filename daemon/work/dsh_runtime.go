@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
@@ -70,7 +71,7 @@ func dshSocket(id string) (string, error) {
 		return "", fmt.Errorf("invalid DSH Session identity")
 	}
 	sum := sha256.Sum256([]byte(id))
-	return filepath.Join(DSHRoot(), fmt.Sprintf("%x.sock", sum[:8])), nil
+	return platform.SocketPath(filepath.Join(DSHRoot(), fmt.Sprintf("%x.sock", sum[:8]))), nil
 }
 
 // CallDSH only reaches the private socket of the explicitly owned Session.
@@ -287,6 +288,9 @@ func RunDSHSession(ctx context.Context, id, cwd string) error {
 		return err
 	}
 	if err := os.MkdirAll(DSHRoot(), 0700); err != nil {
+		return err
+	}
+	if err := platform.EnsureSocketDir(socket); err != nil {
 		return err
 	}
 	unlock, err := lockDSHSession(filepath.Join(DSHRoot(), id+".lock"))

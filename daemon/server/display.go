@@ -178,10 +178,9 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	castReady := make(chan struct{})
 	conn.SetReadLimit(1 << 20)
 	go s.keepTrusted(ctx, cancel, device.ID, nil)
-	go func() {
+	reads := readViewer(conn, cancel, func(next func() (int, []byte, error)) {
 		for {
-			_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
-			kind, data, err := conn.ReadMessage()
+			kind, data, err := next()
 			if err != nil {
 				cancel(err)
 				return
@@ -229,7 +228,8 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 				fits <- [3]float64{msg.Width, msg.Height, msg.DPR}
 			}
 		}
-	}()
+	})
+	defer reads.stop()
 	go func() {
 		<-ctx.Done()
 		view.Close()

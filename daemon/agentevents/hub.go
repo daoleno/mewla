@@ -65,6 +65,7 @@ type Hub struct {
 	onApprovals func(workerID string)
 	onBound     func(workerID string)
 	onResolved  func(workerID string, approval Approval, e Event)
+	onStopped   func(e Event)
 }
 
 type workerState struct {
@@ -116,7 +117,7 @@ func (h *Hub) Publish(e Event) {
 	w.apply(e)
 	changed := before != approvalIDs(w.Approvals)
 	rebound := e.Kind == KindBound && (w.Bound != boundBefore || w.Binding.ConversationID != bindingBefore.ConversationID || w.Binding.Ref != bindingBefore.Ref)
-	onApprovals, onBound, onResolved := h.onApprovals, h.onBound, h.onResolved
+	onApprovals, onBound, onResolved, onStopped := h.onApprovals, h.onBound, h.onResolved, h.onStopped
 	subs := make([]chan Event, 0, len(w.subs))
 	for _, ch := range w.subs {
 		subs = append(subs, ch)
@@ -131,12 +132,23 @@ func (h *Hub) Publish(e Event) {
 	if resolved != nil && onResolved != nil {
 		onResolved(e.WorkerID, *resolved, e)
 	}
+	if e.Kind == KindCommandsStopped && onStopped != nil {
+		onStopped(e)
+	}
 	for _, ch := range subs {
 		select {
 		case ch <- e:
 		default:
 		}
 	}
+}
+
+// OnCommandsStopped calls notify, outside the Hub's lock, with each
+// KindCommandsStopped event.
+func (h *Hub) OnCommandsStopped(notify func(e Event)) {
+	h.mu.Lock()
+	h.onStopped = notify
+	h.mu.Unlock()
 }
 
 // OnApprovalResolved calls notify, outside the Hub's lock, with each pending
@@ -175,6 +187,10 @@ func approvalIDs(approvals []Approval) string {
 }
 
 func (w *workerState) apply(e Event) {
+	if e.Kind == KindCommandsStopped {
+		// Mewla's own report, not the agent moving: it settles nothing.
+		return
+	}
 	if e.At.After(w.LastEvent) {
 		w.LastEvent = e.At
 	}

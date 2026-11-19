@@ -508,7 +508,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.ObserveSessions(opencodeFollow.Observe)
 	senders, stops := []watcher.StructuredSender{opencodeFollow.send}, []func(string) (bool, error){opencodeFollow.interrupt}
 	piFollow := newPiEvents(ctx, eventHub, w.Workers)
-	piSocket, piExtension := filepath.Join(authManager.StorageDir(), "pi-events.sock"), filepath.Join(authManager.StorageDir(), "pi-extension.js")
+	piSocket, piExtension := platform.SocketPath(filepath.Join(authManager.StorageDir(), "pi-events.sock")), filepath.Join(authManager.StorageDir(), "pi-extension.js")
 	if err := piadapter.WriteExtension(piExtension, piSocket); err != nil {
 		log.Printf("WARN agent events: cannot write the Pi extension, Pi Workers will be followed from their transcript: %v", err)
 	} else if err := piFollow.Listen(piSocket); err != nil {
@@ -525,6 +525,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	w.SetStructuredInput(firstHandled(senders...))
 	w.SetStructuredInterrupt(firstHandledStop(stops...))
+	w.SetTurnCommandStop(turnCommandScope(w, execs, adapters, eventHub))
 	w.SetPromptEnricher(choicePromptEnricher(w, execs))
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,
@@ -689,6 +690,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		})
 	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
+	eventHub.OnCommandsStopped(func(e agentevents.Event) { srv.RecordStoppedCommands(stoppedCommandsRecord(e)) })
 	agentEvents.gate = permissionGateHooks(w, brainStore, brainService, srv.WorkerApprovalsChanged)
 	w.SetApprovalHold(agentEvents.holdsApproval)
 	book, err := addressbook.New(authManager.StorageDir())

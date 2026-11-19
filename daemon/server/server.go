@@ -166,6 +166,9 @@ type Server struct {
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 	rewindMessageOverride        func(workerID string, request watcher.MessageRewindRequest) error
 	rewound                      rewoundMessages
+	// stopped holds the Stop lines of each Session's thread
+	// (stopped_commands.go).
+	stopped stoppedCommandsLog
 	sendInputOverride            func(workerID, text string) error
 	sendInputWithReceiptOverride func(workerID, text, receipt string) error
 	sendActionOverride           func(workerID, action string) error
@@ -2235,9 +2238,9 @@ func (s *Server) publishCodexConversationSubscription(
 	}
 
 	now := time.Now()
-	// The thread's overlays (a rewind, answered requests) move apart from
+	// The thread's overlays (a rewind, answered requests, Stop lines) move apart from
 	// the provider transcript; either moving reprojects it.
-	rewoundVersion := s.rewound.version() + s.answeredLedger().Version()
+	rewoundVersion := s.rewound.version() + s.answeredLedger().Version() + s.stopped.Version()
 	conversation, err := s.loadProviderConversation(reader, resolved, now)
 	if took := time.Since(now); took >= slowSessionInputLog {
 		// A snapshot cannot arrive before this load returns; the phone only
@@ -2326,6 +2329,7 @@ func (s *Server) publishCodexConversationSubscription(
 		// Answered requests join the Session's thread after its projection;
 		// Brain's thread takes its own in brainScopedConversation.
 		conversation = s.withAnsweredRequests(resolved.targetID, conversation)
+		conversation = s.withStoppedCommands(resolved.targetID, conversation)
 	}
 	if brainScoped {
 		conversation = s.brainScopedConversation(raw.ConversationScopeKey, conversation, now)
