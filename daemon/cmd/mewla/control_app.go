@@ -1681,7 +1681,11 @@ func (a *controlApp) handleBrainContext() control.Response {
 	if a == nil || a.brainStore == nil {
 		return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
 	}
-	service := brain.NewService(a.brainStore, a.watcher, a.execs)
+	// The daemon's own Service, which knows what only it was told (Watch's last 24 hours); a fresh one without it.
+	service := a.brainService
+	if service == nil {
+		service = brain.NewService(a.brainStore, a.watcher, a.execs)
+	}
 	context, err := service.Context()
 	if err != nil {
 		return control.ErrorResponse("brain_context_failed", err.Error())
