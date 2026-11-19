@@ -1,9 +1,13 @@
 package brain
 
 import (
+	"errors"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // The stale list is information for Brain, never a gate: Work that has been
@@ -132,4 +136,50 @@ func (s *Store) currentTurnWork(sessionID string) string {
 		return ""
 	}
 	return turn.WorkID
+}
+
+// ReclaimFinishedRunSession tears down the Worker Session of a finished
+// scheduled-action run once it sits idle at its prompt, through Brain's
+// teardown so its model route and Codex resources are released too. A
+// Session Brain has since given open Work (a follow-up, an Attempt, a prompt
+// in flight) is left alone. It reports whether the Session was torn down.
+func (s *Service) ReclaimFinishedRunSession(sessionID string) (bool, error) {
+	if s == nil || s.store == nil || s.watcher == nil {
+		return false, nil
+	}
+	reclaimer, ok := s.watcher.(interface{ ReclaimIdleSession(string) error })
+	if !ok || s.store.sessionHoldsOpenWork(sessionID) {
+		return false, nil
+	}
+	err := s.teardownSessionWith(sessionID, reclaimer.ReclaimIdleSession)
+	if errors.Is(err, watcher.ErrSessionNotIdle) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// sessionHoldsOpenWork: an open Work's Attempt or prompt is on the Session,
+// or its current delegated Turn belongs to an open Work.
+func (s *Store) sessionHoldsOpenWork(sessionID string) bool {
+	held := false
+	s.fsm.Each(func(st *lifecycle.State) {
+		if st.Status.Terminal() {
+			return
+		}
+		if st.Attempt != nil && st.Attempt.SessionID == sessionID {
+			held = true
+		}
+		if admission := st.ActiveAdmission(); admission != nil && admission.SessionID == sessionID {
+			held = true
+		}
+	})
+	if held {
+		return true
+	}
+	if workID := s.currentTurnWork(sessionID); workID != "" {
+		if st, err := s.fsmState(workID); err != nil || (st != nil && !st.Status.Terminal()) {
+			return true
+		}
+	}
+	return false
 }
