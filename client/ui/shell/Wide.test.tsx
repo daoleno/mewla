@@ -54,7 +54,8 @@ describe("the wide layout (SPEC §14)", () => {
     const sessions = [running("w1", "api"), running("w2", "docs"), { ...running("w3", "release"), status: "blocked", needs_attention: true, summary: "Approve the deploy" }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }) });
     await app.waitFor("id:left-pane", { timeout: 10_000 });
-    await app.waitUntil(() => app.texts().includes("2 running, 1 needs you"), { timeout: 10_000 });
+    // The title is its counts, each a filter (many Workers 11-19).
+    await app.waitUntil(() => app.texts().includes("1 needs you") && app.texts().includes("2 running"), { timeout: 10_000 });
     expect(app.texts()).toContain("Desk");
     expect(app.texts()).toContain("Search or run");
     expect(app.texts()).toContain("Ctrl K");

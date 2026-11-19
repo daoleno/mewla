@@ -36,11 +36,22 @@ start lists the slash commands of the agent Brain runs on.
 stand: "All quiet", "3 running", "2 need you". A Work with three Workers counts
 as one. Tap it to open the tray.
 
-**The tray.** Everything open, by what it asks of you: **Needs you**,
-**Running** (queued and waiting Work sit here as quiet rows), **Today**,
-**Idle** and **Done** (unread results first). A row with an agent's logo opens
-that Session; a row with Brain's mark (a Work with several Workers, or none)
-opens Work detail.
+**The tray.** One flat list of everything you asked for, by what it asks of
+you: **Needs you**, **New** (a result is back and you have not opened it),
+**Running** (every running Work, the one that changed last on top; queued and
+waiting Work sit at its end as quiet rows), **Today**, **Idle**, and **Done**,
+one row that opens in place. Its title is its counts, "2 need you · 3 new ·
+17 running": tap one to see only those rows, tap it again for all. While two or
+more projects have open Work, chips under the title filter by project.
+
+Each Work row reads as a model wrote it, in your language: a short name for
+the thing you want and one line on where it stands ("Cause found; fixing the
+router session"), with how long since it last changed. The progress judge
+writes both, and the project, in the same pass that judges progress; until it
+has, the row shows Brain's title. A judge that cannot answer leaves the last
+text. Several Workers on one Work are still one row ("3 Workers · …"). Tap a
+row for Work detail; tap the Worker's logo, with its ring, to open its Session
+directly.
 
 **The goal.** When Brain has set one, it is the tray's first line, with how
 much has come back: "Ship atlas-notes v1.4 this week · 2 of 5 back". A new chat
@@ -72,9 +83,13 @@ passing run, a file written, a posted review.
 - **No ring** while the Work waits on you, or for a Work with no finish line.
 - **Tap the Work** to see its outcomes and which are done.
 
-The judge runs only on new evidence (a progress report, a turn ending, Brain's
-next message to the Worker), at most once every two minutes per Work and never
-on a timer alone; after a turn ends or a send-back, within seconds. The
+The judge runs only on new evidence (a progress report with new words, a turn
+ending, Brain's next message to the Worker), at most once every two minutes per
+Work and never on a timer alone; after a turn ends or a send-back, within
+seconds. A report that repeats the last one is not evidence, and the evidence it
+last judged is kept on the Work, so a restart of the computer's Mewla judges
+nothing again. The same call writes the row's title, line and project; a new
+Work is named once when it appears. The
 `Work progress` row of `routing.md` picks its model (see
 [Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
 `progress.judged` or `progress.back` event (`mewla brain work list -id`).
