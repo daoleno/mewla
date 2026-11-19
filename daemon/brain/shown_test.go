@@ -319,7 +319,7 @@ func TestBrainParkingAWorkIsEvidenceButARestartIsNot(t *testing.T) {
 	prompt := f.model.prompts[len(f.model.prompts)-1]
 	for _, want := range []string{
 		"Parked: nothing runs on it now",
-		"Brain asks the person nothing: nothing is needed from them.",
+		"Brain asks the person nothing.\n",
 		"Brain's own note on what it waits for (Brain's shorthand, never words for the person): " + note,
 		"The person's local time now: ",
 		"begin the line by saying nothing is needed from the person",
@@ -362,7 +362,7 @@ func TestBrainsQuestionIsWhatAsksThePerson(t *testing.T) {
 	}
 	f.scan()
 	prompt := f.model.prompts[len(f.model.prompts)-1]
-	if !strings.Contains(prompt, "Brain asks the person: "+question) || strings.Contains(prompt, "Brain asks the person nothing: nothing is needed") {
+	if !strings.Contains(prompt, "Brain asks the person: "+question) || strings.Contains(prompt, "Brain asks the person nothing.\n") {
 		t.Fatalf("the judge was not told Brain's question:\n%s", prompt)
 	}
 }
@@ -526,5 +526,14 @@ func TestNoDailyCapStopsAJudgmentOfNewEvidence(t *testing.T) {
 	f.restart()
 	if ran := f.scan(); ran != 0 {
 		t.Fatalf("a restart judged %d times without new evidence", ran)
+func TestAWordOrTwoIsNotAReading(t *testing.T) {
+	prior := &WorkShown{Title: "Xcode Gemma 工具调用错乱根因", Line: "错乱出在 Bedrock 端，报告待出。", Next: "写出根因报告"}
+	got, changed := applyShownVerdict(prior, shownVerdict{Title: "根因", Line: "矫正", Next: "ok"}, time.Now())
+	if changed || got.Title != prior.Title || got.Line != prior.Line || got.Next != prior.Next {
+		t.Fatalf("a degenerate answer replaced the row: %#v", got)
+	}
+	got, _ = applyShownVerdict(prior, shownVerdict{Title: "0G 旧版删除", Line: "旧版已删，测试站已过"}, time.Now())
+	if got.Title != "0G 旧版删除" || got.Line != "旧版已删，测试站已过" {
+		t.Fatalf("a short real answer was dropped: %#v", got)
 	}
 }

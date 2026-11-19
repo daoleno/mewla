@@ -48,6 +48,9 @@ func shownStatus(status WorkStatus) string {
 // Limits on what the judge writes, in characters: a row has one line for the
 // title and one for the state.
 const (
+	// shownMinRunes is the least a title, line or next step says: fewer
+	// characters are not a reading of the Work, whatever the language.
+	shownMinRunes   = 4
 	shownTitleMax   = 60
 	shownLineMax    = 110
 	shownNextMax    = 200
@@ -100,6 +103,10 @@ func applyShownVerdict(prior *WorkShown, verdict shownVerdict, now time.Time) (W
 	changed := false
 	set := func(field string, dst *string, value string, max int) {
 		value = clipShown(value, max)
+		// A word or two is not a reading ("矫正", 11-19 22:00): the last good text stays.
+		if field != "project" && utf8.RuneCountInString(value) < shownMinRunes {
+			value = ""
+		}
 		if value == "" || next.setByPerson(field) || *dst == value {
 			return
 		}
@@ -443,7 +450,7 @@ func workStanding(item Work, now time.Time) string {
 	if question := strings.TrimSpace(item.Question); question != "" {
 		fmt.Fprintf(&b, "Brain asks the person: %s\n", judgeClip(question, 600))
 	} else {
-		b.WriteString("Brain asks the person nothing: nothing is needed from them.\n")
+		b.WriteString("Brain asks the person nothing.\n")
 	}
 	if item.Wake != nil {
 		switch item.Wake.Kind {
