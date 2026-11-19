@@ -1075,7 +1075,11 @@ object PhoneController {
             return JSONObject().put("type", "result").put("id", id).put("ok", false).put("code", "screen_blank")
                 .put("error", notOpened(launched ?: "The app"))
         }
-        emptyNote(empty)?.let { result.put("note", it) }
+        if (!tree.optBoolean("display_on", true)) {
+            result.put("note", "The phone has switched the agent's screen off and Mewla could not switch it back on, so nothing on it can be read now. Read again in a moment.")
+        } else {
+            emptyNote(empty)?.let { result.put("note", it) }
+        }
         // With nothing to read the picture is the screen: send it now, not after another round trip.
         opaqueScreen = !screenOff && elements == 0
         if (screenOff) {

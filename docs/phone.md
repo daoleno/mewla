@@ -191,6 +191,9 @@ back on when it can.
   picture may be old). Opening an app on a display that drew before but is now
   black with no app on it makes the display again once; a display with any app
   on it is kept, since remaking it closes what is on it.
+- If the phone switches the hidden screen off (it then draws nothing and its
+  apps cannot be read), Mewla switches it back on before the agent's next
+  action, so the apps on it come back as they were instead of being closed.
 - Mewla's Accessibility service only acts while **Set up** runs, only inside
   Settings and the system's prompt, and never answers a system prompt for you.
 - On a network Android hasn't been told to allow, switching Wireless debugging on
