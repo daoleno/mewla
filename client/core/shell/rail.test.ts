@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RAIL, RAIL_PLACES, railEdge, railEnds, railLayout, railRoom } from "./rail";
+import { RAIL, RAIL_PLACES, railEdge, railEnds, railLayout, railPageOrder, railRoom } from "./rail";
 
 const places = RAIL_PLACES.map((place) => place.id);
 
@@ -71,5 +71,17 @@ describe("railLayout", () => {
   test("the cover screen on its side holds a Session's controls with the places in More only when it must", () => {
     const room = railRoom(466, railEnds({ width: 678, height: 466 }, { top: 0, bottom: 34 }, "right"));
     expect(railLayout(["back", "git", "mode", "menu"], places, room)).toEqual({ top: ["back", "git", "mode", "menu"], bottom: ["brain", "state", "search"], more: ["screen", "new"] });
+  });
+});
+
+describe("railPageOrder", () => {
+  test("Back, then the steady controls, then those that come and go: Stop appearing moves nothing under a finger", () => {
+    const back = [{ id: "back" }];
+    const idle = [{ id: "menu" }];
+    const running = [{ id: "stop", transient: true }, { id: "menu" }];
+    expect(railPageOrder(back, idle).map((c) => c.id)).toEqual(["back", "menu"]);
+    expect(railPageOrder(back, running).map((c) => c.id)).toEqual(["back", "menu", "stop"]);
+    const session = [{ id: "stop", transient: true }, { id: "git" }, { id: "mode" }, { id: "menu" }];
+    expect(railPageOrder([], session).map((c) => c.id)).toEqual(["git", "mode", "menu", "stop"]);
   });
 });

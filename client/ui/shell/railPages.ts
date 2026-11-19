@@ -13,6 +13,9 @@ export type RailAction = {
   disabled?: () => boolean;
   /** The button, for a menu that sits at it on wide. */
   ref?: (node: ViewRef) => void;
+  /** Comes and goes while the page is shown (Stop, a changed file's Refresh): it sits after the steady controls, so
+   * appearing never moves one under a finger (`railPageOrder`). */
+  transient?: boolean;
 };
 
 export type RailPressable = { id: string; label: string; icon?: IconName; onPress: () => void; disabled?: () => boolean; ref?: (node: ViewRef) => void };
