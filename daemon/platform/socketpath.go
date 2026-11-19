@@ -25,15 +25,18 @@ func socketPathLimit() int {
 // same path, listener or dialer, gets the same answer and no two paths share
 // one. It only computes the path: EnsureSocketDir makes the directory.
 func SocketPath(path string) string {
-	if absolute, err := filepath.Abs(path); err == nil {
-		path = absolute
+	// The decision and the short name use the absolute, cleaned path, so every
+	// spelling of one path agrees; a path that fits is returned as given.
+	absolute := path
+	if abs, err := filepath.Abs(path); err == nil {
+		absolute = abs
 	}
-	path = filepath.Clean(path)
-	if len(path) < socketPathLimit() {
+	absolute = filepath.Clean(absolute)
+	if len(absolute) < socketPathLimit() {
 		return path
 	}
-	sum := sha256.Sum256([]byte(path))
-	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	sum := sha256.Sum256([]byte(absolute))
+	stem := strings.TrimSuffix(filepath.Base(absolute), filepath.Ext(absolute))
 	if len(stem) > 16 {
 		stem = stem[:16]
 	}
