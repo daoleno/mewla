@@ -2,6 +2,7 @@ package com.daoleno.mewla.phone
 
 import com.daoleno.mewla.phone.helper.Clones
 import com.daoleno.mewla.phone.helper.DisplayHealth
+import com.daoleno.mewla.phone.helper.FrameCheck
 import com.daoleno.mewla.phone.helper.PhoneUser
 import com.daoleno.mewla.phone.helper.SettlePolicy
 import com.daoleno.mewla.phone.helper.TextCheck
@@ -122,6 +123,29 @@ class DisplayHealthTest {
     }
 
     @Test
+    fun aDisplayThatDrewBeforeButIsBlackWithNothingToReadIsMadeAgain() {
+        // 11-19: Chrome, X and 小红书 all "opened" on a display that had drawn earlier and now stayed black, 0 elements.
+        val nothing = DisplayHealth.showsNothing(elements = 0, dark = true)
+        assertTrue(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 0, showsNothing = nothing))
+        assertFalse(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 1, showsNothing = nothing))
+    }
+
+    @Test
+    fun aDarkDisplayWithSomethingToReadIsKeptSinceRemakingItDestroysWhatIsOnIt() {
+        // A dark video, splash or camera view in front of the launch still reads: what is on the display stays.
+        val dark = DisplayHealth.showsNothing(elements = 5, dark = true)
+        assertFalse(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 0, showsNothing = dark))
+    }
+
+    @Test
+    fun aBlackScreenWithNothingToReadIsNeverAnAnswerThatWorked() {
+        assertTrue(DisplayHealth.showsNothing(elements = 0, dark = true))
+        // An app that draws its own UI has no elements but a picture; a dark app with elements is a real screen.
+        assertFalse(DisplayHealth.showsNothing(elements = 0, dark = false))
+        assertFalse(DisplayHealth.showsNothing(elements = 3, dark = true))
+    }
+
+    @Test
     fun itIsOnlyTriedOnce() {
         assertFalse(DisplayHealth.needsRecreate(alive = false, drewSinceLaunch = false, everDrew = false, attempt = 1))
     }
@@ -213,5 +237,31 @@ class WireTest {
         }
         val failure = runCatching { Wire.read(DataInputStream(ByteArrayInputStream(bytes.toByteArray()))) }.exceptionOrNull()
         assertTrue(failure is IOException)
+    }
+}
+
+class FrameCheckTest {
+    private fun frame(width: Int, height: Int, pixelStride: Int = 4, rowPad: Int = 16, fill: (Int, Int) -> Int): java.nio.ByteBuffer {
+        val rowStride = width * pixelStride + rowPad
+        val buffer = java.nio.ByteBuffer.allocate(rowStride * height)
+        for (y in 0 until height) for (x in 0 until width) {
+            val rgb = fill(x, y)
+            val at = y * rowStride + x * pixelStride
+            buffer.put(at, (rgb shr 16).toByte()); buffer.put(at + 1, (rgb shr 8).toByte()); buffer.put(at + 2, rgb.toByte()); buffer.put(at + 3, 0xFF.toByte())
+        }
+        return buffer
+    }
+
+    @Test
+    fun aBlackFrameIsDarkAndAFewBrightPixelsDoNotChangeThat() {
+        assertTrue(FrameCheck.dark(frame(200, 400) { _, _ -> 0x000000 }, 200 * 4 + 16, 4, 200, 400))
+        assertTrue(FrameCheck.dark(frame(200, 400) { x, y -> if (x < 3 && y < 3) 0xFFFFFF else 0x050505 }, 200 * 4 + 16, 4, 200, 400))
+    }
+
+    @Test
+    fun anAppsPictureIsNotDarkEvenInADarkTheme() {
+        assertFalse(FrameCheck.dark(frame(200, 400) { _, _ -> 0xFFFFFF }, 200 * 4 + 16, 4, 200, 400))
+        // Dark theme: a near-black background with lines of text across it.
+        assertFalse(FrameCheck.dark(frame(200, 400) { _, y -> if (y % 40 < 6) 0xE0E0E0 else 0x121212 }, 200 * 4 + 16, 4, 200, 400))
     }
 }

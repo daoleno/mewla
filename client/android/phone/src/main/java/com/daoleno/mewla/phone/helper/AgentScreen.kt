@@ -182,6 +182,16 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         }
     }
 
+    /** Whether the display's newest frame is black, or it has none: it shows nothing ([FrameCheck]). */
+    fun dark(): Boolean {
+        drain()
+        return synchronized(lock) {
+            val image = held ?: return@synchronized true
+            val plane = image.planes[0]
+            FrameCheck.dark(plane.buffer.duplicate(), plane.rowStride, plane.pixelStride, width, height)
+        }
+    }
+
     /** A display nothing has drawn on yet is black: say so with a picture instead of none. */
     private fun blank(maxWidth: Int, quality: Int): ByteArray {
         val target = maxWidth.coerceIn(1, width)

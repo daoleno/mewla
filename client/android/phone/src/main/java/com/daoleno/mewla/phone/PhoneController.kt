@@ -20,6 +20,7 @@ import com.daoleno.mewla.phone.adb.AndroidAdb
 import com.daoleno.mewla.phone.adb.NsdAdbServiceFinder
 import com.daoleno.mewla.phone.adb.PortCache
 import com.daoleno.mewla.phone.helper.Clones
+import com.daoleno.mewla.phone.helper.DisplayHealth
 import com.daoleno.mewla.phone.helper.PhoneHelper
 import com.daoleno.mewla.phone.link.DeviceIdentity
 import com.daoleno.mewla.phone.link.DeviceKeys
@@ -49,6 +50,10 @@ object PhoneController {
     private const val REPLACE_EVERY_MS = 60_000L
     private const val ANNOUNCE_WAIT_MS = 150_000L
     private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
+    /** What a tool is told when the agent's screen shows nothing: the action did not work, and why it usually is. */
+    private const val BLANK_SCREEN = "The agent's screen on the phone is black and has nothing to read, so nothing here can be " +
+        "taken as done (after a launch: the app did not open there). Try once more; if it stays black, tell the person and " +
+        "ask them to unlock the phone and open Mewla once."
 
     private lateinit var app: Context
     private lateinit var prefs: PhonePrefs
@@ -1026,6 +1031,12 @@ object PhoneController {
         val screenOff = windows.length() == 0 && !interactive
         var elements = 0
         for (i in 0 until windows.length()) elements += windows.getJSONObject(i).optJSONArray("nodes")?.length() ?: 0
+        // A black display with nothing to read is not a screen the action worked on: say so, never "ok" (11-19).
+        if (!screenOff && DisplayHealth.showsNothing(elements, tree.optBoolean("dark", false))) {
+            opaqueScreen = false
+            return JSONObject().put("type", "result").put("id", id).put("ok", false).put("code", "screen_blank")
+                .put("error", BLANK_SCREEN)
+        }
         // With nothing to read the picture is the screen: send it now, not after another round trip.
         opaqueScreen = !screenOff && elements == 0
         if (screenOff) {
