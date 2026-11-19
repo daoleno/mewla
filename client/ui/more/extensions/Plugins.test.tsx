@@ -500,6 +500,32 @@ describe("Needs fixing reads at a glance (owner 11-14)", () => {
   });
 });
 
+describe("Slack sign-ins made before Mewla read files and DMs (11-19)", () => {
+  const slackCatalog = [{ id: "slack", name: "Slack", available: true, setup_url: "", description: "Channels" }];
+  const older = { id: "s1", integration: "slack", name: "FreeRide AI · paul", identity: "FreeRide AI · paul", enabled: true, status: "connected", history: [], access: { read: "allowed", write: "allowed", allowed: 6, tools: 6, read_consent: true } };
+
+  test("sit under Needs fixing; Reconnect asks Slack again, keeping changes the account allowed", async () => {
+    const c = computer({ name: "extensions" }, (request) => {
+      if (request.action === "list") return { catalog: slackCatalog, accounts: [older] };
+      if (request.action === "connect_start") return { flow: { id: "f1", integration: "slack", status: "waiting", authorization_url: "https://slack.com/oauth/v2/authorize?state=s", expires: expires() } };
+      return {};
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Needs fixing");
+    expect(app.texts()).toContain("Reconnect");
+    await app.press("id:connect-slack");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "connect_start"));
+    expect(c.asked.find((r) => r.action === "connect_start")).toMatchObject({ input: { integration: "slack", allow_writes: true } });
+  });
+
+  test("the account card says what Reconnect brings", async () => {
+    const c = computer({ name: "extensions-service", id: "slack" }, (request) => (request.action === "list" ? { catalog: slackCatalog, accounts: [older] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:recover-s1");
+    expect(app.texts()).toContain("Reconnect to read files and DMs");
+  });
+});
+
 describe("AWS accounts last as long as the organization allows (owner 11-17: AWS expiring daily)", () => {
   const awsCatalog = [{ id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud accounts" }];
   test("adding an account asks for the organization's access portal and shows the code to approve; aws login is the fallback", async () => {

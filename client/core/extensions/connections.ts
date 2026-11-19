@@ -138,6 +138,8 @@ export type ConnectionResponse = {
 export function accountStatus(account: PluginAccount): string {
   if (account.status === "disconnected") return "Disconnected";
   if (!account.enabled) return "Off";
+  // Signed in before Mewla read more of the service (Slack's files and DMs): works, but wants one Reconnect.
+  if (account.status === "connected" && account.access?.read_consent) return "Needs Reconnect";
   return {
     connected: "Connected",
     configured: "Not checked yet",
