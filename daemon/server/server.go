@@ -161,14 +161,14 @@ type Server struct {
 	providerConversationLoader func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
 	// brainTickObserve, when set by a test, hears what each Brain-scoped
 	// subscription tick did; see the brainTick constants.
-	brainTickObserve             func(brainTick)
-	promptPaneOverride           PanePrompts
-	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
-	rewindMessageOverride        func(workerID string, request watcher.MessageRewindRequest) error
-	rewound                      rewoundMessages
+	brainTickObserve           func(brainTick)
+	promptPaneOverride         PanePrompts
+	answerClaudeChoiceOverride func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
+	rewindMessageOverride      func(workerID string, request watcher.MessageRewindRequest) error
+	rewound                    rewoundMessages
 	// stopped holds the Stop lines of each Session's thread
 	// (stopped_commands.go).
-	stopped stoppedCommandsLog
+	stopped                      stoppedCommandsLog
 	sendInputOverride            func(workerID, text string) error
 	sendInputWithReceiptOverride func(workerID, text, receipt string) error
 	sendActionOverride           func(workerID, action string) error
@@ -3936,6 +3936,33 @@ func (s *Server) runBrainSessionReconcile(ctx context.Context) {
 				s.signalSystemStartupComplete = done
 			}
 			s.brain.ReconcileDelegatedSessions(allWorkerSessions)
+			s.reclaimFinishedCalendarSessions()
+		}
+	}
+}
+
+// calendarReclaimWindow bounds how far back finished scheduled-action runs
+// are looked at for a Session left alive.
+const calendarReclaimWindow = 7 * 24 * time.Hour
+
+// reclaimFinishedCalendarSessions removes the Worker Session of each finished
+// scheduled-action run once it sits idle at its prompt: the run's result is in
+// and nothing else uses that Session. A Session still at work is looked at
+// again on the next tick.
+func (s *Server) reclaimFinishedCalendarSessions() {
+	if s.calendar == nil || s.watcher == nil {
+		return
+	}
+	for _, sessionID := range s.calendar.FinishedRunSessions(time.Now().Add(-calendarReclaimWindow)) {
+		if s.watcher.GetWorker(sessionID) == nil {
+			continue
+		}
+		switch err := s.watcher.ReclaimIdleSession(sessionID); {
+		case err == nil:
+			log.Printf("calendar: reclaimed finished scheduled-action Session %s", sessionID)
+		case errors.Is(err, watcher.ErrSessionNotIdle), errors.Is(err, watcher.ErrNotOwnedDelegatedWorker):
+		default:
+			log.Printf("calendar: reclaim finished scheduled-action Session %s: %v", sessionID, err)
 		}
 	}
 }

@@ -53,10 +53,10 @@ func TestBDD_008_AlreadyReclaimedSessionCleanupIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestCompletedSessionCleanupRejectsNonterminalAndUncontractedTurns(t *testing.T) {
+// A nonterminal turn of a closed Work is reclaimed once idle (or already
+// gone): TestCompletedCleanupOfAnUnreportedTurnWaitsForIdle.
+func TestCompletedSessionCleanupRejectsUncontractedTurns(t *testing.T) {
 	for _, turn := range []TurnSnapshot{
-		{SessionID: "worker", TurnID: "turn", Status: TurnRunning, SignalProtocol: true},
-		{SessionID: "worker", TurnID: "turn", Status: TurnUnknown, SignalProtocol: true},
 		{SessionID: "worker", TurnID: "turn", Status: TurnDone},
 	} {
 		w := New(time.Second)

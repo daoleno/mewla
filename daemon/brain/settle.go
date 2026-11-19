@@ -13,6 +13,7 @@ import (
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
+	"github.com/google/uuid"
 )
 
 // A Work is open only while something real is pending. The split here is
@@ -35,8 +36,12 @@ const (
 	settleDebounce = 3 * time.Minute
 	// judgeTimeout bounds one model call.
 	judgeTimeout = 90 * time.Second
-	// judgeRetryAfter spaces repeat attempts after a failed model call.
+	// judgeRetryAfter is how long one failed model call stands for every
+	// Work before the judge is asked again.
 	judgeRetryAfter = 10 * time.Minute
+	// keptRejudgeAfter is the longest a keep verdict stands without a new
+	// judgment. It never closes the Work by itself.
+	keptRejudgeAfter = 24 * time.Hour
 	// orphanAdmissionAfter is how long a prompt that never became an Attempt
 	// and whose Session runs no turn keeps its fence on the Work.
 	orphanAdmissionAfter = 10 * time.Minute
@@ -66,7 +71,10 @@ type WorkJudge interface {
 type settler struct {
 	mu      sync.Mutex
 	running bool
-	failed  map[string]time.Time
+	// unavailableUntil and cause are the newest judge failure, which stands
+	// for every Work until the retry.
+	unavailableUntil time.Time
+	cause            string
 }
 
 // HostExecutor is the agent Brain's Host runs on.
@@ -151,7 +159,7 @@ func (s *Service) settleWorkLocked() error {
 }
 
 // settleCandidates releases dead prompt fences and lists the open Works
-// nothing live is pending on.
+// nothing live is pending on, leaving out those a keep verdict still holds.
 func (s *Service) settleCandidates() ([]settleItem, error) {
 	items, err := s.store.ListWork()
 	if err != nil {
@@ -174,8 +182,10 @@ func (s *Service) settleCandidates() ([]settleItem, error) {
 			log.Printf("brain release orphan admission %s: %v", item.ID, err)
 			continue
 		}
-		if settleCandidate(item, st, now) && !s.screenOpenOn(item) {
-			candidates = append(candidates, settleItem{work: item, revision: st.Revision})
+		if settleCandidate(item, st, now) && !s.screenOpenOn(item) && !s.keptStillHolds(item, st, now) {
+			// settleCandidate admits an open review only once Brain's handling
+			// of it ended: Brain has read that result.
+			candidates = append(candidates, settleItem{work: item, revision: st.Revision, readResult: st.Review != nil})
 		}
 	}
 	return candidates, nil
@@ -184,6 +194,46 @@ func (s *Service) settleCandidates() ([]settleItem, error) {
 type settleItem struct {
 	work     Work
 	revision uint64 // lifecycle revision the judgment answers
+	// readResult: Brain's handling of a delivered result ended and nothing is
+	// pending, which is what AGENTS.md promises closes the Work.
+	readResult bool
+}
+
+// keptStillHolds says whether the Work's keep verdict still stands: same
+// lifecycle revision, judged less than a day ago, and nothing has happened on
+// the Work since (no new event, no Brain message naming it). A kept Work is
+// never closed by time; it is only judged again.
+func (s *Service) keptStillHolds(item Work, st *lifecycle.State, now time.Time) bool {
+	kept := item.Kept
+	if kept == nil || kept.Revision != st.Revision || now.Sub(kept.At) >= keptRejudgeAfter {
+		return false
+	}
+	if events, err := s.store.ListWorkEvents(item.ID); err == nil {
+		for _, event := range events {
+			if event.CreatedAt.After(kept.At) && event.Kind != "brain.settle_kept" && !strings.HasPrefix(event.Kind, "progress.") {
+				return false
+			}
+		}
+	}
+	if thread := strings.TrimSpace(item.SourceThreadID); thread != "" {
+		if rows, err := s.store.ThreadTimeline(thread, 40); err == nil {
+			for _, row := range rows {
+				if row.Kind == "assistant_message" && row.CreatedAt.After(kept.At) && mentionsWork(row.Body, item) {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+// mentionsWork is whether Brain's message names the Work by id or title.
+func mentionsWork(body string, item Work) bool {
+	if strings.Contains(body, item.ID) {
+		return true
+	}
+	title := strings.TrimSpace(item.Title)
+	return len([]rune(title)) >= 6 && strings.Contains(body, title)
 }
 
 func (s *Service) judgeCandidates(candidates []settleItem) {
@@ -199,32 +249,25 @@ func (s *Service) judgeCandidates(candidates []settleItem) {
 
 func (s *Service) judgeOne(candidate settleItem) {
 	item := candidate.work
-	keptKey := fmt.Sprintf("brain:settle:kept:%d", candidate.revision)
-	if events, err := s.store.ListWorkEvents(item.ID); err == nil {
-		for _, event := range events {
-			if event.DedupeKey == keptKey {
-				return // this state was already judged to stay open
-			}
-		}
-	}
 	s.settle.mu.Lock()
-	if at, failed := s.settle.failed[item.ID]; failed && s.nowUTC().Sub(at) < judgeRetryAfter {
-		s.settle.mu.Unlock()
+	unavailableUntil, cause := s.settle.unavailableUntil, s.settle.cause
+	s.settle.mu.Unlock()
+	if s.nowUTC().Before(unavailableUntil) {
+		// One failure stands for every Work until the retry: the same route
+		// would refuse each of them again.
+		s.settleWithoutJudge(candidate, cause)
 		return
 	}
-	s.settle.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), judgeTimeout)
 	defer cancel()
 	verdict, err := s.judge.Judge(ctx, s.settleBrief(item))
 	if err != nil {
-		log.Printf("brain Work judgment %s: %v", item.ID, err)
+		log.Printf("brain closure judge could not answer (Work %s; next try in %s): %v", item.ID, judgeRetryAfter, err)
 		s.settle.mu.Lock()
-		if s.settle.failed == nil {
-			s.settle.failed = map[string]time.Time{}
-		}
-		s.settle.failed[item.ID] = s.nowUTC()
+		s.settle.unavailableUntil, s.settle.cause = s.nowUTC().Add(judgeRetryAfter), err.Error()
 		s.settle.mu.Unlock()
+		s.settleWithoutJudge(candidate, err.Error())
 		return
 	}
 	reason := strings.TrimSpace(verdict.Reason)
@@ -237,26 +280,37 @@ func (s *Service) judgeOne(candidate settleItem) {
 		if verdict.Outcome == VerdictCancelled {
 			status = WorkCancelled
 		}
-		// The revision check discards the verdict if Brain or the user acted
-		// while the model was thinking.
-		if _, err := s.CloseWork(WorkCloseRequest{
-			WorkID: item.ID, ExpectedRevision: item.Revision, Status: status,
-			Actor: lifecycle.ActorRuntime, Reason: reason,
-		}); err != nil && !errors.Is(err, ErrWorkCleanupPending) {
-			// A pending Session cleanup is retried by the usual reconcile; the
-			// decision itself is saved.
-			log.Printf("brain apply Work judgment %s: %v", item.ID, err)
-		}
+		s.closeSettled(item, status, reason)
 	case VerdictKeep:
-		if _, err := s.store.appendWorkAuditEvent(WorkEvent{
-			WorkID: item.ID, Kind: "brain.settle_kept", DedupeKey: keptKey,
-			PayloadRef: "work:" + item.ID, SourceName: lifecycle.ActorRuntime, Summary: reason,
-			CreatedAt: s.nowUTC(),
-		}); err != nil {
+		if err := s.store.recordSettleKept(item.ID, candidate.revision, reason, s.nowUTC()); err != nil {
 			log.Printf("brain record kept Work %s: %v", item.ID, err)
 		}
 	default:
 		log.Printf("brain Work judgment %s: unknown outcome %q", item.ID, verdict.Outcome)
+	}
+}
+
+// settleWithoutJudge keeps AGENTS.md's promise when the judge cannot answer:
+// a result Brain read, with no Worker turn, wait, question or prompt left,
+// is accepted. Any other Work, and a Work the judge kept, stays as it is and
+// shows in Brain's stale list.
+func (s *Service) settleWithoutJudge(candidate settleItem, cause string) {
+	if !candidate.readResult || candidate.work.Kept != nil {
+		return
+	}
+	s.closeSettled(candidate.work, WorkDone, "Brain read the result and left nothing pending; the closure judge could not answer ("+judgeClip(cause, 300)+").")
+}
+
+// closeSettled applies a runtime settlement. The revision check discards it
+// if Brain or the user acted meanwhile; a follow-up or work update reopens it.
+func (s *Service) closeSettled(item Work, status WorkStatus, reason string) {
+	if _, err := s.CloseWork(WorkCloseRequest{
+		WorkID: item.ID, ExpectedRevision: item.Revision, Status: status,
+		Actor: lifecycle.ActorRuntime, Reason: reason,
+	}); err != nil && !errors.Is(err, ErrWorkCleanupPending) {
+		// A pending Session cleanup is retried by the usual reconcile; the
+		// decision itself is saved.
+		log.Printf("brain apply Work settlement %s: %v", item.ID, err)
 	}
 }
 
@@ -426,4 +480,41 @@ func (s *Store) ReopenSettledWork(workID, reason string) (bool, error) {
 	s.mu.Unlock()
 	s.broadcastWorkChange(workID)
 	return true, nil
+}
+
+// recordSettleKept saves a keep verdict for the lifecycle revision judged: the
+// audit event and the Work's kept state, in one commit. A revision that moved
+// meanwhile records nothing; the next pass judges the new state.
+func (s *Store) recordSettleKept(workID string, revision uint64, reason string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, err := s.fsmState(workID)
+	if err != nil || st == nil || st.Revision != revision || st.Status.Terminal() {
+		return err
+	}
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return err
+	}
+	index := workIndex(database.BrainWork, workID)
+	if index < 0 {
+		return ErrWorkNotFound
+	}
+	id := uuid.NewString()
+	if _, err := appendWorkEventLocked(&database, index, WorkEvent{
+		ID: id, WorkID: workID, Kind: "brain.settle_kept",
+		DedupeKey:  fmt.Sprintf("brain:settle:kept:%d:%s", revision, id),
+		PayloadRef: "work:" + workID, SourceName: lifecycle.ActorRuntime, Summary: reason, CreatedAt: at,
+	}, false); err != nil {
+		return err
+	}
+	database.BrainWork[index].Kept = &WorkKept{Reason: reason, Revision: revision, At: at}
+	if err := s.fsmSyncWorkLocked(&database, workID, at); err != nil {
+		return err
+	}
+	if err := s.persistPresentationLocked(database); err != nil {
+		return err
+	}
+	s.broadcastWorkChange(workID)
+	return nil
 }

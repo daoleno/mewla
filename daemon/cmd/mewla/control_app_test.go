@@ -46,7 +46,9 @@ type fakeControlWatcher struct {
 	mutationChecks    []string
 	budgetedSubmitErr error
 	// reclaimed are the Sessions Mewla closed after their Work was completed.
-	reclaimed         map[string]bool
+	reclaimed map[string]bool
+	// idle are the Sessions that sit idle at their prompt.
+	idle              map[string]bool
 	budgetedCalls     int
 	delegatedResultID string
 }
@@ -192,6 +194,10 @@ func (w *fakeControlWatcher) GetWorker(id string) *classifier.Worker {
 	}
 	cp := *worker
 	return &cp
+}
+
+func (w *fakeControlWatcher) SessionIdleAtPrompt(sessionID string) bool {
+	return w.idle[sessionID]
 }
 
 func (w *fakeControlWatcher) HasSession(target string) bool {
@@ -1765,6 +1771,22 @@ func TestControlAppWorkerCloseRequiresForceForRunningDelegatedWorker(t *testing.
 	forced := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mewla-worker-worker:@1", Force: true})
 	if !forced.OK || len(fw.killed) != 1 {
 		t.Fatalf("forced close response = %#v killed=%#v", forced, fw.killed)
+	}
+}
+
+// Eight finished scheduled-action Sessions (11-19) showed "unknown" (their
+// lease lapsed) and `worker close` refused each with
+// worker_running_requires_force although each sat idle at its prompt.
+func TestControlAppWorkerCloseOfAnIdleSessionNeedsNoForce(t *testing.T) {
+	for _, state := range []classifier.WorkerState{classifier.StateUnknown, classifier.StateRunning} {
+		fw := newFakeControlWatcher()
+		fw.workers["mh-idle"] = &classifier.Worker{ID: "mh-idle", Name: "claude", State: state, Delegated: true}
+		fw.idle = map[string]bool{"mh-idle": true}
+		app := &controlApp{watcher: fw}
+		resp := app.HandleControlRequest(control.Request{Type: "worker_close", WorkerID: "mh-idle"})
+		if !resp.OK || len(fw.killed) != 1 {
+			t.Fatalf("%s idle Session close = %#v killed=%#v", state, resp, fw.killed)
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -95,19 +96,6 @@ func TestStandingWorkIsNeverJudged(t *testing.T) {
 	runSettle(t, service)
 	if len(judge.briefs) != 1 {
 		t.Fatalf("an ordinary Work was not judged: %d", len(judge.briefs))
-	}
-}
-
-func TestJudgeFailureLeavesTheWorkAlone(t *testing.T) {
-	judge := &fakeJudge{err: errors.New("model unavailable")}
-	store, service, item := endedHandlingFixture(t, judge)
-	runSettle(t, service)
-	runSettle(t, service)
-	if got, _ := store.Work(item.ID); got.Status == WorkDone || got.Status == WorkCancelled || closedByRuntime(t, store, item.ID) {
-		t.Fatalf("a failed judgment changed the Work: %+v", got)
-	}
-	if len(judge.briefs) != 1 {
-		t.Fatalf("a failed judgment was retried at once (%d calls)", len(judge.briefs))
 	}
 }
 
@@ -301,5 +289,158 @@ func TestAnOpenPageOnAWorkersDisplayKeepsTheWorkFromTheJudge(t *testing.T) {
 	runSettle(t, service)
 	if got, _ := store.Work(item.ID); got.Status != WorkDone {
 		t.Fatalf("with no page open the done verdict did not apply: %+v", got)
+	}
+}
+
+func TestJudgeFailureClosesAResultBrainRead(t *testing.T) {
+	// The judge cannot answer (an upstream 403, a kill, a rate limit): the
+	// promise in AGENTS.md holds instead. Brain read the result and left no
+	// turn, wait, question or prompt, so the Work closes, reopenably.
+	judge := &fakeJudge{err: errors.New("headless judge: the model route http://127.0.0.1:3427 answered HTTP 403: Insufficient account balance")}
+	store, service, item := endedHandlingFixture(t, judge)
+	runSettle(t, service)
+	got, err := store.Work(item.ID)
+	if err != nil || got.Status != WorkDone || !closedByRuntime(t, store, item.ID) {
+		t.Fatalf("a read result stayed open when the judge failed: %+v err=%v", got, err)
+	}
+	reason := ""
+	for _, event := range mustWorkEvents(t, store, item.ID) {
+		if event.Kind == "brain.work_closed" {
+			reason = event.Summary
+		}
+	}
+	if !strings.Contains(reason, "could not answer") || !strings.Contains(reason, "403") {
+		t.Fatalf("the close does not say why the judge was not used: %q", reason)
+	}
+	if reopened, err := store.ReopenSettledWork(item.ID, "Brain updated the Work."); err != nil || !reopened {
+		t.Fatalf("a fallback close is not undoable: %v %v", reopened, err)
+	}
+}
+
+func TestOneJudgeFailureStandsForEveryWorkUntilTheRetry(t *testing.T) {
+	judge := &fakeJudge{err: errors.New("signal: killed")}
+	store, service, item := endedHandlingFixture(t, judge)
+	runSettle(t, service)
+	if len(judge.briefs) != 1 {
+		t.Fatalf("judge calls = %d, want 1", len(judge.briefs))
+	}
+	if reopened, err := store.ReopenSettledWork(item.ID, "Brain updated the Work."); err != nil || !reopened {
+		t.Fatalf("reopen: %v %v", reopened, err)
+	}
+	later := service.nowUTC().Add(settleDebounce + time.Minute)
+	service.now = func() time.Time { return later }
+	runSettle(t, service)
+	if len(judge.briefs) != 1 {
+		t.Fatalf("a judge that just failed was asked again at once (%d calls)", len(judge.briefs))
+	}
+}
+
+func TestJudgeFailureLeavesAWorkWithoutAReadResultAlone(t *testing.T) {
+	judge := &fakeJudge{err: errors.New("model unavailable")}
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.CreateWork(Work{Title: "plan", Objective: "plan the release"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store, nil, nil)
+	service.SetWorkJudge(judge)
+	later := time.Now().Add(settleDebounce + time.Minute)
+	service.now = func() time.Time { return later }
+	runSettle(t, service)
+	if got, _ := store.Work(item.ID); got.Status == WorkDone || got.Status == WorkCancelled {
+		t.Fatalf("a Work Brain never read a result of was closed: %+v", got)
+	}
+}
+
+func TestKeepVerdictIsAWaitingStateWithTheJudgesReason(t *testing.T) {
+	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictKeep, Reason: "owner decision on the rate-limit options"}}
+	store, service, item := endedHandlingFixture(t, judge)
+	runSettle(t, service)
+	got, err := store.Work(item.ID)
+	if err != nil || got.Status != WorkWaiting || got.WaitFor != "owner decision on the rate-limit options" ||
+		got.Kept == nil || got.Kept.Reason != got.WaitFor {
+		t.Fatalf("kept Work = %+v err=%v, want waiting on the judge's words", got, err)
+	}
+	stale := service.staleList(nil)
+	if stale == nil || len(stale.Work) != 1 || stale.Work[0].ID != item.ID || stale.Work[0].Stale != StaleKept ||
+		stale.Work[0].WaitFor != "owner decision on the rate-limit options" {
+		t.Fatalf("stale list = %+v, want the kept Work", stale)
+	}
+}
+
+func TestKeptWorkIsJudgedAgainOnANewEventAndDaily(t *testing.T) {
+	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictKeep, Reason: "A reply is still expected."}}
+	store, service, item := endedHandlingFixture(t, judge)
+	runSettle(t, service)
+	runSettle(t, service)
+	if len(judge.briefs) != 1 {
+		t.Fatalf("an unchanged kept Work was judged %d times", len(judge.briefs))
+	}
+	// Something happens on the Work: the Session it ran in went away.
+	if _, err := store.appendWorkAuditEvent(WorkEvent{
+		WorkID: item.ID, Kind: "session.uncertain", DedupeKey: "test:session-ended", PayloadRef: "work:" + item.ID,
+		SourceName: "worker", Summary: "Delegated Session ended", CreatedAt: service.nowUTC().Add(time.Second),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	later := service.nowUTC().Add(2 * time.Second)
+	service.now = func() time.Time { return later }
+	runSettle(t, service)
+	if len(judge.briefs) != 2 {
+		t.Fatalf("a new event did not bring a new judgment (%d calls)", len(judge.briefs))
+	}
+	runSettle(t, service)
+	if len(judge.briefs) != 2 {
+		t.Fatalf("a kept Work was judged again with nothing new (%d calls)", len(judge.briefs))
+	}
+	nextDay := later.Add(keptRejudgeAfter + time.Minute)
+	service.now = func() time.Time { return nextDay }
+	runSettle(t, service)
+	if len(judge.briefs) != 3 {
+		t.Fatalf("a kept Work was not judged again after a day (%d calls)", len(judge.briefs))
+	}
+	if got, _ := store.Work(item.ID); got.Status == WorkDone || got.Status == WorkCancelled {
+		t.Fatalf("time closed a kept Work: %+v", got)
+	}
+}
+
+func TestKeptWorkIsNeverClosedByAJudgeFailure(t *testing.T) {
+	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictKeep, Reason: "owner decision pending"}}
+	store, service, item := endedHandlingFixture(t, judge)
+	runSettle(t, service)
+	judge.verdict, judge.err = JudgeVerdict{}, errors.New("headless judge timed out after 1m30s")
+	nextDay := service.nowUTC().Add(keptRejudgeAfter + time.Minute)
+	service.now = func() time.Time { return nextDay }
+	runSettle(t, service)
+	if len(judge.briefs) != 2 {
+		t.Fatalf("the kept Work was not judged again after a day (%d calls)", len(judge.briefs))
+	}
+	if got, _ := store.Work(item.ID); got.Status != WorkWaiting || closedByRuntime(t, store, item.ID) {
+		t.Fatalf("a judge failure closed a kept Work: %+v", got)
+	}
+}
+
+func TestJudgeRunErrorNamesTheRouteAndTheUpstreamAnswer(t *testing.T) {
+	dir := t.TempDir()
+	settings := dir + "/settings.json"
+	if err := os.WriteFile(settings, []byte(`{"env":{"ANTHROPIC_BASE_URL":"http://127.0.0.1:3427"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	route := judgeRoute(settings)
+	err := judgeRunError(context.Background(), errors.New("exit status 1"),
+		"Failed to authenticate. API Error: 403 Insufficient account balance", route)
+	if !strings.Contains(err.Error(), "http://127.0.0.1:3427") || !strings.Contains(err.Error(), "HTTP 403: Insufficient account balance") {
+		t.Fatalf("judge error = %v", err)
+	}
+	if judgeRoute(dir+"/missing.json") != "Claude Code's own sign-in" {
+		t.Fatal("a missing settings file should name Claude Code's own sign-in")
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	if err := judgeRunError(ctx, errors.New("signal: killed"), "", route); !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("a timeout reads %v", err)
 	}
 }

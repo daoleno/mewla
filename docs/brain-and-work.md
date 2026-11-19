@@ -354,8 +354,11 @@ mewla worker close -id <session-id>
 `--work-id` delivers the follow-up as part of that Work. If a send's outcome is
 unknown, the input may still have arrived; `mewla worker receipt` checks
 without sending it again. Closing a Worker, or accepting its Work, stops the
-processes that Worker started. Your own Sessions and Brain are never cleaned
-up this way.
+processes that Worker started. A closed Work's Worker, and a finished
+scheduled run's Session, are closed for you once they sit idle at their
+prompt, even when the Worker never reported done. `worker close` needs
+`--force` only for a Session that is still at work. Your own Sessions and
+Brain are never cleaned up this way.
 
 ## Brain's workspace
 

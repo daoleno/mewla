@@ -135,7 +135,12 @@ type Service struct {
 	workTranscriptMu        sync.Mutex
 	workTranscriptWatch     map[string]workTranscriptWatch
 
-	reconcileMu      sync.Mutex
+	reconcileMu sync.Mutex
+	// reclaimRefused holds the completed Sessions this process was refused
+	// tearing down (session + turn), so the periodic pass reports each once.
+	reclaimMu        sync.Mutex
+	reclaimRefused   map[string]bool
+	reclaimLastErr   string
 	hostActivationMu sync.Mutex
 	// hostLaunching holds the Sessions this daemon launched whose first
 	// activation has not been accepted. Guarded by hostActivationMu.
@@ -326,6 +331,18 @@ func (s *Service) ReconcileCompletedSessions() error {
 }
 
 func (s *Service) reconcileCompletedSessions(workID string) error {
+	return s.reconcileCompletedSessionsWith(workID, false)
+}
+
+// reconcileCompletedSessionsPeriodic is the supervision pass's cleanup. A
+// Session it was refused once (not Mewla's, or another process now) is not
+// asked again by this process, so the refusal is reported once, not every
+// pass; Work closes and startup still try it and report it.
+func (s *Service) reconcileCompletedSessionsPeriodic() error {
+	return s.reconcileCompletedSessionsWith("", true)
+}
+
+func (s *Service) reconcileCompletedSessionsWith(workID string, periodic bool) error {
 	if s == nil || s.store == nil || s.watcher == nil {
 		return nil
 	}
@@ -336,12 +353,28 @@ func (s *Service) reconcileCompletedSessions(workID string) error {
 	var result error
 	var reclaimed []watcher.TurnSnapshot
 	for _, turn := range turns {
+		key := turn.SessionID + "\x00" + turn.TurnID
+		s.reclaimMu.Lock()
+		refused := s.reclaimRefused[key]
+		s.reclaimMu.Unlock()
+		if periodic && refused {
+			continue
+		}
 		err := s.teardownSessionWith(turn.SessionID, func(id string) error {
 			return s.watcher.KillCompletedSession(id, turn.TurnID)
 		})
 		if errors.Is(err, watcher.ErrUnownedSession) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) ||
 			errors.Is(err, watcher.ErrCompletedSessionGenerationChanged) {
 			err = &cleanupRefusal{sessionID: turn.SessionID, err: err}
+			s.reclaimMu.Lock()
+			if s.reclaimRefused == nil {
+				s.reclaimRefused = map[string]bool{}
+			}
+			s.reclaimRefused[key] = true
+			s.reclaimMu.Unlock()
+		}
+		if errors.Is(err, watcher.ErrSessionNotIdle) {
+			continue // the Worker is still at work; a later pass looks again
 		}
 		if err == nil {
 			reclaimed = append(reclaimed, turn)
@@ -894,6 +927,7 @@ func (s *Service) Context() (BrainContext, error) {
 		HostExecutor: snapshot.HostExecutor,
 		Executors:    snapshot.Executors,
 		Workers:      snapshot.Workers,
+		Stale:        s.staleList(snapshot.Workers),
 		GeneratedAt:  s.nowUTC(),
 	}, nil
 }
@@ -2253,6 +2287,18 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 	// create Sessions or infer a next delegated task.
 	if sweepErr := s.store.SweepLifecycle(); sweepErr != nil {
 		log.Printf("brain Work supervisor sweep failed: %v", sweepErr)
+	}
+	// A Session can go idle long after its Work closed (its Worker kept going,
+	// or stopped without a report): no Work change follows, so each pass
+	// looks for closed Work whose Session is left.
+	if err := s.reconcileCompletedSessionsPeriodic(); err != nil {
+		s.reclaimMu.Lock()
+		repeat := err.Error() == s.reclaimLastErr
+		s.reclaimLastErr = err.Error()
+		s.reclaimMu.Unlock()
+		if !repeat {
+			log.Printf("brain completed Session cleanup: %v", err)
+		}
 	}
 	_, _ = s.ReconcileHostLane()
 }

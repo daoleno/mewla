@@ -167,9 +167,21 @@ type Work struct {
 	Progress *WorkProgress `json:"progress,omitempty"`
 	// Shown is how the Work reads in the person's list (shown.go). It is
 	// presentation state: setting it never moves Revision.
-	Shown     *WorkShown `json:"shown,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	Shown *WorkShown `json:"shown,omitempty"`
+	// Kept is the closure judge's newest keep verdict (settle.go). While the
+	// Work's lifecycle revision is the one judged, it waits on what the judge
+	// named; any lifecycle change retires it.
+	Kept      *WorkKept `json:"kept,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// WorkKept is a keep verdict: what the Work still waits on, in the judge's
+// words, for the lifecycle revision it judged.
+type WorkKept struct {
+	Reason   string    `json:"reason"`
+	Revision uint64    `json:"revision"`
+	At       time.Time `json:"at"`
 }
 
 // WorkEvent is an append-only fact and at most a one-shot wake/delivery
@@ -443,6 +455,7 @@ type workRecord struct {
 	SnoozedUntil *time.Time    `json:"snoozed_until,omitempty"`
 	Progress     *WorkProgress `json:"progress,omitempty"`
 	Shown        *WorkShown    `json:"shown,omitempty"`
+	Kept         *WorkKept     `json:"kept,omitempty"`
 	CreatedAt    time.Time     `json:"created_at"`
 	UpdatedAt    time.Time     `json:"updated_at"`
 }
@@ -485,11 +498,20 @@ func worksFromRecords(records []workRecord) []Work {
 			SnoozedUntil:     cloneTimePointer(record.SnoozedUntil),
 			Progress:         cloneWorkProgress(record.Progress),
 			Shown:            cloneWorkShown(record.Shown),
+			Kept:             cloneWorkKept(record.Kept),
 			CreatedAt:        record.CreatedAt,
 			UpdatedAt:        record.UpdatedAt,
 		})
 	}
 	return out
+}
+
+func cloneWorkKept(kept *WorkKept) *WorkKept {
+	if kept == nil {
+		return nil
+	}
+	copied := *kept
+	return &copied
 }
 
 func cloneWorkWake(wake *WorkWake) *WorkWake {
@@ -1162,6 +1184,7 @@ func cloneWorks(items []Work) []Work {
 		out[index].SnoozedUntil = cloneTimePointer(items[index].SnoozedUntil)
 		out[index].Progress = cloneWorkProgress(items[index].Progress)
 		out[index].Shown = cloneWorkShown(items[index].Shown)
+		out[index].Kept = cloneWorkKept(items[index].Kept)
 	}
 	return out
 }
