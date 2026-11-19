@@ -45,3 +45,18 @@ func TestControlBrainWorkEventActionableDeliversOrRefuses(t *testing.T) {
 		t.Fatalf("history event: %+v", resp)
 	}
 }
+
+// mewla brain context shows Watch's last 24 hours: the daemon's own Service
+// answers it, not a fresh one that was never told (11-20 01:00: watch_judge
+// was missing on the live daemon).
+func TestControlBrainContextShowsWatchsDay(t *testing.T) {
+	store := newControlBrainStore(t)
+	service := brain.NewService(store, nil, nil)
+	service.SetWatchJudgeDay(func() brain.WatchJudgeDay { return brain.WatchJudgeDay{Runs: 61, Signals: 900, USD: 7.5} })
+	app := &controlApp{brainStore: store, brainService: service}
+	resp := app.HandleControlRequest(control.Request{Type: "brain_context"})
+	context, ok := resp.Context.(brain.BrainContext)
+	if !resp.OK || !ok || context.WatchJudge == nil || context.WatchJudge.Runs != 61 {
+		t.Fatalf("brain context = %#v (%#v)", resp, context.WatchJudge)
+	}
+}
