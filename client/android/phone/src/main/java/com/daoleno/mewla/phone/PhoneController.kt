@@ -982,9 +982,9 @@ object PhoneController {
     }
 
     private fun typedNote(method: String, verified: Boolean): String? = when {
-        method == "set_text" && verified -> null
-        method == "set_text" -> "Typed by setting the field's text; it could not be read back to check."
-        else -> "The field did not take set-text, so the text went in by $method" + if (verified) "." else "; it could not be read back to check."
+        method == "typed" && verified -> null
+        method == "typed" -> "Typed at the cursor; it could not be read back to check."
+        else -> "The field did not take typed text, so its text was set whole" + if (verified) "." else "; it could not be read back to check."
     }
 
     private fun handoff(id: String, request: JSONObject, helper: HelperClient, args: JSONObject, wantImage: Boolean): JSONObject {
