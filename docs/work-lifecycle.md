@@ -423,7 +423,8 @@ reopens it. A Work with no read result, or one the judge kept, stays as it
 is. One failure stands for every Work for 10 minutes, so a route that refuses
 is asked once, not once per Work. The log line names the route the judge's
 headless Claude used (the base URL from the user's Claude settings, which is
-Mewla's gateway when the Claude takeover is on) and what that route answered,
+Mewla's gateway when the Claude takeover is on, else the daemon's environment)
+and what that route answered,
 e.g. `the model route http://127.0.0.1:3427 … answered HTTP 403: Insufficient
 account balance`. Claude Code prints any upstream 403 as "Failed to
 authenticate", whatever the upstream meant.
