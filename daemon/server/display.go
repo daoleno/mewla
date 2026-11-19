@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
@@ -247,7 +248,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	}()
 	path := clientaddr.Path(r)
 	signOffer, verifyAnswer := s.screenBinding(device.ID)
-	iceServers, relayMaxKbps := s.screenICE(ctx)
+	iceServers, viewerICE, relayMaxKbps := s.screenICE(ctx)
 	cast, err = screencast.Start(ctx, screencast.Config{
 		Source: displaySource{view},
 		Input: func(msg []byte) error {
@@ -262,12 +263,13 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 				screencast.Stats
 			}{"stats", path, st})
 		},
-		NewEncoder:   castEncoder(),
-		SignOffer:    signOffer,
-		VerifyAnswer: verifyAnswer,
-		LoopbackOnly: s.screenLoopbackOnly,
-		ICEServers:   iceServers,
-		RelayMaxKbps: relayMaxKbps,
+		NewEncoder:       castEncoder(),
+		SignOffer:        signOffer,
+		VerifyAnswer:     verifyAnswer,
+		LoopbackOnly:     s.screenLoopbackOnly,
+		ICEServers:       iceServers,
+		ViewerICEServers: viewerICE,
+		RelayMaxKbps:     relayMaxKbps,
 	})
 	close(castReady)
 	if err != nil {
@@ -320,19 +322,36 @@ func (s *Server) screenBinding(deviceID string) (func([]string) (any, error), fu
 	return sign, verify
 }
 
-// screenICE is the relay's TURN (and STUN) for a viewer with no direct path
-// (mobile data), when this computer is registered with a relay that has it.
-func (s *Server) screenICE(ctx context.Context) (servers []webrtc.ICEServer, relayMaxKbps int) {
+// screenICE gives a view's two peers, the computer's and the viewer's, a
+// fresh TURN credential each from the relay this computer is registered with
+// (none: direct paths only), and the most the relay carries for one
+// allocation. A credential holds a few allocations and a peer takes one per
+// TURN address, so no credential is shared between peers or views.
+func (s *Server) screenICE(ctx context.Context) (computer, viewer []webrtc.ICEServer, relayMaxKbps int) {
 	if s.screenLoopbackOnly {
-		return nil, 0
+		return nil, nil, 0
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	creds, err := link.TURN(ctx)
-	if err != nil {
-		return nil, 0
+	var both [2]link.TURNCredentials
+	var errs [2]error
+	var wg sync.WaitGroup
+	for i := range both {
+		wg.Go(func() { both[i], errs[i] = link.TURN(ctx) })
 	}
-	return screencast.ICEServersFor(creds.URLs, creds.Username, creds.Password), creds.MaxKbps
+	wg.Wait()
+	servers := func(i int) []webrtc.ICEServer {
+		if errs[i] != nil {
+			return nil
+		}
+		relayMaxKbps = both[i].MaxKbps
+		return screencast.ICEServersFor(both[i].URLs, both[i].Username, both[i].Password)
+	}
+	computer, viewer = servers(0), servers(1)
+	if viewer == nil {
+		viewer = []webrtc.ICEServer{} // not the computer's credential
+	}
+	return computer, viewer, relayMaxKbps
 }
 
 // keepTrusted ends a view (cancel) within 2 s of its device being revoked,

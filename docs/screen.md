@@ -152,9 +152,9 @@ computer checks against the device that opened the view. The encryption is held
 to those two certificates, so nothing in between (the relay, a network) can
 read the picture or your input, or take either side's place.
 
-**The relay's TURN.** A computer asks its relay for TURN credentials when an
-allowed device opens a view, and hands them to that view; each lasts 12 hours,
-and the computer asks again once half of that has passed or the relay restarted.
+**The relay's TURN.** When an allowed device opens a view, the computer asks
+its relay for two fresh TURN credentials, one for its own side and one it hands
+that view; each lasts 12 hours, and no two views or sides share one.
 With one, the relay relays UDP only, to public addresses and to the other side's
 allocation on the same relay: never to the relay's own other ports, private or
 shared networks such as a tailnet's, or cloud metadata. It holds

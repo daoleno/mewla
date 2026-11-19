@@ -35,6 +35,7 @@ import (
 	"github.com/pion/transport/v5"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
+	"golang.org/x/net/proxy"
 )
 
 // Config is what a session needs from its caller.
@@ -55,6 +56,10 @@ type Config struct {
 	LoopbackOnly bool
 	// ICEServers are STUN and TURN servers to gather through, when any.
 	ICEServers []webrtc.ICEServer
+	// ViewerICEServers are the servers the offer gives the viewer (nil:
+	// ICEServers): a TURN credential of its own, since one holds only a few
+	// allocations and each peer takes one per TURN address.
+	ViewerICEServers []webrtc.ICEServer
 	// RelayMaxKbps is the most the relay's TURN carries for one allocation
 	// (0: no cap): while the picture goes through it, the video stays under.
 	RelayMaxKbps int
@@ -68,6 +73,9 @@ type Config struct {
 
 	// net replaces the computer's network (tests: a virtual, lossy one).
 	net transport.Net
+	// dialTURN dials TURN over TCP and TLS (tests: a turns: name that
+	// resolves to a local relay with a test certificate).
+	dialTURN proxy.Dialer
 }
 
 // Stats is one second of the stream, in the fields the viewer's Connection
@@ -244,6 +252,9 @@ func (s *Session) setup() error {
 	// UDP, and TCP to a TURN server for networks that block UDP.
 	se.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4, webrtc.NetworkTypeUDP6, webrtc.NetworkTypeTCP4})
 	se.SetICETimeouts(4*time.Second, 10*time.Second, time.Second)
+	if s.cfg.dialTURN != nil {
+		se.SetICEProxyDialer(s.cfg.dialTURN)
+	}
 	if s.cfg.net != nil {
 		se.SetNet(s.cfg.net)
 	} else if s.cfg.LoopbackOnly {
@@ -331,7 +342,11 @@ func (s *Session) setup() error {
 			return err
 		}
 	}
-	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: s.cfg.ICEServers, Assertion: assertion})
+	viewerServers := s.cfg.ViewerICEServers
+	if viewerServers == nil {
+		viewerServers = s.cfg.ICEServers
+	}
+	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: viewerServers, Assertion: assertion})
 	return nil
 }
 
