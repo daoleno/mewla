@@ -200,7 +200,7 @@ func cmdlineUnread(pid int, info processInfo, args string) bool {
 	if pid == 2 || info.ppid == 2 {
 		return false
 	}
-	return args == "" || args == "["+info.comm+"]"
+	return commandLineUnread(info.comm, args, nil)
 }
 
 func readCmdline(pid, comm string) string {

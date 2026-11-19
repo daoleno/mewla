@@ -2,15 +2,16 @@ import { colorScheme, context, effect, platform, safeArea, split, Text, untracke
 import type { JSX } from "nsh";
 import { Button, NavPage as BaseNavPage, type NavPageProps, type StatusBar } from "nsh/base";
 import { isAvailable as mobile } from "nsh/mobile";
-import { CAPSULE, capsulePageInset } from "../../core/shell/capsule";
+import { CAPSULE, capsulePageInset, capsuleRailPageInset } from "../../core/shell/capsule";
 import { statusBarForeground } from "../../core/settings/statusBar";
 import { backMark } from "../../core/tray/model";
 import { nativeHeaderTitleWidth, pageColumnWidth, type PageColumn } from "../../core/web/places";
 import { tray } from "../tray/state";
 import { Icon } from "../kit/Icon";
 import { animateSwitch, Capsule, CapsulePage } from "./Capsule";
-import { stackWidth, wide } from "./layout";
+import { rail, stackWidth, wide } from "./layout";
 import { bottomBarInset } from "./below";
+import { joinRail, type RailAction } from "./railPages";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
@@ -33,6 +34,11 @@ export type AppNavPageProps = NavPageProps & {
   capsuleUnder?: boolean;
   /** Whether the page has controls of its own for the capsule (default: whether it passes `headerRight`). */
   capsuleControls?: boolean;
+  /**
+   * The page's controls as the side rail shows them (client/DESIGN.md "The side rail"): while the rail is up they
+   * leave the page's header for it. A page without leaves its `headerRight` in its header.
+   */
+  rail?: readonly RailAction[];
 };
 
 /**
@@ -41,7 +47,9 @@ export type AppNavPageProps = NavPageProps & {
  * desktops, the web and wide keep a header the content starts under). Read it in JSX: it follows the safe area.
  */
 export function capsuleScrollTop(): number {
-  return mobile && platform.idiom === "phone" ? capsulePageInset(safeArea().top) : 0;
+  if (!(mobile && platform.idiom === "phone")) return 0;
+  // With the side rail up such a page's capsule holds nothing at rest (Back and its controls are in the rail).
+  return rail() ? capsuleRailPageInset(safeArea().top) : capsulePageInset(safeArea().top);
 }
 
 /**
@@ -77,13 +85,14 @@ function Column(props: { width: () => number | null; children: JSX.Element }) {
  * thread, the whole pane for the terminal, a diff and Screen (SPEC §14.1).
  */
 export function NavPage(props: AppNavPageProps) {
+  joinRail(() => props.rail);
   const width = () => (props.frame === false ? null : pageColumnWidth(props.column ?? "page"));
   const stack = PageStack();
   /** Back's connection mark on a pushed page (SPEC §1.3); null when connected or on the stack's first page. */
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
   const phone = mobile && platform.idiom === "phone";
   if (phone && "capsule" in props) {
-    const [own, rest] = split(props, ["capsule", "capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
+    const [own, rest] = split(props, ["rail", "capsule", "capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
         <CapsulePage>
@@ -97,15 +106,23 @@ export function NavPage(props: AppNavPageProps) {
   // holds Back, and the title and the page's controls whenever the page's own title is not on screen. A page that
   // shows and hides its header itself (Screen's full bleed, black in both themes) keeps the system's.
   if (phone && !("headerVisible" in props) && untracked(stack.canGoBack)) {
-    const [own, rest] = split(props, ["capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
+    const [own, rest] = split(props, ["rail", "capsuleUnder", "capsuleControls", "headerLeft", "headerTitle", "headerRight", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     const under = untracked(() => Boolean(own.capsuleUnder));
     const controls = "capsuleControls" in props ? untracked(() => Boolean(own.capsuleControls)) : "headerRight" in props;
+    // With the side rail up, a page that gives the rail its controls keeps none in its capsule, and Back is the rail's:
+    // the capsule holds the title once it has scrolled away, or the controls of a page that has no rail list (a switch).
+    const railed = untracked(() => props.rail !== undefined);
+    const capsuleControls = () => controls && !(rail() && railed);
+    // Where the content starts: under the capsule, or under the status strip while the capsule is empty at rest
+    // (read at the page's first title, so the content never moves when the title joins the capsule).
+    const restTitled = untracked(() => Boolean(props.title));
+    const top = () => (rail() && !restTitled && !capsuleControls() ? capsuleRailPageInset(safeArea().top) : capsulePageInset(safeArea().top));
     return (
       <BaseNavPage {...rest} headerVisible={false} class={`${INK} ${own.class ?? ""}`} statusBar={pageStatusBar(own.statusBar)}>
         <CapsulePage>
           {/* Below the capsule, and above the system's bottom bar: the page's foot (a PDF's last page, a list's end) never hides under it. */}
-          <If when={under} else={<View class="flex-1" style={{ paddingTop: capsulePageInset(safeArea().top), paddingBottom: bottomBarInset() }}>{own.children}</View>}>{own.children}</If>
-          <PageCapsule title={() => props.title ?? ""} controls={controls} right={() => own.headerRight} />
+          <If when={under} else={<View class="flex-1" style={{ paddingTop: top(), paddingBottom: bottomBarInset() }}>{own.children}</View>}>{own.children}</If>
+          <PageCapsule title={() => props.title ?? ""} controls={capsuleControls} right={() => own.headerRight} />
         </CapsulePage>
       </BaseNavPage>
     );
@@ -113,7 +130,8 @@ export function NavPage(props: AppNavPageProps) {
   if (mobile) {
     // The system's Back can't carry a dot: while the mark shows, the page's own Back stands in for it.
     const [slots, page] = split(props, ["headerLeft", "headerTitle"]);
-    const markedBack = () => (<If when={mark()}><MarkedBack mark={mark()!} back={stack.back} /></If>);
+    // With the side rail up, Back is the rail's: the system header's own Back and the marked one stand down.
+    const markedBack = () => (<If when={mark() && !rail()}><MarkedBack mark={mark()!} back={stack.back} /></If>);
     // Android draws the header's leading item after the title: there Back and the leading item go into
     // the title's place, ahead of the title, so they lead as on iOS. Read by key, the slots are made once.
     const android = platform.os === "android";
@@ -123,7 +141,7 @@ export function NavPage(props: AppNavPageProps) {
     const ownTitle = "headerTitle" in props;
     const ownBack = () => android && Boolean(mark() || (ownTitle && stack.canGoBack()));
     const back = () => (<If when={mark()} else={<If when={ownBack()}><PlainBack back={stack.back} /></If>}>{markedBack()}</If>);
-    const left = () => (<If when={!android}><If when={mark()} else={<>{slots.headerLeft}</>}><View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View></If></If>);
+    const left = () => (<If when={!android}><If when={mark() && !rail()} else={<>{slots.headerLeft}</>}><View class="flex-row items-center gap-2">{markedBack()}{slots.headerLeft ?? null}</View></If></If>);
     // A page's own title view is as wide as the bar, not as its content (`nativeHeaderTitleWidth`): its
     // controls stay on screen and its text ends in "…" before them.
     const titleWidth = () => (ownTitle ? nativeHeaderTitleWidth({ stackWidth: stackWidth(), os: platform.os, systemBack: stack.canGoBack() && !ownBack() }) : undefined);
@@ -136,18 +154,18 @@ export function NavPage(props: AppNavPageProps) {
     // A phone's page that keeps the system header stays the system's own, with nothing around its content, also in the
     // right pane of an open iPhone Duo (its pushed pages wear the capsule above).
     if (platform.idiom === "phone") {
-      const [own, rest] = split(page, ["capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar"]);
-      return <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
+      const [own, rest] = split(page, ["rail", "capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar"]);
+      return <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark() && !rail()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)} />;
     }
-    const [own, rest] = split(page, ["capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar", "children"]);
+    const [own, rest] = split(page, ["rail", "capsuleUnder", "capsuleControls", "column", "frame", "class", "headerClass", "statusBar", "children"]);
     return (
-      <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
+      <BaseNavPage {...rest} headerBackVisible={!ownBack() && !mark() && !rail()} headerLeft={left()} headerTitle={title()} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} statusBar={pageStatusBar(own.statusBar)}>
         <Column width={width}>{own.children}</Column>
       </BaseNavPage>
     );
   }
   // Read once each, into the one header: forwarded too, they would be made twice.
-  const [own, rest] = split(props, ["header", "capsuleUnder", "capsuleControls", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
+  const [own, rest] = split(props, ["rail", "header", "capsuleUnder", "capsuleControls", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
   const headerWidth = () => pageColumnWidth(own.column ?? "page");
   return (
     <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
@@ -190,7 +208,7 @@ function PageHeader(props: {
  * under it (`title` is empty until then), then the page's actions right after. A page with no actions and its
  * title on screen has Back alone, a 44 circle. It never collapses while the person reads.
  */
-function PageCapsule(props: { title: () => string; controls: boolean; right: () => JSX.Element | undefined }) {
+function PageCapsule(props: { title: () => string; controls: () => boolean; right: () => JSX.Element | undefined }) {
   const titled = () => Boolean(props.title());
   // The title coming or going is the capsule's one transition (width over `dur.move`).
   let was = untracked(titled);
@@ -200,14 +218,16 @@ function PageCapsule(props: { title: () => string; controls: boolean; right: () 
     was = now;
     untracked(animateSwitch);
   });
+  // With the side rail up Back is the rail's: a capsule with neither the title nor controls is not drawn.
+  const back = () => !rail();
   return (
-    <Capsule collapsed={() => !titled()} compact alone={() => !titled() && !props.controls}>
-      <CapsuleBack />
+    <Capsule collapsed={() => !titled()} compact alone={() => !titled() && !props.controls()} hidden={() => !back() && !titled() && !props.controls()}>
+      <If when={back()}><CapsuleBack /></If>
       <If when={titled()}>
         <Text testID="page-title" role="header" class="min-w-0 shrink font-semibold text-foreground line-clamp-1"
-          style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, maxWidth: CAPSULE.pageTitleMax, marginLeft: 2, marginRight: props.controls ? 4 : 14 }}>{props.title()}</Text>
+          style={{ fontSize: CAPSULE.pageTitle.size, lineHeight: CAPSULE.pageTitle.line, maxWidth: CAPSULE.pageTitleMax, marginLeft: back() ? 2 : 14, marginRight: props.controls() ? 4 : 14 }}>{props.title()}</Text>
       </If>
-      <If when={props.controls}><View class="flex-row items-center">{props.right() ?? null}</View></If>
+      <If when={props.controls()}><View class="flex-row items-center">{props.right() ?? null}</View></If>
     </Capsule>
   );
 }

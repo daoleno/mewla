@@ -105,6 +105,9 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 		return control.ErrorResponse("missing_worker_id", "Worker id is required.")
 	}
 	worker, ownershipErr := a.resolveOwnedWorker(workerID)
+	if worker == nil && ownershipErr == nil && a.awaitInventory() {
+		worker, ownershipErr = a.resolveOwnedWorker(workerID)
+	}
 	if ownershipErr != nil {
 		return control.ErrorResponse(workerOwnershipErrorCode(ownershipErr), ownershipErr.Error())
 	}

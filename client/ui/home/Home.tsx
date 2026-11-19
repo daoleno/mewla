@@ -1,5 +1,5 @@
 import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View } from "nsh";
-import { CAPSULE, capsuleInset } from "../../core/shell/capsule";
+import { CAPSULE, capsuleInset, capsuleRailInset } from "../../core/shell/capsule";
 import { brainThreadReadingScope } from "../../core/timeline/readingPlace";
 import { Capsule, CapsulePage, createCapsule, type CapsuleReading } from "../shell/Capsule";
 import { Button } from "nsh/base";
@@ -44,7 +44,7 @@ import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { AttachmentTray } from "../more/files/Pages";
 import { tray } from "../tray/state";
-import { wide } from "../shell/layout";
+import { rail, wide } from "../shell/layout";
 import { createMenuAnchor } from "../kit/Menu";
 import type { UpdateLineItem } from "../../core/timeline/updateLines";
 import { brainComposing, brainNeedsPerson, lines as updateLines } from "../whatsnew/state";
@@ -304,10 +304,12 @@ function HomeHeader() {
  * otherwise); both still act at once, so it has no tap that only expands, and ⋯ returns at the newest end.
  */
 function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
-  const collapsed = props.capsule.collapsed;
+  // With the side rail up the state control and ⋯ are the rail's, and the rail's Brain says where you are: the
+  // capsule keeps the cat (the computer page) alone, a 44 circle.
+  const collapsed = () => Boolean(rail()) || props.capsule.collapsed();
   const computerName = () => (servers().length > 1 ? current()?.name ?? "" : "");
   return (
-    <Capsule testID="home-header" collapsed={collapsed} twoLines={() => Boolean(computerName())}>
+    <Capsule testID="home-header" collapsed={collapsed} alone={() => Boolean(rail())} twoLines={() => Boolean(computerName())}>
       <HomeCat size={CAPSULE.cat.size} box={CAPSULE.cat.box} onPress={() => openPage({ name: "computer" })} />
       <If when={!collapsed()}><>
           <View testID="home-title" class="min-w-0 shrink justify-center" style={{ marginLeft: 2 }}>
@@ -316,7 +318,7 @@ function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
           </View>
           <View class="flex-1" />
         </></If>
-      <StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} capsule={{ short: collapsed }} />
+      <If when={!rail()}><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} capsule={{ short: collapsed }} /></If>
       <If when={!collapsed()}><Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
           class="size-11 items-center justify-center rounded-full active:bg-accent">
           <Icon name="more-horizontal" size={22} tone="ink" />
@@ -458,7 +460,7 @@ export function Home() {
   const phone = mobile && platform.idiom === "phone";
   const capsuled = () => phone && !wide();
   const capsule = createCapsule();
-  const inset = () => capsuleInset(safeArea().top);
+  const inset = () => (rail() ? capsuleRailInset(safeArea().top) : capsuleInset(safeArea().top));
   // One more thing that needs the person, or the computer going out of reach: it expands.
   let lastState = untracked(() => tray().state);
   effect(() => {
@@ -477,9 +479,13 @@ export function Home() {
     wasShown = shown;
   });
   return (
-    <NavPage title="Brain" column="reading" headerVisible={false} header={<View />}>
+    <NavPage title="Brain" column="reading" headerVisible={false} header={<View />} rail={[
+      { id: "stop", icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping Brain" : "Stop Brain", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
+      { id: "brain-menu", icon: "more-horizontal", label: "Brain's menu", onPress: () => menuOpen.set(true), ref: menuAnchor.ref },
+    ]}>
       <CapsulePage>
-        <If when={!capsuled()}><HomeHeader /></If>
+        {/* With the side rail up (an open iPhone Duo on its side, beside the pane) nothing is left for the header. */}
+        <If when={!capsuled() && !rail()}><HomeHeader /></If>
         <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
         <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
         <If when={!routedBrainThread()}><Composer text={text} editor={editor} /></If>

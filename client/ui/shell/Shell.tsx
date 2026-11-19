@@ -9,6 +9,7 @@ import type { WebPlace } from "../../core/web/places";
 import { placeOfRoutes, routesOfPlace } from "./routePlaces";
 import { DesktopOverlays } from "./desktop/Overlays";
 import { LeftPane, PaneHandle } from "./LeftPane";
+import { Rail } from "./Rail";
 import { floatsShown, loadPaneWidth, paneWidth, rightPaneWidth, screenDock, wide } from "./layout";
 import { MenuHost } from "../kit/Menu";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
@@ -192,6 +193,8 @@ export function Shell() {
           paneBottom.set(bounds.origin.y + bounds.size.height);
         }}><Stack /></View>
       </View>
+      {/* In the system's vertical bar, when there is one (the iPhone Duo): the page's controls and the app's places. */}
+      <Rail />
       <Overlays bottomInset={belowSections} />
       <DesktopOverlays />
       <MenuHost />

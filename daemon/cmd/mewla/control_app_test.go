@@ -45,6 +45,8 @@ type fakeControlWatcher struct {
 	// (ResolveOwnedGeneration itself), which may take a live Turn's control.
 	mutationChecks    []string
 	budgetedSubmitErr error
+	// reclaimed are the Sessions Mewla closed after their Work was completed.
+	reclaimed         map[string]bool
 	budgetedCalls     int
 	delegatedResultID string
 }
@@ -303,6 +305,8 @@ func (w *fakeControlWatcher) RecordWorkerInputDispatched(id, turnID string, hand
 	cp := *worker
 	return &cp, nil
 }
+
+func (w *fakeControlWatcher) SessionReclaimed(sessionID string) bool { return w.reclaimed[sessionID] }
 
 func (w *fakeControlWatcher) SendInput(sessionID, text string) error {
 	w.sent = append(w.sent, fakeControlSend{id: sessionID, text: text})
@@ -2343,5 +2347,26 @@ func TestControlAppWorkerSpawnReportsAnAgentThatExitedAtLaunch(t *testing.T) {
 	}
 	if !said {
 		t.Fatalf("Work does not say why it ended: %#v", events)
+	}
+}
+
+// A send without -work-id to a Session Mewla closed after its Work was
+// completed says so (11-18: mh-8d937c96 answered "target provider could not
+// be proven"), and types nothing. An unlisted Session Mewla did not close
+// keeps the raw-input path.
+func TestPlainSendToAReclaimedSessionSaysMewlaClosedIt(t *testing.T) {
+	fw := newFakeControlWatcher()
+	fw.reclaimed = map[string]bool{"mh-closed": true}
+	app := &controlApp{watcher: fw}
+	response := app.handleWorkerSend(control.Request{WorkerID: "mh-closed", Text: "continue", Submit: true})
+	if response.OK || response.Error == nil || response.Error.Code != "worker_session_reclaimed" ||
+		!strings.Contains(response.Error.Message, "Mewla closed this Session after its Work was completed") {
+		t.Fatalf("response = %+v", response)
+	}
+	if len(fw.sent) != 0 {
+		t.Fatalf("input was typed into a closed Session: %+v", fw.sent)
+	}
+	if response := app.handleWorkerSend(control.Request{WorkerID: "%9", Text: "ls", Submit: true}); !response.OK || len(fw.sent) != 1 {
+		t.Fatalf("an unlisted Session Mewla did not close lost raw input: %+v sent=%+v", response, fw.sent)
 	}
 }

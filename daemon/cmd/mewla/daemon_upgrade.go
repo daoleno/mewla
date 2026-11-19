@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/listenhandoff"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 )
@@ -154,7 +155,9 @@ func (r *inPlaceRestarter) handle(version string) control.Response {
 // execInPlace runs the startup executable again in this process's place
 // (platform.ExecInPlace).
 func execInPlace(startup startupSnapshot, stops <-chan os.Signal) error {
-	return platform.ExecInPlace(startup.Executable, startup.Args, startup.Env, startup.Dir, stops)
+	// The model relay's sockets go with it: a Worker's request made during the
+	// restart waits in their queue for the new version (listenhandoff).
+	return platform.ExecInPlace(startup.Executable, startup.Args, listenhandoff.ForExec(startup.Env), startup.Dir, stops)
 }
 
 // inPlaceRestartFailurePath holds why the last accepted restart did not

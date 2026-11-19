@@ -167,6 +167,11 @@ const (
 	turnRecoveryWait turnRecoveryAction = iota
 	turnRecoveryResume
 	turnRecoveryEscalate
+	// turnRecoveryCompact sends the agent's /compact, then resumes
+	// (turn_compaction.go).
+	turnRecoveryCompact
+	// turnRecoveryResumeCompacted resumes a Turn whose compaction is done.
+	turnRecoveryResumeCompacted
 )
 
 type turnRecoveryDecision struct {
@@ -367,6 +372,11 @@ type turnRecoverySupervisor struct {
 	paneSeen map[string]uint64
 	submit   func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error)
 	run      func(func())
+	// command types a provider command (/compact) into a Session; observe
+	// reads its agent's transcript now; sleep waits between looks. Test seams.
+	command func(sessionID, text string) error
+	observe func(sessionID string) (ProviderActivityObservation, bool)
+	sleep   func(time.Duration)
 }
 
 func newTurnRecoverySupervisor(w *Watcher) *turnRecoverySupervisor {
@@ -379,7 +389,10 @@ func newTurnRecoverySupervisor(w *Watcher) *turnRecoverySupervisor {
 		submit: func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error) {
 			return w.SubmitDelegatedWorkInput(sessionID, payload, workID, turnID, "", "", at)
 		},
-		run: func(fn func()) { go fn() },
+		run:     func(fn func()) { go fn() },
+		command: w.SendProviderCommand,
+		observe: w.ProbeProviderTranscript,
+		sleep:   time.Sleep,
 	}
 }
 
@@ -476,7 +489,21 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		if item.provider.Error == nil && idleSince.After(settledAt) {
 			settledAt = idleSince
 		}
-		decision := decideTurnRecovery(policy, item.now, settledAt, deadline, item.provider.Error, records)
+		// Whether a failed Turn was too large to send, and whether the
+		// conversation was compacted since, are in the agent's transcript.
+		failure, compactedAt := item.provider.Error, item.provider.CompactedAt
+		if failure != nil && autoCompactCommand(item.workerSnap.Command) != "" && supervisor.observe != nil {
+			if transcript, ok := supervisor.observe(item.id); ok {
+				compactedAt = transcript.CompactedAt
+				if transcript.Error != nil {
+					failure = transcript.Error
+				}
+			}
+		}
+		decision, compaction := decideCompaction(policy, stall.settledAt, failure, compactedAt, item.workerSnap.Command, records)
+		if !compaction {
+			decision = decideTurnRecovery(policy, item.now, settledAt, deadline, item.provider.Error, records)
+		}
 		if stall.stopped && decision.reason == "idle" {
 			decision.reason = "stopped"
 		}
@@ -487,6 +514,29 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 				next = decision.due
 			}
 			supervisor.recheck(item.id, key, next)
+		case turnRecoveryCompact, turnRecoveryResumeCompacted:
+			supervisor.mu.Lock()
+			if supervisor.inflight[item.id] {
+				supervisor.mu.Unlock()
+				continue
+			}
+			supervisor.inflight[item.id] = true
+			supervisor.mu.Unlock()
+			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
+			sessionID, fromTurn, command := item.id, stall.turnID, item.workerSnap.Command
+			supervisor.run(func() {
+				defer func() {
+					supervisor.mu.Lock()
+					delete(supervisor.inflight, sessionID)
+					supervisor.mu.Unlock()
+				}()
+				if decision.action == turnRecoveryCompact {
+					w.compactStalledTurn(ledger, supervisor, sessionID, workID, fromTurn, command, decision)
+					return
+				}
+				w.submitContinuation(ledger, supervisor, sessionID, workID, fromTurn, decision.attempt,
+					compactReasonPrefix+"ed: resumed after the conversation was compacted", CompactedContinuationPrompt)
+			})
 		case turnRecoveryResume:
 			supervisor.mu.Lock()
 			if supervisor.inflight[item.id] {
@@ -667,9 +717,20 @@ func (w *Watcher) resumeStalledTurn(
 			return
 		}
 	}
+	w.submitContinuation(ledger, supervisor, sessionID, workID, fromTurn, decision.attempt, decision.reason, TurnContinuationPrompt)
+}
+
+// submitContinuation submits prompt as the stalled Turn's continuation and
+// records it as an automatic resume.
+func (w *Watcher) submitContinuation(
+	ledger TurnRecoveryLedger,
+	supervisor *turnRecoverySupervisor,
+	sessionID, workID, fromTurn string,
+	attempt int, reason, prompt string,
+) {
 	turnID := "turn:" + uuid.NewString()
 	at := time.Now().UTC()
-	result, submitErr := supervisor.submit(sessionID, DelegatedLifecyclePayload(TurnContinuationPrompt, turnID), workID, turnID, at)
+	result, submitErr := supervisor.submit(sessionID, DelegatedLifecyclePayload(prompt, turnID), workID, turnID, at)
 	outcome := result.Outcome
 	if submitErr != nil {
 		outcome = InputOutcomeFromError(submitErr)
@@ -681,7 +742,7 @@ func (w *Watcher) resumeStalledTurn(
 	}
 	if err := ledger.RecordTurnRecovery(TurnRecovery{
 		WorkID: workID, SessionID: sessionID, FromTurnID: fromTurn, TurnID: turnID,
-		Attempt: decision.attempt, Reason: decision.reason, Outcome: outcome, At: at,
+		Attempt: attempt, Reason: reason, Outcome: outcome, At: at,
 	}); err != nil {
 		log.Printf("delegated turn recovery: record resume %s (work %s): %v", sessionID, workID, err)
 	}
@@ -694,6 +755,8 @@ func stallSummary(decision turnRecoveryDecision, failure *ProviderActivityError,
 		head = fmt.Sprintf("Worker stalled: provider error persisted after %d automatic resumes", decision.attempt)
 	case "provider_error":
 		head = "Worker stalled: provider error needs attention; not resumed automatically"
+	case "compaction_failed":
+		head = "Worker stalled: its conversation is still too large to send after Mewla compacted it"
 	case "stopped":
 		head = "Worker's turn ended without a progress report; review the result"
 	default:

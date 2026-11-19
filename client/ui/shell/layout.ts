@@ -1,4 +1,6 @@
-import { computed, safeArea, signal, Storage, windowSize } from "nsh";
+import { computed, platform, safeArea, signal, Storage, windowSize } from "nsh";
+import { isAvailable as mobile } from "nsh/mobile";
+import { railEdge } from "../../core/shell/rail";
 import { screenDockWidth } from "../../core/screen/float";
 import { clampPaneWidth, nextWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 
@@ -22,6 +24,13 @@ export const wide = computed(() => {
   lastWide = { wide: now, width };
   return now;
 });
+
+/**
+ * The edge of the system's vertical bar Mewla's buttons sit in (client/DESIGN.md "The side rail"), or null: an
+ * iPhone with a side inset of the bar's width on one side (the iPhone Duo's cover screen, its inner screen on its
+ * side). Never Android, the web or a phone's cutout. Every page header and the rail itself follow this one value.
+ */
+export const rail = computed(() => railEdge({ os: platform.os, phone: mobile && platform.idiom === "phone", safe: safeArea() }));
 
 /** The left pane's width: dragged, stepped or reset on its handle, kept on this device. */
 export const paneWidth = signal<number>(PANE_WIDTH.initial);

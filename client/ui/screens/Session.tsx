@@ -1,7 +1,7 @@
 import { cleanup, computed, effect, keyboardFrame, openUrl, platform, safeArea, signal, Storage, Text, untracked, View, windowSize } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
-import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleTerminalInset, crampedOverKeyboard } from "../../core/shell/capsule";
-import { stackWidth } from "../shell/layout";
+import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleRailInset, capsuleTerminalInset, crampedOverKeyboard } from "../../core/shell/capsule";
+import { rail, stackWidth } from "../shell/layout";
 import { Capsule, createCapsule } from "../shell/Capsule";
 import { CapsuleBack } from "../shell/NavPage";
 import { listSessionServices } from "../../core/sessions/services";
@@ -538,7 +538,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // has it collapsed: a tap on the name brings it over the top rows, the next touch in the terminal folds it.
   const capsuled = mobile && platform.idiom === "phone";
   const capsule = createCapsule({ collapsed: untracked(mode) === "terminal" });
-  const inset = () => capsuleInset(safeArea().top);
+  // With the side rail up Back and the actions are the rail's: the capsule keeps the mark and the name, on one line.
+  const inset = () => (rail() ? capsuleRailInset(safeArea().top) : capsuleInset(safeArea().top));
   // The terminal over the keyboard of a phone held sideways: the capsule steps aside and the terminal takes its row.
   const cramped = () => mode() === "terminal" && crampedOverKeyboard(windowSize().height, keyboardFrame().height);
   // Blocked, it waits on the person, unless Brain delegated it and it stopped on its own report: that is Brain's
@@ -579,6 +580,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   );
   const nameStyle = () => {
     if (capsule.collapsed()) return { ...CAPSULE.nameCompact, lines: 1 };
+    if (rail()) return { ...CAPSULE.name, lines: 1 };
     return capsuleNameIsLong(title()) ? { ...CAPSULE.nameLong, lines: 2 } : { ...CAPSULE.name, lines: 1 };
   };
   const DurabilityWarning = () => (
@@ -630,8 +632,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     else if (untracked(mode) === "terminal") capsule.collapse();
   };
   const capsuleHeader = () => (
-    <Capsule collapsed={capsule.collapsed} hidden={cramped} twoLines={() => capsuleNameIsLong(title())} below={<If when={durability()}><DurabilityWarning /></If>}>
-      <CapsuleBack />
+    <Capsule collapsed={capsule.collapsed} compact={Boolean(rail())} hidden={cramped} twoLines={() => !rail() && capsuleNameIsLong(title())} below={<If when={durability()}><DurabilityWarning /></If>}>
+      <If when={!rail()}><CapsuleBack /></If>
       {/* The name gets the room; a long one takes two balanced lines ending in "…" before the controls. Collapsed,
           one line of 15, ending in "…" at min(200, 52 % of the width). */}
       <Button testID="capsule-name" accessibilityLabel={capsule.collapsed() ? `${title()}, show the header` : title()} onPress={pressName}
@@ -643,7 +645,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             style={{ fontSize: nameStyle().size, lineHeight: nameStyle().line }}>{title()}</Text>
         </View>
       </Button>
-      <If when={!capsule.collapsed()}>{actions(false)}</If>
+      <If when={!capsule.collapsed() && !rail()}>{actions(false)}</If>
     </Capsule>
   );
   // Made once, here: a call in the page's props would be one of the getters NSH re-reads.
@@ -651,6 +653,13 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
 
   return (
     <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"} capsule={header}
+      // The side rail's: Stop while a turn runs, Git in a repository, the view, ⋯ (the capsule's actions, in its order).
+      rail={[
+        { id: "stop", icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping" : "Stop", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
+        { id: "session-git", icon: "git-compare", label: "Git changes", onPress: openGit, shown: () => isRepo() },
+        { id: "session-mode", icon: mode() === "chat" ? "terminal" : "chat", label: mode() === "chat" ? "Show terminal" : "Show chat", onPress: () => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")), shown: () => Boolean(props.brain) || canChat() },
+        { id: "session-menu", icon: "more-horizontal", label: "Session menu", onPress: () => void menu(), shown: () => hasMenu(), ref: menuAnchor.ref },
+      ]}
       // One row holds the text and the controls (SPEC §11 Session header), as wide as the bar: the title gets
       // the room, the two lines end in "…" before the view button and ⋯; in the second the project
       // truncates and the state word never does. A Calendar run's title is already its run: the second line

@@ -23,7 +23,7 @@ import (
 // opens the agent's tabs in a window of their own, which the person's tabs
 // never share and which can sit on the display Mewla keeps for agents.
 
-//go:embed extension/manifest.json extension/background.js extension/relay.js extension/status.html extension/status.js extension/LICENSE-NOTICE.md extension/icons/*.png
+//go:embed extension/manifest.json extension/background.js extension/relay.js extension/sitedata.js extension/status.html extension/status.js extension/LICENSE-NOTICE.md extension/icons/*.png
 var extensionFiles embed.FS
 
 // MewlaExtensionID is the ID the key in the extension's own manifest fixes:

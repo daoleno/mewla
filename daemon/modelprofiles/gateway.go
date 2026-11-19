@@ -2,6 +2,7 @@ package modelprofiles
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/debuglog"
+	"github.com/daoleno/mewla/daemon/listenhandoff"
 )
 
 // DefaultGatewayListenAddr is the stable machine-level Codex gateway
@@ -179,7 +181,7 @@ func (g *Gateway) Listen() error {
 		g.mu.Unlock()
 		return err
 	}
-	ln, err := net.Listen("tcp", g.addr)
+	ln, err := listenhandoff.Listen("tcp", g.addr)
 	if err != nil && g.listenFallback && isDefaultGatewayAddress(g.addr) {
 		for port := 3426; port <= 3445 && err != nil; port++ {
 			candidate := fmt.Sprintf("127.0.0.1:%d", port)
@@ -253,12 +255,30 @@ func (g *Gateway) Close() error {
 	return nil
 }
 
-// InFlight is the number of HTTP model requests the gateway is answering.
+// InFlight is the number of model replies the gateway is passing: HTTP
+// requests to their last byte, and responses in progress on its WebSockets.
 func (g *Gateway) InFlight() int {
 	if g == nil {
 		return 0
 	}
-	return int(g.requests.Load())
+	g.mu.RLock()
+	registry := g.ws
+	g.mu.RUnlock()
+	return int(g.requests.Load()) + registry.activeTurns()
+}
+
+// Drain is the gateway's part of Owner.Drain.
+func (g *Gateway) Drain(ctx context.Context) DrainResult {
+	if g == nil {
+		return DrainResult{}
+	}
+	g.mu.RLock()
+	ln, server, registry := g.ln, g.server, g.ws
+	g.mu.RUnlock()
+	if ln == nil {
+		return DrainResult{}
+	}
+	return drainListener(ctx, ln, server, registry, func() int { return int(g.requests.Load()) })
 }
 
 // Listening reports whether the gateway listener is bound.

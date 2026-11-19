@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/listenhandoff"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
@@ -491,9 +493,12 @@ func runUpdateHandover(h *updateHandover, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	brainRoot, _ := brain.DefaultRoot()
+	// The relay's sockets stay open in this process throughout: the trial
+	// child serves them, then the exec below takes them on.
+	childEnv, childFiles := listenhandoff.ForChild(os.Environ())
 	outcome := selfupdate.Handover{
 		Installed: h.Installed, Staged: h.Staged, Version: h.Version,
-		Args: args, Env: os.Environ(), StateDir: h.StateDir, BrainRoot: brainRoot,
+		Args: args, Env: childEnv, ExtraFiles: childFiles, StateDir: h.StateDir, BrainRoot: brainRoot,
 		Gate:   updateGate,
 		Stdout: os.Stdout, Stderr: os.Stderr,
 		Healthy: func() error { return probeUpdatedDaemon(h.Addr, h.DaemonID, h.Version) },
@@ -516,5 +521,18 @@ func runUpdateHandover(h *updateHandover, args []string) error {
 			log.Printf("mewla: remember failed update: %v", err)
 		}
 	}
-	return platform.ExecReplace(h.Installed, append([]string{os.Args[0]}, args...), os.Environ())
+	markRestarting(h.StateDir)
+	return platform.ExecReplace(h.Installed, append([]string{os.Args[0]}, args...), listenhandoff.ForExec(os.Environ()))
+}
+
+// markRestarting tells commands that this process is about to answer again
+// (control.MarkRestarting): the trial child cleared the mark when it listened.
+func markRestarting(stateDir string) {
+	socket, err := control.DefaultSocketPath(stateDir)
+	if err != nil {
+		return
+	}
+	if err := control.MarkRestarting(socket, os.Getpid(), time.Now().Add(restartStartAllowance)); err != nil {
+		log.Printf("mewla: mark the restart for waiting commands: %v", err)
+	}
 }

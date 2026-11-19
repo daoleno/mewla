@@ -48,6 +48,15 @@ done
 find "$APP" -type f \( -name '*.gz' -o -name '*.br' \) -delete
 find "$APP" -type f -exec gzip -9 -n {} +
 
-find "$OUT" -mindepth 1 ! -name .gitkeep -delete
-cp -R "$APP/." "$OUT/"
+# A dev daemon serves $OUT from disk while this runs (mewla-dev), so the new
+# package replaces the old one in one rename, never file by file.
+NEXT="$OUT.next.$$"
+OLD="$OUT.old.$$"
+rm -rf "$NEXT"
+mkdir -p "$NEXT"
+cp -R "$APP/." "$NEXT/"
+if [ -f "$OUT/.gitkeep" ]; then cp "$OUT/.gitkeep" "$NEXT/.gitkeep"; fi
+if [ -d "$OUT" ]; then mv "$OUT" "$OLD"; fi
+mv "$NEXT" "$OUT"
+rm -rf "$OLD"
 echo "Web UI staged in $OUT ($(du -sh "$OUT" | cut -f1) gzip)"

@@ -438,10 +438,13 @@ func (b *claudeConversationBuilder) snapshot() CodexConversation {
 		}
 	}
 	return conversationWithActivity(CodexConversation{
-		Available: true,
-		Source:    claudeConversationSource,
-		SessionID: firstNonEmpty(b.sessionID, b.sourceID),
-		CWD:       b.cwd,
-		Events:    own,
+		Available:       true,
+		Source:          claudeConversationSource,
+		SessionID:       firstNonEmpty(b.sessionID, b.sourceID),
+		CWD:             b.cwd,
+		Events:          own,
+		CompactedAt:     b.compactedAt,
+		CompactFailedAt: b.compactFailedAt,
+		CompactFailure:  b.compactFailure,
 	}, &b.activityLifecycle)
 }

@@ -245,6 +245,54 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		t.Fatalf("the server saw %d hits, value %q: %s", hits.Load(), typed.Load(), out)
 	}
 
+	// The person is signed in to a site the agent never worked on. The
+	// agent's cleanup wipes "all" cookies (2026-11-18: one did, and the
+	// person was signed out of every site); the wipe is refused, clearing
+	// its own site still works, and the person's sign-in stays.
+	browserCDP(t, "Storage.setCookies", map[string]any{"cookies": []map[string]any{{
+		"name": "user_session", "value": "person", "domain": "github.example", "path": "/",
+		"expires": float64(time.Now().Add(14 * 24 * time.Hour).Unix()),
+	}}})
+	out = mcp.call(t, "browser_run_code_unsafe", map[string]any{"code": `async (page) => {
+	  await page.context().addCookies([{ name: 'agent', value: 'a', url: page.url() }]);
+	  let wipe = 'ran';
+	  try { await page.context().clearCookies(); } catch (e) { wipe = 'refused: ' + e.message; }
+	  await page.context().clearCookies({ name: 'agent' });
+	  return { wipe, agentLeft: (await page.context().cookies(page.url())).filter(c => c.name === 'agent').length };
+	}`})
+	t.Logf("cookie wipe: %s", firstLine(out))
+	if !strings.Contains(out, "refused: ") || !strings.Contains(out, "Mewla refused Storage.clearCookies") || !strings.Contains(out, `"agentLeft":0`) {
+		t.Fatalf("the agent's wipe of every site was not refused, or its own clear failed: %s", out)
+	}
+	var kept struct {
+		Cookies []struct{ Name, Domain string } `json:"cookies"`
+	}
+	_ = json.Unmarshal(browserCDP(t, "Storage.getCookies", map[string]any{}), &kept)
+	signedIn := false
+	for _, c := range kept.Cookies {
+		signedIn = signedIn || (c.Name == "user_session" && c.Domain == "github.example")
+	}
+	if !signedIn {
+		t.Fatalf("the person's sign-in is gone: %+v", kept.Cookies)
+	}
+
+	// A clean context of the agent's own (a first visit with no sign-ins)
+	// is what a signed-out check would want instead of clearing the shared
+	// one: this mode has no browser-level target, so Playwright cannot make
+	// one, nor a raw CDP session of the agent's own.
+	out = mcp.call(t, "browser_run_code_unsafe", map[string]any{"code": `async (page) => {
+	  const tries = {};
+	  try {
+	    const fresh = await page.context().browser().newContext();
+	    await (await fresh.newPage()).goto('about:blank');
+	    await fresh.close();
+	    tries.context = 'ran';
+	  } catch (e) { tries.context = 'failed: ' + e.message.split('\n')[0]; }
+	  try { await page.context().newCDPSession(page); tries.cdp = 'ran'; } catch (e) { tries.cdp = 'failed: ' + e.message.split('\n')[0]; }
+	  return tries;
+	}`})
+	t.Logf("a fresh context and a raw CDP session: %s", out)
+
 	if displayBounds != nil {
 		got := agentWindowBounds(t)
 		t.Logf("agent window at %+v, agent display %+v", got, *displayBounds)
@@ -745,6 +793,44 @@ func frontAppPID() int {
 	}
 	pid, _ := strconv.Atoi(digits[len(digits)-1])
 	return pid
+}
+
+// browserCDP sends one command to the person's Chrome as a whole, beside the
+// agent's tools.
+func browserCDP(t *testing.T, method string, params map[string]any) json.RawMessage {
+	t.Helper()
+	resp, err := http.Get("http://127.0.0.1:9334/json/version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version struct {
+		WS string `json:"webSocketDebuggerUrl"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&version)
+	resp.Body.Close()
+	conn, _, err := websocket.DefaultDialer.Dial(version.WS, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.WriteJSON(map[string]any{"id": 1, "method": method, "params": params})
+	for {
+		var m struct {
+			ID     int             `json:"id"`
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		if err := conn.ReadJSON(&m); err != nil {
+			t.Fatal(err)
+		}
+		if m.ID == 1 {
+			if len(m.Error) > 0 {
+				t.Fatalf("%s: %s", method, m.Error)
+			}
+			return m.Result
+		}
+	}
 }
 
 // agentWindowBounds is where the agent's page's window is, from Chrome.

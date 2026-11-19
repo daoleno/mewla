@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunSurfacesUnexpectedDaemonExit(t *testing.T) {
@@ -261,6 +262,113 @@ func TestDevProfilerYieldsToTheEnvironment(t *testing.T) {
 		t.Setenv("MEWLA_PPROF_ADDR", value)
 		if got := devPprofAddr(); got != "" {
 			t.Fatalf("MEWLA_PPROF_ADDR=%q overridden with %q", value, got)
+		}
+	}
+}
+
+// A client/ edit only rebuilds the web UI the daemon serves from disk; any
+// daemon file in the batch rebuilds and restarts (11-19: another Worker's
+// client/ edits restarted the daemon every ~20 s and cut every Worker's model
+// stream).
+func TestDevWebOnlyChangesDoNotRestartTheDaemon(t *testing.T) {
+	if !onlyWebSources([]string{"client/ui/chat/Composer.tsx", "client/core/files/upload.ts", "scripts/build-web-ui.sh"}) {
+		t.Fatal("a web-only batch would restart the daemon")
+	}
+	if onlyWebSources([]string{"client/ui/chat/Composer.tsx", "daemon/server/web_ui.go"}) || onlyWebSources(nil) {
+		t.Fatal("a batch with daemon code must rebuild and restart")
+	}
+	out := filepath.Join(t.TempDir(), "env")
+	script := filepath.Join(t.TempDir(), "daemon.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf %s \"$"+webUIDirEnv+"\" > "+out+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	runner := &devRunner{root: root, binary: script, stdout: io.Discard, stderr: io.Discard}
+	if err := runner.start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-runner.child.done; err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); string(got) != filepath.Join(root, "webui", "dist") {
+		t.Fatalf("daemon child web UI dir = %q", got)
+	}
+	builds := 0
+	runner.buildWeb = func() error { builds++; return nil }
+	runner.webDirty = true
+	if err := runner.rebuildWebUI(); err != nil || builds != 1 || runner.webDirty {
+		t.Fatalf("web rebuild: err=%v builds=%d dirty=%v", err, builds, runner.webDirty)
+	}
+}
+
+func sleepingChild(t *testing.T) *runningProcess {
+	t.Helper()
+	cmd := exec.Command("sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	child := &runningProcess{cmd: cmd, done: make(chan error, 1)}
+	go func() { child.done <- cmd.Wait() }()
+	t.Cleanup(func() { _ = cmd.Process.Kill() })
+	return child
+}
+
+// A daemon build restarts the daemon in place (daemon_upgrade: it drains
+// model replies and execs the new binary in the same process); it is stopped
+// and started only when it cannot do that.
+func TestDevRestartIsInPlace(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "daemon.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		code     string
+		err      error
+		since    time.Duration
+		waiting  bool
+		replaced bool
+	}{
+		{name: "accepted"},
+		{name: "busy", code: "upgrade_in_progress", err: errors.New("busy"), waiting: true},
+		{name: "restarting", code: "not_running", err: errors.New("gap"), waiting: true},
+		{name: "never takes it", code: "upgrade_in_progress", err: errors.New("busy"), since: inPlaceRetryFor + time.Second, replaced: true},
+		{name: "old daemon", code: "unknown_request", err: errors.New("unknown"), replaced: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			child := sleepingChild(t)
+			var stderr strings.Builder
+			runner := &devRunner{root: t.TempDir(), binary: script, stdout: io.Discard, stderr: &stderr, child: child,
+				upgrade: func() (string, error) { return tc.code, tc.err }}
+			if tc.since > 0 {
+				runner.inPlaceSince = time.Now().Add(-tc.since)
+			}
+			waiting, err := runner.restart()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if waiting != tc.waiting {
+				t.Fatalf("waiting=%v want %v (%s)", waiting, tc.waiting, stderr.String())
+			}
+			if replaced := runner.child != child; replaced != tc.replaced {
+				t.Fatalf("daemon replaced=%v want %v (%s)", replaced, tc.replaced, stderr.String())
+			}
+			if !tc.replaced && child.cmd.ProcessState != nil {
+				t.Fatal("the daemon was stopped")
+			}
+		})
+	}
+}
+
+func TestDevStateDirArg(t *testing.T) {
+	for args, want := range map[string]string{
+		"-lan":                         "",
+		"-state-dir /s -lan":           "/s",
+		"--state-dir=/t":               "/t",
+		"-addr 127.0.0.1:1 -state-dir": "",
+	} {
+		if got := stateDirArg(strings.Fields(args)); got != want {
+			t.Fatalf("%q: %q want %q", args, got, want)
 		}
 	}
 }

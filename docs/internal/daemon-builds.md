@@ -39,7 +39,13 @@ bun run daemon:build
 
 `bun run daemon:build` and `cd daemon && go run ./cmd/mewla-dev` build with
 `CGO_ENABLED=0`. The development watcher rebuilds Go source changes and restarts
-the daemon with its existing arguments. No display libraries are required.
+the daemon in place (control request `daemon_upgrade`, as `mewla restart` does):
+the same process lets every Worker's model reply finish, then execs the new
+binary with the model relay's listening sockets still open
+(`daemon/listenhandoff`), so a reload cuts no Worker's stream and refuses no
+request. Only a daemon that cannot restart itself is stopped (SIGINT, killed
+after 20 s) and started again. A `client/` change alone does not restart the
+daemon at all (see [Web UI](web-ui.md)). No display libraries are required.
 
 `mewla-dev` also serves the daemon's profiler on a free loopback port (printed as `Dev     Profiler http://127.0.0.1:<port>/debug/pprof/` when it starts, the same after every restart); `go tool pprof "http://127.0.0.1:<port>/debug/pprof/profile?seconds=10"` answers where CPU goes. Set `MEWLA_PPROF_ADDR` (empty turns it off) to choose another address; release daemons never serve it unless that variable is set.
 

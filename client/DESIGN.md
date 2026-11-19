@@ -165,7 +165,8 @@ preference.
   with no actions while its title shows. It never collapses. Every capsule
   screen stands on the app's canvas (`CapsulePage`): the screen view behind a
   page is painted in the system's theme. Screen keeps its black system header,
-  wide keeps its own header.
+  wide keeps its own header. With the side rail up (see The side rail) Back and
+  the page's controls are the rail's, and the capsule keeps what is left.
 - **Home's tray** (SPEC §1.2, §3.2, §11; `ui/tray/Tray.tsx`, `core/tray/model.ts`)
   rises from the bottom, its top hanging just under home's header and filling
   to the screen's bottom whatever it lists; the header and the page dim under
@@ -208,6 +209,40 @@ preference.
   sheet (Brain, Sessions, a Session, Screen, Browser, a Work, a diff) draws
   `more-vertical`. A menu on one thing in a list or under a reply (a message,
   a post, a provider row) draws `more-horizontal`.
+
+### The side rail
+
+An iPhone that keeps a vertical bar at one side (the iPhone Duo: its cover screen either way up, its inner
+screen on its side, the outer edge of either app in Split View) gets Mewla's buttons in that bar
+(`ui/shell/Rail.tsx`; the gate, every number and the fit rule in `core/shell/rail.ts`). The gate is one value,
+`rail` (`ui/shell/layout.ts`): iOS, the phone idiom, a side safe-area inset of at least 80 on one side and none
+on the other. A phone's cutout on its side (about 62, both sides), Android, the web and the inner screen
+upright never have it.
+
+- **What it holds.** Icons only, 44 pt targets, the 22 glyph, English accessibility labels, no text. The system's
+  own items (the Island and the status items, which open Control Center) sit at the camera's end of the bar:
+  its top on the cover screen upright (174) and the inner screen on its side (124), its foot on the cover
+  screen on its side (82), each measured with the bar on the right. The rail keeps clear of them
+  (`railEnds`); a bar on the left (the other rotation, Split View's left app) keeps both ends clear, since its
+  camera's end is not known. The rail's foot rises above the keyboard while it is up. From the rail's top down: the page's controls, moved out of its header, never duplicated: Back (with the
+  connection mark) when there is a page to go back to, Stop while a turn runs on the page shown, then the
+  page's actions (a Session's Git, view and ⋯; Brain's ⋯; Git review's ⋯; a file's Refresh, Download, Copy).
+  At the bar's foot, the app's places (`RAIL_PLACES`, a table the owner may change): Brain (home, the accent
+  well while on it, a dot while its turn runs), the state (its dot, and the count while something needs you;
+  it opens the tray over Brain; gone while the left pane holds the tray), Search or run, Screen, New session.
+- **Not a tab bar.** The places are shortcuts to pages that already exist: the stack and its routes stay as
+  they are, Brain stays home, and nothing is selected but Brain.
+- **What does not fit** goes, from the end of the order up (the last place first), into one More at the foot,
+  whose menu keeps that order (Apple's rule for the bar).
+- **The header keeps the rest.** On a page that keeps the system's header (Screen), the header's Back
+  stands down for the rail's (swipe back stays: NSH's own pop delegate allows it). A page gives the rail its controls (`NavPage`'s `rail`); a page whose
+  controls are not icons (a switch, Calendar's Today | Month) keeps them in its capsule. Brain's capsule keeps
+  the cat alone (a 44 circle), and on the inner screen beside the pane Brain has no header at all. A Session's
+  keeps its mark and name on one line (44, never two lines). A pushed page's capsule has the title once it has
+  scrolled away, and nothing (not drawn) at rest, so its content starts 6 under the top.
+- **Not followed yet.** NSH reports neither the bar's edge nor where the system's items end: the edge comes
+  from the safe area and the system's end from measured constants per screen and posture, so a Live Activity growing the Island down the bar
+  can cover the first button.
 
 ### One control per concept
 
@@ -295,7 +330,8 @@ pointer with a keyboard (a browser, a desktop) get the same frame.
 
 On an iPhone (the Duo opened) the right pane's pages keep their phone
 headers: Brain's header loses its cat and state control to the pane, and a
-pushed page keeps its capsule. A half-open fold is not yet followed: NSH 0.5.1
+pushed page keeps its capsule. Its side bar holds the side rail, and with it
+Brain's header goes and Back is the rail's (see The side rail). A half-open fold is not yet followed: NSH 0.5.1
 reports no fold, so nothing snaps to it.
 
 1. **One tree.** `Shell` (`ui/shell/Shell.tsx`) is one row at every width: the
