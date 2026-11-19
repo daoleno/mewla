@@ -123,6 +123,9 @@ describe("account status and capability boundaries", () => {
     const access = { read: "allowed" as const, write: "allowed" as const, allowed: 6, tools: 6, read_consent: true };
     const old = account({ integration: "slack", name: "FreeRide AI · paul", access });
     expect(accountRecovery(old, "Slack")).toMatchObject({ action: "reconnect", actionLabel: "Reconnect", tone: "warning" });
+    // Its row says so, not Connected.
+    expect(accountStatus(old)).toBe("Needs Reconnect");
+    expect(accountTone(old)).toBe("warning");
     expect(pluginCatalogRows([plugin("slack", "Slack")], [old], { slack: {} }).services[0]!.state).toEqual({ kind: "reconnect", account: old });
     // Off stays off; a full grant has nothing to fix.
     expect(accountRecovery({ ...old, enabled: false }, "Slack")).toBeNull();

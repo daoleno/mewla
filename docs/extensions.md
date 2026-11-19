@@ -221,7 +221,7 @@ Mewla's state on the computer (`slack-files/<account>`), up to 50 MB, and
 returns the local path, so Brain opens a screenshot with its own image reader
 and a PDF or text file the usual way. Slack's token goes only in the request's
 Authorization header, never in an address, a log line or a tool's result.
-Downloads are kept for seven days.
+Each download clears that account's files older than seven days.
 
 An account connected before Mewla read files and private conversations shows
 **Reconnect to read files and DMs** with one **Reconnect**: Slack asks you once

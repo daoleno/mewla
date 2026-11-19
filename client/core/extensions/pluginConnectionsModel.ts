@@ -115,6 +115,7 @@ export function enabledRequest(account: PluginAccount, on: boolean): ConnectionR
 
 export function accountTone(account: PluginAccount): ConnectionTone {
   if (account.status === "disconnected" || !account.enabled) return "neutral";
+  if (account.status === "connected" && account.access?.read_consent) return "warning";
   if (account.status === "connected") return "success";
   if (account.status === "configured") return "neutral";
   if (account.status === "authorization_required") return "warning";
