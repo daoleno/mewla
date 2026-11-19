@@ -393,13 +393,18 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
     }
     // The commit reaches onChange before the composition ends; a moment's wait also takes one that comes after.
     if (commitTimer) clearTimeout(commitTimer);
-    commitTimer = setTimeout(() => {
-      commitTimer = null;
-      const next = field.flush();
-      if (next !== null) settle(next);
-    }, COMMIT_SETTLE_MS);
+    commitTimer = setTimeout(commitNow, COMMIT_SETTLE_MS);
+  };
+  // A composition's commit waiting out its moment goes now, before a key that follows it (the key bar,
+  // Return): the key would overtake it ("ls" then Tab arrived as Tab then "ls").
+  const commitNow = () => {
+    if (commitTimer) clearTimeout(commitTimer);
+    commitTimer = null;
+    const next = field.flush();
+    if (next !== null) settle(next);
   };
   const press = (key: ScreenKey) => {
+    commitNow();
     const active = activeModifiers(mods());
     props.session.key(key, active);
     if (key === "BackSpace" && !active.length) echoed({ kind: "backspace", count: 1 });
@@ -410,6 +415,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   const paste = async () => {
     const text = await Clipboard.readText().catch(() => "");
     if (!text) return;
+    commitNow();
     props.session.text(text, []);
     echo.set(pushEcho(untracked(echo), { kind: "text", text: "\u2022".repeat(Math.min(Array.from(text).length, 24)) }, 0));
     tickEcho();
