@@ -84,13 +84,71 @@ export interface FloatPage {
 
 /**
  * The screens the window may show on this page: those of the Worker whose Session or Work file is open (and any whose
- * Worker is unknown), or every one on a page that belongs to no Worker. A screen is never floated over its own full view.
+ * Worker is unknown), or every one on a page that belongs to no Worker. A screen is never floated over its own full view,
+ * nor one the person hid (`hidden`, by `hideKey`) or whose window closed itself (`closed`, by `key`).
  */
-export function floatSources(all: readonly ScreenSource[], page: FloatPage): ScreenSource[] {
+export function floatSources(
+  all: readonly ScreenSource[],
+  page: FloatPage,
+  hidden: ReadonlySet<string> = new Set(),
+  closed: ReadonlySet<string> = new Set(),
+): ScreenSource[] {
   return all.filter((source) => {
     if (source.kind === "phone" ? page.phonePage : page.screenPage) return false;
+    if (hidden.has(hideKey(source)) || closed.has(source.key)) return false;
     return page.owner === null || source.owner === null || source.owner === page.owner;
   });
+}
+
+// Hiding: the person closes the window for one Worker; it stays closed for that Worker until they open the screen's
+// own page (Screen, or Phone use for the phone). Another Worker's screen still floats by itself.
+
+/** What a hidden window is kept under: a display's or the Mac's is its Worker's key, the phone's the agent working it. */
+export function hideKey(source: Pick<ScreenSource, "key" | "kind" | "owner" | "title">): string {
+  return source.kind === "phone" ? `phone:${source.owner ?? source.title}` : source.key;
+}
+
+/** Where the hidden keys are kept, one list per computer. */
+export const FLOAT_HIDDEN_KEY = "mewla:screen_float_hidden";
+/** The most hidden keys kept per computer: Worker ids only grow, so the oldest go. */
+export const FLOAT_HIDDEN_MAX = 50;
+
+/** The stored list read back: only strings, at most the last FLOAT_HIDDEN_MAX. */
+export function parseHiddenKeys(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(-FLOAT_HIDDEN_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The list with `key` hidden, newest last. */
+export function withHidden(keys: readonly string[], key: string): string[] {
+  return [...keys.filter((item) => item !== key), key].slice(-FLOAT_HIDDEN_MAX);
+}
+
+/**
+ * Opening a screen's own page brings its windows back: Screen every display's and the Mac's (its stage switches between
+ * agents), Phone use the phone's. Returns the same list when nothing changes.
+ */
+export function unhiddenOn(keys: readonly string[], page: Pick<FloatPage, "screenPage" | "phonePage">): readonly string[] {
+  const kept = keys.filter((key) => !(key.startsWith("phone:") ? page.phonePage : page.screenPage));
+  return kept.length === keys.length ? keys : kept;
+}
+
+/**
+ * After the window's live view ended while the app is in front: how long until it tries again, or null when the window
+ * closes itself instead of sitting there dark. A view that was live tries again a few times, so a dropped link recovers
+ * by itself; one that never came up (the video cannot reach this device) gets one more try; a computer too old for this
+ * app, none. `failures` counts the attempts that ended in a row, this one included.
+ */
+export const FLOAT_RETRY_MS = [1_000, 3_000, 8_000] as const;
+export function floatRetryDelay(failures: number, state: { everLive: boolean; outdated: boolean }): number | null {
+  if (state.outdated || failures < 1) return null;
+  const tries = state.everLive ? FLOAT_RETRY_MS.length : 1;
+  return failures <= tries ? FLOAT_RETRY_MS[failures - 1] : null;
 }
 
 /** The one the window shows: the one the person picked while it is still there, else the first. */
