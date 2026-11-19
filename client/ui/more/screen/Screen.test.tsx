@@ -236,6 +236,54 @@ describe("Screen: agents", () => {
     expect((opened(app)[1].data as { url: string }).url).toContain("watch=1");
   });
 
+  test("after Give back, the watched agent finishing a step opens no view of the person's own (re-review RR1)", async () => {
+    let status: Record<string, unknown> = { ...base, agent: codex, agents: [codex] };
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: () => json(status) }));
+    await app.waitFor("id:take-over");
+    await app.press("id:take-over");
+    await goLive(app);
+    status = { ...base };
+    await app.press("label:Give back");
+    await app.waitFor("id:screen-given-back");
+    status = { ...base, agent: codex, agents: [codex] };
+    await app.waitUntil(() => opened(app).length === 2, { timeout: 4_000 });
+    expect((opened(app)[1].data as { url: string }).url).toContain("watch=1");
+    await app.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
+    // The agent's screen session ends (idle between two steps): the watch closes.
+    status = { ...base };
+    await app.host.send("app.socketEnd", { reason: "" });
+    await app.waitFor("id:screen-given-back");
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    const urls = opened(app).map((o) => (o.data as { url: string }).url);
+    expect(urls.slice(2).filter((u) => !u.includes("watch=1"))).toEqual([]);
+    // And it watches the agent again when it comes back.
+    status = { ...base, agent: codex, agents: [codex] };
+    await app.waitUntil(() => opened(app).length === 3, { timeout: 4_000 });
+    expect((opened(app)[2].data as { url: string }).url).toContain("watch=1");
+  });
+
+  test("after Stop, the app going away and coming back opens no view of the person's own (re-review RR1)", async () => {
+    let status: Record<string, unknown> = { ...base, agent: codex, agents: [codex] };
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: () => json(status), [`POST ${SCREEN}`]: () => json(status) }));
+    await app.waitFor("id:screen-agents");
+    await app.press("label:Watch Codex");
+    await goLive(app);
+    status = { ...base };
+    await app.press("id:watch-stop");
+    await app.waitFor("id:screen-given-back");
+    expect(app.texts()).toContain("Codex stopped");
+    await app.setLifecycle("background");
+    await app.setLifecycle("active");
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await app.waitFor("id:screen-given-back");
+    expect(app.texts()).toContain("Codex stopped");
+    expect(opened(app)).toHaveLength(1);
+    // Take over is the person's own: it opens their view.
+    await app.press("id:take-over");
+    await app.waitUntil(() => opened(app).length === 2);
+    expect((opened(app)[1].data as { url: string }).url).not.toContain("watch=1");
+  });
+
   test("Take over opens the screen", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
     await app.waitFor("id:take-over");

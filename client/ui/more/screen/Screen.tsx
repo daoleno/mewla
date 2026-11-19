@@ -118,6 +118,15 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     if (!target || gone) return;
     dropSession();
     if (how !== "takeOver") tookOver.set(null);
+    // Given back or stopped, the screen stays the agents' until the person takes over: nothing that
+    // happens by itself (the watched agent's session ending, the app coming back, a reconnect) opens a
+    // view of the person's own, which would keep the agent off the screen. It watches or waits instead.
+    const handsOff = untracked(givenBack);
+    if (how === "takeOver") givenBack.set(null);
+    else if (how === "auto" && handsOff) {
+      how = "watch";
+      worker ??= handsOff.worker || undefined;
+    }
     const token = ++epoch;
     const active = () => token === epoch && isCurrent(target.id);
     slowWatch.reset();
@@ -162,18 +171,22 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     // Given back, stopped, or watching an agent that is between two steps: the person holds no view
     // of the screen (a view of their own would keep the agent off it) and waits for the agent to come back.
     if ((how === "watch" || how === "stopped") && !next.agent) {
-      givenBack.set({ worker: worker ?? "", name: untracked(givenBack)?.name ?? "", stopped: how === "stopped" });
+      const before = untracked(givenBack);
+      givenBack.set({ worker: worker ?? "", name: before?.name ?? "", stopped: how === "stopped" || (how === "watch" && !!before?.stopped) });
       phase.set("waiting");
       return;
     }
-    givenBack.set(null);
     const watch = how === "watch" && !!next.agent;
+    if (!watch) givenBack.set(null);
+    // The agent is back after a Stop: should it pause again, it goes on rather than stopped.
+    else if (untracked(givenBack)?.stopped) givenBack.set({ ...untracked(givenBack)!, stopped: false });
     watching.set(watch ? { worker } : null);
     const viewer = new RemoteSession(target, {
       watch,
       worker: watch ? worker : undefined,
       align: untracked(immersive) ? "center" : "top",
-      // The watched agent finished: look again, which opens the screen.
+      // The watched agent finished: look again, which opens the screen (after Give back or Stop it waits for
+      // the agent instead).
       onSocketClosed: () => {
         if (!watch) return false;
         void connect();
@@ -287,6 +300,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       epoch++;
       dropSession();
       ownScreen.set(false);
+      givenBack.set(null);
       status.set(null);
       iphone.set(null);
       watching.set(null);
