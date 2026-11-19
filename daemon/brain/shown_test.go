@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -421,7 +422,58 @@ func TestThePersonsLanguageIsReadFromTheirMessages(t *testing.T) {
 			t.Errorf("%v: got %q, want %q", c.messages, got, c.want)
 		}
 	}
-	if !strings.Contains(buildShownContext(Work{}, say("这个看不懂", "你需要我干啥"), nil, time.Now()), "The person writes in Chinese: write title, line and next in Chinese.") {
+	if !strings.Contains(buildShownContext(Work{}, say("这个看不懂", "你需要我干啥"), nil, time.Now(), personLanguage(say("这个看不懂", "你需要我干啥"))), "The person writes in Chinese: write title, line and next in Chinese.") {
 		t.Fatal("the judge is not told the person's language")
+	}
+}
+
+func TestASweptClosedWorkIsNotReadAgain(t *testing.T) {
+	f := newParkedFixture(t, answerClosed)
+	// Closed without ever having a row: a sweep of old Work moving its updated_at is not a reason to read it.
+	done := WorkDone
+	if _, err := f.store.UpdateWork(f.id, WorkUpdate{Status: &done}); err != nil {
+		t.Fatal(err)
+	}
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a closed Work with no row was judged %d times", ran)
+	}
+	// Its row written over a day ago: not in the list any more.
+	err := f.store.updateWorkProgressLocked(f.id, func(item *Work) (*WorkEvent, bool) {
+		item.Shown = &WorkShown{Title: "旧事", Line: "进行中", Status: "active", JudgedAt: f.clock.Add(-progressClosedWindow - time.Hour)}
+		return nil, false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a Work closed with a day-old row was judged %d times", ran)
+	}
+}
+
+func TestEvidenceNotYetJudgedSurvivesARestart(t *testing.T) {
+	f := newParkedFixture(t, answerParked)
+	f.service.requestChanged() // seen, queued, not judged
+	f.restart()                // the queue is gone
+	if ran := f.scan(); ran != 1 {
+		t.Fatalf("evidence seen before a restart was judged %d times after it, want 1", ran)
+	}
+	f.restart()
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a restart with everything judged judged %d times", ran)
+	}
+}
+
+func TestTheLanguageIsThePersonsNotTheWorks(t *testing.T) {
+	f := newParkedFixture(t, answerParked)
+	// The person's newest messages are hours after the Work began, outside its own window.
+	for i, text := range []string{"这个也看不懂。", "你看好多任务我都看不懂", "Dev 的代码最新的要往 main 合一下。"} {
+		if _, err := f.store.AppendTimelineItem(TimelineItem{ID: fmt.Sprintf("u%d", i), ThreadID: "t", SessionID: "s", Role: "user", Kind: "user_message", Body: text, CreatedAt: f.clock.Add(10 * time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.clock = f.clock.Add(11 * time.Hour)
+	f.scan()
+	if prompt := f.model.prompts[len(f.model.prompts)-1]; !strings.Contains(prompt, "The person writes in Chinese: write title, line and next in Chinese.") {
+		t.Fatalf("the judge was not told the person's language:\n%s", prompt[strings.Index(prompt, "<<<PERSON"):])
 	}
 }

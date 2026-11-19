@@ -290,6 +290,35 @@ func (s *Store) personMessagesFor(item Work, now time.Time) []personMessage {
 	return out
 }
 
+// personRecent reads the person's newest messages to Brain, whatever Work
+// they are about: the language they write in is theirs, not a Work's, and a
+// Work started by Brain (a review, a Trigger) may have none of its own near it.
+func (s *Store) personRecent(n int, now time.Time) []personMessage {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query(`SELECT body FROM timeline WHERE json_extract(body, '$.role') = 'user' ORDER BY seq DESC LIMIT ?`, personScanRows)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []personMessage
+	for rows.Next() && len(out) < n {
+		var body string
+		if rows.Scan(&body) != nil {
+			continue
+		}
+		if message, ok := personMessageOf([]byte(body)); ok && !message.At.After(now) {
+			out = append(out, message)
+		}
+	}
+	return out
+}
+
+// personLanguageRecent is how many of the person's newest messages set the
+// language the judge writes in.
+const personLanguageRecent = 30
+
 var personMarkup = regexp.MustCompile(`(?s)<mewla_attachments>.*?</mewla_attachments>`)
 
 func personMessageOf(body []byte) (personMessage, bool) {
@@ -318,7 +347,7 @@ func personMessageOf(body []byte) (personMessage, bool) {
 
 // buildShownContext is what the judge reads besides the Work to say how it
 // reads: the person's messages around it and the projects in use.
-func buildShownContext(item Work, messages []personMessage, projects []string, now time.Time) string {
+func buildShownContext(item Work, messages []personMessage, projects []string, now time.Time, language string) string {
 	var b strings.Builder
 	b.WriteString(workStanding(item, now))
 	b.WriteString("\n<<<PERSON\n## The person's own messages to Brain around this Work (oldest first; many are about other Work)\n")
@@ -340,7 +369,7 @@ func buildShownContext(item Work, messages []personMessage, projects []string, n
 		b.WriteString(strings.Join(projects, ", ") + "\n")
 	}
 	if item.Shown != nil && (item.Shown.Title != "" || item.Shown.Line != "") {
-		fmt.Fprintf(&b, "\n## Shown so far\ntitle: %s\nline: %s\nproject: %s\n", item.Shown.Title, item.Shown.Line, item.Shown.Project)
+		fmt.Fprintf(&b, "\n## Shown so far (keep the title and project unless wrong; write the line anew from the evidence above, never from this one)\ntitle: %s\nline: %s\nproject: %s\n", item.Shown.Title, item.Shown.Line, item.Shown.Project)
 		if len(item.Shown.ByPerson) > 0 {
 			fmt.Fprintf(&b, "The person set: %s (kept as they wrote it).\n", strings.Join(item.Shown.ByPerson, ", "))
 		}
@@ -348,7 +377,7 @@ func buildShownContext(item Work, messages []personMessage, projects []string, n
 	b.WriteString("PERSON>>>\n")
 	// Last, so it is the rule the judge reads nearest its answer: a brief, reports and notes in another
 	// language pull the words toward theirs.
-	if language := personLanguage(messages); language != "" {
+	if language != "" {
 		fmt.Fprintf(&b, "\nThe person writes in %s: write title, line and next in %s.\n", language, language)
 	} else {
 		b.WriteString("\nWrite title, line and next in the language of the person's own messages above.\n")
