@@ -3950,19 +3950,19 @@ const calendarReclaimWindow = 7 * 24 * time.Hour
 // and nothing else uses that Session. A Session still at work is looked at
 // again on the next tick.
 func (s *Server) reclaimFinishedCalendarSessions() {
-	if s.calendar == nil || s.watcher == nil {
+	if s.calendar == nil || s.watcher == nil || s.brain == nil {
 		return
 	}
 	for _, sessionID := range s.calendar.FinishedRunSessions(time.Now().Add(-calendarReclaimWindow)) {
 		if s.watcher.GetWorker(sessionID) == nil {
 			continue
 		}
-		switch err := s.watcher.ReclaimIdleSession(sessionID); {
-		case err == nil:
-			log.Printf("calendar: reclaimed finished scheduled-action Session %s", sessionID)
-		case errors.Is(err, watcher.ErrSessionNotIdle), errors.Is(err, watcher.ErrNotOwnedDelegatedWorker):
-		default:
+		reclaimed, err := s.brain.ReclaimFinishedRunSession(sessionID)
+		switch {
+		case err != nil:
 			log.Printf("calendar: reclaim finished scheduled-action Session %s: %v", sessionID, err)
+		case reclaimed:
+			log.Printf("calendar: reclaimed finished scheduled-action Session %s", sessionID)
 		}
 	}
 }

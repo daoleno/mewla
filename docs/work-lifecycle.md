@@ -360,7 +360,9 @@ cleanup, so a Session that goes idle after its Work closed is reclaimed then;
 a Session the pass was refused is asked again only by a later Work close or
 restart. A finished scheduled-action run (Calendar) reclaims its Worker
 Session the same way: once the run is completed or failed and the Session is
-idle at its prompt. A refused, failed or retryable teardown is never
+idle at its prompt, through the same teardown (its model route and Codex
+resources are released), and never while Brain has given that Session open
+Work since. A refused, failed or retryable teardown is never
 marked. A completed Session whose pane id now belongs to another process or
 pane generation is a final refusal for that record, so it ends the startup
 retry instead of repeating every 10 seconds. Releasing a Session that has no
@@ -421,8 +423,9 @@ limited or times out, or its reply is not a verdict), AGENTS.md's promise
 holds: a Work whose result Brain read (its handling of a delivered result
 ended) with no Attempt, wait, question or prompt left closes as actor
 `runtime`, and its Sessions are reclaimed. A follow-up or `work update`
-reopens it. A Work with no read result, or one the judge kept, stays as it
-is. One failure stands for every Work for 10 minutes, so a route that refuses
+reopens it. A Work with no read result, one the judge kept, and one where
+Brain named a later step with `-wait-for` after that result (even if the wait
+was since released) stay as they are. One failure stands for every Work for 10 minutes, so a route that refuses
 is asked once, not once per Work. The log line names the route the judge's
 headless Claude used (the base URL from the user's Claude settings, which is
 Mewla's gateway when the Claude takeover is on, else the daemon's environment)

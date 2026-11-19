@@ -642,6 +642,13 @@ func (w *fakeWatcher) KillCompletedSession(sessionID, turnID string) error {
 	return w.KillSession(sessionID)
 }
 
+func (w *fakeWatcher) ReclaimIdleSession(sessionID string) error {
+	if w.busy[sessionID] {
+		return watcher.ErrSessionNotIdle
+	}
+	return w.KillSession(sessionID)
+}
+
 func (w *fakeWatcher) KillSession(sessionID string) error {
 	w.killed = append(w.killed, sessionID)
 	if w.killLeavesLive && w.killErr != nil {

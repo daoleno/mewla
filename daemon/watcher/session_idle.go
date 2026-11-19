@@ -26,6 +26,9 @@ const reclaimIdleStable = 60 * time.Second
 // working spinner nor background shells, agents or monitors show. These are
 // the stall supervisor's own facts; the screen is the Worker's own process.
 func (w *Watcher) SessionIdleAtPrompt(sessionID string) bool {
+	if pending, err := w.pendingInputAdmissions(strings.TrimSpace(sessionID)); err != nil || len(pending) != 0 {
+		return false // a prompt is on its way in
+	}
 	_, idle := w.sessionIdleScreen(sessionID)
 	return idle
 }

@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +155,66 @@ func TestRestartKeepsUpdatedAtOfUnchangedWork(t *testing.T) {
 	}
 	if !after.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Fatalf("restart rewrote updated_at: %s -> %s", before.UpdatedAt, after.UpdatedAt)
+	}
+}
+
+// The same Work during a judge outage: Brain named the delta re-check with
+// -wait-for after reading the result, a reply released it, and the judge
+// cannot answer. The fallback must not close it on "last turn done" alone.
+func TestLiveCaseJudgeOutageLeavesANamedWaitAlone(t *testing.T) {
+	judge := &fakeJudge{err: errors.New("headless judge: the model route http://127.0.0.1:3427 answered HTTP 403: Insufficient account balance")}
+	store, service, item := endedHandlingFixture(t, judge)
+	id := lifecycle.WorkID(item.ID)
+	if _, err := store.FSM().SetWait(id, lifecycle.WakeUserInput, liveCaseWaitFor); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.FSM().ClearWait(id, lifecycle.WakeUserInput, liveCaseWaitFor, "message:reply"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SyncWorkProjection(item.ID); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(settleDebounce + 5*time.Minute)
+	service.now = func() time.Time { return later }
+	runSettle(t, service)
+	if got, _ := store.Work(item.ID); got.Status == WorkDone || got.Status == WorkCancelled || closedByRuntime(t, store, item.ID) {
+		t.Fatalf("a judge outage closed a Work Brain named a later step for: %+v", got)
+	}
+}
+
+// A finished scheduled run's Session is reclaimed when idle, unless Brain has
+// since given it open Work (a follow-up whose result Brain is reading).
+func TestFinishedRunSessionIsReclaimedOnlyWithoutOpenWork(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw := &fakeWatcher{turnStore: store, sessions: map[string]*classifier.Worker{
+		"mh-run":  {ID: "mh-run", Delegated: true, State: classifier.StateUnknown},
+		"mh-used": {ID: "mh-used", Delegated: true, State: classifier.StateDone},
+		"mh-busy": {ID: "mh-busy", Delegated: true, State: classifier.StateUnknown},
+	}, busy: map[string]bool{"mh-busy": true}}
+	service := NewService(store, fw, nil)
+	item, err := store.CreateWork(Work{Title: "follow-up", Objective: "Brain reused a finished run's Session"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.SubmitDelegatedWorkInput("mh-used", "follow-up", item.ID, "turn:used", "", "", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ApplyDelegatedTurnProgress(watcher.TurnFact{SessionID: "mh-used", TurnID: "turn:used", Class: watcher.EvidenceControl, Kind: "done", SourceID: "d", At: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id   string
+		want bool
+	}{{"mh-used", false}, {"mh-busy", false}, {"mh-run", true}} {
+		got, err := service.ReclaimFinishedRunSession(tc.id)
+		if err != nil || got != tc.want {
+			t.Fatalf("%s: reclaimed=%v err=%v, want %v", tc.id, got, err, tc.want)
+		}
+	}
+	if len(fw.killed) != 1 || fw.killed[0] != "mh-run" {
+		t.Fatalf("killed = %v, want only mh-run", fw.killed)
 	}
 }

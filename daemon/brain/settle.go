@@ -185,7 +185,11 @@ func (s *Service) settleCandidates() ([]settleItem, error) {
 		if settleCandidate(item, st, now) && !s.screenOpenOn(item) && !s.keptStillHolds(item, st, now) {
 			// settleCandidate admits an open review only once Brain's handling
 			// of it ended: Brain has read that result.
-			candidates = append(candidates, settleItem{work: item, revision: st.Revision, readResult: st.Review != nil})
+			candidate := settleItem{work: item, revision: st.Revision, readResult: st.Review != nil}
+			if st.Review != nil {
+				candidate.namedWaitSince = s.store.namedWaitSince(item.ID, st.Review.OpenedAt)
+			}
+			candidates = append(candidates, candidate)
 		}
 	}
 	return candidates, nil
@@ -197,6 +201,9 @@ type settleItem struct {
 	// readResult: Brain's handling of a delivered result ended and nothing is
 	// pending, which is what AGENTS.md promises closes the Work.
 	readResult bool
+	// namedWaitSince: Brain named a later step to wait for after that result
+	// arrived (a -wait-for since released). Only a judgment may close it.
+	namedWaitSince bool
 }
 
 // keptStillHolds says whether the Work's keep verdict still stands: same
@@ -292,10 +299,11 @@ func (s *Service) judgeOne(candidate settleItem) {
 
 // settleWithoutJudge keeps AGENTS.md's promise when the judge cannot answer:
 // a result Brain read, with no Worker turn, wait, question or prompt left,
-// is accepted. Any other Work, and a Work the judge kept, stays as it is and
-// shows in Brain's stale list.
+// is accepted. Any other Work, a Work the judge kept, and a Work Brain named
+// a later step for after that result stay as they are and show in Brain's
+// stale list.
 func (s *Service) settleWithoutJudge(candidate settleItem, cause string) {
-	if !candidate.readResult || candidate.work.Kept != nil {
+	if !candidate.readResult || candidate.work.Kept != nil || candidate.namedWaitSince {
 		return
 	}
 	s.closeSettled(candidate.work, WorkDone, "Brain read the result and left nothing pending; the closure judge could not answer ("+judgeClip(cause, 300)+").")
@@ -554,4 +562,24 @@ func (s *Store) statedWaits(workID string) []string {
 		out = append(out, event.At.UTC().Format(time.RFC3339)+" "+string(wait.WakeKind)+": "+judgeClip(ref, 300))
 	}
 	return out
+}
+
+// namedWaitSince says whether Brain set a wait naming a step (not a plain park
+// on its own thread) at or after since.
+func (s *Store) namedWaitSince(workID string, since time.Time) bool {
+	if s == nil || s.fsm == nil {
+		return false
+	}
+	events, err := s.fsm.WaitHistory(lifecycle.WorkID(workID))
+	if err != nil {
+		return true // unreadable history: never close on a guess
+	}
+	for _, event := range events {
+		wait, ok := event.Payload.(lifecycle.WakePayload)
+		if ok && !event.At.Before(since) && wait.WakeKind == lifecycle.WakeUserInput &&
+			strings.TrimSpace(wait.Ref) != "" && !strings.HasPrefix(strings.TrimSpace(wait.Ref), "brain-thread:") {
+			return true
+		}
+	}
+	return false
 }
