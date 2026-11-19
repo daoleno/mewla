@@ -43,6 +43,18 @@ func startTURNRelay(t *testing.T, clientListener, controlTCP net.Listener, relay
 	}
 }
 
+// waitRegistered waits until the relay holds the computer's route and the
+// connector has taken that registration as its own. The relay records the
+// route before the connector hears back, and TURN asks the connector. The
+// relay is read first: once it holds the route of this connection, the
+// connector's "connected" is that connection's, not one before a restart.
+func waitRegistered(t *testing.T, timeout time.Duration, relayServer *relay.Server, connector *link.Connector) {
+	t.Helper()
+	waitFor(t, timeout, func() bool {
+		return relayServer.Snapshot().ActiveRoutes == 1 && connector.State().Phase == "connected"
+	})
+}
+
 // A computer registered with a relay that issues TURN credentials gets them
 // over the signed control exchange (one that is not registered gets none),
 // keeps them while more than half their life is left, and drops them when it
@@ -79,7 +91,7 @@ func TestConnectorGetsTURNCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() { _ = connector.Run(ctx) }()
-	waitFor(t, 3*time.Second, func() bool { return relayServer.Snapshot().ActiveRoutes == 1 })
+	waitRegistered(t, 3*time.Second, relayServer, connector)
 
 	creds, err := link.TURN(ctx)
 	if err != nil {
@@ -108,7 +120,7 @@ func TestConnectorGetsTURNCredentials(t *testing.T) {
 	}
 	relayServer, stop = startTURNRelay(t, clientListener, controlTCP, relayTLS, bytes.Repeat([]byte{2}, 32))
 	t.Cleanup(stop)
-	waitFor(t, 10*time.Second, func() bool { return relayServer.Snapshot().ActiveRoutes == 1 })
+	waitRegistered(t, 10*time.Second, relayServer, connector)
 	fresh, err := connector.TURN(ctx)
 	if err != nil {
 		t.Fatal(err)
