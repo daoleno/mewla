@@ -451,6 +451,8 @@ func workStanding(item Work, now time.Time) string {
 			b.WriteString("It goes on when its Worker's turn ends.\n")
 		case WorkWakeCalendarResult:
 			b.WriteString("It goes on when a scheduled run reports.\n")
+		case WorkWakeNamed:
+			b.WriteString("It waits on something Brain named, not on the person.\n")
 		}
 	}
 	if wait := strings.TrimSpace(item.WaitFor); wait != "" {

@@ -13,7 +13,7 @@ export type BrainWorkStatus =
   | "cancelled";
 
 export type BrainWorkWake = {
-  kind: "session_terminal" | "calendar_result" | "user_input";
+  kind: "session_terminal" | "calendar_result" | "user_input" | "named";
   ref: string;
 };
 

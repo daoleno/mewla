@@ -179,8 +179,10 @@ func (s *Store) RecordWorkUserAction(request WorkUserActionRequest, admission Ex
 		event.Summary = workReplySummary(request)
 		details, _ := json.Marshal(map[string]any{"admission": string(admission), "question": item.Question, "attachments": request.Attachments})
 		event.DetailsJSON = string(details)
-		if st, stateErr := s.fsmState(item.ID); stateErr == nil && st != nil && st.Wake != nil && st.Wake.Kind == lifecycle.WakeKind(WorkWakeUserInput) {
-			// The user answered what the Work waited on.
+		if st, stateErr := s.fsmState(item.ID); stateErr == nil && st != nil && st.Wake != nil && st.Wake.Kind == lifecycle.WakeKind(WorkWakeUserInput) &&
+			strings.TrimSpace(item.Question) != "" {
+			// The person answered what Brain asked. A reply on a Work that asks
+			// nothing is a message to Brain: the wait stays until Brain decides.
 			if _, err := s.fsm.ClearWait(st.ID, st.Wake.Kind, st.Wake.Ref, receipt); err != nil {
 				s.mu.Unlock()
 				return Work{}, WorkEvent{}, err

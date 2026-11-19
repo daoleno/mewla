@@ -98,8 +98,8 @@ func (s *Service) ownedByTrigger(workID string) bool {
 
 // undecided is a decision nobody takes, with nothing asked and no Worker on
 // it: a result back, or the person's reply, waiting a day for Brain; or a
-// bare park for two hours (parked): a user_input wait that names nothing to
-// wait on, which the person is never shown. A wait Brain names (-wait-for a
+// bare park for two hours (parked): a wait that names nothing to wait on and
+// asks nothing, which the person is never shown. A wait Brain names (-wait-for a
 // Mac, a PR head, a Worker's next commit) is Brain's own and stays quiet, as
 // does a Work with a live delegated Worker (owner 2026-11-19).
 func undecided(work CurrentWork, now time.Time) (parked, ok bool) {
@@ -111,15 +111,14 @@ func undecided(work CurrentWork, now time.Time) (parked, ok bool) {
 	}
 	waited := now.Sub(*work.AttentionSince)
 	if work.Wake != nil {
-		parked = work.Wake.Kind == WorkWakeUserInput && bareParkRef(work) && !liveWorker(work)
+		parked = (work.Wake.Kind == WorkWakeNamed || work.Wake.Kind == WorkWakeUserInput) && bareParkRef(work) && !liveWorker(work)
 		return parked, parked && waited >= parkedAfter
 	}
 	return false, waited >= undecidedAfter && (work.UnreadResult || work.UserAction != nil && work.UserAction.Kind == WorkUserReply)
 }
 
-// bareParkRef is a user_input wake that names nothing: the ref the runtime
-// gives a wait without -wait-for (operator:<work>), or a review's wait on
-// Brain's thread.
+// bareParkRef is a wait that names nothing: the ref the runtime gives a wait
+// without -wait-for (operator:<work>), or a review's wait on Brain's thread.
 func bareParkRef(work CurrentWork) bool {
 	ref := strings.TrimSpace(work.Wake.Ref)
 	return ref == "" || ref == "operator:"+work.ID || strings.HasPrefix(ref, "brain-thread:")

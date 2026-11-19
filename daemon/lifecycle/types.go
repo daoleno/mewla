@@ -90,6 +90,10 @@ const (
 	WakeCalendarResult  WakeKind = "calendar_result"
 	WakeUserInput       WakeKind = "user_input"
 	WakeDueRetry        WakeKind = "due_retry"
+	// WakeNamed is a condition Brain named (-wait-for) with no producer of its
+	// own: a release, another Worker's push, tomorrow's run. Nothing but Brain
+	// ends it; the person's reply on the Work is a message, not its answer.
+	WakeNamed WakeKind = "named"
 )
 
 // Review dispositions.

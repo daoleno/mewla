@@ -285,17 +285,17 @@ func (s *Service) BrainUpdateWork(id string, update WorkUpdate) (Work, error) {
 			(*update.Status == WorkRunning || *update.Status == WorkWaiting || *update.Status == WorkNeedsInput)
 		if update.Status != nil && (*update.Status == WorkWaiting || *update.Status == WorkNeedsInput) {
 			request.Disposition = WorkDispositionWait
-			request.Wake = &WorkWake{Kind: WorkWakeUserInput, Ref: "brain-thread:" + strings.TrimSpace(handling.SourceThreadID)}
+			request.Wake, err = s.reviewWaitWake(id, handling.SourceThreadID, update)
+			if err != nil {
+				return Work{}, err
+			}
 		}
 		if update.Status == nil || statusIsDisposition {
 			_, _, resolveErr := s.store.ResolveWorkReview(request)
 			switch {
 			case resolveErr == nil:
-				// A review's wait parks on Brain's thread; a wait Brain names
-				// (-wait-for "<a Mac, a PR head>") parks on that named thing
-				// instead, so it stays the wait Brain owns (owner 2026-11-19).
-				named := statusIsDisposition && *update.Status == WorkWaiting && update.WaitFor != nil && strings.TrimSpace(*update.WaitFor) != ""
-				if statusIsDisposition && !named {
+				// The disposition carried the wait; the update keeps only its prose.
+				if statusIsDisposition {
 					update.Status = nil
 				}
 			case request.Disposition == WorkDispositionWait &&
@@ -312,6 +312,25 @@ func (s *Service) BrainUpdateWork(id string, update WorkUpdate) (Work, error) {
 		return s.store.Work(id)
 	}
 	return s.UpdateWork(id, update)
+}
+
+// reviewWaitWake is the wait a review's -status waiting resolves to. Asking
+// the person (a question, this update's or the standing one) parks on Brain's
+// thread, where their answer arrives. Anything else is Brain's own wait on what
+// -wait-for names (or nothing named): a named wake no message ends.
+func (s *Service) reviewWaitWake(id, threadID string, update WorkUpdate) (*WorkWake, error) {
+	item, err := s.store.Work(id)
+	if err != nil {
+		return nil, err
+	}
+	if waitWakeKind(item, update.Question) == WorkWakeUserInput {
+		return &WorkWake{Kind: WorkWakeUserInput, Ref: "brain-thread:" + strings.TrimSpace(threadID)}, nil
+	}
+	ref := "operator:" + item.ID
+	if update.WaitFor != nil && strings.TrimSpace(*update.WaitFor) != "" {
+		ref = *update.WaitFor
+	}
+	return &WorkWake{Kind: WorkWakeNamed, Ref: ref}, nil
 }
 
 func (s *Service) cleanupAfterWorkDecision(workID string) error {

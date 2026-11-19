@@ -1164,11 +1164,11 @@ func waitNothingAskedNotice(item brain.Work, update brain.WorkUpdate) string {
 	if item.Status == brain.WorkDone || item.Status == brain.WorkCancelled || strings.TrimSpace(item.Question) != "" {
 		return ""
 	}
-	if item.Wake == nil || item.Wake.Kind != brain.WorkWakeUserInput {
+	if item.Wake == nil || item.Wake.Kind != brain.WorkWakeNamed {
 		return ""
 	}
 	// A wait Brain names (-wait-for a Mac, a PR head) is its own: nothing to say.
-	if ref := strings.TrimSpace(item.Wake.Ref); ref != "" && ref != "operator:"+item.ID && !strings.HasPrefix(ref, "brain-thread:") {
+	if ref := strings.TrimSpace(item.Wake.Ref); ref != "" && ref != "operator:"+item.ID {
 		return ""
 	}
 	return fmt.Sprintf("The person is not asked anything: this Work shows as Waiting, never Needs you. To ask them, run mewla brain work update -id %s -question \"<one line>\" -choice \"<a>\" -choice \"<b>\" -recommend \"<your pick>\".", item.ID)
