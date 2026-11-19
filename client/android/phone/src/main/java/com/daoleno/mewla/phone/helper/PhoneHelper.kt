@@ -375,9 +375,8 @@ internal class PhoneHelper(
             // display is stale (the system dropped it, or the helper outlived what it was made for):
             // make a fresh one and start the app there once.
             val drew = target.drewSince(began, DRAW_WAIT_MS)
-            // Remaking a display destroys what is on it: a black one counts as showing nothing only when nothing on it reads either.
-            val blank = !drew && target.frameCount() > 0 && target.dark() && interactive() &&
-                DisplayHealth.showsNothing(readable(target.displayId), dark = true)
+            // Remaking a display destroys what is on it: a black one counts as showing nothing only when no app window is on it.
+            val blank = !drew && target.frameCount() > 0 && target.dark() && interactive() && appWindows(target.displayId) == 0
             if (!DisplayHealth.needsRecreate(target.alive(), drew, target.frameCount() > 0, attempt, showsNothing = blank)) break
             Log.w(TAG, "display ${target.displayId} drew nothing after launching $pkg: recreating")
             val dims = intArrayOf(target.width, target.height, target.dpi)
@@ -391,11 +390,8 @@ internal class PhoneHelper(
         return ok().put("component", component).put("recovered", recovered).put("display", target.displayId)
     }
 
-    /** How many elements the accessibility tree has on [displayId]. */
-    private fun readable(displayId: Int): Int {
-        val windows = reader.read(displayId).optJSONArray("windows") ?: return 0
-        return (0 until windows.length()).sumOf { windows.getJSONObject(it).optJSONArray("nodes")?.length() ?: 0 }
-    }
+    /** How many app windows the accessibility tree has on [displayId]: none means nothing is open there. */
+    private fun appWindows(displayId: Int): Int = reader.read(displayId).optJSONArray("windows")?.length() ?: 0
 
     /**
      * The launcher component of [pkg] for clone [user], from `cmd package query-activities`. A user that is

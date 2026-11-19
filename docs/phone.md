@@ -184,12 +184,13 @@ back on when it can.
 - If an app reports none of its views as visible (WeChat on the hidden screen did), the reader trusts each element's position instead, and elements also carry their state description and tooltip as their description.
 - Apps that block screen capture (banking, some video apps) show a black
   picture, and apps that block automation may refuse. The agent is told.
-- A hidden screen that is black with nothing to read is never an answer that
-  worked: the agent is told it failed (`screen_blank`) and to ask you to unlock
-  the phone and open Mewla if it stays black. Opening an app on a display that
-  drew before but is now black with nothing to read makes the display again
-  once; a dark screen that still reads is kept, since remaking a display closes
-  what is on it.
+- An app opened on the hidden screen that leaves nothing there (no app window)
+  is a failure (`screen_blank`), never "opened". Anything else with nothing to
+  read is answered with what it is: nothing is open yet, the app shows only black
+  (starting, a video, a camera), or no app answers (it hung or closed, and the
+  picture may be old). Opening an app on a display that drew before but is now
+  black with no app on it makes the display again once; a display with any app
+  on it is kept, since remaking it closes what is on it.
 - Mewla's Accessibility service only acts while **Set up** runs, only inside
   Settings and the system's prompt, and never answers a system prompt for you.
 - On a network Android hasn't been told to allow, switching Wireless debugging on

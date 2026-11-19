@@ -123,26 +123,26 @@ class DisplayHealthTest {
     }
 
     @Test
-    fun aDisplayThatDrewBeforeButIsBlackWithNothingToReadIsMadeAgain() {
+    fun aDisplayThatDrewBeforeButIsBlackWithNoAppOnItIsMadeAgain() {
         // 11-19: Chrome, X and 小红书 all "opened" on a display that had drawn earlier and now stayed black, 0 elements.
-        val nothing = DisplayHealth.showsNothing(elements = 0, dark = true)
-        assertTrue(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 0, showsNothing = nothing))
-        assertFalse(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 1, showsNothing = nothing))
+        assertTrue(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 0, showsNothing = true))
+        assertFalse(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 1, showsNothing = true))
+        // An app window on it, even one drawing black, is kept: remaking the display would close it.
+        assertFalse(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 0, showsNothing = false))
     }
 
     @Test
-    fun aDarkDisplayWithSomethingToReadIsKeptSinceRemakingItDestroysWhatIsOnIt() {
-        // A dark video, splash or camera view in front of the launch still reads: what is on the display stays.
-        val dark = DisplayHealth.showsNothing(elements = 5, dark = true)
-        assertFalse(DisplayHealth.needsRecreate(alive = true, drewSinceLaunch = false, everDrew = true, attempt = 0, showsNothing = dark))
-    }
-
-    @Test
-    fun aBlackScreenWithNothingToReadIsNeverAnAnswerThatWorked() {
-        assertTrue(DisplayHealth.showsNothing(elements = 0, dark = true))
-        // An app that draws its own UI has no elements but a picture; a dark app with elements is a real screen.
-        assertFalse(DisplayHealth.showsNothing(elements = 0, dark = false))
-        assertFalse(DisplayHealth.showsNothing(elements = 3, dark = true))
+    fun onlyALaunchThatLeftNoAppWindowFails() {
+        // 11-20 emulator: a fresh display read before any launch, an app drawing black (ProbeBlack), a cold start's black
+        // splash and the same behind the lock screen all failed as screen_blank. Each is a healthy phone.
+        assertEquals(DisplayHealth.Empty.NOT_OPENED, DisplayHealth.empty(windows = 0, elements = 0, dark = true, launched = true))
+        assertEquals(DisplayHealth.Empty.NOTHING_OPEN, DisplayHealth.empty(windows = 0, elements = 0, dark = true, launched = false))
+        assertEquals(DisplayHealth.Empty.BLACK_APP, DisplayHealth.empty(windows = 1, elements = 0, dark = true, launched = true))
+        assertEquals(DisplayHealth.Empty.BLACK_APP, DisplayHealth.empty(windows = 1, elements = 0, dark = true, launched = false))
+        // 11-20 00:30: 小红书 hung, nothing answered and the last frame stayed: say so instead of a bare "0 elements".
+        assertEquals(DisplayHealth.Empty.NOT_ANSWERING, DisplayHealth.empty(windows = 0, elements = 0, dark = false, launched = false))
+        assertEquals(DisplayHealth.Empty.OWN_UI, DisplayHealth.empty(windows = 1, elements = 0, dark = false, launched = false))
+        assertEquals(DisplayHealth.Empty.NONE, DisplayHealth.empty(windows = 1, elements = 3, dark = true, launched = true))
     }
 
     @Test

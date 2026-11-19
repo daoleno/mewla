@@ -48,12 +48,13 @@ object PhoneController {
     // The agent display has the phone's real pixels; what the agent sees and sends is the picture space, at most this wide.
     private const val MODEL_IMAGE_WIDTH = 720
     private const val REPLACE_EVERY_MS = 60_000L
+    private const val LAUNCH_WINDOW_POLLS = 4
+    private const val LAUNCH_WINDOW_POLL_MS = 1_500L
     private const val ANNOUNCE_WAIT_MS = 150_000L
     private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
-    /** What a tool is told when the agent's screen shows nothing: the action did not work, and why it usually is. */
-    private const val BLANK_SCREEN = "The agent's screen on the phone is black and has nothing to read, so nothing here can be " +
-        "taken as done (after a launch: the app did not open there). Try once more; if it stays black, tell the person and " +
-        "ask them to unlock the phone and open Mewla once."
+    /** What a tool is told when a launch left nothing on the agent's screen: the app did not open, never "ok". */
+    private fun notOpened(label: String) = "$label did not open on the agent's screen: nothing is there (black, no app window). " +
+        "Try the launch once more; if it stays empty, tell the person that Mewla on the phone could not open apps for you, and stop."
 
     private lateinit var app: Context
     private lateinit var prefs: PhonePrefs
@@ -974,7 +975,8 @@ object PhoneController {
             else -> return failure(id, "failed", "Unknown phone op $op")
         }
         if (op != "screen") helper.call("settle", JSONObject().put("quiet_ms", settleQuiet).put("timeout_ms", settleMax).put("min_wait_ms", settleMin), settleMax + 3_000)
-        return snapshot(id, helper, wantImage, acted = op != "screen" && op != "wait").also { result ->
+        val launched = if (op == "launch") appLabel(args.getString("package"), args.optInt("user", 0)) else null
+        return snapshot(id, helper, wantImage, acted = op != "screen" && op != "wait", launched = launched).also { result ->
             note?.let { result.put("note", listOf(it, result.optString("note")).filter { n -> n.isNotEmpty() }.joinToString(" ")) }
         }
     }
@@ -1027,13 +1029,29 @@ object PhoneController {
     /** The agent display's size and density next to the phone's own, as the daemon is told it. */
     @Volatile private var displayInfo: String? = null
 
+    /** What the agent is told about a reading with nothing to read; null when there is something, or the picture says it all. */
+    private fun emptyNote(empty: DisplayHealth.Empty): String? = when (empty) {
+        DisplayHealth.Empty.NOTHING_OPEN -> "Nothing is open on the agent's screen: open an app with launch."
+        DisplayHealth.Empty.BLACK_APP -> "The app shows only black and nothing to read: it may still be starting, or it draws black " +
+            "(a video, a camera). Read again in a moment before acting on it."
+        DisplayHealth.Empty.NOT_ANSWERING -> "No app on the agent's screen answers: nothing can be read and the picture may be from " +
+            "before. The app may have hung or closed. Read again in a moment; if it stays like this, launch the app again."
+        else -> null
+    }
+
     /** Whether the last reading had nothing the agent could name: an app that draws its own UI. */
     @Volatile private var opaqueScreen = false
 
     /** What is on the agent's display now, in the daemon's Screen shape, with a picture when asked or needed. */
-    private fun snapshot(id: String, helper: HelperClient, wantImage: Boolean, acted: Boolean = false): JSONObject {
-        val tree = helper.call("tree")
+    private fun snapshot(id: String, helper: HelperClient, wantImage: Boolean, acted: Boolean = false, launched: String? = null): JSONObject {
+        var tree = helper.call("tree")
         if (!tree.optBoolean("ok")) return failure(id, "failed", tree.optString("error"))
+        // An app slow to start has no window yet: give a launch a few more seconds before saying it did not open.
+        for (wait in 1..LAUNCH_WINDOW_POLLS) {
+            if (launched == null || (tree.optJSONArray("windows")?.length() ?: 0) > 0 || !tree.optBoolean("interactive", true)) break
+            Thread.sleep(LAUNCH_WINDOW_POLL_MS)
+            tree = helper.call("tree").takeIf { it.optBoolean("ok") } ?: break
+        }
         val windows = tree.optJSONArray("windows") ?: JSONArray()
         val picture = pictureSize() ?: intArrayOf(tree.optInt("w"), tree.optInt("h"))
         for (i in 0 until windows.length()) {
@@ -1047,12 +1065,17 @@ object PhoneController {
         val screenOff = windows.length() == 0 && !interactive
         var elements = 0
         for (i in 0 until windows.length()) elements += windows.getJSONObject(i).optJSONArray("nodes")?.length() ?: 0
-        // A black display with nothing to read is not a screen the action worked on: say so, never "ok" (11-19).
-        if (!screenOff && DisplayHealth.showsNothing(elements, tree.optBoolean("dark", false))) {
+        // Nothing to read is never left unexplained, and a launch that left nothing on the display is not "ok" (11-19).
+        // Only that last case fails: an app drawing black (a cold start, a video) or a display nothing was opened on yet
+        // is a healthy phone, and a failure telling the agent to ask the person to unlock would be wrong there.
+        val empty = if (screenOff) DisplayHealth.Empty.NONE
+        else DisplayHealth.empty(windows.length(), elements, tree.optBoolean("dark", false), launched != null)
+        if (empty == DisplayHealth.Empty.NOT_OPENED) {
             opaqueScreen = false
             return JSONObject().put("type", "result").put("id", id).put("ok", false).put("code", "screen_blank")
-                .put("error", BLANK_SCREEN)
+                .put("error", notOpened(launched ?: "The app"))
         }
+        emptyNote(empty)?.let { result.put("note", it) }
         // With nothing to read the picture is the screen: send it now, not after another round trip.
         opaqueScreen = !screenOff && elements == 0
         if (screenOff) {
@@ -1070,7 +1093,7 @@ object PhoneController {
         }
         // The display draws only when something changes. After an action with no new frame the picture is
         // the screen from before it; say so, so the agent waits and reads again instead of trusting it.
-        if (acted && !tree.optBoolean("drew_since_action", true)) {
+        if (acted && !tree.optBoolean("drew_since_action", true) && empty == DisplayHealth.Empty.NONE) {
             result.put("note", "Nothing was drawn on the screen after the action: the screen may be unchanged, or the app has not redrawn yet. Wait a moment and read again before acting on it.")
         }
         return result
