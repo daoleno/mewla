@@ -232,7 +232,7 @@ describe("Brain's Work", () => {
     expect(app.texts()).not.toContain("This Work is no longer open");
   }, 20_000);
 
-  test("Work detail shows the Work's brief under the top block, four lines until tapped: an open Work asks the computer for it once", async () => {
+  test("Work detail shows the Work's brief, labelled, four lines until tapped: an open Work asks the computer for it once", async () => {
     const at = now();
     const objective = "Ship the beta: fix the checkout flake, refresh the docs screenshots, and tag 0.4.0 once CI is green.";
     const app = await workApp({ brain: brain(), replies: { brain_work_detail: { type: "brain_work_detail", work: {
@@ -242,6 +242,29 @@ describe("Brain's Work", () => {
     await app.waitFor("id:work-brief");
     expect(app.texts()).toContain(objective);
     expect(framesOf(app.host.posts(), "brain_work_detail")).toHaveLength(1);
+  }, 20_000);
+
+  test("Work detail reads Now, Next, Outcomes, So far, Asked, Workers, then Brain's brief: the judge's words and the person's own, never Brain's notes (mock round 2)", async () => {
+    const at = now();
+    const daemon = brain();
+    const shown = { title: "发布测试版", line: "结账偶发失败已修好，正在跑发布检查", next: "检查通过后打 0.4.0 标签", status: "active" };
+    daemon.current_work = daemon.current_work.map((work) => (work.work_id === "w-run" ? { ...work, shown } : work)) as never;
+    const app = await workApp({ brain: daemon, replies: { brain_work_detail: { type: "brain_work_detail", work: {
+      work_id: "w-run", revision: 3, title: "ship-the-beta", objective: "Ship the beta: fix the checkout flake and tag 0.4.0.", status: "running", created_at: at, updated_at: at, worker_sessions: [],
+      shown: { ...shown, so_far: [{ at, text: "找到结账偶发失败的原因" }, { at, text: "结账偶发失败已修好，正在跑发布检查" }], asked: [{ seq: 41, at, text: "测试版能今天发吗？结账那个偶发失败先修掉" }] },
+    } } } });
+    await openWork(app, "w-run");
+    await app.waitFor("id:work-asked");
+    const texts = app.texts();
+    const place = (text: string) => texts.findIndex((t) => t.includes(text));
+    for (const label of ["Now", "Next", "So far", "Asked", "Brief"]) expect(texts).toContain(label);
+    expect(place("Now")).toBeLessThan(place("Next"));
+    expect(place("Next")).toBeLessThan(place("So far"));
+    expect(place("So far")).toBeLessThan(place("Asked"));
+    expect(place("Asked")).toBeLessThan(place("Brief"));
+    expect(texts).toContain("检查通过后打 0.4.0 标签");
+    expect(texts).toContain("找到结账偶发失败的原因");
+    expect(texts).toContain("“测试版能今天发吗？结账那个偶发失败先修掉”");
   }, 20_000);
 
   test("a closed Work's page shows its brief too; a computer that sends none shows no brief", async () => {

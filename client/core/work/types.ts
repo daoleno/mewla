@@ -77,6 +77,12 @@ export type BrainWorkShown = {
   by_person?: ("title" | "project")[];
   /** Where the Work stood when the line was written: "done" says how it ended. */
   status?: "active" | "waiting" | "done";
+  /** The Work the person merged this one into: its row shows under that Work. */
+  merged_into?: string;
+  /** Detail only: the person's own messages that asked for it, oldest first. */
+  asked?: { seq: number; at: string; text: string }[];
+  /** Detail only: each line the row read, with when, oldest first. */
+  so_far?: { at: string; text: string }[];
 };
 
 /** `brain_work_detail`'s Work: one Work's page, current or closed. */

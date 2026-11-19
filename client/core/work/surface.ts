@@ -174,6 +174,12 @@ export type BrainWorkSlip = {
   shownStatus?: "active" | "waiting" | "done";
   /** The project the judge or the person put it under (`shown.project`); the tray's chips filter by it. */
   shownProject?: string;
+  /** The next step, as the judge wrote it (`shown.next`). */
+  shownNext?: string;
+  /** The Work the person merged this one into (`shown.merged_into`). */
+  mergedInto?: string;
+  /** The Works merged into this one whose rows it shows (`foldMergedSlips`). */
+  merged?: { workId: string; title: string }[];
   /** When what the person sees of it last changed (`shown.changed_at`, else its last update): the tray's order. */
   changedAt?: string;
 };
@@ -349,13 +355,52 @@ function shownTitle(shown: BrainWorkShown | undefined): string {
 }
 
 /** What the judge wrote for the row, beside the slip's own fields. */
-function shownParts(shown: BrainWorkShown | undefined, updatedAt: string | undefined): Pick<BrainWorkSlip, "shownLine" | "shownStatus" | "shownProject" | "changedAt"> {
+function shownParts(shown: BrainWorkShown | undefined, updatedAt: string | undefined): Pick<BrainWorkSlip, "shownLine" | "shownStatus" | "shownProject" | "shownNext" | "mergedInto" | "changedAt"> {
   return {
     shownLine: shown?.line?.trim() || undefined,
     shownStatus: shown?.status,
     shownProject: shown?.project?.trim() || undefined,
+    shownNext: shown?.next?.trim() || undefined,
+    mergedInto: shown?.merged_into || undefined,
     changedAt: shown?.changed_at ?? updatedAt,
   };
+}
+
+/**
+ * A Work the person merged into another shows under it (owner's ⋯ › Merge with…): its row goes and its Workers
+ * join the other's. Only the list changes. A Work that asks the person something or has a result they have not
+ * read keeps its own row, and so does one whose target is not listed or is itself merged.
+ */
+export function foldMergedSlips(slips: readonly BrainWorkSlip[]): BrainWorkSlip[] {
+  const byId = new Map(slips.map((slip) => [slip.workId, slip] as const));
+  const under = new Map<string, BrainWorkSlip[]>();
+  for (const slip of slips) {
+    if (!slip.mergedInto || slip.group === "needs" || slip.question || slip.unread) continue;
+    const target = byId.get(slip.mergedInto);
+    if (!target || target.mergedInto) continue;
+    under.set(target.workId, [...(under.get(target.workId) ?? []), slip]);
+  }
+  if (!under.size) return [...slips];
+  const gone = new Set([...under.values()].flat().map((slip) => slip.workId));
+  return slips.filter((slip) => !gone.has(slip.workId)).map((slip) => {
+    const merged = under.get(slip.workId);
+    if (!merged) return slip;
+    return { ...slip, workerSessions: mergedWorkers(slip, merged), merged: merged.map((m) => ({ workId: m.workId, title: m.title })) };
+  });
+}
+
+/** A Work's Worker Sessions, then those of the Works merged into it, each once. */
+export function mergedWorkers(slip: Pick<BrainWorkSlip, "workerSessions">, merged: readonly Pick<BrainWorkSlip, "workerSessions">[]): WorkWorkerSession[] {
+  const sessions = [...(slip.workerSessions ?? [])];
+  const seen = new Set(sessions.map((worker) => worker.session_id));
+  for (const other of merged) {
+    for (const worker of other.workerSessions ?? []) {
+      if (seen.has(worker.session_id)) continue;
+      seen.add(worker.session_id);
+      sessions.push(worker);
+    }
+  }
+  return sessions;
 }
 
 function isSurfacedOpenWork(work: BrainOpenWork): boolean {
