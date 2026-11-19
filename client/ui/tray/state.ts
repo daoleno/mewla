@@ -97,7 +97,8 @@ const brainAsk = computed(() => {
   lastAsk = next;
   return next;
 });
-const brainTurn = computed(() => brainThread().conversation?.activity?.status === "running");
+/** Brain's turn is running (the rail's Brain dot, the tray's Working). */
+export const brainTurn = computed(() => brainThread().conversation?.activity?.status === "running");
 
 function today(): TrayTodayInput[] {
   const now = clock();

@@ -156,8 +156,33 @@ The supervisor serializes launches and holds an OS lock on the profile. Chrome
 owns its normal profile lock; Mewla never deletes SingletonLock. Every way the
 browser ends (idle, the daemon's shutdown) asks Chrome for `Browser.close` first,
 so the profile flushes; a daemon that is killed loses the sign-ins made since
-Chrome last flushed. Session-only cookies, live DOM and tab identity are not
-promised after a Chrome restart.
+Chrome last flushed. Session-only cookies outlast a clean restart too: each
+fresh start sets the profile's `session.restore_on_startup` to 1 (Chrome then
+keeps them) and removes `Default/Sessions` first, so no old tabs come back.
+Live DOM and tab identity are not promised after a Chrome restart.
+
+An agent may remove cookies and site data only of the sites it works on: pages
+its tabs opened or were given, and cookies it set itself. Mewla's extension
+refuses `Storage.clearCookies` and `Network.clearBrowserCookies` (Playwright's
+`context.clearCookies()` without a filter, which signs the person out of every
+site). It also refuses, for any other site, a cookie deletion and the commands
+that remove a site's stored data (`Storage.clearDataFor*`, storage buckets and
+shared storage, `DOMStorage`, `IndexedDB` and `CacheStorage` deletes; a cache id
+is `<storage key>|<name>`). The refusal names the scoped call to use instead
+(`clearCookies({ domain })`). This is a guard against a well-meaning agent's
+mistake, not a boundary (see Security scope). In extension mode an agent has no
+browser-level target: `browser.newContext()` and a raw CDP session are refused
+by Chrome ("Not allowed"), so a clean first visit means clearing the one site
+under test, not a context of its own.
+
+Whenever Chrome is not running on the profile (after a clean stop, and before a
+fresh start), Mewla reads the profile's sign-ins from `Default/Cookies` (its
+HttpOnly cookies, by registrable site; local and IP hosts left out) and compares
+them with `signed-in-sites.json` in the profile root. Sites whose every sign-in
+cookie went before it expired are all named in one Chat notice ("Agents'
+browser signed out", timeline kind `browser_notice`) and in the daemon problem
+`browser.signins_lost`, so the person signs in again once instead of each Worker
+finding a site signed out and asking.
 
 **Security scope:** the daemon principal is the server owner represented by paired
 devices, not a multi-user login model. Agent access is limited to the same server

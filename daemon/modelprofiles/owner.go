@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/listenhandoff"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/google/uuid"
 )
@@ -630,7 +631,8 @@ func listenerMetadataApplied(err error) bool {
 
 func bindLoopbackListener(network, prefer string, sticky bool) (net.Listener, string, error) {
 	if prefer != "" {
-		ln, err := net.Listen(network, prefer)
+		// A restarted daemon takes back the socket its predecessor held open.
+		ln, err := listenhandoff.Listen(network, prefer)
 		if err == nil {
 			return ln, ln.Addr().String(), nil
 		}
@@ -721,7 +723,10 @@ func (o *Owner) ModelRequestsInFlight() int {
 	if o == nil {
 		return 0
 	}
-	return o.table.TotalInFlight() + o.gateway.InFlight()
+	o.mu.Lock()
+	router := o.router
+	o.mu.Unlock()
+	return router.InFlight() + o.gateway.InFlight()
 }
 
 // Table returns the RouteTable (tests).

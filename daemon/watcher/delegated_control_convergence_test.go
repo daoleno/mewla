@@ -309,3 +309,45 @@ func TestSendAfterTheProviderSettledALiveSignalTurnSteersItsAttempt(t *testing.T
 		})
 	}
 }
+
+// FreerideCiToAws 11-19 00:09: the Worker's last signal turn was lost (no
+// report; the Work has no Attempt), so the ledger reads it as unknown, while
+// its own row still says blocked. The provider's settled Activity bound that
+// row, came back non-terminal, and the send steered an Attempt that does not
+// exist: "steering requires the exact active Attempt", on every send. With no
+// Attempt to continue, the follow-up starts a fresh one.
+func TestSendAfterALostSignalTurnStartsAFreshAttempt(t *testing.T) {
+	for _, status := range []string{"completed", "failed"} {
+		t.Run(status, func(t *testing.T) {
+			io := newFakeSessionInputIO()
+			ledger := newFakeTurnLedger()
+			ledger.providerSignalHints = true
+			now := time.Date(2026, 11, 18, 16, 9, 0, 0, time.UTC)
+			sessionID := "mewla-worker-lost-signal:@1"
+			identity := testSessionInputIdentity("claude")
+			turnID := "turn:computer:out:relay:m_1:1"
+			row := TurnSnapshot{
+				SessionID: sessionID, TurnID: turnID, Status: TurnBlocked,
+				AcceptedAt: now.Add(-37 * time.Minute), ActivityID: "activity-last",
+				ProcessIdentity: delegatedTurnIdentity(identity), PaneGeneration: io.paneValue.generation,
+				SignalProtocol: true,
+			}
+			ledger.seed(sessionID, row)
+			// What the ledger answers for the Session: no Attempt owns the
+			// row, so it is unknown.
+			current := row
+			current.Status = TurnUnknown
+			owner := newLedgerSessionInputOwner(io, ledger)
+			decision, err := owner.reconcileSubmissionActivity(sessionID, current, ProviderActivityObservation{
+				ID: "activity-last", Status: status, StartedAt: now.Add(-37 * time.Minute),
+				SettledAt: now.Add(-36 * time.Minute), Structured: true,
+			})
+			if err != nil {
+				t.Fatalf("%s: %v", status, err)
+			}
+			if decision.Mode != delegatedReuseFresh {
+				t.Fatalf("%s: the send steers a lost turn's Attempt that no longer exists: %+v", status, decision)
+			}
+		})
+	}
+}

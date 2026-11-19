@@ -793,6 +793,13 @@ func (w *Watcher) reproveOwnership(sessionID string, turn TurnSnapshot, observed
 	return w.ledgerTurnAuthoritative(sessionID, at)
 }
 
+// SessionReclaimed says whether Mewla closed sessionID after its Work was
+// completed. It only reads the ledger.
+func (w *Watcher) SessionReclaimed(sessionID string) bool {
+	turn, found, err := w.ledgerTurn(strings.TrimSpace(sessionID))
+	return err == nil && found && turn.Reclaimed
+}
+
 func (w *Watcher) ledgerTurn(sessionID string) (TurnSnapshot, bool, error) {
 	if w == nil || w.turnLedger == nil {
 		return TurnSnapshot{}, false, nil
@@ -1722,6 +1729,29 @@ func (w *Watcher) ProbeProviderEvidence(sessionID string) (ProviderActivityObser
 	}
 	observation := probe.ObserveProviderActivity(*worker, time.Now().UTC())
 	return observation, providerFactRelevant(observation), nil
+}
+
+// ProbeProviderTranscript returns what a Session's agent recorded in its own
+// transcript (ProviderTranscriptProbe); a probe that reads nothing else
+// answers as ProbeProviderEvidence does.
+func (w *Watcher) ProbeProviderTranscript(sessionID string) (ProviderActivityObservation, bool) {
+	worker := w.GetWorker(strings.TrimSpace(sessionID))
+	if worker == nil {
+		return ProviderActivityObservation{}, false
+	}
+	w.mu.RLock()
+	probe := w.providerActivityProbe
+	w.mu.RUnlock()
+	if probe == nil {
+		return ProviderActivityObservation{}, false
+	}
+	var observation ProviderActivityObservation
+	if transcript, ok := probe.(ProviderTranscriptProbe); ok {
+		observation = transcript.ObserveProviderTranscript(*worker, time.Now().UTC())
+	} else {
+		observation = probe.ObserveProviderActivity(*worker, time.Now().UTC())
+	}
+	return observation, observation.ProbeState == ProbeStateOK
 }
 
 // Run starts the polling loop. Blocks until context is cancelled.

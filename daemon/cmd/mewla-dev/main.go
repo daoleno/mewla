@@ -15,13 +15,26 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/fsnotify/fsnotify"
 )
 
 const (
 	restartDebounce = 250 * time.Millisecond
-	stopTimeout     = 4 * time.Second
+	// stopTimeout covers the daemon's own wait for model replies on a stop
+	// (15 s, cmd/mewla relay_stop.go) before it is killed.
+	stopTimeout = 20 * time.Second
+	// inPlaceRetry is how often a restart the daemon cannot take yet (it is
+	// still starting, or still restarting onto the previous build) is asked
+	// again, for up to inPlaceRetryFor before stopping and starting it.
+	inPlaceRetry    = time.Second
+	inPlaceRetryFor = 8 * time.Minute
 )
+
+// webUIDirEnv points a dev daemon at the web UI on disk
+// (daemon/webui/dist), so a client/ edit is served without restarting the
+// daemon. Keep in step with cmd/mewla.
+const webUIDirEnv = "MEWLA_DEV_WEB_UI_DIR"
 
 type runningProcess struct {
 	cmd  *exec.Cmd
@@ -47,6 +60,15 @@ type devRunner struct {
 	webDirty  bool
 	// goBuild runs `go build`; a test seam.
 	goBuild func(dir string, env, args []string) ([]byte, error)
+	// buildWeb runs scripts/build-web-ui.sh; a test seam.
+	buildWeb func() error
+	// upgrade asks the running daemon to restart itself in place onto the
+	// binary just built (control request daemon_upgrade). It returns the
+	// refusal's code with its error. A test seam.
+	upgrade func() (string, error)
+	// inPlaceSince is when the restart now waiting for the daemon was first
+	// asked for; zero when none waits.
+	inPlaceSince time.Time
 }
 
 // engineLibDir holds the session host's terminal engine libraries
@@ -86,6 +108,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		goBuild:    runGoBuild,
 		pprofAddr:  devPprofAddr(),
 	}
+	runner.upgrade = runner.requestInPlaceRestart
 
 	buildStarted := time.Now()
 	if err := runner.rebuild(); err != nil {
@@ -120,6 +143,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	pending := map[string]struct{}{}
 	var debounce *time.Timer
 	var debounceC <-chan time.Time
+	// retryC fires while a restart waits for the daemon to take it.
+	var retryC <-chan time.Time
 
 	for {
 		select {
@@ -167,12 +192,38 @@ func run(args []string, stdout, stderr io.Writer) error {
 			pending = map[string]struct{}{}
 
 			fmt.Fprintf(stderr, "\nmewla-dev detected changes: %s\n", strings.Join(changedFiles, ", "))
+			if onlyWebSources(changedFiles) && runner.inPlaceSince.IsZero() {
+				// The daemon serves the web UI from disk: rebuilding it is enough,
+				// and every Worker's model stream through the daemon keeps going.
+				if err := runner.rebuildWebUI(); err != nil {
+					fmt.Fprintf(stderr, "mewla-dev build failed:\n%v\n", err)
+				} else {
+					fmt.Fprintln(stderr, "  Dev     Web UI rebuilt; the daemon keeps running")
+				}
+				continue
+			}
 			if err := runner.rebuild(); err != nil {
 				fmt.Fprintf(stderr, "mewla-dev build failed:\n%v\n", err)
 				continue
 			}
-			if err := runner.restart(); err != nil {
+			retryC = nil
+			runner.inPlaceSince = time.Time{}
+			waiting, err := runner.restart()
+			if err != nil {
 				return err
+			}
+			if waiting {
+				retryC = time.After(inPlaceRetry)
+			}
+			childDone = runner.child.done
+		case <-retryC:
+			retryC = nil
+			waiting, err := runner.restart()
+			if err != nil {
+				return err
+			}
+			if waiting {
+				retryC = time.After(inPlaceRetry)
 			}
 			childDone = runner.child.done
 		}
@@ -343,15 +394,42 @@ func webSourcePath(rel string) bool {
 	return rel == "scripts/build-web-ui.sh"
 }
 
+// onlyWebSources: every changed file is web UI source, none daemon code.
+func onlyWebSources(changed []string) bool {
+	for _, rel := range changed {
+		if !webSourcePath(rel) {
+			return false
+		}
+	}
+	return len(changed) > 0
+}
+
+// rebuildWebUI packages the web UI into daemon/webui/dist, which the daemon
+// serves from disk (webUIDirEnv) and the next daemon build embeds.
+func (r *devRunner) rebuildWebUI() error {
+	build := r.buildWeb
+	if build == nil {
+		build = r.runWebBuild
+	}
+	if err := build(); err != nil {
+		return fmt.Errorf("web UI build failed: %w", err)
+	}
+	r.webDirty = false
+	return nil
+}
+
+func (r *devRunner) runWebBuild() error {
+	cmd := exec.Command("bash", filepath.Join(r.root, "..", "scripts", "build-web-ui.sh"))
+	cmd.Dir = filepath.Dir(r.root)
+	cmd.Stdout, cmd.Stderr = r.stdout, r.stderr
+	return cmd.Run()
+}
+
 func (r *devRunner) rebuild() error {
 	if r.webDirty {
-		cmd := exec.Command("bash", filepath.Join(r.root, "..", "scripts", "build-web-ui.sh"))
-		cmd.Dir = filepath.Dir(r.root)
-		cmd.Stdout, cmd.Stderr = r.stdout, r.stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("web UI build failed: %w", err)
+		if err := r.rebuildWebUI(); err != nil {
+			return err
 		}
-		r.webDirty = false
 	}
 	flags, err := publisherFlags(r.root)
 	if err != nil {
@@ -424,18 +502,93 @@ func commitBuiltBinary(built, dest string) error {
 	return nil
 }
 
-func (r *devRunner) restart() error {
-	if err := r.stop(syscall.SIGINT); err != nil {
-		return err
+// restart moves the daemon onto the binary just built. It asks the daemon to
+// restart itself in place first: the same process drains every Worker's model
+// reply and execs the new binary with the relay's sockets still open, so
+// nothing a Worker streams is cut and nothing is refused. waiting means the
+// daemon cannot take the restart yet (it is starting, or still restarting
+// onto the previous build); ask again after inPlaceRetry. Only a daemon that
+// cannot restart itself (or never takes it) is stopped and started instead.
+func (r *devRunner) restart() (waiting bool, err error) {
+	if r.child != nil && r.upgrade != nil {
+		code, upgradeErr := r.upgrade()
+		if upgradeErr == nil {
+			r.inPlaceSince = time.Time{}
+			fmt.Fprintln(r.stderr, "  Dev     Daemon restarting in place (model replies finish first)")
+			return false, nil
+		}
+		if retryableInPlace(code) {
+			if r.inPlaceSince.IsZero() {
+				r.inPlaceSince = time.Now()
+			}
+			if time.Since(r.inPlaceSince) < inPlaceRetryFor {
+				return true, nil
+			}
+		}
+		r.inPlaceSince = time.Time{}
+		fmt.Fprintf(r.stderr, "mewla-dev: the daemon did not restart in place (%v); stopping and starting it\n", upgradeErr)
 	}
-	return r.start()
+	if err := r.stop(syscall.SIGINT); err != nil {
+		return false, err
+	}
+	return false, r.start()
+}
+
+// retryableInPlace: the daemon will take a restart later.
+func retryableInPlace(code string) bool {
+	switch code {
+	case "upgrade_in_progress", "upgrade_unavailable", "not_running":
+		return true
+	}
+	return false
+}
+
+// requestInPlaceRestart sends daemon_upgrade to the daemon this runner
+// started, on its control socket.
+func (r *devRunner) requestInPlaceRestart() (string, error) {
+	socket, err := control.DefaultSocketPath(stateDirArg(r.daemonArgs))
+	if err != nil {
+		return "", err
+	}
+	response, err := control.CallWithTimeout(socket, control.Request{Type: "daemon_upgrade"}, 30*time.Second)
+	if err != nil {
+		if errors.Is(err, control.ErrNotRunning) {
+			return "not_running", err
+		}
+		return "", err
+	}
+	if response.OK {
+		return "", nil
+	}
+	if response.Error == nil {
+		return "", errors.New("daemon_upgrade failed")
+	}
+	return response.Error.Code, fmt.Errorf("%s: %s", response.Error.Code, response.Error.Message)
+}
+
+// stateDirArg is the -state-dir the daemon was given, "" for the default.
+func stateDirArg(args []string) string {
+	for i, arg := range args {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if name != "state-dir" || !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if hasValue {
+			return value
+		}
+		if i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
 }
 
 func (r *devRunner) start() error {
 	cmd := exec.Command(r.binary, r.daemonArgs...)
 	cmd.Dir = r.root
+	cmd.Env = append(os.Environ(), webUIDirEnv+"="+filepath.Join(r.root, "webui", "dist"))
 	if r.pprofAddr != "" {
-		cmd.Env = append(os.Environ(), "MEWLA_PPROF_ADDR="+r.pprofAddr)
+		cmd.Env = append(cmd.Env, "MEWLA_PPROF_ADDR="+r.pprofAddr)
 	}
 	cmd.Stdout = r.stdout
 	cmd.Stderr = r.stderr

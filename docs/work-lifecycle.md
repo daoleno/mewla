@@ -106,8 +106,9 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | --- | --- |
 | Transient error by the provider's own code or HTTP status: dropped connection or stream, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
-| Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx |
-| An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) | One stall escalation after 30 s (`provider_error`); never resumed |
+| Persistent error by code or status: login, billing, unknown model, invalid request, 4xx | One stall escalation after 30 s (`provider_error`); never resumed |
+| Claude: a request too large to send (HTTP 413, "Request too large … Run /compact") | Once the stall is seen (under a minute after the error), Mewla compacts the conversation and continues (see Compaction below); one stall escalation (`compaction_failed`) if that fails |
+| An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) |
 | Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents or the screen shows the agent working |
 | Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
 
@@ -193,6 +194,32 @@ matched the Turn and every later provider fact stayed unbound.
   Resumes more than 30 minutes apart start a new episode.
 - After a dev reload the first complete poll re-reads every Session and resumes
   any whose provider turn died, once its backoff has elapsed.
+
+**Compaction.** A Claude Worker whose conversation grew too large to send stops
+on "Request too large (max 32MB) … Run /compact". The same request fails the
+same way, so it is not resumed. Mewla runs the agent's own remedy:
+- It types `/compact` into the Session (as `worker send -command /compact`
+  does) and records a `session.auto_resumed` Work Event that says so.
+- It waits up to 10 minutes for Claude to record the compaction in its
+  transcript (`compact_boundary`). The 413 and the compaction are read from the
+  transcript: Claude's StopFailure hook reports the 413 only as
+  `invalid_request`.
+- It then submits "Your conversation grew too large to send, so Mewla
+  compacted it (/compact). Continue the task from where you stopped; don't redo
+  finished steps." through the normal admission path. That is a second
+  `session.auto_resumed` Event.
+- A compaction Claude reports failed (a `local_command` record with a failed
+  outcome, such as "Compaction failed · attached media exceeds size limits"),
+  no compaction within the 10 minutes, or a resumed Turn that is too large
+  again: one stall escalation (`compaction_failed`), with Claude's words.
+- A restart between the compaction and the continuation sends the
+  continuation, not a second `/compact`.
+
+Codex compacts on its own before its context limit, and pi compacts and retries
+once on a context overflow, so Mewla does not compact for them. Brain can send
+any of the three `/compact` with `worker send -command`. The Session routes
+accept request bodies up to 64 MiB; at 8 MiB, Mewla itself answered 413 to
+conversations Claude could still send (11-18).
 
 **Escalation.**
 - Escalation records one `session.stale` evidence row with the reason, the
@@ -643,7 +670,9 @@ Historical Turn rows remain evidence and are available by exact identity. They
 must not advertise a released Attempt as a currently steerable owner. For an
 explicit follow-up to a signal-protocol Session, the normal `worker send -id ...
 -work-id ... --stdin` path may prepare a fresh admission when the Work has no
-active Attempt. It still validates the exact owned process and provider generation,
+active Attempt. That holds also when the lost Turn's own row last said blocked
+(it asked and was then lost) and the provider's settled Activity binds it: only
+a Turn the ledger reads as live is steered. It still validates the exact owned process and provider generation,
 and only the new prompt-carried identity can admit the new Attempt. A conflicting
 current owner is rejected by the existing fence. Work updates cannot manually
 assign an Attempt Session; restarting a provider or editing durable state is not

@@ -3,8 +3,11 @@
  * Licensed under the Apache License, Version 2.0 (see LICENSE-NOTICE.md).
  *
  * Derived from the Playwright Extension's relayConnection.ts, in plain
- * JavaScript. Changed: tabs the relay creates go to the agent's own window.
+ * JavaScript. Changed: tabs the relay creates go to the agent's own window,
+ * and an agent may remove cookies and site data only of sites it works on.
  */
+
+import { SiteDataGuard } from './sitedata.js';
 
 // When each agent window was last driven by its agent (any command it sent): a
 // focus change to that window right after one is the agent's doing.
@@ -44,6 +47,8 @@ export class RelayConnection {
     this._closed = false;
     this._pendingReattach = new Set();
     this._recentReattach = new Set();
+    // The sites this agent works on: only their cookies and data may it remove.
+    this.siteData = new SiteDataGuard();
     this.onclose = undefined;
     this.ontabattached = undefined;
     this.ontabdetached = undefined;
@@ -122,6 +127,8 @@ export class RelayConnection {
     const tabId = tabIdForEventArgs(fullMethod, args);
     if (tabId === undefined || !this.attachedTabs.has(tabId))
       return;
+    if (fullMethod === 'chrome.debugger.onEvent' && args[1] === 'Page.frameNavigated' && !args[2]?.frame?.parentId)
+      this.siteData.workedOn(args[2]?.frame?.url);
     this._sendMessage({ method: fullMethod, params: args });
     if (fullMethod === 'chrome.debugger.onDetach') {
       this._notifyTabDetached(tabId);
@@ -199,7 +206,13 @@ export class RelayConnection {
       throw new Error(`Unknown method: ${message.method}`);
     const args = [...(message.params ?? [])];
     drivenAt.set(this._home.windowId, Date.now());
+    if (message.method === 'chrome.debugger.sendCommand') {
+      const refusal = this.siteData.check(args[1], args[2] ?? {});
+      if (refusal)
+        throw new Error(refusal);
+    }
     if (message.method === 'chrome.tabs.create') {
+      this.siteData.workedOn(args[0]?.url);
       // The server opens its tabs in the agent's window, never the person's.
       args[0] = { ...(args[0] ?? {}), windowId: this._home.windowId };
       // A window kept out of the way stays so: a tab made the active one brings the window up.
@@ -216,6 +229,8 @@ export class RelayConnection {
           // from the person's app: clicks and typing then don't change which
           // window or app is in front.
           await chrome.debugger.sendCommand(target, 'Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
+          // A tab the agent is given is a site it works on.
+          await chrome.tabs.get(target.tabId).then(tab => this.siteData.workedOn(tab?.url)).catch(() => {});
           this._notifyTabAttached(target.tabId);
         }
       }

@@ -43,7 +43,7 @@ func CallWithTimeoutResult(
 	if timeout <= 0 {
 		return CallResult{}, fmt.Errorf("control request timeout required")
 	}
-	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
+	conn, err := dial(socketPath)
 	if err != nil {
 		if platform.NoListener(err) {
 			return CallResult{}, fmt.Errorf("%w (%v)", ErrNotRunning, err)
@@ -76,7 +76,7 @@ func PeerPID(socketPath string) (int, error) {
 	if socketPath == "" {
 		return 0, fmt.Errorf("control socket path required")
 	}
-	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
+	conn, err := dial(socketPath)
 	if err != nil {
 		if platform.NoListener(err) {
 			return 0, fmt.Errorf("%w (%v)", ErrNotRunning, err)

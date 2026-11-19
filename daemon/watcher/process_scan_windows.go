@@ -49,6 +49,7 @@ func snapshotProcessTable() (map[int]processInfo, error) {
 				continue
 			}
 			info.args = args
+			info.argsUnread = commandLineUnread(info.comm, args, err)
 		}
 		processes[entry.PID] = info
 	}
@@ -66,6 +67,7 @@ func snapshotProcessTable() (map[int]processInfo, error) {
 			// mewla.
 			info.comm = "sh"
 			info.args = "mewla sh"
+			info.argsUnread = false
 			info.tpgid = pid
 			processes[pid] = info
 		}

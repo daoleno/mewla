@@ -205,6 +205,7 @@ function ReviewPage(props: { review: GitReview; title?: string; nav: PageNav }) 
       capsuleUnder
       column={wide() ? "full" : "page"}
       headerRight={headerRight}
+      rail={[{ id: "git-more", icon: "more-horizontal", label: "Git options", onPress: () => void overflowMenu(review, props.nav, moreAnchor.node(), untracked(tab)), ref: moreAnchor.ref }]}
       popOnBack={!review.searchOpen()}
       onBackPress={() => {
         if (review.searchOpen()) closeSearch();

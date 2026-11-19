@@ -1288,6 +1288,9 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 	if worker != nil && !worker.Delegated && !worker.Hidden && !req.Force {
 		return control.ErrorResponse("worker_not_delegated", "Refusing to send input to a session that was not created as a Brain delegated Mewla Worker. Use --force only when you intentionally want to control this external session.")
 	}
+	if command := strings.TrimSpace(req.ProviderCommand); command != "" {
+		return a.sendProviderCommand(workerID, worker, command, req)
+	}
 	payload := req.Text
 	if strings.TrimSpace(payload) == "" && !req.Submit {
 		return control.ErrorResponse("missing_text", "Text is required.")
@@ -1453,6 +1456,9 @@ func (a *controlApp) handleWorkerStatus(req control.Request) control.Response {
 		return control.ErrorResponse("missing_worker_id", "Worker id is required.")
 	}
 	worker, ownershipErr := a.resolveOwnedWorker(workerID)
+	if worker == nil && ownershipErr == nil && a.awaitInventory() {
+		worker, ownershipErr = a.resolveOwnedWorker(workerID)
+	}
 	if ownershipErr != nil {
 		// ResolveOwnedGeneration has already durably deprojected a live
 		// canonical turn before this rejection. Re-read the named recoverable
@@ -1486,6 +1492,11 @@ func (a *controlApp) resolveOwnedWorker(workerID string) (*classifier.Worker, er
 	}
 	worker := a.watcher.GetWorker(workerID)
 	if worker == nil {
+		// A Session Mewla closed after its Work was completed is no longer
+		// listed; say that, instead of letting raw input fail on it.
+		if reclaimed, ok := a.watcher.(interface{ SessionReclaimed(string) bool }); ok && reclaimed.SessionReclaimed(workerID) {
+			return nil, fmt.Errorf("%w: %s", watcher.ErrSessionReclaimed, workerID)
+		}
 		return nil, nil
 	}
 	if _, err := a.watcher.ResolveDelegatedControl(workerID); err != nil {
@@ -1502,7 +1513,7 @@ func (a *controlApp) handleWorkerProgress(req control.Request) control.Response 
 	if workerID == "" {
 		return control.ErrorResponse("missing_worker_id", "Worker id is required.")
 	}
-	if worker := a.watcher.GetWorker(workerID); worker == nil {
+	if worker := a.watcher.GetWorker(workerID); worker == nil && (!a.awaitInventory() || a.watcher.GetWorker(workerID) == nil) {
 		return control.ErrorResponse("worker_not_found", "Worker session was not found.")
 	}
 	progress, err := classifier.ValidateProgress(classifier.WorkerProgress{
@@ -2300,4 +2311,60 @@ func (a *controlApp) handleThreadRuntimeSet(req control.Request) control.Respons
 		log.Printf("thread runtime switch applied with uncertain durability: %v", err)
 	}
 	return response
+}
+
+// inventoryWait bounds how long a Worker command waits for the first
+// Session inventory of a daemon that has just started.
+const inventoryWait = 15 * time.Second
+
+type inventoryWaiter interface {
+	SnapshotReady() bool
+	WaitForSnapshot(context.Context) error
+}
+
+// awaitInventory is called when a Worker lookup found nothing. Right after a
+// restart every Worker is "not found" until the daemon's first Session
+// inventory is in, and a Worker's own progress report would be refused: it
+// waits for that inventory and reports whether looking again can help.
+func (a *controlApp) awaitInventory() bool {
+	waiter, ok := a.watcher.(inventoryWaiter)
+	if !ok || waiter.SnapshotReady() {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), inventoryWait)
+	defer cancel()
+	return waiter.WaitForSnapshot(ctx) == nil
+}
+
+// sendProviderCommand types one of the agent's own commands (/compact) into a
+// Worker's Session outside any Turn: no Work has to own the Session and the
+// command is not wrapped in the turn contract. Text is refused alongside it, so
+// a follow-up goes in its own send with -work-id once the command is done.
+func (a *controlApp) sendProviderCommand(workerID string, worker *classifier.Worker, command string, req control.Request) control.Response {
+	if strings.TrimSpace(req.Text) != "" || strings.TrimSpace(req.WorkID) != "" {
+		return control.ErrorResponse("provider_command_alone", "Send a provider command on its own, without -text or -work-id.")
+	}
+	if worker == nil && a.awaitInventory() {
+		worker = a.watcher.GetWorker(workerID)
+	}
+	if worker == nil || !a.watcher.HasSession(workerID) {
+		return control.ErrorResponse("worker_session_unavailable", "Worker session is not available.")
+	}
+	sender, ok := a.watcher.(interface {
+		SendProviderCommand(sessionID, text string) error
+	})
+	if !ok {
+		return control.ErrorResponse("provider_command_unavailable", "This Mewla cannot send provider commands.")
+	}
+	if open := a.openPrompt(workerID, worker); open != nil {
+		return control.ErrorResponse("prompt_open", fmt.Sprintf("%s is waiting on prompt %s; answer it with: %s", workerID, open.ID, watcher.AnswerCommand(workerID, open)))
+	}
+	if err := sender.SendProviderCommand(workerID, command); err != nil {
+		code := "send_failed"
+		if errors.Is(err, watcher.ErrProviderCommandRefused) {
+			code = "provider_command_refused"
+		}
+		return control.ErrorResponse(code, err.Error())
+	}
+	return control.Response{OK: true, Confirmation: "sent " + command}
 }
