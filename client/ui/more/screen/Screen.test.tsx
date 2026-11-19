@@ -212,6 +212,28 @@ describe("Screen: agents", () => {
     expect((opened(app)[1].data as { url: string }).url).toContain("worker=w1");
   });
 
+  test("Stop while watching tells the computer and leaves the screen to the agent: no view of the person's own, the agent's if it comes back", async () => {
+    let status: Record<string, unknown> = { ...base, agent: codex, agents: [codex] };
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: () => json(status), [`POST ${SCREEN}`]: () => json(status) }));
+    await app.waitFor("id:screen-agents");
+    await app.press("label:Watch Codex");
+    await goLive(app);
+    expect((opened(app)[0].data as { url: string }).url).toContain("watch=1");
+    // The computer stops the agent: it is told, and no longer shows as using the screen.
+    status = { ...base };
+    await app.press("id:watch-stop");
+    await app.waitUntil(() => posted(app, SCREEN).length > 0);
+    expect(posted(app, SCREEN)[0]).toEqual({ action: "stop_agent", worker: "w1" });
+    await app.waitFor("id:screen-given-back");
+    expect(app.texts()).toContain("Codex stopped");
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    expect(opened(app)).toHaveLength(1);
+    // Nothing is locked: its next call takes the screen, and the page watches it.
+    status = { ...base, agent: codex, agents: [codex] };
+    await app.waitUntil(() => opened(app).length === 2, { timeout: 4_000 });
+    expect((opened(app)[1].data as { url: string }).url).toContain("watch=1");
+  });
+
   test("Take over opens the screen", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
     await app.waitFor("id:take-over");
