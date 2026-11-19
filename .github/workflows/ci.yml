@@ -53,9 +53,22 @@ jobs:
           go-version-file: daemon/go.mod
           cache-dependency-path: daemon/go.sum
       # Screen's pushed video encodes with the computer's ffmpeg on Linux; without it its tests skip.
+      # The runner image has none. Its packages (89, some 70 MB, from an Ubuntu mirror that once
+      # crawled past the 5 minutes) come from this cache, and apt fetches only what changed since
+      # it was saved; a stalled mirror connection is cut after 20 s and tried again. Bump v1 when
+      # the step downloads most of it again.
+      - uses: actions/cache@v4
+        with:
+          path: ~/ffmpeg-debs
+          key: ffmpeg-debs-${{ runner.os }}-v1
       - name: Install ffmpeg
         timeout-minutes: 5
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: |
+          mkdir -p ~/ffmpeg-debs/partial
+          apt_net="-o Acquire::Retries=3 -o Acquire::http::Timeout=20"
+          sudo apt-get $apt_net update
+          sudo apt-get $apt_net -o Dir::Cache::Archives="$HOME/ffmpeg-debs" install -y ffmpeg
+          sudo chown -R "$(id -u):$(id -g)" ~/ffmpeg-debs
       - name: Test
         run: go test ./...
       - name: Vet
