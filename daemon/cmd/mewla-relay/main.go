@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/acmecert"
 	"github.com/daoleno/mewla/daemon/linkproto"
 	"github.com/daoleno/mewla/daemon/relay"
 )
@@ -62,6 +63,7 @@ func run(args []string) error {
 	var turnMinPort, turnMaxPort uint
 	var turnLimits relay.TURNLimits
 	turnURLs := stringList{}
+	var turnCert turnCertFlags
 
 	flags := flag.NewFlagSet("mewla-relay", flag.ContinueOnError)
 	flags.StringVar(&clientAddress, "client-addr", ":443", "raw L4 client listen address")
@@ -111,9 +113,12 @@ func run(args []string) error {
 	flags.IntVar(&turnLimits.AllocationsPerCredential, "turn-allocations-per-credential", 4, "maximum TURN allocations of one credential")
 	flags.IntVar(&turnLimits.Conns, "turn-conns", 512, "maximum TCP and TLS connections to the TURN server")
 	flags.IntVar(&turnLimits.ConnsPerIP, "turn-conns-per-ip", 16, "maximum TCP and TLS connections to the TURN server from one address")
+	turnCert.register(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	operatorSet := false
+	flags.Visit(func(f *flag.Flag) { operatorSet = operatorSet || f.Name == "operator-addr" })
 
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
@@ -146,6 +151,8 @@ func run(args []string) error {
 		)
 	}
 	var turnSecret []byte
+	var turnServer *relay.TURNServer
+	var turnKeeper *acmecert.Keeper
 	if turnSecretFile != "" {
 		secret, err := relay.ReadTURNSecret(turnSecretFile)
 		if err != nil {
@@ -164,13 +171,35 @@ func run(args []string) error {
 		if ip == nil {
 			return fmt.Errorf("-turn-public-ip %q is not an IPv4 address", turnPublicIP)
 		}
+		keeper, err := turnCert.keeper(turnTLSCert, turnTLSKey, log.Printf)
+		if err == nil && keeper != nil && strings.TrimSpace(turnTLS) == "" {
+			err = errors.New("-turn-tls-acme-dir needs -turn-tls-addr")
+		}
+		if err != nil {
+			return err
+		}
 		started, err := startTURN(relay.TURNConfig{
 			PublicIP: ip, UDPAddr: turnUDP, TCPAddr: turnTCP, TLSAddr: turnTLS, ProxyProtocol: turnTLSProxy,
 			Secret: turnSecret, MinPort: uint16(turnMinPort), MaxPort: uint16(turnMaxPort), Limits: turnLimits, Logf: log.Printf,
-		}, turnTLSCert, turnTLSKey, certificateFile, keyFile)
+		}, turnTLSCert, turnTLSKey, certificateFile, keyFile, keeper)
 		switch {
 		case err == nil:
 			defer started.Close()
+			turnServer, turnKeeper = started, keeper
+			if keeper != nil {
+				keeperCtx, stopKeeper := context.WithCancel(context.Background())
+				defer stopKeeper()
+				go keeper.Run(keeperCtx)
+				hup := make(chan os.Signal, 1)
+				signal.Notify(hup, syscall.SIGHUP)
+				defer signal.Stop(hup)
+				go func() {
+					for range hup {
+						log.Printf("turn: SIGHUP: renewing the TLS certificate now")
+						keeper.RenewNow()
+					}
+				}()
+			}
 		case turnOnly:
 			return err
 		default:
@@ -185,6 +214,18 @@ func run(args []string) error {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		// Health and metrics only when asked for: on a host network the
+		// default address is the host's own loopback port.
+		if operatorSet {
+			listener, err := net.Listen("tcp", operatorAddress)
+			if err != nil {
+				return fmt.Errorf("listen for operator probes: %w", err)
+			}
+			operator := &http.Server{Handler: turnOperatorHandler(turnServer, turnKeeper), ReadHeaderTimeout: 5 * time.Second}
+			go func() { _ = operator.Serve(listener) }()
+			defer operator.Close()
+			log.Printf("turn: operator health and metrics on %s", listener.Addr())
+		}
 		log.Printf("mewla-relay ready: TURN only")
 		<-ctx.Done()
 		return nil
@@ -370,8 +411,12 @@ func (l *stringList) Set(value string) error {
 
 // startTURN starts the TURN server, its TLS identity from -turn-tls-cert/-key
 // or else the relay's own.
-func startTURN(config relay.TURNConfig, certFile, keyPath, relayCert, relayKey string) (*relay.TURNServer, error) {
-	if strings.TrimSpace(config.TLSAddr) != "" {
+func startTURN(config relay.TURNConfig, certFile, keyPath, relayCert, relayKey string, keeper *acmecert.Keeper) (*relay.TURNServer, error) {
+	if strings.TrimSpace(config.TLSAddr) != "" && keeper != nil {
+		// Renewed in place: new connections get the new certificate, open
+		// ones keep theirs.
+		config.TLS = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: keeper.GetCertificate}
+	} else if strings.TrimSpace(config.TLSAddr) != "" {
 		if certFile == "" {
 			certFile, keyPath = relayCert, relayKey
 		}

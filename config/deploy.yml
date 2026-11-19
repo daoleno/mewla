@@ -145,8 +145,15 @@ accessories:
   # UDP and TCP on 3478 face the internet; TLS listens only on the kamal
   # bridge's gateway (172.18.0.1), where the relay's SNI route for
   # turn.connect.mewla.ai on :443 sends it with a PROXY header.
+  # Its certificate renews itself (DNS-01 through Cloudflare, 30 days before
+  # expiry, served to new connections without a restart; SIGHUP renews at
+  # once) and is kept in its acme directory; the uploaded turn.crt/key are
+  # served only until that holds a later one. Health and days until expiry:
+  # 127.0.0.1:9181/healthz and /metrics on the host.
+  # Its own version (MEWLA_TURN_VERSION, else MEWLA_LINK_VERSION): the relay
+  # and turn upgrade separately.
   turn:
-    image: localhost:5555/daoleno/mewla-link:<%= ENV.fetch("MEWLA_LINK_VERSION", "latest") %>
+    image: localhost:5555/daoleno/mewla-link:<%= ENV.fetch("MEWLA_TURN_VERSION") { ENV.fetch("MEWLA_LINK_VERSION", "latest") } %>
     host: 167.114.116.27
     network: host
     cmd: >-
@@ -163,11 +170,22 @@ accessories:
       -turn-max-port=49671
       -turn-kbps=8000
       -turn-total-kbps=200000
+      -turn-tls-acme-dir=/var/lib/mewla-turn
+      -turn-tls-acme-domain=turn.connect.mewla.ai
+      -turn-tls-acme-cloudflare-zone-id=338037db978d5f7b2ae75f151022ad66
+      -operator-addr=127.0.0.1:9181
+    env:
+      secret:
+        # The account service's token (DNS edit on the mewla.ai zone).
+        - MEWLA_TURN_CLOUDFLARE_TOKEN:MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
+    directories:
+      # ACME account key, certificate and key; written by the process (uid 1000).
+      - acme:/var/lib/mewla-turn
     files:
       - local: .kamal/files/turn.secret
         remote: /run/mewla-link/turn.secret
         mode: "0600"
-      # Let's Encrypt, by DNS-01 (runbook); renew before it expires.
+      # The first Let's Encrypt certificate (runbook); later ones are in acme/.
       - local: .kamal/files/turn.crt
         remote: /run/mewla-link/turn.crt
         mode: "0644"
