@@ -16,6 +16,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.DisplayMetrics
+import android.util.Log
+import android.view.Display
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -131,6 +133,22 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     fun effectiveDpi(): Int = metrics(displayId)?.densityDpi ?: dpi
 
     /** Whether the system still has this display: a removed one keeps its object but never draws again. */
+    /** Whether the system has the display on. One it switched off draws nothing and hides its apps from reading. */
+    fun on(): Boolean = runCatching { manager.getDisplay(displayId)?.state == Display.STATE_ON }.getOrDefault(true)
+
+    /**
+     * Switches a display the system turned off back on, so the apps on it draw and read again exactly as they were;
+     * remaking it would close them. True when it is on afterwards. (Android 14+; the switch is the display's own.)
+     */
+    fun switchOn(): Boolean {
+        if (on()) return true
+        runCatching { VirtualDisplay::class.java.getMethod("setDisplayState", Boolean::class.javaPrimitiveType).invoke(display, true) }
+            .onFailure { Log.w("MewlaPhoneHelper", "cannot switch display $displayId on", it) }
+        val deadline = SystemClock.uptimeMillis() + SWITCH_ON_WAIT_MS
+        while (!on() && SystemClock.uptimeMillis() < deadline) Thread.sleep(50)
+        return on()
+    }
+
     fun alive(): Boolean = !released && runCatching { manager.getDisplay(displayId) != null }.getOrDefault(true)
 
     /** Waits up to [timeoutMs] for a frame drawn after [since] (uptime ms); false when the display drew nothing. */
@@ -260,6 +278,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     }
 
     private companion object {
+        const val SWITCH_ON_WAIT_MS = 1_500L
         const val SETTLE_POLL_MS = 20L
         // DisplayManager.VIRTUAL_DISPLAY_FLAG_*; several are hidden constants.
         const val FLAG_PUBLIC = 1 shl 0

@@ -183,7 +183,7 @@ internal class PhoneHelper(
             val took = android.os.SystemClock.uptimeMillis() - began
             if (took > 1_000) Log.w(TAG, "tree: interactive=$on read took $took ms")
             tree.put("ok", true).put("w", s.width).put("h", s.height).put("interactive", on)
-                .put("display_alive", s.alive()).put("drew_since_action", s.drewSinceAction()).put("frames", s.frameCount()).put("frame_age_ms", s.frameAgeMs())
+                .put("display_alive", s.alive()).put("display_on", s.on()).put("drew_since_action", s.drewSinceAction()).put("frames", s.frameCount()).put("frame_age_ms", s.frameAgeMs())
                 .put("dark", s.dark())
         }
         "settle" -> {
@@ -225,7 +225,11 @@ internal class PhoneHelper(
 
     private fun display(w: Int, h: Int, dpi: Int): JSONObject {
         screen?.let { existing ->
-            if (existing.width == w && existing.height == h && existing.dpi == dpi && existing.alive()) return described(existing)
+            if (existing.width == w && existing.height == h && existing.dpi == dpi && existing.alive()) {
+                // A display the phone switched off still holds the agent's apps: switch it on instead of starting over.
+                if (!existing.on()) Log.w(TAG, "display ${existing.displayId} was off; switched on: ${existing.switchOn()}")
+                return described(existing)
+            }
             // A different size or density (the person changed Display size), or a display the system
             // dropped: start over on a fresh one.
             existing.release()
