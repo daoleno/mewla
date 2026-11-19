@@ -149,7 +149,9 @@ back on when it can.
   debugging more than stock Android. If **Helper** won't tick, switch Mewla's
   battery setting to unrestricted.
 - If your phone restarts or changes Wi‑Fi, Mewla brings the helper back by
-  itself while Phone use is on. An agent that asks while the connection is down
+  itself while Phone use is on. The connection to your computer is Phone use's
+  own: it stays up with Mewla closed, and a drop of the app's connection no
+  longer takes it down. An agent that asks while the connection is down
   waits up to 30 seconds for it to return; after that it is told the phone is
   not connected rather than left waiting.
 - After you update or reinstall Mewla over a paired phone, nothing is paired

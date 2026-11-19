@@ -16,7 +16,9 @@ import java.util.concurrent.TimeUnit
  * request at a time; [Host.execute] runs it on a thread of its own and the result goes back on the
  * same socket. It lives in the foreground service's process, not in the app's JavaScript, so it
  * stays up and reconnects (1, 2, 4, 8, 15 s) with the app in the background, swiped away, or not
- * started since a reboot. Another phone taking the computer's Phone use (4001) or a computer that
+ * started since a reboot. On Mewla Relay it opens its own pinned TLS to the computer's addresses
+ * (direct first, then the relay; [LinkTarget.connectUrls]): it used to ride the app's loopback
+ * tunnel, which the app stops whenever its own connection drops or moves, and Phone use went with it. Another phone taking the computer's Phone use (4001) or a computer that
  * does not know this protocol (4002) stops it: reconnecting would only repeat that.
  */
 class PhoneLink(private val target: LinkTarget, private val host: Host) {
@@ -39,7 +41,15 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
     private val lock = Any()
     private var socket: WebSocket? = null
     private var stopped = false
-    private var attempt = 0
+    private val endpoints = LinkEndpoints(target.connectUrls)
+    /** The link's own pinned TLS (Mewla Relay), or the plain client for a computer paired by address. */
+    private val http: OkHttpClient by lazy {
+        val pin = target.pin
+        if (!target.pinned || pin == null) return@lazy client
+        val trust = PinnedTls.trustManager(pin)
+        // The pin is the computer's identity: no name or CA check applies to its self-made certificate.
+        client.newBuilder().sslSocketFactory(PinnedTls.socketFactory(trust), trust).hostnameVerifier { _, _ -> true }.build()
+    }
     private var timer: ScheduledFuture<*>? = null
     private var lastStateKey = ""
     @Volatile var state: String = "connecting"
@@ -67,7 +77,7 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
             if (stopped || socket != null) return
             timer?.cancel(false)
             timer = null
-            attempt = 0
+            endpoints.opened()
         }
         scheduler.execute { open() }
     }
@@ -81,17 +91,18 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
             retry()
             return
         }
+        val url = synchronized(lock) { endpoints.current }
         val request = try {
-            Request.Builder().url(target.url).header("Authorization", authorization).build()
+            Request.Builder().url(url).header("Authorization", authorization).build()
         } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "bad link address ${target.url}")
+            Log.w(TAG, "bad link address $url")
             retry()
             return
         }
         synchronized(lock) {
             if (stopped || socket != null) return
             setState("connecting")
-            socket = client.newWebSocket(request, Listener())
+            socket = http.newWebSocket(request, Listener())
         }
     }
 
@@ -99,7 +110,7 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             synchronized(lock) {
                 if (socket !== webSocket) return
-                attempt = 0
+                endpoints.opened()
                 lastStateKey = ""
             }
             webSocket.send(host.hello().toString())
@@ -126,7 +137,7 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = closed(webSocket, code)
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            Log.i(TAG, "link failed: ${t.message}${response?.let { " (${it.code})" }.orEmpty()}")
+            Log.i(TAG, "link failed at ${synchronized(lock) { endpoints.current }}: ${t.message}${response?.let { " (${it.code})" }.orEmpty()}")
             closed(webSocket, 1006)
         }
     }
@@ -144,8 +155,7 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
     private fun retry() {
         synchronized(lock) {
             if (stopped) return
-            val delay = LinkBackoff.delayMs(attempt)
-            attempt += 1
+            val delay = endpoints.failed()
             timer?.cancel(false)
             timer = scheduler.schedule({ open() }, delay, TimeUnit.MILLISECONDS)
         }
@@ -181,7 +191,8 @@ class PhoneLink(private val target: LinkTarget, private val host: Host) {
         /** Pings keep the connection honest through NATs and tunnels and tell a dead computer from a quiet one. */
         private val client: OkHttpClient by lazy {
             OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
+                // A direct address that is not there (the phone away from home) costs this before the relay is tried.
+                .connectTimeout(5, TimeUnit.SECONDS)
                 .pingInterval(30, TimeUnit.SECONDS)
                 .build()
         }

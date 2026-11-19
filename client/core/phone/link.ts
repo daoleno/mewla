@@ -1,4 +1,5 @@
 import { normalizeDaemonId } from "../deviceAuthContract";
+import { directAddressesFor } from "../link/directAddresses";
 import type { StoredServer } from "../storedServerContract";
 
 /**
@@ -15,6 +16,14 @@ export interface PhoneLinkTarget {
   url: string;
   /** The computer's id the signature names. */
   daemonId: string;
+  /**
+   * Mewla Relay: the transport key pin, and the computer's own addresses (`wss://host:port/phone/device`, direct ones
+   * first, the relay last) that the link connects to with a pinned TLS of its own. `url` is then the app's loopback
+   * tunnel, which the app stops whenever its own connection drops or moves: a host that knows `endpoints` never uses
+   * it (Phone use died with every app drop, 11-19); an older host still does.
+   */
+  pin?: string;
+  endpoints?: string[];
 }
 
 /** The socket's address on the address the app uses for this computer: ws for http, wss for https. */
@@ -35,19 +44,44 @@ export function phoneDeviceURL(serverUrl: string): string | null {
   }
 }
 
-/** The one current computer as the link's target; null when there is none or it has no address or id. */
-export function phoneLinkTarget(server: Pick<StoredServer, "id" | "url" | "daemonId"> | null): PhoneLinkTarget | null {
+type LinkServer = Pick<StoredServer, "id" | "url" | "daemonId"> & Partial<Pick<StoredServer, "transportKind" | "transportPin" | "transportCandidates">>;
+
+/**
+ * The one current computer as the link's target; null when there is none or it has no address or id. `urlNow` is the
+ * address the app reaches it at now (on Mewla Relay its loopback tunnel), for hosts that know no `endpoints`.
+ */
+export function phoneLinkTarget(server: LinkServer | null, urlNow?: string): PhoneLinkTarget | null {
   if (!server) return null;
-  const url = phoneDeviceURL(server.url);
+  const url = phoneDeviceURL(urlNow ?? server.url);
   const daemonId = normalizeDaemonId(server.daemonId);
   if (!url || !daemonId) return null;
-  return { serverId: server.id, url, daemonId };
+  const target: PhoneLinkTarget = { serverId: server.id, url, daemonId };
+  const pin = server.transportKind === "link" ? (server.transportPin ?? "").toLowerCase() : "";
+  if (!/^[0-9a-f]{64}$/.test(pin)) return target;
+  const endpoints = linkEndpoints(server as StoredServer);
+  return endpoints.length > 0 ? { ...target, pin, endpoints } : target;
+}
+
+/** The computer's addresses for the link's own pinned TLS: the direct ones it announced, then its relay candidates. */
+function linkEndpoints(server: StoredServer): string[] {
+  const direct = directAddressesFor(server).map((address) => `wss://${address.host.includes(":") ? `[${address.host}]` : address.host}:${address.port}/phone/device`);
+  const configured = (server.transportCandidates ?? []).filter((candidate) => candidate.kind === "link").map((candidate) => candidate.url);
+  const relays = (configured.length > 0 ? configured : [server.url])
+    .map((url) => (url.trim().startsWith("wss:") ? phoneDeviceURL(url) : null))
+    .filter((url): url is string => url !== null);
+  return [...new Set([...direct, ...relays])];
 }
 
 /** Whether two targets are the same computer at the same address: the link is kept then. */
 export function sameTarget(a: PhoneLinkTarget | null, b: PhoneLinkTarget | null): boolean {
   if (!a || !b) return a === b;
-  return a.serverId === b.serverId && a.url === b.url && a.daemonId === b.daemonId;
+  return (
+    a.serverId === b.serverId &&
+    a.url === b.url &&
+    a.daemonId === b.daemonId &&
+    (a.pin ?? "") === (b.pin ?? "") &&
+    (a.endpoints ?? []).join("\n") === (b.endpoints ?? []).join("\n")
+  );
 }
 
 /**

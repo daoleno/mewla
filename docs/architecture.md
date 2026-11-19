@@ -366,8 +366,22 @@ waiting out its backoff goes at once when a network is back, and a live socket
 answers a `link_ping` within 5 s or is replaced, instead of after 25 s of
 silence. Each new connection reports how the previous one ended in one
 `client_diagnostic` line (`event=link_drop`: why, path, age, time down,
-attempts, network changes), so the daemon log says which drops were the
-network's, the app's or the connection's own.
+attempts, network changes, and, when they apply, `away_for` (how long the app had
+been out of sight), `error` (the socket's own error text from NSH) and
+`last_error` (the last failed attempt's)), so the daemon log says which drops
+were the network's, the app's or the connection's own. Before 11-19 an error
+ended as a bare `why=error`, which could not tell a reset from a socket the app
+itself let go.
+
+Phone use's link (`/phone/device`) lives in the Android host's foreground
+service. On Mewla Relay it opens its own pinned TLS 1.3 to the computer's
+addresses (the direct ones it announced, then the relay; same pin and server
+name as the app's tunnels) and keeps that socket through anything the app's own
+connection does. Before 11-19 it rode the app's loopback tunnel: every app
+reconnect stopped that tunnel and closed Phone use with it (each Phone use
+`1006` on 11-19 landed in the same second as an app drop), every relay→LAN move
+re-pointed it (a `1000` close and a reconnect), and after a reboot the saved
+loopback port pointed at nothing until the app was opened.
 
 Route presence is in memory. A relay restart deliberately disconnects routes;
 connectors re-register. A single-region MVP therefore runs one relay process

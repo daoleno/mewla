@@ -10,11 +10,33 @@ import java.security.SecureRandom
 /** The computer the link follows: the one current computer, as the app tells it (core/phone/link.ts). */
 data class LinkTarget(
     val serverId: String,
-    /** The socket's address: `ws(s)://<computer>/phone/device`. */
+    /**
+     * The socket's address the app uses now: `ws(s)://<computer>/phone/device`. On Mewla Relay that is a loopback port of
+     * the app's own tunnel, which the app stops whenever its connection drops: a pinned target never connects there.
+     */
     val url: String,
     /** The computer's id, which the signature names. */
     val daemonId: String,
-)
+    /** Mewla Relay's transport key pin (SHA-256 of the computer's SubjectPublicKeyInfo, hex); null for a computer paired by address. */
+    val pin: String? = null,
+    /** With [pin]: the computer's own addresses, `wss://host:port/phone/device`, direct ones first and the relay last. */
+    val endpoints: List<String> = emptyList(),
+) {
+    /** A link of its own, pinned, to the computer's addresses: nothing the app does to its connection touches it. */
+    val pinned: Boolean get() = !pin.isNullOrBlank() && endpoints.isNotEmpty()
+
+    /** Where the link connects, in the order it tries them. */
+    val connectUrls: List<String> get() = if (pinned) endpoints else listOf(url)
+
+    /**
+     * Whether [other] keeps this link: the same computer reached the same way. A pinned link ignores [url], which moves
+     * with the app's tunnel (a relay to LAN move, a reconnect): following it closed Phone use on every one of those.
+     */
+    fun sameLink(other: LinkTarget?): Boolean {
+        if (other == null || serverId != other.serverId || daemonId != other.daemonId || pinned != other.pinned) return false
+        return if (pinned) pin.equals(other.pin, ignoreCase = true) && endpoints == other.endpoints else url == other.url
+    }
+}
 
 /** This phone's device key, as the app keeps it (its secure store): what signs the link's Authorization. */
 class DeviceIdentity(val deviceId: String, val seedHex: String)
