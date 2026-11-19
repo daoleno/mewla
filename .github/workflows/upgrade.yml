@@ -5,13 +5,29 @@ name: Upgrade from the latest release
 # here is a bug to fix now, filed as an issue, and does not hold an unrelated release
 # (docs/ci-release.md).
 #
-# Android: the latest release's APK pairs with its daemon and keeps a draft; main's APK, signed with
-# the release key, installs over it, opens paired and Connected with the same device key and the
+# Android: the starting release's APK pairs with its daemon and keeps a draft; the target's APK, signed
+# with the release key, installs over it, opens paired and Connected with the same device key and the
 # draft, and its scanner runs (client/scripts/release-upgrade.sh).
+#
+# The target is main (built here, the schedule's use) or a release tag (its published APK). The start is
+# the release before the target: for main the latest stable release, for a tag the stable release before
+# it. So the daily run proves latest -> main, and a run right after a release proves previous -> new
+# instead of the release against itself: dispatch with `to` = the new tag. `from` pins another start.
 on:
   schedule:
     - cron: "40 3 * * *"
   workflow_dispatch:
+    inputs:
+      from:
+        description: "Release tag to start from (empty: the stable release before the target)"
+        required: false
+        default: ""
+        type: string
+      to:
+        description: "Target: main (built here) or a release tag such as v0.4.17 (its published APK)"
+        required: false
+        default: "main"
+        type: string
 
 concurrency:
   group: upgrade-${{ github.ref }}
@@ -22,7 +38,7 @@ permissions:
 
 jobs:
   android:
-    name: Android (latest release → main)
+    name: Android (${{ inputs.from || 'previous release' }} → ${{ inputs.to || 'main' }})
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -35,14 +51,38 @@ jobs:
       - name: Install NSH
         timeout-minutes: 10
         run: client/scripts/fetch-nsh.sh
-      - name: The latest release's APK and daemon
+      - name: Which releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_FROM: ${{ inputs.from }}
+          IN_TO: ${{ inputs.to }}
+        run: |
+          set -euo pipefail
+          TO="${IN_TO:-main}"
+          [[ "$TO" == main || "$TO" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]] || { echo "to must be main or a vX.Y.Z tag, got '$TO'"; exit 1; }
+          # Stable releases, newest first.
+          gh release list --repo "$GITHUB_REPOSITORY" --exclude-pre-releases --exclude-drafts --limit 30 \
+            --json tagName --jq '.[].tagName' > "$RUNNER_TEMP/stable.txt"
+          if [[ -n "$IN_FROM" ]]; then
+            [[ "$IN_FROM" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]] || { echo "from must be a vX.Y.Z tag, got '$IN_FROM'"; exit 1; }
+            FROM="$IN_FROM"
+          elif [[ "$TO" == main ]]; then
+            FROM="$(head -1 "$RUNNER_TEMP/stable.txt")"
+          else
+            # The stable release right after $TO in the newest-first list; none when $TO is not listed or is the oldest.
+            FROM="$(awk -v t="$TO" 'f { print; exit } $0 == t { f = 1 }' "$RUNNER_TEMP/stable.txt")"
+          fi
+          [[ -n "$FROM" ]] || { echo "no stable release before $TO to start from"; exit 1; }
+          [[ "$FROM" != "$TO" ]] || { echo "from and to are both $FROM: that tests a release against itself"; exit 1; }
+          echo "upgrading from $FROM to $TO"
+          echo "OLD=$FROM" >> "$GITHUB_ENV"
+          echo "TARGET=$TO" >> "$GITHUB_ENV"
+      - name: The starting release's APK and daemon
         timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          OLD="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
-          echo "upgrading from $OLD"
           mkdir -p "$RUNNER_TEMP/old"
           gh release download "$OLD" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/old" \
             --pattern "mewla-android-arm64-$OLD.apk" --pattern mewla-linux-amd64.tar.gz --pattern SHA256SUMS
@@ -53,13 +93,29 @@ jobs:
             echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk"
             echo "MEWLA=$(find "$RUNNER_TEMP/old" -name mewla -type f -perm -u+x | head -1)"
           } >> "$GITHUB_ENV"
+      # A release tag as the target needs no build: its published APK, checked against the release's SHA256SUMS.
+      - name: The target release's APK
+        if: env.TARGET != 'main'
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/new"
+          gh release download "$TARGET" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/new" \
+            --pattern "mewla-android-arm64-$TARGET.apk" --pattern SHA256SUMS
+          cd "$RUNNER_TEMP/new"
+          grep -E " mewla-android-arm64-$TARGET.apk$" SHA256SUMS | sha256sum -c -
+          echo "NEW_APK=$RUNNER_TEMP/new/mewla-android-arm64-$TARGET.apk" >> "$GITHUB_ENV"
       - name: Materialize the release keystore (temp, mode 0600)
+        if: env.TARGET == 'main'
         env:
           MEWLA_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
           MEWLA_ANDROID_KEYSTORE: ${{ runner.temp }}/mewla-release.p12
         run: ./scripts/materialize-android-keystore.sh > /dev/null
       # The same build as a release's APK (scripts/android-release-apk.sh), from main.
       - name: Build main's signed APK
+        if: env.TARGET == 'main'
         timeout-minutes: 40
         env:
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
@@ -88,8 +144,9 @@ jobs:
         timeout-minutes: 25
         env:
           OUT: ${{ runner.temp }}/upgrade
-          # main's tracked version is the latest release's until the next release moves it.
-          MEWLA_UPGRADE_SAME_VERSION_OK: "1"
+          # main's tracked version is the latest release's until the next release moves it; a release
+          # tag as the target must be a real upgrade.
+          MEWLA_UPGRADE_SAME_VERSION_OK: ${{ (inputs.to || 'main') == 'main' && '1' || '' }}
         with:
           api-level: 35
           target: google_apis

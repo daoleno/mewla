@@ -155,14 +155,18 @@ jobs:
           TEST_RUNNER_MEWLA_CORPUS: ${{ github.workspace }}/scripts/terminal-corpus
         run: |
           mkdir -p out
-          # On a failure, each failed assertion's line before the summary (`tail` alone named the test, never why).
+          # Every suite's result line and the totals, so a reader sees which suites ran (`tail` alone showed
+          # only the last few). On a failure, each failed assertion's line first (it named the test, never why).
+          suites() { grep -E "^Test Suite '.*' (passed|failed)|^[^A-Za-z]*(Suite|Test run).* (passed|failed)|^[[:space:]]*Executed [0-9]+ tests?," "$RUNNER_TEMP/ios-test.log" || echo "no suite result lines in the log"; }
           xcodebuild test-without-building -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= > "$RUNNER_TEMP/ios-test.log" 2>&1 || {
             grep -E ": error:|failed \(" "$RUNNER_TEMP/ios-test.log" | head -40
+            suites
             tail -40 "$RUNNER_TEMP/ios-test.log"
             exit 1
           }
-          tail -40 "$RUNNER_TEMP/ios-test.log"
+          suites
+          tail -10 "$RUNNER_TEMP/ios-test.log"
       # The app the tests ran in carries the same client/ui bundle as a Release build (the Bundle
       # client/ui phase runs `nsh build --release` in every configuration); ios-release.yml builds the
       # signed Release app on each release.
