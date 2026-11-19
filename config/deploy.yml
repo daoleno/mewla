@@ -101,6 +101,11 @@ accessories:
       -max-clients-per-route=32
       -max-client-handshakes=8192
       -max-connector-handshakes=1024
+      -sni-route=turn.connect.mewla.ai=172.18.0.1:5349
+      -turn-secret-file=/run/mewla-link/turn.secret
+      -turn-url=turn:turn.connect.mewla.ai:3478?transport=udp
+      -turn-url=turn:turn.connect.mewla.ai:3478?transport=tcp
+      -turn-url=turns:turn.connect.mewla.ai:443?transport=tcp
     files:
       # Written by the runbook into .kamal/files/ (gitignored), mode 0600.
       - local: .kamal/files/relay.crt
@@ -112,6 +117,11 @@ accessories:
       - local: .kamal/files/grant.pub
         remote: /run/mewla-link/grant.pub
         mode: "0644"
+      # TURN's shared secret: the relay signs credentials, the turn
+      # accessory checks them. Written by the runbook, mode 0600.
+      - local: .kamal/files/turn.secret
+        remote: /run/mewla-link/turn.secret
+        mode: "0600"
     options:
       # The uploaded files belong to the host's ubuntu user.
       user: "1000:1000"
@@ -126,6 +136,49 @@ accessories:
         - "0.0.0.0:443:443"
         - "0.0.0.0:8443:8443"
         - "127.0.0.1:9180:8080"
+
+  # TURN for Screen's video when a view has no direct path (runbook: "TURN
+  # for Screen's video"). The same image as the relay, as its own process.
+  # Host network: publishing 512 UDP ports would start a docker-proxy per
+  # port, and the relayed address must equal the host port. A host-network
+  # container is filtered by ufw (INPUT), not the DOCKER-USER guard.
+  # UDP and TCP on 3478 face the internet; TLS listens only on the kamal
+  # bridge's gateway (172.18.0.1), where the relay's SNI route for
+  # turn.connect.mewla.ai on :443 sends it with a PROXY header.
+  turn:
+    image: localhost:5555/daoleno/mewla-link:<%= ENV.fetch("MEWLA_LINK_VERSION", "latest") %>
+    host: 167.114.116.27
+    network: host
+    cmd: >-
+      /usr/local/bin/mewla-relay -turn-only
+      -turn-public-ip=167.114.116.27
+      -turn-udp-addr=167.114.116.27:3478
+      -turn-tcp-addr=167.114.116.27:3478
+      -turn-tls-addr=172.18.0.1:5349
+      -turn-tls-proxy-protocol
+      -turn-tls-cert=/run/mewla-link/turn.crt
+      -turn-tls-key=/run/mewla-link/turn.key
+      -turn-secret-file=/run/mewla-link/turn.secret
+      -turn-min-port=49160
+      -turn-max-port=49671
+      -turn-kbps=8000
+      -turn-total-kbps=200000
+    files:
+      - local: .kamal/files/turn.secret
+        remote: /run/mewla-link/turn.secret
+        mode: "0600"
+      # Let's Encrypt, by DNS-01 (runbook); renew before it expires.
+      - local: .kamal/files/turn.crt
+        remote: /run/mewla-link/turn.crt
+        mode: "0644"
+      - local: .kamal/files/turn.key
+        remote: /run/mewla-link/turn.key
+        mode: "0600"
+    options:
+      user: "1000:1000"
+      # The image's healthcheck asks 127.0.0.1:8080, which on the host
+      # network is the host's own loopback, not this process.
+      no-healthcheck: true
 
 deploy_timeout: 60
 drain_timeout: 10

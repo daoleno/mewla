@@ -487,7 +487,14 @@ bundle exec kamal`). Local inputs, never committed:
 | `.kamal/secrets` | Copy of `.kamal/secrets.example`; reads the Cloudflare token from `~/.config/mewla-remote/cloudflare-dns-token` (0600) when Kamal loads secrets. The token is limited to DNS edit on the `mewla.ai` zone. It reads Mewla's Slack client secret from `~/.config/mewla-remote/slack-client-secret` (0600) the same way. |
 | `.kamal/files/relay.crt`, `relay.key` | The relay's self-signed control certificate (P-256, `CN=connect.mewla.ai`). |
 | `.kamal/files/grant.pub` | Hex grant public keys the relay accepts, one per line. |
-| `~/.config/mewla-remote/backup/` (0700) | Copies of the three files above and volume backups (0600). |
+| `.kamal/files/turn.secret`, `turn.crt`, `turn.key` | TURN's shared secret (hex, 0600) and the Let's Encrypt certificate for `turn.connect.mewla.ai` (see [TURN](#turn-for-screens-video)). |
+| `~/.config/mewla-remote/turn-acme-account.pem` (0600) | The ACME account key that issued the TURN certificate; renewal reuses it. |
+| `~/.config/mewla-remote/backup/` (0700) | Copies of the files above and volume backups (0600). |
+
+The `ssh ubuntu@167.114.116.27` lines below need Kamal's key
+(`config/deploy.yml` `ssh.keys`): add `-i ~/.ssh/id_ed25519_lenscan -o
+IdentitiesOnly=yes`, or use a `~/.ssh/config` host entry with that key. A plain
+`ssh ubuntu@167.114.116.27` offers other keys and is refused.
 
 The host limits SSH to six new connections per 30 seconds per address and
 then drops it for minutes. Each Kamal command opens at least one; leave about
@@ -615,11 +622,19 @@ If the grant key is lost, generate a new one (first deploy, step 4), replace
 `grant.pub`, upgrade the relay and deploy; every computer must then sign in
 again.
 
-### TURN for Screen's video (not deployed)
+### TURN for Screen's video
 
 Screen's video goes peer to peer when ICE finds a path and through TURN
-otherwise. `mewla-relay` carries both halves; nothing below is on the hosted
-relay yet, and each step needs the owner's approval.
+otherwise. `mewla-relay` carries both halves.
+
+**Deployed 2026-11-20** (03:18 to 03:22 UTC+8, 2026-11-19 19:18 to 19:22 UTC) from the v0.4.17 tag's image
+(`0b6d059c3`): the `turn` accessory and the relay with the TURN flags, as
+`config/deploy.yml` has them, with UDP, TCP and `turns:` on 443. Before it, a
+v0.4.17 or later computer and app with no direct path got "The connection to
+the screen was lost" after about 14 s: Screen is pushed only as WebRTC video
+since v0.4.17, and the relay's byte tunnel carries only the signalling. The
+TURN certificate expires 2027-02-17 and nothing renews it by itself (see
+Renewal below).
 
 **What it is.** The relay (`-turn-url`, `-turn-secret-file`) answers a
 computer's signed `turn_request` with a credential `<expiry>:<route>:<nonce>`
@@ -656,7 +671,8 @@ anyway, which the quotas above bound. Credentials reach the viewer in the
 signed offer; on `mewla --lan` plain HTTP they cross the LAN in cleartext.
 
 **What must ship first.** Nothing breaks without TURN: views go direct when
-ICE finds a path and say "connection lost" when it does not. To deploy:
+ICE finds a path and say "connection lost" when it does not. To deploy (all
+met on 2026-11-20):
 - The relay image must be built from main at or after the merge of
   `screen-webrtc`. That merge brings quotas taken when checked (an older image
   lets concurrent allocations past every cap) and the per-computer cap of 32.
@@ -674,19 +690,30 @@ ICE finds a path and say "connection lost" when it does not. To deploy:
    committed), uploaded to both accessories as `/run/mewla-link/turn.secret`.
 3. Certificate for `turn.connect.mewla.ai`: browsers and the app's WebView check
    a `turns:` server's certificate, so the relay's self-signed control
-   certificate does not do. A Let's Encrypt certificate by DNS-01 (Cloudflare
-   token, as the account service issues computers' certificates) in
-   `.kamal/files/turn.crt`/`turn.key`, renewed with a `kamal accessory reboot
-   turn`. Without it, deploy UDP and TCP 3478 only and leave out the `turns:`
-   URL; mobile networks that block UDP and port 3478 then get no relay path.
+   certificate does not do. A Let's Encrypt certificate by DNS-01 with the
+   Cloudflare token in `.kamal/files/turn.crt` (chain) and `turn.key`, issued
+   with `golang.org/x/crypto/acme` the way `daemon/remote/cert.go` does it,
+   writing the challenge with `daemon/account/dns.Cloudflare` and the ACME
+   account key in `~/.config/mewla-remote/turn-acme-account.pem`. After
+   publishing the TXT record, wait about 30 s and let the CA ask the
+   authoritative servers: a public resolver asked before the record existed
+   (or before the A record existed) caches the empty answer for minutes, so
+   polling 1.1.1.1 or 8.8.8.8 gives a false "not visible". Without the
+   certificate, deploy UDP and TCP 3478 only and leave out the `turns:` URL;
+   mobile networks that block UDP and port 3478 then get no relay path.
 4. A `turn` accessory beside `relay`, same image, **host network** (publishing
    512 UDP ports through Docker would start a docker-proxy per port, and the
-   relayed address must equal the host port):
+   relayed address must equal the host port). Kamal takes the network from the
+   accessory's own `network:` key (default `kamal`); a `network` under
+   `options:` would add a second `--network`. The image's healthcheck asks
+   `127.0.0.1:8080`, which on the host network is the host's loopback and not
+   this process (`-turn-only` opens no operator listener), so it is off:
 
    ```yaml
    turn:
      image: localhost:5555/daoleno/mewla-link:<%= ENV.fetch("MEWLA_LINK_VERSION", "latest") %>
      host: <host address>
+     network: host
      cmd: >-
        /usr/local/bin/mewla-relay -turn-only
        -turn-public-ip=<host address>
@@ -700,7 +727,7 @@ ICE finds a path and say "connection lost" when it does not. To deploy:
      files: [turn.secret, turn.crt, turn.key, as the relay's files are]
      options:
        user: "1000:1000"
-       network: host
+       no-healthcheck: true
    ```
 
    `<kamal bridge gateway>` is the gateway of the network the relay container
@@ -720,7 +747,10 @@ ICE finds a path and say "connection lost" when it does not. To deploy:
 **Check after deploy**, in order; stop and roll back at the first failure:
 1. `kamal accessory logs turn` shows `turn: serving udp=… tcp=… tls=…` with
    the port range; `ssh ubuntu@167.114.116.27 ss -lunt | grep -e 3478 -e 5349`
-   lists the listeners.
+   lists the listeners. Prove reachability with a STUN or TURN answer, not a
+   TCP connect: a local proxy such as a TUN-mode mihomo accepts any TCP
+   connection itself (on 11-20 TCP 3478 "accepted" from the operator's machine
+   while nothing listened on the host).
 2. The relay's log has no `TURN` start error, and `/readyz` answers as before.
 3. From a computer on the new release, signed in to the hosted relay: open
    Screen from a phone on mobile data with Wi-Fi off. The Connection panel
@@ -733,11 +763,21 @@ ICE finds a path and say "connection lost" when it does not. To deploy:
    re-registered.
 
 **Order and what people see.** Boot `turn` first (nothing uses it yet, no one
-notices). Then the relay with its new flags, by the stop / remove_container /
-boot sequence: the last relay upgrade was down about 80 s; computers
-re-registered 4 s after it was ready, phones within their 30 s back-off (at once
-when the app comes to the front). Every Mewla Relay connection drops and comes
-back, as with any relay upgrade.
+notices). Before the relay restart, a credential minted with the relay's own
+issuer (`relay.NewTURNIssuer` with `.kamal/files/turn.secret`, a throwaway
+route) proves UDP and TCP allocations against the running `turn`. Then the
+relay with its new flags, by the stop / remove_container / boot sequence: on
+2026-11-20 it was down 24 s (stopped 19:21:24 UTC, ready 19:21:47); six computers
+re-registered within 10 s of ready, phones come back within their 30 s back-off
+(at once when the app comes to the front). Every Mewla Relay connection drops
+and comes back, as with any relay upgrade.
+
+**Renewal.** The certificate lasts 90 days (the first expires 2027-02-17) and
+nothing renews it automatically. Issue a new one as in step 3 into
+`.kamal/files/turn.crt`/`turn.key`, then, with `MEWLA_LINK_VERSION` set to the
+running version, `kamal accessory stop turn`, `kamal accessory remove_container
+turn`, `kamal accessory boot turn` (`kamal accessory reboot` cannot pull from
+the local registry). Only relayed views drop, and they reconnect.
 
 **Cost.** Only views with no direct path go through TURN (most LAN and home
 Wi-Fi views do not). Each relayed byte crosses the host twice: in from one side
@@ -763,8 +803,11 @@ allocation holds one UDP port of the 512 in the range.
   viewers fall back to direct paths only, with no relay restart. A view that
   was relayed ends with "connection lost", and the person reopens it.
 - Removing the relay's TURN flags (the `-sni-route` for TURN, `-turn-url`,
-  `-turn-secret-file`) is the usual relay upgrade sequence (about 80 s) and can
-  wait.
+  `-turn-secret-file`) is the usual relay upgrade sequence (about 30 to 80 s)
+  and can wait. The relay image before TURN was
+  `f3cd28850517bcfd9c4615542e5e355b1834ee80`; an image that old refuses the
+  `-turn-*` flags, so roll back to it only with the `config/deploy.yml` from
+  before the TURN commit (`kamal -c <that copy>`).
 - Close the ufw rules from step 6 (`ufw delete allow …`).
 - The DNS name and the certificate can stay.
 
