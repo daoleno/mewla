@@ -360,17 +360,20 @@ func providerActivitySignalFor(observation ProviderActivityObservation) provider
 
 // Watcher monitors Mewla's Sessions and classifies agent states.
 type Watcher struct {
-	promptEnrich          promptEnrichment
-	quickTunnels          *serviceTunnels
-	tunnelResolveHost     func(context.Context, string) ([]net.IPAddr, error)
-	pollInterval          time.Duration
-	workers               map[string]*classifier.Worker
-	workerOrder           []string
-	prevContent           map[string]string
-	hidden                map[string]bool
-	delegated             map[string]bool
-	activityProbe         classifier.ActivityProbe
-	executorResolver      func(command string) string
+	promptEnrich      promptEnrichment
+	quickTunnels      *serviceTunnels
+	tunnelResolveHost func(context.Context, string) ([]net.IPAddr, error)
+	pollInterval      time.Duration
+	workers           map[string]*classifier.Worker
+	workerOrder       []string
+	prevContent       map[string]string
+	hidden            map[string]bool
+	delegated         map[string]bool
+	activityProbe     classifier.ActivityProbe
+	executorResolver  func(command string) string
+	// turnCommandScope names the turn a keystroke Stop interrupts, for
+	// ending the commands it started (turn_commands.go).
+	turnCommandScope      func(sessionID string) (TurnCommandScope, bool)
 	launchAdapter         func(executorID, command string) (agentevents.Launch, error)
 	sessionObservers      []func(SessionEvent)
 	providerActivityProbe ProviderActivityProbe
@@ -4211,7 +4214,15 @@ func (w *Watcher) SendAction(sessionID, action string) error {
 				return err
 			}
 		}
-		return w.sessions().sendKeys(sessionID, keys...)
+		// Read before Ctrl-C ends the turn: the turn it interrupts.
+		scope, endCommands := w.turnCommandScopeFor(sessionID)
+		if err := w.sessions().sendKeys(sessionID, keys...); err != nil {
+			return err
+		}
+		if endCommands {
+			w.stopTurnCommands(identity.ProcessID, scope)
+		}
+		return nil
 	}
 	return w.sessionInputOwner().serialized(sessionID, send)
 }

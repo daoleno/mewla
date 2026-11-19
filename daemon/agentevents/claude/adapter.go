@@ -36,6 +36,9 @@ func (Adapter) Descriptor() agentevents.Descriptor {
 			agentevents.CapSend:      agentevents.LevelKeystroke,
 			agentevents.CapApprove:   agentevents.LevelHook,
 			agentevents.CapInterrupt: agentevents.LevelKeystroke,
+			// Its interrupt leaves Bash run_in_background shells running:
+			// Mewla ends the turn's own (TurnCommand).
+			agentevents.CapStopCommands: agentevents.LevelProcess,
 		},
 	}
 }
