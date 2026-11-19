@@ -197,6 +197,27 @@ describe("Transport", () => {
     transport.close();
   });
 
+  test("a drop says what the socket's error said, and how long the app had been out of sight", async () => {
+    const { transport, socket } = await connected();
+    Object.assign(transportTiming, { silentLimitMs: 10_000 });
+    transport.setAway(true);
+    await wait(120);
+    // NSH's error event carries a message (a reset, an end without a close frame); then the close follows.
+    socket.onerror?.({ message: "WebSocket connection ended without a close frame" });
+    socket.close(1006, "");
+    await socketsReach(2);
+    sockets[1].onerror?.({ message: "IO error: Connection refused (os error 111)" });
+    sockets[1].close(1006, "");
+    await socketsReach(3);
+    transport.setAway(false);
+    sockets[2].open();
+    const report = sockets[2].sent.map((text) => JSON.parse(text)).find((frame) => frame.type === "client_diagnostic");
+    expect(report?.body).toMatch(
+      /^why=error path=address age=\d+\.\ds down=\d+\.\ds attempts=1 last=error away=true network_changes=0 away_for=0\.[1-9]s error=WebSocket_connection_ended_without_a_close_frame last_error=IO_error:_Connection_refused_\(os_error_111\)$/,
+    );
+    transport.close();
+  });
+
   test("close stops for good", async () => {
     const { transport, socket } = await connected();
     transport.close();
