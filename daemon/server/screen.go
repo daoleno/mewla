@@ -245,10 +245,9 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
-	go func() {
+	reads := readViewer(conn, cancel, func(next func() (int, []byte, error)) {
 		for {
-			_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
-			kind, data, err := conn.ReadMessage()
+			kind, data, err := next()
 			if err != nil {
 				cancel(err)
 				return
@@ -279,7 +278,8 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-	}()
+	})
+	defer reads.stop()
 
 	signOffer, verifyAnswer := s.screenBinding(device.ID)
 	iceServers, viewerICE, relayMaxKbps := s.screenICE(ctx)
