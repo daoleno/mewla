@@ -180,7 +180,10 @@ func TestOutboxKeepsASlowButProgressingClient(t *testing.T) {
 }
 
 // A terminal flood on a slow but live client waits for room instead of
-// filling the queue, so a broadcast to that client never overflows it.
+// filling the queue, so a broadcast to that client never overflows it: the
+// flood holds at most half the limit and broadcasts keep the other half. The
+// reader reads nothing until the flood has filled its half and the broadcasts
+// have used all of theirs, so the outcome does not depend on how fast it reads.
 func TestTerminalFloodDoesNotDropASlowReader(t *testing.T) {
 	previousTimeout, previousLimit := wsWriteTimeout, wsOutboxLimit
 	wsWriteTimeout, wsOutboxLimit = 5*time.Second, 1<<20
@@ -190,24 +193,12 @@ func TestTerminalFloodDoesNotDropASlowReader(t *testing.T) {
 	outbox := newClientOutbox(serverConn)
 	defer outbox.close()
 
-	counts := make(chan map[byte]int, 1)
-	go func() {
-		seen := map[byte]int{}
-		defer func() { counts <- seen }()
-		for seen['t']+seen['b'] < 256+32 {
-			_, data, err := client.ReadMessage()
-			if err != nil {
-				return
-			}
-			seen[data[0]]++
-			time.Sleep(time.Millisecond)
-		}
-	}()
-
+	const message = 64 << 10
+	floodChunks, broadcasts := 256, wsOutboxLimit/2/message
 	flood := make(chan error, 1)
 	go func() {
-		chunk := []byte(strings.Repeat("t", 64<<10))
-		for i := 0; i < 256; i++ {
+		chunk := []byte(strings.Repeat("t", message))
+		for i := 0; i < floodChunks; i++ {
 			if err := outbox.enqueue(websocket.TextMessage, chunk, true); err != nil {
 				flood <- err
 				return
@@ -215,23 +206,45 @@ func TestTerminalFloodDoesNotDropASlowReader(t *testing.T) {
 		}
 		flood <- nil
 	}()
-	broadcast := []byte(strings.Repeat("b", 64<<10))
-	for i := 0; i < 32; i++ {
-		if err := outbox.enqueue(websocket.TextMessage, broadcast, false); err != nil {
-			t.Fatalf("broadcast %d dropped a slow reader: %v", i, err)
+
+	// The socket takes a few KB and then nothing more, so the flood fills
+	// its half of the queue and waits there.
+	pending := 0
+	for deadline := time.Now().Add(5 * time.Second); pending != wsOutboxLimit/2; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("terminal flood queued %d bytes, want it to wait at %d", pending, wsOutboxLimit/2)
 		}
-		time.Sleep(5 * time.Millisecond)
+		outbox.mu.Lock()
+		pending = outbox.bytes
+		outbox.mu.Unlock()
+	}
+
+	broadcast := []byte(strings.Repeat("b", message))
+	for i := 0; i < broadcasts; i++ {
+		if err := outbox.enqueue(websocket.TextMessage, broadcast, false); err != nil {
+			t.Fatalf("broadcast %d of %d dropped a slow reader: %v", i+1, broadcasts, err)
+		}
+	}
+	select {
+	case err := <-flood:
+		t.Fatalf("terminal flood finished (%v) while the reader read nothing; it did not wait for room", err)
+	default:
+	}
+
+	seen := map[byte]int{}
+	for seen['t']+seen['b'] < floodChunks+broadcasts {
+		_, data, err := client.ReadMessage()
+		if err != nil {
+			t.Fatalf("slow reader dropped after terminal=%d broadcast=%d: %v", seen['t'], seen['b'], err)
+		}
+		seen[data[0]]++
+		time.Sleep(time.Millisecond)
 	}
 	if err := <-flood; err != nil {
 		t.Fatalf("terminal flood: %v", err)
 	}
-	select {
-	case seen := <-counts:
-		if seen['t'] != 256 || seen['b'] != 32 {
-			t.Fatalf("delivered terminal=%d broadcast=%d", seen['t'], seen['b'])
-		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("slow reader did not receive the flood")
+	if seen['t'] != floodChunks || seen['b'] != broadcasts {
+		t.Fatalf("delivered terminal=%d broadcast=%d, want %d and %d", seen['t'], seen['b'], floodChunks, broadcasts)
 	}
 }
 
