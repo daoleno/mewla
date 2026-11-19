@@ -291,3 +291,13 @@ class PinnedTlsServerTest {
     private fun loadKeystore(dir: java.io.File): java.security.KeyStore =
         java.security.KeyStore.getInstance("PKCS12").apply { keystore(dir).inputStream().use { load(it, "secret".toCharArray()) } }
 }
+
+class ForegroundRestartTest {
+    @Test
+    fun onlyALinkAnotherConnectionReplacedStartsAgainWhenTheAppComesToTheFront() {
+        assertTrue(PhoneFrames.restartsOnForeground(PhoneFrames.closeOutcome(4001)))
+        assertFalse(PhoneFrames.restartsOnForeground(PhoneFrames.closeOutcome(4002)))
+        assertFalse(PhoneFrames.restartsOnForeground("online"))
+        assertFalse(PhoneFrames.restartsOnForeground("offline"))
+    }
+}
