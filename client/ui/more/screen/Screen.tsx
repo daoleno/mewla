@@ -42,7 +42,7 @@ const WINDOWS_POLL_MS = 3_000;
 const ROOMY_MIN_HEIGHT = 500;
 
 type Phase = "checking" | "failed" | "setup" | "agent" | "waiting" | "local" | "live";
-type How = "auto" | "takeOver" | "watch";
+type How = "auto" | "takeOver" | "watch" | "stopped";
 
 const MENU_POPUP = "rounded-[18px] bg-popover p-1.5 shadow-float";
 /** On wide Screen ⋯ is a popover at its button, 288 wide (SPEC §14.2). */
@@ -71,7 +71,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
   /** The person took the screen over from an agent (Give back hands it back): the agent's worker, or "" for every agent. */
   const tookOver = signal<string | null>(null);
   /** Given back: the agent it went back to (its worker, or "" for any), and its name, until it uses the screen again. */
-  const givenBack = signal<{ worker: string; name: string } | null>(null);
+  const givenBack = signal<{ worker: string; name: string; stopped?: boolean } | null>(null);
   const session = signal<RemoteSession | null>(null);
   const typing = signal(false);
   const mode = signal<ScreenPointerMode>("touch");
@@ -148,7 +148,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       }
       if (!active() || untracked(agentWindows)) return;
     }
-    const entry = screenEntry(next, how);
+    const entry = screenEntry(next, how === "stopped" ? "auto" : how);
     if (entry === "setup") {
       reason.set(next.reason || "");
       phase.set("setup");
@@ -159,10 +159,10 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       phase.set(entry);
       return;
     }
-    // Given back, or watching an agent that is between two steps: the person holds no view of the
-    // screen (a view of their own would keep the agent off it) and waits for the agent to come back.
-    if (how === "watch" && !next.agent) {
-      givenBack.set({ worker: worker ?? "", name: untracked(givenBack)?.name ?? "" });
+    // Given back, stopped, or watching an agent that is between two steps: the person holds no view
+    // of the screen (a view of their own would keep the agent off it) and waits for the agent to come back.
+    if ((how === "watch" || how === "stopped") && !next.agent) {
+      givenBack.set({ worker: worker ?? "", name: untracked(givenBack)?.name ?? "", stopped: how === "stopped" });
       phase.set("waiting");
       return;
     }
@@ -247,10 +247,15 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     }
     if (isCurrent(target.id)) void connect();
   };
+  // Stop tells the agent and locks nothing: the page lets go of the screen too (a view of the
+  // person's own would keep the agent off it) and watches the agent if it uses the screen again.
   const stopAgent = async (worker?: string) => {
     if (untracked(busy)) return;
+    const current = untracked(status);
+    const name = withoutSessionId((worker ? screenAgents(current).find((a) => a.worker === worker)?.name : undefined) || current?.agent?.name) || "";
     await request(worker ? { action: "stop_agent", worker } : { action: "stop_agent" });
-    void connect();
+    givenBack.set({ worker: worker ?? "", name, stopped: true });
+    void connect("stopped", worker);
   };
   const stopWatching = () => {
     dropSession();
@@ -609,7 +614,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
         <AgentCard agents={screenAgents(status())} busy={busy()} iphone={iphoneRow()} onWatch={(agent) => void connect("watch", agent.worker)} onStop={(agent) => void stopAgent(agent.worker)} onTakeOver={takeOver} />
       );
     }
-    if (p === "waiting") return <WaitingCard name={givenBack()?.name || "The agent"} busy={busy()} onTakeOver={takeOver} />;
+    if (p === "waiting") return <WaitingCard name={givenBack()?.name || "The agent"} stopped={!!givenBack()?.stopped} busy={busy()} onTakeOver={takeOver} />;
     if (p === "local") return <LocalCard agents={screenAgents(status())} busy={busy()} iphone={iphoneRow()} onStop={(agent) => void stopAgent(agent.worker)} />;
     const current = session();
     if (!current) return <EmptyState onBlack busy />;
@@ -846,13 +851,13 @@ function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
 }
 
 /** Given back: the agent goes on and is watched as soon as it uses the screen again; Take over takes it back. */
-function WaitingCard(props: { name: string; busy: boolean; onTakeOver: () => void }) {
+function WaitingCard(props: { name: string; stopped: boolean; busy: boolean; onTakeOver: () => void }) {
   return (
     <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow items-center justify-center gap-3 px-6 py-6">
       <View testID="screen-given-back" class="w-full items-center gap-3">
         <Icon name="desktop" size={36} tone="onBlackSoft" />
-        <Text class="text-center text-title font-semibold text-white">{`${props.name} goes on`}</Text>
-        <Spinner size={20} tone="onBlackSoft" />
+        <Text class="text-center text-title font-semibold text-white">{props.stopped ? `${props.name} stopped` : `${props.name} goes on`}</Text>
+        <If when={() => !props.stopped}><Spinner size={20} tone="onBlackSoft" /></If>
         <View class="pt-2">
           <SmallButton testID="take-over" title="Take over" icon="hand" filled disabled={props.busy} onPress={props.onTakeOver} />
         </View>

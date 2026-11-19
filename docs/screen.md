@@ -61,7 +61,8 @@ While an agent uses the screen you see, it has one switch, the same everywhere:
   screen and tells it that you pressed Stop (its next action, if none was under
   way, is refused saying so). It is not locked out: like everything you do on
   an agent's screen, Stop informs the agent, and it uses the screen again only
-  if you ask it to.
+  if you ask it to. Screen lets go of the computer's screen too, and shows the
+  agent again if it comes back.
 
 On a phone the switch sits under the picture and steps aside while you type; on
 a desktop or a wide window it is in the bar on top. The bar also has Back, the
