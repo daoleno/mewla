@@ -278,7 +278,7 @@ func (f *parkedFixture) restart() {
 	f.service.SetProgressAsker(f.model.ask)
 	f.service.now = func() time.Time { return f.clock }
 	f.service.progress.loading = func(WorkTranscriptLink) (work.CodexConversation, error) { return work.CodexConversation{}, nil }
-	f.service.seedProgressLimits()
+	f.service.seedProgressLastRun()
 }
 
 // scan reads Brain's dispositions, as the judge's ticker does, and runs every
@@ -475,5 +475,56 @@ func TestTheLanguageIsThePersonsNotTheWorks(t *testing.T) {
 	f.scan()
 	if prompt := f.model.prompts[len(f.model.prompts)-1]; !strings.Contains(prompt, "The person writes in Chinese: write title, line and next in Chinese.") {
 		t.Fatalf("the judge was not told the person's language:\n%s", prompt[strings.Index(prompt, "<<<PERSON"):])
+	}
+}
+
+func TestNoDailyCapStopsAJudgmentOfNewEvidence(t *testing.T) {
+	f := newParkedFixture(t, answerParked)
+	f.scan()
+	// 80 judgments of this Work today and 700 in all (the old caps were 80 and 600).
+	other, _, err := f.store.EnsureWork(Work{ID: "w-other", Title: "Another", Objective: "x", CompletionPolicy: CompletionBounded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fill := func(id string, n int) {
+		err := f.store.updateWorkProgressLocked(id, func(item *Work) (*WorkEvent, bool) {
+			progress := WorkProgress{}
+			if item.Progress != nil {
+				progress = *cloneWorkProgress(item.Progress)
+			}
+			for i := 0; i < n; i++ {
+				progress.Runs = append(progress.Runs, ProgressRun{At: f.clock.Add(-time.Duration(n-i) * time.Minute), USD: 0.002})
+			}
+			item.Progress = &progress
+			return nil, false
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	fill(f.id, 80)
+	fill(other.ID, 620)
+	f.restart()
+	f.scan() // the other Work's first naming
+	before := len(f.model.prompts)
+	note := "the release window tonight"
+	waiting := WorkWaiting
+	if _, err := f.store.UpdateWork(f.id, WorkUpdate{Status: &waiting, WaitFor: &note}); err != nil {
+		t.Fatal(err)
+	}
+	if ran := f.scan(); ran != 1 || len(f.model.prompts) != before+1 {
+		t.Fatalf("new evidence on the 81st judgment of the day (700 in all) was judged %d times, want 1", ran)
+	}
+	day, err := f.service.Context()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if day.ProgressJudge.Judgments < 702 || day.ProgressJudge.USD < 1.4 || day.ProgressJudge.Works != 2 {
+		t.Fatalf("Brain context shows %#v", day.ProgressJudge)
+	}
+	// And still nothing without new evidence after a restart.
+	f.restart()
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a restart judged %d times without new evidence", ran)
 	}
 }

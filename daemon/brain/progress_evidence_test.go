@@ -45,7 +45,7 @@ func TestARestartJudgesNothingWithoutNewEvidence(t *testing.T) {
 	restarted.SetProgressAsker(f.model.ask)
 	restarted.now = func() time.Time { return f.clock }
 	f.service = restarted
-	f.service.seedProgressLimits()
+	f.service.seedProgressLastRun()
 	f.noteAndWait(t, f.fact("turn:1", "running", "fix deployed"), true)
 	time.Sleep(50 * time.Millisecond)
 	f.clock = f.clock.Add(time.Hour)
@@ -55,9 +55,12 @@ func TestARestartJudgesNothingWithoutNewEvidence(t *testing.T) {
 	if len(f.model.prompts) != 1 {
 		t.Fatalf("%d model calls, want 1", len(f.model.prompts))
 	}
-	// The day's count came back with the restart.
-	if got := len(f.service.progress.perWork[f.workID]); got != 1 {
-		t.Fatalf("per-Work count after restart = %d", got)
+	// The judgment it made is kept on the Work with its cost, and the gap since it came back with the restart.
+	if runs := f.work(t).Progress.Runs; len(runs) != 1 || runs[0].USD != 0.01 {
+		t.Fatalf("runs after restart = %#v", runs)
+	}
+	if _, ok := f.service.progress.lastRun[f.workID]; !ok {
+		t.Fatal("the last judgment's time did not come back with the restart")
 	}
 }
 

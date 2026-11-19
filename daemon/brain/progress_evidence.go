@@ -117,11 +117,11 @@ func (s *Store) noteBrainEvidence(workID, key string) (due bool, err error) {
 }
 
 // markProgressJudged records that a judgment saw the evidence it was given,
-// and when, so the day's limits survive a restart.
-func markProgressJudged(progress *WorkProgress, seen *ProgressEvidence, now time.Time) {
+// when, and what it cost: the gate and the day's spend survive a restart.
+func markProgressJudged(progress *WorkProgress, seen *ProgressEvidence, now time.Time, usd float64) {
 	if seen != nil {
 		judged := *seen
 		progress.Judged = &judged
 	}
-	progress.Recent = append(withinDay(append([]time.Time(nil), progress.Recent...), now), now)
+	progress.Runs = append(runsWithinDay(append([]ProgressRun(nil), progress.Runs...), now), ProgressRun{At: now, USD: usd})
 }

@@ -79,11 +79,19 @@ type WorkProgress struct {
 	// They stay in the daemon: view drops them.
 	Reports []ProgressReport `json:"reports,omitempty"`
 	// Seen and Judged are the evidence observed and the evidence last judged
-	// (progress_evidence.go); Recent the judgments of the last day. They keep
-	// the judge's gate and limits across restarts, and stay in the daemon.
+	// (progress_evidence.go); Runs the judgments of the last day and what
+	// each cost. They keep the judge's gate across restarts and say what it
+	// spent (Brain context), and stay in the daemon.
 	Seen   *ProgressEvidence `json:"seen,omitempty"`
 	Judged *ProgressEvidence `json:"judged,omitempty"`
-	Recent []time.Time       `json:"recent,omitempty"`
+	Runs   []ProgressRun     `json:"runs,omitempty"`
+}
+
+// ProgressRun is one judgment: when, and what the model run cost in dollars
+// when the executor reports it.
+type ProgressRun struct {
+	At  time.Time `json:"at"`
+	USD float64   `json:"usd,omitempty"`
 }
 
 // view is the progress as clients read it, or nil before the first judgment.
@@ -93,7 +101,7 @@ func (p *WorkProgress) view() *WorkProgress {
 	}
 	out := *p
 	out.Outcomes = append([]ProgressOutcome(nil), p.Outcomes...)
-	out.Reports, out.Seen, out.Judged, out.Recent = nil, nil, nil, nil
+	out.Reports, out.Seen, out.Judged, out.Runs = nil, nil, nil, nil
 	return &out
 }
 
@@ -104,7 +112,7 @@ func cloneWorkProgress(p *WorkProgress) *WorkProgress {
 	out := *p
 	out.Outcomes = append([]ProgressOutcome(nil), p.Outcomes...)
 	out.Reports = append([]ProgressReport(nil), p.Reports...)
-	out.Recent = append([]time.Time(nil), p.Recent...)
+	out.Runs = append([]ProgressRun(nil), p.Runs...)
 	if p.Seen != nil {
 		seen := *p.Seen
 		out.Seen = &seen
