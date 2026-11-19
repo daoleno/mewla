@@ -205,6 +205,35 @@ under **Make changes when asked**, so turn that on before Brain reads anything
 from your account, and it can only do what you granted on Cloudflare's page; to grant more, disconnect and connect again, choosing more
 permissions there.
 
+## Slack
+
+Slack connects through Mewla's own Slack app, signed in as you. Its sign-in
+asks to read public channels, private channels, direct messages and group
+DMs, to search, and to read the files people share in them; sending and
+editing messages are asked for only when you allow **Make changes when asked**.
+Brain reads what you can read, nothing more.
+
+Read and search covers listing conversations, reading a channel or DM, reading
+a thread with its replies, searching messages, and **get_file**. A message
+lists each file's ID, name, type and size; get_file downloads one (by its ID or
+its `files.slack.com` address) into a private folder for that account in
+Mewla's state on the computer (`slack-files/<account>`), up to 50 MB, and
+returns the local path, so Brain opens a screenshot with its own image reader
+and a PDF or text file the usual way. Slack's token goes only in the request's
+Authorization header, never in an address, a log line or a tool's result.
+Downloads are kept for seven days.
+
+An account connected before Mewla read files and private conversations shows
+**Reconnect to read files and DMs** with one **Reconnect**: Slack asks you once
+more for the new permissions, and the account keeps its name, its switches and
+whether it may make changes. Until then it reads public channels as before, and
+Brain is told plainly to ask you to reconnect when it asks for a file or a
+thread.
+
+Slack's own hosted MCP server is not used: it accepts only apps listed in the
+Slack Marketplace or internal to one workspace, and has no tool to edit a
+message.
+
 ## Tailscale
 
 Tailscale has no sign-in that works across tailnets, so Mewla connects with an

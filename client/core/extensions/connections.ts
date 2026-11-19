@@ -81,6 +81,8 @@ export type PluginAccess = {
   write: AccessState;
   /** Allowing changes needs the service to ask again (its sign-in lacks the write scope). */
   write_consent?: boolean;
+  /** The sign-in predates reads Mewla now offers (Slack's files and private conversations): Reconnect asks for them. */
+  read_consent?: boolean;
   allowed: number;
   tools: number;
 };
