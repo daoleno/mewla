@@ -284,6 +284,12 @@ export function TrayBody(props: TrayBodyProps) {
         </If>
         <If when={said()}><View testID="tray-said" onPress={() => said.set("")} class="mt-2 px-4"><Text class="text-sub text-muted-foreground">{said()}</Text></View></If>
         <View class={m().dimmed ? "opacity-45" : ""}>
+          {/* A count and a project together can leave nothing: say so rather than show a blank tray. */}
+          <If when={(filter().kind || filter().project) && !(f().needs.length + f().fresh.length + f().running.length + f().done.length)}>
+            <View testID="tray-filter-empty" class="mt-6 min-h-[52px] justify-center rounded-(--radius-group) bg-sheet-surface px-4">
+              <Text class="text-sub text-muted-foreground">Nothing here</Text>
+            </View>
+          </If>
           <If when={f().needs.length}><View testID="tray-needs">
               <Label title="Needs you" />
               <Group><Each of={f().needs} key={(request) => request.key}>
@@ -343,13 +349,13 @@ function TrayCounts(props: { pane?: boolean; filter: () => TrayFilter; onPick: (
     { kind: "running" as const, n: m().runningCount, words: `${m().runningCount} running` },
   ].filter((part) => part.n > 0);
   return (
-    <View testID="tray-title" role="header" class="min-w-0 flex-1 flex-row flex-wrap items-center gap-1">
+    <View testID="tray-title" role="header" class="-ml-1.5 min-w-0 flex-1 flex-row flex-wrap items-center gap-x-1">
       <Each of={parts()} key={(part) => part.kind}>{(part) => {
         const on = () => props.filter().kind === part().kind;
         return (
           <Button testID={`tray-count-${part().kind}`} accessibilityLabel={part().words} selected={on()}
             onPress={() => props.onPick({ ...props.filter(), kind: on() ? undefined : part().kind })}
-            class={`-ml-1.5 flex-row items-center gap-1.5 rounded-full px-1.5 py-0.5 active:opacity-70 ${on() ? "bg-foreground" : ""}`}>
+            class={`flex-row items-center gap-1.5 rounded-full px-1.5 py-0.5 active:opacity-70 ${on() ? "bg-foreground" : ""}`}>
             <If when={part().kind === "needs"}><View class="size-2 rounded-full bg-seal" /></If>
             <Text class={`${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"} ${on() ? "text-background" : ""}`}>{part().words}</Text>
           </Button>
