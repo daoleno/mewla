@@ -159,7 +159,7 @@ func TestTriggerFiringEndsATypedWaitButNotAWorkersTurn(t *testing.T) {
 	}
 
 	item := waitOn("PRLoopWatcher", "trigger.fired from Trigger 3b5d1da9")
-	if _, err := service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "cli-1"}); !errors.Is(err, ErrWorkEventNotDelivered) || !strings.Contains(err.Error(), "waits on its user_input wake") {
+	if _, err := service.DeliverWorkEvent(WorkEvent{WorkID: item.ID, Kind: "pr.new", DedupeKey: "cli-1"}); !errors.Is(err, ErrWorkEventNotDelivered) || !strings.Contains(err.Error(), "waits on its named wake") {
 		t.Fatalf("the CLI's generic append over a typed wait: %v", err)
 	}
 	fired, opened, err := service.RaiseWorkEvent(WorkEvent{WorkID: item.ID, Kind: "trigger.fired", DedupeKey: "fire:2", PayloadRef: "/p/2.txt", Actionable: true})

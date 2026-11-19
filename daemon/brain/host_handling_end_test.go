@@ -163,8 +163,8 @@ func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
 		update WorkUpdate
 		want   WorkDisposition
 	}{
-		{"waiting waits on the Brain thread", WorkUpdate{Status: status(WorkWaiting), NextAction: text("Waiting for the user's approval.")}, WorkDispositionWait},
-		{"needs_input waits on the Brain thread", WorkUpdate{Status: status(WorkNeedsInput)}, WorkDispositionWait},
+		{"waiting with nothing asked is Brain's own wait", WorkUpdate{Status: status(WorkWaiting), NextAction: text("Waiting for the user's approval.")}, WorkDispositionWait},
+		{"needs_input with nothing asked is Brain's own wait", WorkUpdate{Status: status(WorkNeedsInput)}, WorkDispositionWait},
 		{"a question continues", WorkUpdate{Question: text("Ship it?")}, WorkDispositionContinue},
 		{"running continues", WorkUpdate{Status: status(WorkRunning)}, WorkDispositionContinue},
 		{"prose continues", WorkUpdate{NextAction: text("Review the next PR.")}, WorkDispositionContinue},
@@ -198,7 +198,7 @@ func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
 			t.Fatal(err)
 		}
 		after, _ := store.Work(item.ID)
-		if after.Review != nil || after.Status != WorkWaiting || after.Wake == nil || after.Wake.Kind != WorkWakeUserInput || after.Wake.Ref != waitFor {
+		if after.Review != nil || after.Status != WorkWaiting || after.Wake == nil || after.Wake.Kind != WorkWakeNamed || after.Wake.Ref != waitFor {
 			t.Fatalf("after a named wait in a review: status %s wake %+v review %+v", after.Status, after.Wake, after.Review)
 		}
 		if got := dispositionOf(t, store, item.ID); got != WorkDispositionWait {

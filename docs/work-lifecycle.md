@@ -502,7 +502,7 @@ Event with `source_name: user`, so Brain reads the decision as a fact.
 
 | Action | Daemon effect | Event |
 | --- | --- | --- |
-| `reply` (a choice or free text) | Submitted to the current Brain host through the same admission as any user message (`SubmitExternalUserInput`, receipt `work-reply:<work>:<request>`), as `Re: <title> (work <id>)`, Brain's question quoted, then the text and, when the reply carries files, the same `<mewla_attachments>` tag a chat message ends with (the files are uploaded first; the daemon refuses any path outside the upload store with `attachment_not_uploaded`, and a reply needs text or a file). Once Brain has it (accepted or uncertain), the question clears and a `user_input` wake is released. A not-submitted reply records nothing. | `user.replied` (non-actionable; details carry the admission) |
+| `reply` (a choice or free text) | Submitted to the current Brain host through the same admission as any user message (`SubmitExternalUserInput`, receipt `work-reply:<work>:<request>`), as `Re: <title> (work <id>)`, Brain's question quoted, then the text and, when the reply carries files, the same `<mewla_attachments>` tag a chat message ends with (the files are uploaded first; the daemon refuses any path outside the upload store with `attachment_not_uploaded`, and a reply needs text or a file). Once Brain has it (accepted or uncertain), the question clears and, when the Work asked, its `user_input` wake is released. A reply on a Work that asks nothing is a message to Brain about it and leaves its wait as it is; Brain decides whether the wait still holds. A not-submitted reply records nothing. | `user.replied` (non-actionable; details carry the admission) |
 | `close` (Accept) | `CloseWork` as done, actor `user` | `brain.work_closed` |
 | `dismiss` (Not needed anymore) | `CloseWork` as cancelled, actor `user` | `brain.work_closed` |
 | `stop` | `CloseWork` as cancelled, then the delegated Worker Session is torn down; never the Host | `brain.work_closed` |
@@ -653,6 +653,18 @@ The daemon calculates the earliest due Wake, claim expiry, or Attempt
 liveness deadline and waits on one timer plus lifecycle commit wakeups. On
 restart it reconstructs the next timer from durable rows. Brain never sleeps,
 polls Sessions, or holds an LLM turn open while waiting.
+
+A Work waits on the person only when Brain asks them something (a question).
+`work update -status waiting` with a question, this update's or the one
+standing, sets a `user_input` wake (on Brain's thread during a review). Without
+one it sets a `named` wake: the condition `-wait-for` names (tomorrow's run, a
+release, another Worker's push), or `operator:<work>` when nothing is named.
+No producer ends a `named` wake. It ends when Brain sets a new status or wait
+or an empty `-wait-for`, when a follow-up Turn starts on the Work, or when an
+event opens a review for Brain (a Trigger firing on its Work, a result). Input on
+Brain's thread and a reply on a Work's card end a `user_input` wait only on a
+Work that asks, so the person writing on a parked Work never releases it and
+never opens it to the closure judge.
 
 `due_retry` is the generic durable wait for a discoverable external condition.
 Its source reference and timestamp are exact: unrelated `user_input` is a no-op,

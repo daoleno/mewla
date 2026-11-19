@@ -576,7 +576,9 @@ func (s *Store) namedWaitSince(workID string, since time.Time) bool {
 	}
 	for _, event := range events {
 		wait, ok := event.Payload.(lifecycle.WakePayload)
-		if ok && !event.At.Before(since) && wait.WakeKind == lifecycle.WakeUserInput &&
+		// A named wake, or (before named wakes) a user_input wake carrying
+		// Brain's -wait-for text; the event log keeps both shapes.
+		if ok && !event.At.Before(since) && (wait.WakeKind == lifecycle.WakeNamed || wait.WakeKind == lifecycle.WakeUserInput) &&
 			strings.TrimSpace(wait.Ref) != "" && !strings.HasPrefix(strings.TrimSpace(wait.Ref), "brain-thread:") {
 			return true
 		}

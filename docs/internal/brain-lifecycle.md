@@ -18,7 +18,8 @@ durable lifecycle state.
 A discoverable external condition uses a source-specific wake or `due_retry`
 with a durable `next_attempt_at`. The daemon timer creates one actionable wake
 for one bounded check. Generic Brain-thread `user_input` cannot match that wait,
-so unrelated conversation does not revise the Work or create a card.
+so unrelated conversation does not revise the Work or create a card. A wait
+Brain names without asking the person is a `named` wake, which no message ends.
 
 The visible Brain timeline is a projection. One Work owns one replaceable card;
 repeated delivery of its stable Event cannot append duplicate cards. Session,

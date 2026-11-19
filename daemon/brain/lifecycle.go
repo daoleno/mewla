@@ -53,6 +53,9 @@ const (
 	WorkWakeCalendarResult  WorkWakeKind = "calendar_result"
 	WorkWakeUserInput       WorkWakeKind = "user_input"
 	WorkWakeDueRetry        WorkWakeKind = "due_retry"
+	// WorkWakeNamed is a wait Brain named that no producer ends; only Brain
+	// clears it (lifecycle.WakeNamed).
+	WorkWakeNamed WorkWakeKind = "named"
 )
 
 // WorkWake is the typed identity of the external producer that owns a true
@@ -927,7 +930,7 @@ func validateWorkWake(wake *WorkWake) error {
 		return fmt.Errorf("typed wake requires ref")
 	}
 	switch wake.Kind {
-	case WorkWakeSessionTerminal, WorkWakeCalendarResult, WorkWakeUserInput:
+	case WorkWakeSessionTerminal, WorkWakeCalendarResult, WorkWakeUserInput, WorkWakeNamed:
 		if wake.NextAttemptAt != nil {
 			return fmt.Errorf("%s wake cannot set next_attempt_at", wake.Kind)
 		}
@@ -994,6 +997,21 @@ func validateWorkWakeProducer(database presentationDatabase, item Work, wake *Wo
 		}
 	}
 	return nil
+}
+
+// waitWakeKind is the wake a wait gets when Brain names no producer: the
+// person is waited on only when Brain asks them (a question, this update's or
+// the standing one); any other wait is Brain's own named condition, which a
+// reply on the Work does not end (owner 2026-11-19).
+func waitWakeKind(item Work, question *string) WorkWakeKind {
+	asked := strings.TrimSpace(item.Question) != ""
+	if question != nil {
+		asked = strings.TrimSpace(*question) != ""
+	}
+	if asked {
+		return WorkWakeUserInput
+	}
+	return WorkWakeNamed
 }
 
 func workWakeEqual(left, right *WorkWake) bool {
@@ -1528,7 +1546,7 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 				waitFor = *update.WaitFor
 			}
 			if wake == nil {
-				wake = &WorkWake{Kind: WorkWakeUserInput, Ref: firstNonEmpty(waitFor, "operator:"+item.ID)}
+				wake = &WorkWake{Kind: waitWakeKind(item, update.Question), Ref: firstNonEmpty(waitFor, "operator:"+item.ID)}
 			}
 			if _, err := s.fsm.SetWait(lifecycle.WorkID(item.ID), lifecycle.WakeKind(wake.Kind), wake.Ref); err != nil {
 				return Work{}, err
@@ -2498,6 +2516,11 @@ func (s *Store) wakeWaitingWorkLocked(database *presentationDatabase, wake WorkW
 	for index := range database.BrainWork {
 		item := database.BrainWork[index]
 		if !workWakeEqual(item.Wake, &wake) {
+			continue
+		}
+		if wake.Kind == WorkWakeUserInput && strings.TrimSpace(item.Question) == "" {
+			// Only a Work that asks the person waits on their input; a park
+			// that asks nothing is Brain's to end, whatever they write.
 			continue
 		}
 		dedupeKey := fmt.Sprintf("wake:%s:%s:%s", wake.Kind, wake.Ref, occurrenceID)
@@ -3662,7 +3685,7 @@ func currentWakePresent(wake *WorkWake, present map[string]bool) bool {
 		return false
 	}
 	switch wake.Kind {
-	case WorkWakeUserInput, WorkWakeCalendarResult:
+	case WorkWakeUserInput, WorkWakeCalendarResult, WorkWakeNamed:
 		return true
 	case WorkWakeSessionTerminal:
 		ref := strings.TrimPrefix(strings.TrimSpace(wake.Ref), "session:")

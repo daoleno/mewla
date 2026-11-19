@@ -132,7 +132,7 @@ func ringOf(work brain.CurrentWork) *Ring {
 		return nil
 	}
 	waiting := strings.TrimSpace(work.Question) != "" || work.Status == brain.WorkNeedsInput ||
-		work.Wake != nil && work.Wake.Kind == brain.WorkWakeUserInput ||
+		work.Wake != nil && (work.Wake.Kind == brain.WorkWakeUserInput || work.Wake.Kind == brain.WorkWakeNamed) ||
 		work.Status == brain.WorkWaiting && strings.TrimSpace(work.WaitFor) != ""
 	if waiting || work.Status == brain.WorkDone || work.Status == brain.WorkCancelled {
 		return nil

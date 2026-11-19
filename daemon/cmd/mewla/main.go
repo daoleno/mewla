@@ -2207,7 +2207,7 @@ func runBrainWorkResolve(args []string, stderr io.Writer) error {
 	fs.StringVar(&request.ProviderTurnID, "provider-turn-id", "", "exact admitted provider Turn identity")
 	fs.Uint64Var(&request.ExpectedWorkRevision, "revision", 0, "expected Work revision from the delivered input")
 	fs.StringVar(&disposition, "disposition", "", "continue, wait, complete, or cancel")
-	fs.StringVar(&wakeKind, "wake-kind", "", "session_terminal, calendar_result, user_input, or due_retry for wait")
+	fs.StringVar(&wakeKind, "wake-kind", "", "session_terminal, calendar_result, user_input, due_retry, or named for wait")
 	fs.StringVar(&wakeRef, "wake-ref", "", "exact producer reference for wait")
 	fs.StringVar(&nextAttemptAt, "next-attempt-at", "", "RFC3339 due time for a due_retry wait")
 	fs.StringVar(&request.NextAction, "next-action", "", "descriptive next action")

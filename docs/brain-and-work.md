@@ -193,8 +193,10 @@ mewla brain work update -id <work-id> -status waiting \
 that answer "Brain's pick". It must be one of the choices, and a new question
 starts without one. `-status waiting` without `-question` asks you nothing: the
 Work shows as Waiting, and, unless `-wait-for` names what it waits on, the
-command's answer tells Brain so. During a review, `-wait-for` keeps the wait on
-the thing it names rather than on Brain's thread.
+command's answer tells Brain so. Such a wait is Brain's own: your reply on that
+Work reaches Brain as a message about it and does not end the wait; Brain
+decides whether it still holds. Only a Work that asks waits on you, and your
+answer ends that wait.
 
 ## Work detail
 
