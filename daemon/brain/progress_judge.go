@@ -36,7 +36,10 @@ const (
 	progressQuietGap   = 20 * time.Second
 	progressMaxWait    = 45 * time.Second
 	progressTurnSettle = 5 * time.Second
-	progressMinGap     = 2 * time.Minute
+	// Reports alone move a running Work's ring at most every progressMinGap:
+	// 42% of 11-19's 1248 judgments came under 5 minutes after the same Work's
+	// last one, and the day's limit then left late Work unjudged.
+	progressMinGap     = 10 * time.Minute
 	progressTick       = 10 * time.Second
 	progressTimeout    = 2 * time.Minute
 	progressRetryAfter = 10 * time.Minute
