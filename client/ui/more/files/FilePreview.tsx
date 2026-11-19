@@ -184,7 +184,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       testID="file-preview"
       // The side rail's: Back closes it there, so Close stays in the header only.
       rail={[
-        { id: "file-refresh", icon: "refresh", label: "Refresh changed file", onPress: () => void load(), shown: () => stale() },
+        { id: "file-refresh", transient: true, icon: "refresh", label: "Refresh changed file", onPress: () => void load(), shown: () => stale() },
         { id: "file-download", icon: "download", label: sessionFileDownloadLabel({ busy: download() === "busy", can: canDownload() }), onPress: onDownload, disabled: () => !canDownload() || download() === "busy" },
         { id: "file-copy", icon: copied() ? "check" : "copy", label: copied() ? "Copied" : "Copy", onPress: onCopy, shown: () => canCopy() },
       ]}
