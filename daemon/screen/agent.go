@@ -366,7 +366,11 @@ func (s *Service) StopAgentFor(worker string) {
 	s.agentMu.Lock()
 	agent := s.agents[worker]
 	hook := s.stopHook
-	s.tellStoppedLocked(worker)
+	// Only a Worker using the screen hears it: one with no session (it ended, or never began) would be
+	// refused once, perhaps days later, for a Stop it was never under.
+	if agent != nil && agent.ctx.Err() == nil {
+		s.tellStoppedLocked(worker)
+	}
 	s.agentMu.Unlock()
 	if agent != nil {
 		agent.control.cancel(ErrStoppedByPerson)
