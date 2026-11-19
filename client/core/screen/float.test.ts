@@ -13,7 +13,13 @@ import {
   displaySource,
   floatOrigin,
   floatSize,
+  floatRetryDelay,
   floatSources,
+  hideKey,
+  parseHiddenKeys,
+  unhiddenOn,
+  withHidden,
+  FLOAT_HIDDEN_MAX,
   macSource,
   nearestFloatCorner,
   parseFloatCorner,
@@ -118,6 +124,57 @@ describe("which screens the window may show", () => {
     expect(other.title).toBe("%2");
     expect(macSource({ worker: "%2", name: "Coder", since: "" } as never).title).toBe("Coder");
     expect(mac.title).toBe("An agent");
+  });
+});
+
+describe("hiding the window", () => {
+  const phone = phoneSource(phoneStatus, workers)!;
+  const mine = displaySource(display, "Writer");
+  const other = displaySource({ ...display, id: "%2" });
+  const mac = macSource({ worker: "%2", since: "" } as never);
+  const all = [phone, mine, other, mac];
+
+  test("a hidden Worker's window stays out; another Worker's still floats", () => {
+    expect(floatSources(all, page, new Set([hideKey(mine)])).map((s) => s.key)).toEqual(["phone", "display:%2", "mac:%2"]);
+    expect(floatSources(all, page, new Set([hideKey(mac)])).map((s) => s.key)).toEqual(["phone", "display:%1", "display:%2"]);
+  });
+  test("the phone is hidden for the agent working it: another agent on the phone floats", () => {
+    expect(hideKey(phone)).toBe("phone:%1");
+    const next = phoneSource({ ...phoneStatus, agent: "Coder-ish" } as never, workers)!;
+    expect(floatSources([next], page, new Set([hideKey(phone)]))).toHaveLength(1);
+    expect(floatSources([phone], page, new Set([hideKey(phone)]))).toHaveLength(0);
+  });
+  test("a window that closed itself stays out by its screen", () => {
+    expect(floatSources(all, page, new Set(), new Set(["display:%2"])).map((s) => s.key)).toEqual(["phone", "display:%1", "mac:%2"]);
+  });
+  test("Screen brings back the displays and the Mac, Phone use the phone; another page nothing", () => {
+    const keys = ["display:%1", "mac:%2", "phone:%1"];
+    expect(unhiddenOn(keys, { screenPage: true, phonePage: false })).toEqual(["phone:%1"]);
+    expect(unhiddenOn(keys, { screenPage: false, phonePage: true })).toEqual(["display:%1", "mac:%2"]);
+    expect(unhiddenOn(keys, { screenPage: false, phonePage: false })).toBe(keys);
+  });
+  test("the kept list: newest last, no repeats, bounded, and nothing but strings read back", () => {
+    expect(withHidden(["a", "b"], "a")).toEqual(["b", "a"]);
+    const many = Array.from({ length: FLOAT_HIDDEN_MAX + 5 }, (_, i) => `display:%${i}`);
+    expect(withHidden(many, "x")).toHaveLength(FLOAT_HIDDEN_MAX);
+    expect(withHidden(many, "x").at(-1)).toBe("x");
+    expect(parseHiddenKeys(JSON.stringify(["display:%1", 3, null]))).toEqual(["display:%1"]);
+    expect(parseHiddenKeys("{")).toEqual([]);
+    expect(parseHiddenKeys(null)).toEqual([]);
+  });
+});
+
+describe("a live view that ended", () => {
+  test("one that was live tries again three times, then the window closes itself", () => {
+    const live = { everLive: true, outdated: false };
+    expect([1, 2, 3, 4].map((n) => floatRetryDelay(n, live))).toEqual([1_000, 3_000, 8_000, null]);
+  });
+  test("one that never came up gets one more try", () => {
+    const never = { everLive: false, outdated: false };
+    expect([1, 2].map((n) => floatRetryDelay(n, never))).toEqual([1_000, null]);
+  });
+  test("a computer too old for this app gets none", () => {
+    expect(floatRetryDelay(1, { everLive: true, outdated: true })).toBeNull();
   });
 });
 
