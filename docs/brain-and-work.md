@@ -213,7 +213,9 @@ Work shows as Waiting, and, unless `-wait-for` names what it waits on, the
 command's answer tells Brain so. Such a wait is Brain's own: your reply on that
 Work reaches Brain as a message about it and does not end the wait; Brain
 decides whether it still holds. Only a Work that asks waits on you, and your
-answer ends that wait.
+answer ends that wait. Brain can ask at any time, also while a Worker still
+holds the Work (a Worker stopped on something only you can do): the question
+goes on the card and the Worker keeps its turn.
 
 ## Work detail
 
