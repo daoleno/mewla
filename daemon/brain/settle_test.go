@@ -435,12 +435,37 @@ func TestJudgeRunErrorNamesTheRouteAndTheUpstreamAnswer(t *testing.T) {
 	if !strings.Contains(err.Error(), "http://127.0.0.1:3427") || !strings.Contains(err.Error(), "HTTP 403: Insufficient account balance") {
 		t.Fatalf("judge error = %v", err)
 	}
+	t.Setenv("ANTHROPIC_BASE_URL", "")
 	if judgeRoute(dir+"/missing.json") != "Claude Code's own sign-in" {
 		t.Fatal("a missing settings file should name Claude Code's own sign-in")
+	}
+	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:42403/r/rt_x")
+	if got := judgeRoute(dir + "/missing.json"); !strings.Contains(got, "http://127.0.0.1:42403/r/rt_x") {
+		t.Fatalf("the daemon environment's route is not named: %q", got)
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 	if err := judgeRunError(ctx, errors.New("signal: killed"), "", route); !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("a timeout reads %v", err)
+	}
+}
+
+func TestStaleListNamesDelegatedSessionsLeftWithoutOpenWork(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store, nil, nil)
+	now := time.Now()
+	service.now = func() time.Time { return now }
+	old := now.Add(-staleSessionAfter - time.Minute)
+	stale := service.staleList([]WorkerRef{
+		{ID: "mh-left", Name: "Left", Status: "unknown", Delegated: true, Updated: old},
+		{ID: "mh-fresh", Delegated: true, Updated: now},
+		{ID: "mh-host", Hidden: true, Delegated: true, Updated: old},
+		{ID: "mh-user", Updated: old},
+	})
+	if stale == nil || len(stale.Sessions) != 1 || stale.Sessions[0].ID != "mh-left" {
+		t.Fatalf("stale Sessions = %+v", stale)
 	}
 }

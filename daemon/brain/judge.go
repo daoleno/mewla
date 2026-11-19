@@ -81,7 +81,8 @@ func judgeRunError(ctx context.Context, err error, output, route string) error {
 }
 
 // judgeRoute names where the judge's headless Claude sends its request: the
-// user's settings carry it (Mewla's gateway when the Claude takeover is on).
+// base URL in the user's settings (Mewla's gateway when the Claude takeover is
+// on), else the one in the daemon's environment, else Claude Code's sign-in.
 func judgeRoute(settingsPath string) string {
 	raw, err := os.ReadFile(settingsPath)
 	if err == nil {
@@ -93,6 +94,9 @@ func judgeRoute(settingsPath string) string {
 				return "the model route " + strings.TrimSpace(base) + " (from " + settingsPath + ")"
 			}
 		}
+	}
+	if base := strings.TrimSpace(os.Getenv("ANTHROPIC_BASE_URL")); base != "" {
+		return "the model route " + base + " (from the daemon's environment)"
 	}
 	return "Claude Code's own sign-in"
 }
