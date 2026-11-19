@@ -542,6 +542,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 		log.Printf("WARN Triggers unavailable: %v", triggerErr)
 	} else {
 		controlHandler.triggers = triggerEngine
+		// A Trigger's Work waits on its firings: Brain's own wait, never a bare park.
+		triggers := triggerEngine.Store()
+		brainService.SetTriggerWork(func(workID string) bool {
+			for _, item := range triggers.List() {
+				if item.WorkID == workID {
+					return true
+				}
+			}
+			return false
+		})
 	}
 
 	profilesPath, err := work.DefaultModelProfilesPath()
@@ -1115,6 +1125,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 					return err
 				}
 				brainService.RunLifecycleScheduler(ctx)
+				return nil
+			},
+		},
+		{
+			name: "Brain undecided results",
+			run: func(ctx context.Context) error {
+				if err := w.WaitForSnapshot(ctx); err != nil {
+					return err
+				}
+				brainService.RunUndecidedNudge(ctx)
 				return nil
 			},
 		},

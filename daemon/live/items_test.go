@@ -198,3 +198,27 @@ func TestItemRunningLineIsNotANewStateButAnAskIs(t *testing.T) {
 		t.Fatalf("what a request asks is news, got %d states", len(got))
 	}
 }
+
+// Only Brain's question puts a Work in Needs you (owner 2026-11-19, client
+// core/work/surface.ts): a Work parked on a user_input wake with nothing
+// asked, as Brain's `work update -status waiting` leaves it, is a quiet wait
+// on the notification and widgets too.
+func TestItemsAWaitWithNothingAskedIsNotNeedsYou(t *testing.T) {
+	since := t0.Add(-time.Hour)
+	in := Input{Snapshot: brain.Snapshot{CurrentWork: []brain.CurrentWork{
+		{ID: "parked", Title: "MewlaScreenVideo", Status: brain.WorkWaiting, ProgressMode: brain.WorkProgressWaiting, WaitFor: "brain-thread:b1",
+			Wake: &brain.WorkWake{Kind: brain.WorkWakeUserInput, Ref: "brain-thread:b1"}, AttentionSince: &since},
+		{ID: "named", Title: "CiSessionStoreReview", Status: brain.WorkWaiting, WaitFor: "new heads of freeride-aws#108 to re-check",
+			Wake: &brain.WorkWake{Kind: brain.WorkWakeUserInput, Ref: "new heads of freeride-aws#108 to re-check"}},
+	}}}
+	state := ProjectInput(in, t0)
+	if state.Kind == KindNeedsYou || state.NeedsCount != 0 || state.Waiting != 2 || len(state.Items) != 0 {
+		t.Fatalf("a wait with nothing asked is not Needs you: kind=%s needs=%d waiting=%d items=%+v", state.Kind, state.NeedsCount, state.Waiting, state.Items)
+	}
+	in.Snapshot.CurrentWork[0].Question = "Ship the H.264 path now?"
+	in.Snapshot.CurrentWork[0].Choices = []string{"Ship", "Wait"}
+	state = ProjectInput(in, t0)
+	if state.Kind != KindNeedsYou || state.NeedsCount != 1 || len(state.Items) != 1 || state.Items[0].Line != "Ship the H.264 path now?" {
+		t.Fatalf("Brain's question is Needs you, its line the question: %+v", state)
+	}
+}

@@ -62,8 +62,9 @@ function lifecyclePresentation(lifecycle: BrainWorkLifecycle): BrainWorkLifecycl
 export function brainCurrentWorkLifecycle(work: BrainCurrentWork): BrainWorkLifecyclePresentation {
   if (work.status === "cancelled") return lifecyclePresentation("cancelled");
   if (work.status === "done") return lifecyclePresentation("done");
-  // Brain parked the Work on you (a user_input wake).
-  if (work.wake?.kind === "user_input") return lifecyclePresentation("needs_you");
+  // Only Brain's question asks you something (owner 2026-11-19): a Work parked on a user_input wake with nothing
+  // asked is Brain's wait, quiet like any other.
+  if (work.question?.trim()) return lifecyclePresentation("needs_you");
   if (work.attention_state === "reviewing") return lifecyclePresentation("reviewing");
   // A Worker's request (the daemon's needs_input) is Brain's to resolve, whether Brain's review is queued or
   // under way: it reaches you only as Brain's question (`work.question`), never by itself, and it is not a
@@ -183,9 +184,8 @@ const RESOURCE_PRESSURE_WORK_PREFIX = "resource-pressure:";
  * are left out.
  */
 /**
- * A result stays under Back this long. After that, if Brain still has not
- * decided, it is no longer news but a decision nobody took, and it moves to
- * Needs you with Accept / Ask Brain on it.
+ * A result stays under Back this long before it counts as a decision nobody took. It stays where it is, never in
+ * Needs you: an undecided result is Brain's to settle, and the computer wakes Brain for it (owner 2026-11-19).
  */
 export const BRAIN_WORK_STUCK_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -258,11 +258,7 @@ export function brainWorkSurface(
       group = "running";
       status = "running";
       statusLabel = "Reviewing";
-    } else if (stuck) {
-      group = "needs";
-      status = "warning";
-      statusLabel = "No decision";
-    } else if (replied && !stuck) {
+    } else if (replied) {
       group = "running";
       status = "running";
       statusLabel = "With Brain";
@@ -283,11 +279,11 @@ export function brainWorkSurface(
       project: projectName(worker?.cwd) || undefined,
       summary: work.question
         ? work.question
-        : stuck
-          ? stuckSummary(stuck, waited, Boolean(replied))
+        : stuck === "outcome_unknown"
+          ? "The Worker's Session ended without a result. Ask Brain to check, or close it."
           : replied
             ? `You said “${replied.text ?? ""}”${replied.uncertain ? ". It may not have reached Brain." : ""}`
-            : withAge(slipSummary(work, group, worker), group, waited),
+            : slipSummary(work, group, worker),
       // updated_at moves on every daemon sync; a waiting Work dates from when it began waiting.
       updatedAt: work.attention_since ?? work.updated_at,
       sessionId: worker?.id,
@@ -382,30 +378,8 @@ export function projectName(cwd: string | undefined): string {
   return parts[parts.length - 1] ?? "";
 }
 
-/** "3 days" from a span in milliseconds; whole hours below a day. */
-export function brainWorkAge(ms: number): string {
-  const hours = Math.max(1, Math.round(ms / 3_600_000));
-  if (hours < 24) return hours === 1 ? "an hour" : `${hours} hours`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? "a day" : `${days} days`;
-}
-
-function stuckSummary(stuck: NonNullable<BrainWorkSlip["stuck"]>, waited: number, replied: boolean): string {
-  if (stuck === "outcome_unknown") {
-    return "The Worker's Session ended without a result. Ask Brain to check, or close it.";
-  }
-  if (replied) {
-    return `You answered ${brainWorkAge(waited)} ago and nothing came back. Close it, or ask Brain.`;
-  }
-  return `Back for ${brainWorkAge(waited)} with no decision. Close it, or ask Brain.`;
-}
-
-/** A Needs-you slip waiting over a day says how long: "Waiting 6 days · …". */
-function withAge(summary: string | undefined, group: BrainWorkGroup, waited: number): string | undefined {
-  if (group !== "needs" || waited <= BRAIN_WORK_STUCK_AFTER_MS) return summary;
-  const age = `Waiting ${brainWorkAge(waited)}`;
-  return summary ? `${age} · ${summary}` : age;
-}
+/** The runtime's reason code at the head of a line: "worker_stalled: stopped", "lease_expired_escalation". */
+const REASON_CODE = /^[a-z]+(?:_[a-z]+)+(?::|$)/;
 
 function slipSummary(
   work: BrainCurrentWork,
@@ -426,10 +400,11 @@ function slipSummary(
       : group === "back"
         ? [work.summary, reported, waitFor]
         : [waitFor, work.summary];
-  // A bare reference ("operator:2985…") is plumbing, and a terminal's footer chrome: neither is something to read.
+  // A bare reference ("operator:2985…"), the runtime's reason code ("worker_stalled: stopped") and a terminal's
+  // footer chrome are plumbing: none is something to read.
   return candidates
     .map((value) => readableSummary(value))
-    .find((value) => Boolean(value && value.includes(" ")));
+    .find((value) => Boolean(value && value.includes(" ") && !REASON_CODE.test(value)));
 }
 
 /**

@@ -408,8 +408,25 @@ func (s *Store) WorkDetail(workID string, workers []WorkerRef) (WorkDetail, erro
 		sessions = []WorkWorkerSession{}
 	}
 	return WorkDetail{
-		ID: item.ID, Revision: item.Revision, Title: item.Title, Objective: item.Objective, Status: item.Status,
+		ID: item.ID, Revision: item.Revision, Title: item.Title, Objective: PersonBrief(item.Objective), Status: item.Status,
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(), WorkerSessions: sessions,
 		ResultActions: []work.ResultAction{}, Progress: item.Progress.view(),
 	}, nil
+}
+
+// WorkerProtocolHeading starts the lifecycle protocol Mewla appends to a
+// delegated Worker's brief (cmd/mewla lifecycleProtocol).
+const WorkerProtocolHeading = "Mewla lifecycle protocol:"
+
+// PersonBrief is a Work's brief as the person reads it: the task, without the
+// protocol Mewla appends for the Worker (owner 2026-11-19: a long block of
+// instructions stood before what the Work asked).
+func PersonBrief(objective string) string {
+	if at := strings.Index(objective, "\n\n"+WorkerProtocolHeading); at >= 0 {
+		return strings.TrimSpace(objective[:at])
+	}
+	if strings.HasPrefix(strings.TrimSpace(objective), WorkerProtocolHeading) {
+		return ""
+	}
+	return objective
 }

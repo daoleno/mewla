@@ -54,12 +54,14 @@ describe("brainWorkSurface", () => {
   test("groups live Work by what it asks of you, needs-you first", () => {
     const surface = brainWorkSurface(live, workers);
     expect(surface.slips.map((slip) => [slip.workId, slip.group])).toEqual([
-      ["release", "needs"],
       ["reopen", "running"],
       ["pipeline", "back"],
+      ["release", "back"],
       ["doc", "waiting"],
     ]);
-    expect(surface.counts).toEqual({ needs: 1, running: 1, back: 1, waiting: 1, queued: 0 });
+    expect(surface.counts).toEqual({ needs: 0, running: 1, back: 2, waiting: 1, queued: 0 });
+    const asked = brainWorkSurface([work({ work_id: "ask", status: "waiting", question: "Ship it?", choices: ["Ship", "Wait"] }), ...live], workers);
+    expect(asked.slips.map((slip) => [slip.workId, slip.group])[0]).toEqual(["ask", "needs"]);
   });
 
   test("leaves out closed Work, unrun Calendar occurrences and resource telemetry", () => {
@@ -92,10 +94,18 @@ describe("brainWorkSurface", () => {
     expect(brainWorkSurface(live, footer).slips.find((item) => item.workId === "reopen")!.summary ?? "").not.toContain("shift+tab");
   });
 
-  test("a needs-you slip says what Brain is waiting on", () => {
-    const slip = brainWorkSurface(live, workers).slips[0];
-    expect(slip).toMatchObject({ status: "needs", statusLabel: "Needs you", summary: "Apple account holder resolves the agreement" });
-    expect(slip.sessionId).toBeUndefined();
+  test("a Work parked on a user_input wake with nothing asked is Brain's wait, never Needs you; it says what it waits on (owner 2026-11-19)", () => {
+    const slip = brainWorkSurface(live, workers).slips.find((item) => item.workId === "release")!;
+    expect(slip.group).not.toBe("needs");
+    expect(slip.status).not.toBe("needs");
+    expect(slip.summary).toBe("Apple account holder resolves the agreement");
+    // The MewlaScreenVideo case: Brain's review resolved as a wait on its thread, nothing asked.
+    const parked = brainWorkSurface([work({ status: "waiting", progress_mode: "waiting", wait_for: "brain-thread:b1", wake: { kind: "user_input", ref: "brain-thread:b1" }, attention_since: "2026-11-19T03:32:30Z" })], [])
+      .slips[0]!;
+    expect(parked).toMatchObject({ group: "waiting", statusLabel: "Waiting" });
+    expect(parked.summary).toBeUndefined();
+    // Its lost turn's reason code is the runtime's, nothing to read.
+    expect(brainWorkSurface([work({ status: "waiting", progress_mode: "waiting", summary: "worker_stalled: stopped", wake: { kind: "user_input", ref: "brain-thread:b1" } })], []).slips[0]!.summary).toBeUndefined();
   });
 
   test("a back slip prefers the daemon's outcome summary", () => {
@@ -112,14 +122,15 @@ describe("brainWorkSurface", () => {
     expect(unreadDone.slips.map((slip) => slip.group)).toEqual(["back"]);
   });
 
-  test("Brain's question and a user_input wake need you; a Worker's request is Brain's (owner 2026-11-13)", () => {
+  test("only Brain's question needs you; a user_input wake alone and a Worker's request are Brain's (owner 2026-11-13, 11-19)", () => {
     expect(brainWorkGroup(work({ status: "needs_input", progress_mode: "waiting" }))).toBe("running");
     expect(brainCurrentWorkLifecycle(work({ status: "needs_input", progress_mode: "waiting" })).label).toBe("Reviewing");
     // Brain's review queued (Brain not on it yet) is still Brain's, never a result under Done (shot 11, isolated run).
     expect(brainWorkGroup(work({ status: "needs_input", attention_state: "queued" }))).toBe("running");
     expect(brainWorkSurface([work({ status: "needs_input", progress_mode: "waiting", question: "Which name?" })], []).slips[0]).toMatchObject({ group: "needs", statusLabel: "Needs you" });
     expect(brainWorkGroup(work({ status: "needs_input", attention_state: "reviewing" }))).toBe("running");
-    expect(brainWorkGroup(work({ status: "waiting", wake: { kind: "user_input", ref: "x" } }))).toBe("needs");
+    expect(brainWorkGroup(work({ status: "waiting", wake: { kind: "user_input", ref: "x" } }))).toBe("waiting");
+    expect(brainWorkGroup(work({ status: "waiting", wake: { kind: "user_input", ref: "x" }, question: "Which name?" }))).toBe("needs");
     expect(brainWorkGroup(work({ status: "waiting", progress_mode: "waiting" }))).toBe("waiting");
   });
 });
