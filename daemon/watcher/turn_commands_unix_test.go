@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -164,6 +165,52 @@ wait`
 	}
 }
 
+// TestStopWithNoRecognizedCommandSaysSomeMayStillRun runs a fake agent whose
+// only command this turn is in a form match does not read (as after a Claude
+// update): the Stop leaves it alone and reports one command that may still be
+// running, instead of nothing.
+func TestStopWithNoRecognizedCommandSaysSomeMayStillRun(t *testing.T) {
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("no setsid on this system")
+	}
+	goFile := filepath.Join(t.TempDir(), "go")
+	script := `while [ ! -e ` + goFile + ` ]; do sleep 0.05; done
+setsid sh -c 'echo turn-cmd: new-form; while :; do sleep 1; done' &
+wait`
+	agent := exec.Command("sh", "-c", script)
+	agent.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := agent.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = syscall.Kill(-agent.Process.Pid, syscall.SIGKILL)
+		_ = agent.Wait()
+	}()
+	time.Sleep(300 * time.Millisecond)
+	since := time.Now()
+	if err := os.WriteFile(goFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := waitForChild(t, agent.Process.Pid, "new-form")
+	defer syscall.Kill(-command, syscall.SIGKILL)
+
+	reports := make(chan []agentevents.StoppedCommand, 1)
+	never := func(string) (string, bool) { return "", false }
+	w := &Watcher{}
+	w.stopTurnCommands(agent.Process.Pid, TurnCommandScope{Since: since, Match: never, Agent: func() string { return "claude 9.9.9" }, Report: func(stopped []agentevents.StoppedCommand) { reports <- stopped }})
+	select {
+	case stopped := <-reports:
+		if want := []agentevents.StoppedCommand{{Unrecognized: true}}; !reflect.DeepEqual(stopped, want) {
+			t.Fatalf("stopped = %+v, want %+v", stopped, want)
+		}
+	case <-time.After(6 * time.Second):
+		t.Fatal("no report within 6 s")
+	}
+	if err := syscall.Kill(-command, 0); err != nil {
+		t.Fatalf("a command Mewla did not recognize was ended: %v", err)
+	}
+}
+
 // waitForChild returns the pid of agent's direct child whose command line
 // names tag.
 func waitForChild(t *testing.T, agent int, tag string) int {
@@ -215,8 +262,8 @@ func TestUnrecognizedTurnChildrenAreThisTurnsOwnGroupsNoMatchReads(t *testing.T)
 // and told to the chat as commands that may still be running; a hook that was
 // only passing through says nothing at all.
 func TestReportUnrecognizedNamesTheVersionAndIsNeverSilent(t *testing.T) {
-	var logged strings.Builder
-	log.SetOutput(&logged)
+	logged := &syncBuilder{}
+	log.SetOutput(logged)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 	unknown := []turnUnrecognized{
 		{process: turnCommandProcess{pid: 301}, args: "bash -c run-v3 'sleep 300'"},
@@ -245,4 +292,30 @@ func TestReportUnrecognizedNamesTheVersionAndIsNeverSilent(t *testing.T) {
 	if reports != nil || logged.Len() != 0 {
 		t.Fatalf("a hook that ended was reported: %+v %q", reports, logged.String())
 	}
+}
+
+// syncBuilder is a strings.Builder the log can write while the test reads.
+type syncBuilder struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuilder) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuilder) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func (s *syncBuilder) Len() int { return len(s.String()) }
+
+func (s *syncBuilder) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.b.Reset()
 }
