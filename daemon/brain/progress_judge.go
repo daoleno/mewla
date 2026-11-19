@@ -47,7 +47,7 @@ const (
 	progressPerDay     = 600
 	progressReportsMax = 12
 	// Brain's disposition of each Work is read every progressChangedEvery-th
-	// tick; a closed Work while it closed within progressClosedWindow.
+	// tick; a closed Work while its row was written within progressClosedWindow.
 	progressChangedEvery = 6
 	progressClosedWindow = 24 * time.Hour
 )
@@ -240,8 +240,8 @@ func (s *Service) seedProgressLimits() {
 // each one whose disposition the last judgment did not see. A Work new to the
 // judge has seen nothing yet, so it is named before its first report. Kept
 // on the Work, so a restart finds nothing changed and asks the model nothing.
-// A closed Work is read once more, while it was closed within
-// progressClosedWindow, so its row says how it ended.
+// A closed Work whose row the person still reads (closedInList) is read once
+// more, so its row says how it ended.
 func (s *Service) requestChanged() {
 	if s.store == nil {
 		return
@@ -254,11 +254,19 @@ func (s *Service) requestChanged() {
 	now := s.nowUTC()
 	for _, item := range items {
 		if item.Status == WorkCancelled || strings.HasPrefix(item.ID, resourcePressureWorkPrefix) ||
-			(item.Status == WorkDone && now.Sub(item.UpdatedAt) > progressClosedWindow) {
+			(item.Status == WorkDone && !closedInList(item, now)) {
 			continue
 		}
 		key := brainKey(item)
-		if item.Progress != nil && item.Progress.Seen != nil && item.Progress.Seen.Brain == key {
+		var seen, judged ProgressEvidence
+		if item.Progress != nil && item.Progress.Seen != nil {
+			seen = *item.Progress.Seen
+		}
+		if item.Progress != nil && item.Progress.Judged != nil {
+			judged = *item.Progress.Judged
+		}
+		// Nothing new from Brain and nothing seen that is not judged: the common case, no write.
+		if seen.Brain == key && seen == judged {
 			continue
 		}
 		p.mu.Lock()
@@ -267,15 +275,28 @@ func (s *Service) requestChanged() {
 		if pending {
 			continue
 		}
-		due, err := s.store.noteBrainEvidence(item.ID, key)
-		if err != nil {
-			log.Printf("brain progress evidence %s: %v", item.ID, err)
-			continue
+		due := seen != judged
+		if seen.Brain != key {
+			var err error
+			if due, err = s.store.noteBrainEvidence(item.ID, key); err != nil {
+				log.Printf("brain progress evidence %s: %v", item.ID, err)
+				continue
+			}
 		}
+		// Evidence seen before a restart and not yet judged is still evidence: a restart drops the queue, not it.
 		if due {
 			s.requestProgress(item.ID, "", true)
 		}
 	}
+}
+
+// closedInList says a closed Work's row is still one the person reads: the
+// judge wrote it while the Work was open, within progressClosedWindow. Only
+// such a Work is read once more for how it ended. Its updated_at says
+// nothing here: a sweep of old Work moves it.
+func closedInList(item Work, now time.Time) bool {
+	shown := item.Shown
+	return shown != nil && shown.Status != "done" && !shown.JudgedAt.IsZero() && now.Sub(shown.JudgedAt) <= progressClosedWindow
 }
 
 // nextProgressDue picks one Work whose evidence has settled and whose limits
@@ -447,7 +468,9 @@ func (s *Service) progressBrief(item Work) (string, bool) {
 	events, _ := s.store.ListWorkEvents(item.ID)
 	brief, scopeAdded := buildProgressBrief(item, s.progressConversation(item), events, files, s.nowUTC())
 	all, _ := s.store.ListWork()
-	return brief + buildShownContext(item, s.store.personMessagesFor(item, s.nowUTC()), projectsInUse(all, item.ID), s.nowUTC()), scopeAdded
+	now := s.nowUTC()
+	language := personLanguage(s.store.personRecent(personLanguageRecent, now))
+	return brief + buildShownContext(item, s.store.personMessagesFor(item, now), projectsInUse(all, item.ID), now, language), scopeAdded
 }
 
 // buildProgressBrief renders the judge's context. Only a message that carries
