@@ -1,10 +1,13 @@
 package brain
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 const (
@@ -54,7 +57,7 @@ func TestTheJudgeNamesTheWorkInItsSameCall(t *testing.T) {
 		t.Fatalf("%d model calls, want 1 (one call judges progress and the name)", len(f.model.prompts))
 	}
 	prompt := f.model.prompts[0]
-	for _, want := range []string{"<<<PERSON", "上传完图片输入框就没法工作了", "language of the person's own messages", "never a code name"} {
+	for _, want := range []string{"<<<PERSON", "上传完图片输入框就没法工作了", "language the person writes their own messages in", "never a code name"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("judge prompt lacks %q", want)
 		}
@@ -122,7 +125,7 @@ func TestAJudgeThatSaysNothingOrFailsKeepsTheLastGoodText(t *testing.T) {
 
 func TestAnOpenWorkWithNoNameIsAskedForOneOnce(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownZh)
-	f.service.requestUnnamed()
+	f.service.requestChanged()
 	f.service.progress.mu.Lock()
 	_, pending := f.service.progress.pending[f.workID]
 	f.service.progress.mu.Unlock()
@@ -133,7 +136,7 @@ func TestAnOpenWorkWithNoNameIsAskedForOneOnce(t *testing.T) {
 	if !f.judgeDue(t) || f.work(t).Shown == nil {
 		t.Fatal("the first judgment did not name the Work")
 	}
-	f.service.requestUnnamed()
+	f.service.requestChanged()
 	f.service.progress.mu.Lock()
 	_, pending = f.service.progress.pending[f.workID]
 	f.service.progress.mu.Unlock()
@@ -144,13 +147,13 @@ func TestAnOpenWorkWithNoNameIsAskedForOneOnce(t *testing.T) {
 
 func TestAWorkTheJudgeTriedToNameWaitsForEvidence(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownBlank)
-	f.service.requestUnnamed()
+	f.service.requestChanged()
 	f.clock = f.clock.Add(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("not asked for a name")
 	}
 	f.clock = f.clock.Add(24 * time.Hour)
-	f.service.requestUnnamed()
+	f.service.requestChanged()
 	f.clock = f.clock.Add(progressQuietGap + time.Second)
 	if f.judgeDue(t) {
 		t.Fatal("asked again with no new evidence")
@@ -230,5 +233,195 @@ func TestOneProjectKeepsOneName(t *testing.T) {
 		if got := sameProject(in, inUse); got != want {
 			t.Errorf("sameProject(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+const (
+	answerParked = `{"title":"Xcode 日志查看器不再卡住","line":"等明早 11:17 的清理跑完再验证，无需你操作","next":"清理跑完后收集数据","project":"Xcode Logs","measurable":true,"reason":"parked","reopened":[],"outcomes":[
+		{"id":"fix","text":"Viewer fixed","weight":2,"state":"done"},
+		{"id":"proof","text":"Proven after the retention run","weight":1,"state":"todo"}]}`
+	answerClosed = `{"title":"Xcode 日志查看器不再卡住","line":"清理后查看器一直正常，已确认修好","next":"","project":"Xcode Logs","measurable":true,"reason":"closed","reopened":[],"outcomes":[
+		{"id":"fix","text":"Viewer fixed","weight":2,"state":"done"},
+		{"id":"proof","text":"Proven after the retention run","weight":1,"state":"done"}]}`
+)
+
+// parkedFixture is a Work with no Worker on it, as Brain parks one on a
+// condition, judged by a fake model on a clock the test moves.
+type parkedFixture struct {
+	store   *Store
+	service *Service
+	model   *fakeProgressModel
+	clock   time.Time
+	id      string
+}
+
+func newParkedFixture(t *testing.T, answers ...string) *parkedFixture {
+	t.Helper()
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &parkedFixture{store: store, model: &fakeProgressModel{answers: answers}, clock: time.Now().UTC()}
+	f.restart()
+	item, _, err := store.EnsureWork(Work{ID: "w-xcode", Title: "XcodeLogsViewerHang", Objective: "Find why the Xcode Logs viewer hangs and fix it.", CompletionPolicy: CompletionBounded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.id = item.ID
+	return f
+}
+
+// restart is a new daemon on the same store.
+func (f *parkedFixture) restart() {
+	f.service = NewService(f.store, nil, nil)
+	f.service.SetProgressAsker(f.model.ask)
+	f.service.now = func() time.Time { return f.clock }
+	f.service.progress.loading = func(WorkTranscriptLink) (work.CodexConversation, error) { return work.CodexConversation{}, nil }
+	f.service.seedProgressLimits()
+}
+
+// scan reads Brain's dispositions, as the judge's ticker does, and runs every
+// judgment that is due once the evidence has settled. It says how many ran.
+func (f *parkedFixture) scan() int {
+	f.service.requestChanged()
+	f.clock = f.clock.Add(progressMinGap + time.Second)
+	ran := 0
+	for workID := f.service.nextProgressDue(); workID != ""; workID = f.service.nextProgressDue() {
+		f.service.judgeProgress(context.Background(), workID)
+		ran++
+	}
+	return ran
+}
+
+func (f *parkedFixture) work(t *testing.T) Work {
+	t.Helper()
+	item, err := f.store.Work(f.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return item
+}
+
+func TestBrainParkingAWorkIsEvidenceButARestartIsNot(t *testing.T) {
+	f := newParkedFixture(t, answerParked)
+	if ran := f.scan(); ran != 1 {
+		t.Fatalf("a new Work was judged %d times, want 1 (named before its first report)", ran)
+	}
+	note := "11-20 03:17Z retention run; Trigger c57a7c00 pings the Worker after 04:40Z to collect repair numbers"
+	waiting := WorkWaiting
+	if _, err := f.store.UpdateWork(f.id, WorkUpdate{Status: &waiting, WaitFor: &note}); err != nil {
+		t.Fatal(err)
+	}
+	if ran := f.scan(); ran != 1 {
+		t.Fatalf("parking it was judged %d times, want 1", ran)
+	}
+	prompt := f.model.prompts[len(f.model.prompts)-1]
+	for _, want := range []string{
+		"Parked: nothing runs on it now",
+		"Brain asks the person nothing: nothing is needed from them.",
+		"Brain's own note on what it waits for (Brain's shorthand, never words for the person): " + note,
+		"The person's local time now: ",
+		"begin the line by saying nothing is needed from the person",
+		"never UTC",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("the judge was not told %q", want)
+		}
+	}
+	if shown := f.work(t).Shown; shown == nil || shown.Status != "waiting" || shown.Line != "等明早 11:17 的清理跑完再验证，无需你操作" {
+		t.Fatalf("shown = %#v", shown)
+	}
+	// A restart replays nothing new: no judgment.
+	f.restart()
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a restart judged %d times without new evidence", ran)
+	}
+	f.restart()
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a second restart judged %d times without new evidence", ran)
+	}
+	// Brain rewording the wait is evidence again.
+	reworded := "the retention run tomorrow morning"
+	if _, err := f.store.UpdateWork(f.id, WorkUpdate{Status: &waiting, WaitFor: &reworded}); err != nil {
+		t.Fatal(err)
+	}
+	if ran := f.scan(); ran != 1 {
+		t.Fatalf("a new wait note was judged %d times, want 1", ran)
+	}
+	if len(f.model.prompts) != 3 {
+		t.Fatalf("%d model calls, want 3", len(f.model.prompts))
+	}
+}
+
+func TestBrainsQuestionIsWhatAsksThePerson(t *testing.T) {
+	f := newParkedFixture(t, answerParked)
+	question := "Release Looper now, or wait for the review?"
+	if _, err := f.store.UpdateWork(f.id, WorkUpdate{Question: &question, Choices: &[]string{"Release now", "Wait"}}); err != nil {
+		t.Fatal(err)
+	}
+	f.scan()
+	prompt := f.model.prompts[len(f.model.prompts)-1]
+	if !strings.Contains(prompt, "Brain asks the person: "+question) || strings.Contains(prompt, "Brain asks the person nothing: nothing is needed") {
+		t.Fatalf("the judge was not told Brain's question:\n%s", prompt)
+	}
+}
+
+func TestAClosedWorkIsReadOnceForHowItEnded(t *testing.T) {
+	f := newParkedFixture(t, answerParked, answerClosed)
+	f.scan()
+	before := f.work(t)
+	done := WorkDone
+	if _, err := f.store.UpdateWork(f.id, WorkUpdate{Status: &done}); err != nil {
+		t.Fatal(err)
+	}
+	if ran := f.scan(); ran != 1 {
+		t.Fatalf("closing it was judged %d times, want 1", ran)
+	}
+	after := f.work(t)
+	if after.Shown == nil || after.Shown.Status != "done" || after.Shown.Line != "清理后查看器一直正常，已确认修好" {
+		t.Fatalf("shown = %#v", after.Shown)
+	}
+	if after.Progress.Percent != before.Progress.Percent || after.Progress.Judgments != before.Progress.Judgments {
+		t.Fatalf("a closed Work's checklist moved: %d%% (%d) -> %d%% (%d)", before.Progress.Percent, before.Progress.Judgments, after.Progress.Percent, after.Progress.Judgments)
+	}
+	if !strings.Contains(f.model.prompts[1], "Closed by Brain") {
+		t.Fatal("the judge was not told the Work is closed")
+	}
+	f.restart()
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("a closed Work was judged %d more times", ran)
+	}
+	// Long closed: never read again.
+	f.clock = f.clock.Add(progressClosedWindow + time.Hour)
+	if ran := f.scan(); ran != 0 {
+		t.Fatalf("an old closed Work was judged %d times", ran)
+	}
+}
+
+func TestThePersonsLanguageIsReadFromTheirMessages(t *testing.T) {
+	say := func(texts ...string) []personMessage {
+		var out []personMessage
+		for _, text := range texts {
+			out = append(out, personMessage{Text: text})
+		}
+		return out
+	}
+	cases := []struct {
+		messages []personMessage
+		want     string
+	}{
+		{say("Re: LooperRequestBoard (work 2cc9c9eb-9b37-42d1) 这个也看不懂。", "seek alpha 这个直接用网页去抓，效率会更高吗", "set up a Router session for the user 这个的作用是啥？", "ok"), "Chinese"},
+		{say("ship it", "what about the docs?", "继续"), ""},
+		{say("このバグを直して", "ありがとう"), "Japanese"},
+		{say("이거 고쳐줘", "고마워"), "Korean"},
+		{nil, ""},
+	}
+	for _, c := range cases {
+		if got := personLanguage(c.messages); got != c.want {
+			t.Errorf("%v: got %q, want %q", c.messages, got, c.want)
+		}
+	}
+	if !strings.Contains(buildShownContext(Work{}, say("这个看不懂", "你需要我干啥"), nil, time.Now()), "The person writes in Chinese: write title, line and next in Chinese.") {
+		t.Fatal("the judge is not told the person's language")
 	}
 }

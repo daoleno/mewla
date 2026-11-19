@@ -36,6 +36,35 @@ describe("a Work in Brain's thread", () => {
     expect(workCardModel({ event: event(), currentWork: work({ progress: { stage: "last", percent: 99 } }) }).mark).toBeUndefined();
   });
 
+  // The three cards the owner could not read (11-19 20:35): Brain parked each with a note in its own shorthand.
+  const parked = [
+    ["XcodeLogsViewerHang", "11-20 03:17Z retention run; Trigger c57a7c00 pings the Worker after 04:40Z to collect repair numbers and remove the recorder"],
+    ["MewlaWorkReclaim", "Brain rebuilds and restarts the live daemon on main (after MewlaScreenHide commits its follow-up), then checks: no Work re-judged without new evidence is not yet in"],
+    ["LooperRequestBoard", "reviewer's delta re-check of #103/#104/#106 (tick 1119l) and merges; then Brain releases Looper and the Worker does the production steps"],
+  ] as const;
+
+  test("a parked Work's card never shows Brain's note or code name, never asks; the judge's words once it has them (owner 11-19)", () => {
+    for (const [title, wait_for] of parked) {
+      const current = work({ title, status: "waiting", unread_result: false, wait_for, wake: { kind: "user_input", ref: wait_for }, progress: { stage: "moving", percent: 88 } });
+      for (const kind of ["session.uncertain", "session.done"] as const) {
+        const before = workCardModel({ event: event({ kind, work_title: title, summary: "Worker's turn ended without a progress report" }), currentWork: current });
+        expect(before).toMatchObject({ kind: "live", state: "Waiting", summary: "Nothing needed from you" });
+        expect(JSON.stringify(before)).not.toContain(wait_for);
+        // Parked on something else, it keeps its ring: no ring reads as "waits on you".
+        expect(before.mark).toEqual({ kind: "percent", percent: 90, tone: "moving" });
+      }
+      const judged = workCardModel({ event: event({ kind: "session.done", work_title: title }), currentWork: { ...current, shown: { title: "看板改造", line: "等独立评审合并后发布，无需你操作", status: "waiting" } } });
+      expect(judged).toMatchObject({ kind: "live", title: "看板改造", summary: "等独立评审合并后发布，无需你操作" });
+    }
+  });
+
+  test("a closed Work's card says how it ended in the judge's words once the judge read it closed; until then what came back", () => {
+    const shown = { title: "文档上线", line: "文档已在新地址上线", status: "done" as const };
+    expect(workCardModel({ event: event(), currentWork: work({ shown }) })).toMatchObject({ kind: "result", title: "文档上线", summary: "文档已在新地址上线" });
+    // A line written while it ran is not how it ended.
+    expect(workCardModel({ event: event(), currentWork: work({ summary: "Docs are live.", shown: { ...shown, line: "等部署", status: "active" } }) })).toMatchObject({ title: "文档上线", summary: "Docs are live." });
+  });
+
   test("the Session that ran it is named without the id the daemon appends", () => {
     expect(workCardModel({ event: event({ session_name: "Hello writer (mh-17b3337d43f38037916f0e5b)" }) }).sessionName).toBe("Hello writer");
   });

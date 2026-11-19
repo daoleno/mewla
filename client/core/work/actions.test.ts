@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine } from "./actions";
+import { brainWorkActions, brainWorkAskDraft, brainWorkUserAction } from "./actions";
 import { BRAIN_WORK_STUCK_AFTER_MS, brainWorkSurface } from "./surface";
 import type { BrainCurrentWork } from "./types";
 
@@ -82,9 +82,9 @@ test("failed: retry through Brain, or dismiss", () => {
 });
 
 describe("nothing stays stuck", () => {
-  test("a Work parked for days with nothing asked stays a quiet wait that says what it waits on, never Needs you", () => {
+  test("a Work parked for days with nothing asked stays a quiet wait, never Needs you, and never in Brain's shorthand", () => {
     const slip = slipOf(work({ status: "waiting", wake: { kind: "user_input", ref: "operator:1" }, wait_for: "Apple account holder resolves the agreement", attention_since: hoursAgo(24 * 6) }));
-    expect(slip.summary).toBe("Apple account holder resolves the agreement");
+    expect(slip.summary).toBeUndefined();
     expect(slip.group).toBe("waiting");
   });
 
@@ -142,14 +142,5 @@ describe("a running Calendar run's slip", () => {
     const kinds = brainWorkActions(slip).map((action) => action.kind);
     expect(kinds).toContain("open");
     expect(kinds).not.toContain("stop");
-  });
-});
-
-describe("Waiting for", () => {
-  test("shows what the Work waits on when it says something new", () => {
-    expect(brainWorkWaitForLine({ waitFor: "Reviewer approval on the PR", summary: "Shipping" })).toBe("Waiting for: Reviewer approval on the PR");
-    expect(brainWorkWaitForLine({ waitFor: "operator:2985", summary: "" })).toBeUndefined();
-    expect(brainWorkWaitForLine({ waitFor: "Reviewer approval", summary: "Reviewer approval" })).toBeUndefined();
-    expect(brainWorkWaitForLine({ waitFor: "Reviewer approval", question: "Merge?" })).toBeUndefined();
   });
 });

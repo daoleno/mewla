@@ -389,11 +389,16 @@ function OneSessionWork(props: { model: () => WorkCardModel; line: () => WorkWor
   const sending = signal(false);
   const row = (): TrayRow => {
     const line = props.line();
-    // The Work's judged progress, as its tray row draws it (§11 Progress); never a Worker's own.
-    if (line) return { ...workDetailWorkerRow(line, elapsedNow()), mark: props.model().mark };
+    // The Work's judged progress, as its tray row draws it (§11 Progress); never a Worker's own. Named as the
+    // judge wrote it in the person's language; the Session's code name and its Worker's words only before
+    // (owner 2026-11-19: "看不懂这个"). A parked Work says it asks nothing until the judge says what it waits on.
+    if (line) {
+      const worker = workDetailWorkerRow(line, elapsedNow());
+      return { ...worker, title: props.model().shownTitle || worker.title, line: props.model().shownLine || worker.line, mark: props.model().mark };
+    }
     const agent = props.agent();
     return {
-      key: `work:${props.model().workId}`, title: workerName(agent?.name) || props.model().sessionName || props.model().title, line: props.model().summary,
+      key: `work:${props.model().workId}`, title: props.model().shownTitle || workerName(agent?.name) || props.model().sessionName || props.model().title, line: props.model().summary,
       end: "", tile: agent ? { kind: "agent", agent: agent.kind, flavor: agent.flavor } : { kind: "brain" }, target: { open: "work", workId: props.model().workId },
       mark: props.model().mark,
     };

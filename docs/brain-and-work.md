@@ -49,7 +49,11 @@ the thing you want and one line on where it stands ("Cause found; fixing the
 router session"), with how long since it last changed. The progress judge
 writes both, and the project, in the same pass that judges progress; until it
 has, the row shows Brain's title. A judge that cannot answer leaves the last
-text. Several Workers on one Work are still one row ("3 Workers · …"). Tap a
+text. Brain's own notes on a Work (what it waits for, its next step) are
+Brain's shorthand and never show: a Work Brain parked reads, for example,
+"无需你操作：等明早 11:17 日志清理跑完，再核对修复效果", in your local time, and
+says "Nothing needed from you" until the judge has said what it waits for. Ids,
+hashes and UTC times never reach a row. Several Workers on one Work are still one row ("3 Workers · …"). Tap a
 row for Work detail; tap the Worker's logo, with its ring, to open its Session
 directly.
 
@@ -62,7 +66,9 @@ moved for 12 hours.
 **Work cards in the conversation.** Each Work has one live card: its title, up
 to three Workers (logo, name, what it does, time) and "N more". When the Work
 reports again, earlier cards of it shrink to one line, so the thread never
-fills with copies. Tap the title for Work detail, or a Worker for its Session.
+fills with copies. A card with one Worker reads as the Work's tray row: the
+judge's name and line beside its Worker's logo and ring. Tap the title for Work
+detail, or a Worker for its Session.
 Work detail lists every Worker that joined the Work, finished ones too; in the
 tray a Work with several Workers is one row reading "N Workers".
 
@@ -80,16 +86,21 @@ passing run, a file written, a posted review.
 - **It never fills to 100 %.** When every outcome is done, the Work is in its
   last stretch (the Worker reporting, Brain reading the result), and the ring
   closes in green.
-- **No ring** while the Work waits on you, or for a Work with no finish line.
+- **No ring** while Brain asks you something on it, while Brain reviews what
+  its Worker sent, or for a Work with no finish line. A Work Brain parked on
+  something else (a review, a date, a release) keeps its ring: it asks nothing
+  of you.
 - **Tap the Work** to see its outcomes and which are done.
 
 The judge runs only on new evidence (a progress report with new words, a turn
-ending, Brain's next message to the Worker), at most once every two minutes per
+ending, Brain's next message to the Worker, Brain parking or closing the Work or
+changing what it waits on or asks you), at most once every two minutes per
 Work and never on a timer alone; after a turn ends or a send-back, within
 seconds. A report that repeats the last one is not evidence, and the evidence it
 last judged is kept on the Work, so a restart of the computer's Mewla judges
-nothing again. The same call writes the row's title, line and project; a new
-Work is named once when it appears. The
+nothing again. The same call writes the row's title, line and project, in the
+language you write to Brain in; a new Work is named once when it appears, and a
+closed one is read once more so its row says how it ended. The
 `Work progress` row of `routing.md` picks its model (see
 [Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
 `progress.judged` or `progress.back` event (`mewla brain work list -id`).
@@ -151,7 +162,8 @@ A Work is a request only when Brain asks you something on it. Its tray row
 opens Work detail, where the question and its answers come first, Brain's pick
 tagged, and the reply box sits at the bottom; the brief, outcomes and Workers
 fold under **Details**. A Work Brain left waiting with nothing asked is a quiet
-**Waiting** row, never under Needs you.
+**Waiting** row, never under Needs you, and its page's box reads **Tell Brain
+about this Work**, not Reply.
 
 **Who a request is for.** Needs you holds only what you can act on: a question
 Brain asked you, a prompt Brain handed to you, a sign-in or approval only you

@@ -65,7 +65,8 @@ describe("tray model", () => {
     const bare = trayModel(input({ openWork: [{ work_id: "q", title: "Write the hello", status: "open" }] }));
     expect(bare.running[0]!.line).toBe("Not started yet");
     const waiting = trayModel(input({ openWork: [{ work_id: "w", title: "Ship", status: "waiting", wait_for: "the deploy window" }] }));
-    expect(waiting.running[0]!.line).toBe("the deploy window");
+    // Brain's wait note is Brain's shorthand: until the judge says what it waits on, the row says it asks nothing.
+    expect(waiting.running[0]!.line).toBe("Nothing needed from you");
     // A Session blocked on something unreadable asks "Waiting for you", not its footer.
     const asks = requestsOf({ workers: [{ ...claude, status: "blocked", needs_attention: true }], alerts: [], now: NOW });
     expect(asks[0]).toMatchObject({ title: "Waiting for you", source: "Hello writer" });
@@ -204,7 +205,7 @@ describe("tray model", () => {
     expect(projectsOf([{ project: "Mewla" }, { project: "Mewla" }, {}])).toEqual([]);
   });
 
-  test("a Work's row carries its judged progress while it runs or waits on Brain; never while a person has a part", () => {
+  test("a Work's row carries its judged progress while it runs, waits on Brain or is parked; never while Brain asks the person", () => {
     const moving = { stage: "moving" as const, percent: 43 };
     const m = trayModel(input({
       workers: [worker("b")],
@@ -212,8 +213,8 @@ describe("tray model", () => {
         work("w1", { attempt_session_id: "b", progress: moving }),
         // The Worker reported: Brain reads the result, the last stretch.
         work("w2", { status: "waiting", progress: { stage: "last", percent: 99 } }),
-        // Brain parked it on something it names.
-        work("w3", { status: "waiting", wait_for: "The owner's pick of the look", progress: moving }),
+        // Brain parked it on something it names: that asks nothing of the person (owner 2026-11-19).
+        work("w3", { status: "waiting", wait_for: "The release window", progress: moving }),
         // Brain asks the person.
         work("w4", { question: "Ship it now?", choices: ["Ship", "Wait"], progress: moving }),
         // No judgment yet.
@@ -223,7 +224,7 @@ describe("tray model", () => {
     const mark = (key: string) => [...m.running, ...m.done].find((r) => r.key === key)?.mark;
     expect(mark("work:w1")).toEqual({ kind: "percent", percent: 45, tone: "moving" });
     expect(mark("work:w2")).toEqual({ kind: "last" });
-    expect(mark("work:w3")).toBeUndefined();
+    expect(mark("work:w3")).toEqual({ kind: "percent", percent: 45, tone: "moving" });
     expect(mark("work:w4")).toBeUndefined();
     expect(mark("work:w5")).toBeUndefined();
     expect(m.running.some((r) => r.key === "work:w4")).toBe(false);

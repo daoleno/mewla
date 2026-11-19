@@ -15,8 +15,9 @@
  *   closed, or before its first judgment.
  *
  * A Work whose Worker has reported is `waiting` while Brain reads the result: that is the last stretch and
- * keeps its mark. Only a person's part hides it: a question, a needs-you wake or state, or Brain parking
- * it on something it names (`wait_for`).
+ * keeps its mark. Only a person's part hides it: Brain's question, or Brain's review of a Worker's request.
+ * Brain parking it on something else (a date, a review, a release: `wait_for`) asks nothing of the person,
+ * so it keeps its mark (owner 2026-11-19: a parked Work must never look like it needs you).
  */
 import type { BrainCurrentWork } from "./types";
 
@@ -54,12 +55,9 @@ export function progressMark(progress: BrainWorkProgress | undefined | null, opt
 }
 
 /** The mark a Work carries (`progressMark`), from the Work's own fields. */
-export function workProgressMark(work: Pick<BrainCurrentWork, "status" | "progress" | "question" | "wake" | "wait_for">): ProgressMark | undefined {
+export function workProgressMark(work: Pick<BrainCurrentWork, "status" | "progress" | "question">): ProgressMark | undefined {
   const open = work.status !== "done" && work.status !== "cancelled";
-  const waiting = Boolean(work.question?.trim())
-    || work.status === "needs_input"
-    || work.wake?.kind === "user_input"
-    || (work.status === "waiting" && Boolean(work.wait_for?.trim()));
+  const waiting = Boolean(work.question?.trim()) || work.status === "needs_input";
   return progressMark(work.progress, { running: open, waiting });
 }
 

@@ -94,11 +94,15 @@ describe("brainWorkSurface", () => {
     expect(brainWorkSurface(live, footer).slips.find((item) => item.workId === "reopen")!.summary ?? "").not.toContain("shift+tab");
   });
 
-  test("a Work parked on a user_input wake with nothing asked is Brain's wait, never Needs you; it says what it waits on (owner 2026-11-19)", () => {
+  test("a Work parked on a user_input wake with nothing asked is Brain's wait, never Needs you; Brain's wait note is never its words (owner 2026-11-19)", () => {
     const slip = brainWorkSurface(live, workers).slips.find((item) => item.workId === "release")!;
     expect(slip.group).not.toBe("needs");
     expect(slip.status).not.toBe("needs");
-    expect(slip.summary).toBe("Apple account holder resolves the agreement");
+    // "Apple account holder resolves the agreement" is Brain's note: the judge's line says what it waits on.
+    expect(slip.summary).toBeUndefined();
+    const judged = brainWorkSurface([work({ status: "waiting", wait_for: "11-20 03:17Z retention run; Trigger c57a7c00 pings the Worker", shown: { title: "Xcode 日志查看器不再卡住", line: "等明早清理跑完再验证，无需你操作", status: "waiting" } })], []).slips[0]!;
+    expect(judged).toMatchObject({ title: "Xcode 日志查看器不再卡住", shownLine: "等明早清理跑完再验证，无需你操作", shownStatus: "waiting" });
+    expect(judged.summary).toBeUndefined();
     // The MewlaScreenVideo case: Brain's review resolved as a wait on its thread, nothing asked.
     const parked = brainWorkSurface([work({ status: "waiting", progress_mode: "waiting", wait_for: "brain-thread:b1", wake: { kind: "user_input", ref: "brain-thread:b1" }, attention_since: "2026-11-19T03:32:30Z" })], [])
       .slips[0]!;
@@ -153,7 +157,8 @@ describe("open Work on the rail", () => {
       ["w1", "waiting", "Waiting"],
       ["q1", "queued", "Queued"],
     ]);
-    expect(surface.slips[0].summary).toBe("the registrar's approval email");
+    // Brain's wait note is Brain's shorthand, never the slip's words (owner 2026-11-19).
+    expect(surface.slips[0].summary).toBeUndefined();
     expect(surface.counts.queued).toBe(1);
   });
 
