@@ -1183,6 +1183,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleBrainWorkRead(conn, raw)
 	case "brain_work_detail":
 		s.handleBrainWorkDetail(conn, raw)
+	case "brain_work_shown_set":
+		s.handleBrainWorkShownSet(conn, raw)
 	case "answered_requests":
 		s.handleAnsweredRequests(conn, raw)
 	case "brain_work_action":
@@ -3468,6 +3470,27 @@ func (s *Server) handleBrainWorkRead(conn *websocket.Conn, raw clientMessage) {
 		"type":       "brain_work_read",
 		"request_id": raw.RequestID,
 		"work_id":    strings.TrimSpace(raw.ID),
+	})
+}
+
+// handleBrainWorkShownSet records the person's correction of a Work's row:
+// Name is the field (title, project or merged_into), Text its value, empty to
+// hand it back. The reply carries how the Work now reads.
+func (s *Server) handleBrainWorkShownSet(conn *websocket.Conn, raw clientMessage) {
+	if s.brain == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
+		return
+	}
+	item, err := s.brain.SetWorkShown(raw.ID, brain.ShownField(strings.TrimSpace(raw.Name)), raw.Text)
+	if err != nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_shown_set_failed", brainWorkActionMessage(err))
+		return
+	}
+	s.sendJSON(conn, map[string]any{
+		"type":       "brain_work_shown_set",
+		"request_id": raw.RequestID,
+		"work_id":    item.ID,
+		"shown":      item.Shown,
 	})
 }
 

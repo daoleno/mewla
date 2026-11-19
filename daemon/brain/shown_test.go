@@ -547,3 +547,80 @@ func TestAWordOrTwoIsNotAReading(t *testing.T) {
 		t.Fatalf("a short real answer was dropped: %#v", got)
 	}
 }
+
+// Asked is the person's own words for the Work, as the judge picks them from
+// the messages it was shown; So far keeps each line the row read. Both are
+// the detail's, never the list's.
+func TestAskedIsThePersonsWordsAndSoFarTheLinesTheRowRead(t *testing.T) {
+	first := strings.Replace(answerShownZh, `"measurable"`, `"asked":[1],"measurable"`, 1)
+	later := strings.Replace(answerShownLater, `"measurable"`, `"asked":[1,2,9],"measurable"`, 1)
+	f := newProgressJudgeFixture(t, first, later)
+	created := f.work(t).CreatedAt
+	for index, text := range []string{"上传图片后输入框卡住了，处理下", "Looper 那个看板怎么样了"} {
+		if _, err := f.store.AppendTimelineItem(TimelineItem{ID: fmt.Sprintf("m%d", index), ThreadID: "t", SessionID: "s", Role: "user", Body: text,
+			CreatedAt: created.Add(time.Duration(index-30) * time.Minute)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.judgeNow(t, "fix deployed")
+	if !strings.Contains(f.model.prompts[0], "[1] -30m: 上传图片后输入框卡住了，处理下") {
+		t.Fatalf("the person's messages are not numbered for the judge:\n%s", f.model.prompts[0])
+	}
+	shown := f.work(t).Shown
+	if len(shown.Asked) != 1 || shown.Asked[0].Text != "上传图片后输入框卡住了，处理下" || shown.Asked[0].Seq == 0 {
+		t.Fatalf("asked = %#v", shown.Asked)
+	}
+	if len(shown.SoFar) != 1 || shown.SoFar[0].Text != "已修好并上线，Brain 在核对" {
+		t.Fatalf("so far = %#v", shown.SoFar)
+	}
+	f.judgeNow(t, "verified on mobile")
+	shown = f.work(t).Shown
+	// The first ask stays first; a number outside the list is nothing.
+	if len(shown.Asked) != 2 || shown.Asked[0].Text != "上传图片后输入框卡住了，处理下" {
+		t.Fatalf("asked after the second judgment = %#v", shown.Asked)
+	}
+	if len(shown.SoFar) != 2 || shown.SoFar[1].Text != "移动端也验证通过" {
+		t.Fatalf("so far after the second judgment = %#v", shown.SoFar)
+	}
+	if view := shown.view(); view.Asked != nil || view.SoFar != nil {
+		t.Fatalf("the list carries the detail's text: %#v", view)
+	}
+	detail, err := f.store.WorkDetail(f.workID, nil)
+	if err != nil || detail.Shown == nil || len(detail.Shown.Asked) != 2 || len(detail.Shown.SoFar) != 2 {
+		t.Fatalf("detail shown = %#v (%v)", detail.Shown, err)
+	}
+}
+
+// Merging only changes where a Work's row is shown: one level, never into
+// itself, and the judge never writes it.
+func TestAMergeIsThePersonsAndOneLevelDeep(t *testing.T) {
+	f := newProgressJudgeFixture(t, answerShownZh, answerShownLater)
+	other, err := f.store.CreateWork(Work{Title: "Other", Objective: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.service.SetWorkShown(f.workID, ShownMergedInto, f.workID); !errors.Is(err, ErrShownMerge) {
+		t.Fatalf("merge into itself: %v", err)
+	}
+	if _, err := f.service.SetWorkShown(f.workID, ShownMergedInto, "missing"); !errors.Is(err, ErrWorkNotFound) {
+		t.Fatalf("merge into a missing Work: %v", err)
+	}
+	merged, err := f.service.SetWorkShown(other.ID, ShownMergedInto, f.workID)
+	if err != nil || merged.Shown == nil || merged.Shown.MergedInto != f.workID {
+		t.Fatalf("merge = %#v (%v)", merged.Shown, err)
+	}
+	if _, err := f.service.SetWorkShown(f.workID, ShownMergedInto, other.ID); !errors.Is(err, ErrShownMerge) {
+		t.Fatalf("merge into a merged Work, or a Work others are under: %v", err)
+	}
+	f.judgeNow(t, "fix deployed")
+	if got, _ := f.store.Work(other.ID); got.Shown == nil || got.Shown.MergedInto != f.workID {
+		t.Fatalf("a judgment changed the merge: %#v", got.Shown)
+	}
+	if view := merged.Shown.view(); view == nil || view.MergedInto != f.workID {
+		t.Fatalf("lists do not see the merge: %#v", view)
+	}
+	unmerged, err := f.service.SetWorkShown(other.ID, ShownMergedInto, "")
+	if err != nil || unmerged.Shown.MergedInto != "" {
+		t.Fatalf("unmerge = %#v (%v)", unmerged.Shown, err)
+	}
+}

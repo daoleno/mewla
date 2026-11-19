@@ -2466,6 +2466,24 @@ func (s *Service) WorkDetail(workID string) (WorkDetail, error) {
 	return detail, nil
 }
 
+// SetWorkShown records the person's correction of how a Work reads in their
+// list: its title, its project, or the Work it is shown under. It returns the
+// Work as it now reads.
+func (s *Service) SetWorkShown(workID string, field ShownField, value string) (Work, error) {
+	if s == nil || s.store == nil {
+		return Work{}, fmt.Errorf("brain service is not configured")
+	}
+	workID = strings.TrimSpace(workID)
+	if _, err := s.store.SetWorkShown(workID, field, value, s.nowUTC()); err != nil {
+		return Work{}, err
+	}
+	item, ok := s.workByID(workID)
+	if !ok {
+		return Work{}, ErrWorkNotFound
+	}
+	return item, nil
+}
+
 func (s *Service) MarkWorkRead(workID string) error {
 	if s == nil || s.store == nil {
 		return fmt.Errorf("brain service is not configured")

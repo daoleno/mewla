@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // A Work's progress is judged by a model, not reported by its Worker. The
@@ -137,16 +138,35 @@ type progressVerdict struct {
 		ID  string `json:"id"`
 		Why string `json:"why"`
 	} `json:"reopened"`
+	// Dropped names outcomes not yet done that a later message from Brain
+	// replaced or withdrew; taken only when Brain changed the Work.
+	Dropped []struct {
+		ID  string `json:"id"`
+		Why string `json:"why"`
+	} `json:"dropped"`
 	Reason string `json:"reason"`
 	// How the Work reads in the person's list (shown.go).
 	Title   string `json:"title"`
 	Line    string `json:"line"`
 	Next    string `json:"next"`
 	Project string `json:"project"`
+	// Asked numbers the person's messages, as listed, that asked for the Work.
+	Asked []int `json:"asked"`
+	// language is the person's (personLanguage): an outcome written in
+	// another is said again in theirs, once.
+	language string
 }
 
-func (v progressVerdict) shown() shownVerdict {
-	return shownVerdict{Title: v.Title, Line: v.Line, Next: v.Next, Project: v.Project}
+// shown is how the Work reads, given the person's messages as the judge saw
+// them numbered.
+func (v progressVerdict) shown(person []personMessage) shownVerdict {
+	out := shownVerdict{Title: v.Title, Line: v.Line, Next: v.Next, Project: v.Project}
+	for _, number := range v.Asked {
+		if number >= 1 && number <= len(person) {
+			out.Asked = append(out.Asked, person[number-1])
+		}
+	}
+	return out
 }
 
 func parseProgressVerdict(raw []byte) (progressVerdict, error) {
@@ -214,6 +234,13 @@ func applyProgressVerdict(prev *WorkProgress, verdict progressVerdict, scopeAdde
 	}
 
 	back, grew := "", false
+	dropped := map[string]bool{}
+	if scopeAdded && len(next.Outcomes) > 0 {
+		next.Outcomes = dropOutcomes(next.Outcomes, verdict)
+		for _, outcome := range verdict.Dropped {
+			dropped[strings.TrimSpace(outcome.ID)] = true
+		}
+	}
 	if len(next.Outcomes) == 0 {
 		// The first checklist is the judge's, within bounds.
 		for _, id := range order {
@@ -234,6 +261,9 @@ func applyProgressVerdict(prev *WorkProgress, verdict progressVerdict, scopeAdde
 			if !ok {
 				continue // the judge dropped it: it keeps its mark
 			}
+			if text := judgeClip(mark.Text, 140); verdict.language != "" && !inLanguage(outcome.Text, verdict.language) && inLanguage(text, verdict.language) {
+				outcome.Text = text // said once in the person's language; kept as is after
+			}
 			if outcome.State == OutcomeDone && mark.State != OutcomeDone {
 				why, named := reopenWhy[outcome.ID]
 				if !named {
@@ -245,7 +275,7 @@ func applyProgressVerdict(prev *WorkProgress, verdict progressVerdict, scopeAdde
 		}
 		if scopeAdded {
 			for _, id := range order {
-				if known[id] || len(next.Outcomes) == progressMaxGrown {
+				if known[id] || dropped[id] || len(next.Outcomes) == progressMaxGrown {
 					continue
 				}
 				outcome := marks[id]
@@ -287,6 +317,54 @@ func applyProgressVerdict(prev *WorkProgress, verdict progressVerdict, scopeAdde
 	changed := prev == nil || prev.Stage != next.Stage || prev.Back != next.Back ||
 		(next.ShowsNumber() && prev.Percent != next.Percent) || !sameOutcomes(prev.Outcomes, next.Outcomes)
 	return next, changed
+}
+
+// dropOutcomes removes the outcomes the judge says a later message from Brain
+// replaced or withdrew. A done outcome stays (dropping it would read as the
+// Work going back), and at least one outcome is left.
+func dropOutcomes(outcomes []ProgressOutcome, verdict progressVerdict) []ProgressOutcome {
+	drop := map[string]bool{}
+	for _, dropped := range verdict.Dropped {
+		drop[strings.TrimSpace(dropped.ID)] = true
+	}
+	if len(drop) == 0 {
+		return outcomes
+	}
+	kept := make([]ProgressOutcome, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		if !drop[outcome.ID] || outcome.State == OutcomeDone {
+			kept = append(kept, outcome)
+		}
+	}
+	if len(kept) == 0 {
+		return outcomes
+	}
+	return kept
+}
+
+// inLanguage says whether text is written in language, as personLanguage
+// names it; for a language it does not name it answers true.
+func inLanguage(text, language string) bool {
+	var han, kana, hangul int
+	for _, r := range text {
+		switch {
+		case unicode.In(r, unicode.Hiragana, unicode.Katakana):
+			kana++
+		case unicode.Is(unicode.Hangul, r):
+			hangul++
+		case unicode.Is(unicode.Han, r):
+			han++
+		}
+	}
+	switch language {
+	case "Japanese":
+		return kana > 0
+	case "Korean":
+		return hangul >= 2
+	case "Chinese":
+		return han >= 2
+	}
+	return true
 }
 
 func sameOutcomes(a, b []ProgressOutcome) bool {

@@ -33,6 +33,28 @@ type WorkShown struct {
 	// ("active", "waiting" or "done"), so a list can tell a line written
 	// while it ran from one that says how it ended.
 	Status string `json:"status,omitempty"`
+	// Asked is the person's own messages that asked for this Work or added
+	// to it, oldest first, as the judge picked them from Brain's thread.
+	Asked []ShownAsked `json:"asked,omitempty"`
+	// MergedInto names the Work the person merged this one into: its row is
+	// shown under that Work. Presentation only: the lifecycle is untouched.
+	MergedInto string `json:"merged_into,omitempty"`
+	// SoFar is the Work's story for its detail: each line the judge wrote
+	// when it changed, with when, oldest first, the newest few kept.
+	SoFar []ShownMoment `json:"so_far,omitempty"`
+}
+
+// ShownMoment is one line the Work's row read, from At.
+type ShownMoment struct {
+	At   time.Time `json:"at"`
+	Text string    `json:"text"`
+}
+
+// ShownAsked is one message the person typed to Brain about a Work.
+type ShownAsked struct {
+	Seq  int64     `json:"seq"`
+	At   time.Time `json:"at"`
+	Text string    `json:"text"`
 }
 
 func shownStatus(status WorkStatus) string {
@@ -55,6 +77,10 @@ const (
 	shownLineMax    = 110
 	shownNextMax    = 200
 	shownProjectMax = 24
+	// shownAskedMax bounds Asked; the first asks are kept, as they name the Work.
+	shownAskedMax = 6
+	// shownSoFarMax is how many past lines So far keeps.
+	shownSoFarMax = 10
 )
 
 func cloneWorkShown(s *WorkShown) *WorkShown {
@@ -63,12 +89,25 @@ func cloneWorkShown(s *WorkShown) *WorkShown {
 	}
 	out := *s
 	out.ByPerson = append([]string(nil), s.ByPerson...)
+	out.Asked = append([]ShownAsked(nil), s.Asked...)
+	out.SoFar = append([]ShownMoment(nil), s.SoFar...)
 	return &out
 }
 
-// view is the shown text as clients read it, or nil when there is none.
+// view is the shown text as lists read it, or nil when there is none. Asked
+// and So far belong to the detail only (detailView).
 func (s *WorkShown) view() *WorkShown {
-	if s == nil || (s.Title == "" && s.Line == "" && s.Project == "") {
+	if s == nil || (s.Title == "" && s.Line == "" && s.Project == "" && s.MergedInto == "") {
+		return nil
+	}
+	out := cloneWorkShown(s)
+	out.Asked, out.SoFar = nil, nil
+	return out
+}
+
+// detailView is the shown text whole, for one Work's detail.
+func (s *WorkShown) detailView() *WorkShown {
+	if s == nil {
 		return nil
 	}
 	return cloneWorkShown(s)
@@ -89,6 +128,8 @@ type shownVerdict struct {
 	Line    string
 	Next    string
 	Project string
+	// Asked is the person's messages the judge says asked for the Work.
+	Asked []personMessage
 }
 
 // applyShownVerdict folds the judge's answer into what is shown. An empty
@@ -100,7 +141,17 @@ func applyShownVerdict(prior *WorkShown, verdict shownVerdict, now time.Time) (W
 	if prior != nil {
 		next = *cloneWorkShown(prior)
 	}
-	changed := false
+	changed, asked := false, false
+	for _, message := range verdict.Asked {
+		if message.Seq == 0 || len(next.Asked) == shownAskedMax || hasAsked(next.Asked, message.Seq) {
+			continue
+		}
+		next.Asked = append(next.Asked, ShownAsked{Seq: message.Seq, At: message.At, Text: message.Text})
+		asked = true
+	}
+	if asked {
+		sort.SliceStable(next.Asked, func(i, j int) bool { return next.Asked[i].Seq < next.Asked[j].Seq })
+	}
 	set := func(field string, dst *string, value string, max int) {
 		value = clipShown(value, max)
 		// A word or two is not a reading ("矫正", 11-19 22:00): the last good text stays.
@@ -116,14 +167,30 @@ func applyShownVerdict(prior *WorkShown, verdict shownVerdict, now time.Time) (W
 		}
 	}
 	set("title", &next.Title, verdict.Title, shownTitleMax)
+	line := next.Line
 	set("line", &next.Line, verdict.Line, shownLineMax)
+	if next.Line != line {
+		next.SoFar = append(next.SoFar, ShownMoment{At: now, Text: next.Line})
+		if len(next.SoFar) > shownSoFarMax {
+			next.SoFar = append([]ShownMoment(nil), next.SoFar[len(next.SoFar)-shownSoFarMax:]...)
+		}
+	}
 	set("next", &next.Next, verdict.Next, shownNextMax)
 	set("project", &next.Project, verdict.Project, shownProjectMax)
 	next.JudgedAt = now
 	if changed {
 		next.ChangedAt = now
 	}
-	return next, changed
+	return next, changed || asked
+}
+
+func hasAsked(asked []ShownAsked, seq int64) bool {
+	for _, message := range asked {
+		if message.Seq == seq {
+			return true
+		}
+	}
+	return false
 }
 
 // clipShown makes one line of at most max characters.
@@ -142,7 +209,14 @@ type ShownField string
 const (
 	ShownTitle   ShownField = "title"
 	ShownProject ShownField = "project"
+	// ShownMergedInto shows the Work under another one; the value is that
+	// Work's id, empty to show it on its own again.
+	ShownMergedInto ShownField = "merged_into"
 )
+
+// ErrShownMerge is a merge the list cannot show: into itself, into a Work
+// that is itself merged, or a Work others are merged into.
+var ErrShownMerge = errors.New("cannot merge")
 
 var ErrShownField = errors.New("unknown shown field")
 
@@ -156,6 +230,8 @@ func (s *Store) SetWorkShown(workID string, field ShownField, value string, now 
 		max = shownTitleMax
 	case ShownProject:
 		max = shownProjectMax
+	case ShownMergedInto:
+		return s.mergeWorkShown(workID, strings.TrimSpace(value))
 	default:
 		return WorkShown{}, fmt.Errorf("%w: %q", ErrShownField, field)
 	}
@@ -183,6 +259,46 @@ func (s *Store) SetWorkShown(workID string, field ShownField, value string, now 
 			}
 			shown.ChangedAt = now
 		}
+		item.Shown = &shown
+		out = *cloneWorkShown(&shown)
+		return nil, true
+	})
+	return out, err
+}
+
+// mergeWorkShown shows workID under into, or on its own again when into is
+// empty. One level only: a Work merged into another takes no merges itself.
+func (s *Store) mergeWorkShown(workID, into string) (WorkShown, error) {
+	if into != "" {
+		items, err := s.ListWork()
+		if err != nil {
+			return WorkShown{}, err
+		}
+		target, found := Work{}, false
+		for _, item := range items {
+			if item.ID == into {
+				target, found = item, true
+			}
+			if into != workID && item.Shown != nil && item.Shown.MergedInto == workID {
+				return WorkShown{}, fmt.Errorf("%w: other Work is shown under this one", ErrShownMerge)
+			}
+		}
+		switch {
+		case into == workID:
+			return WorkShown{}, fmt.Errorf("%w: a Work into itself", ErrShownMerge)
+		case !found:
+			return WorkShown{}, ErrWorkNotFound
+		case target.Shown != nil && target.Shown.MergedInto != "":
+			return WorkShown{}, fmt.Errorf("%w: that Work is itself merged into another", ErrShownMerge)
+		}
+	}
+	var out WorkShown
+	err := s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
+		shown := WorkShown{}
+		if item.Shown != nil {
+			shown = *cloneWorkShown(item.Shown)
+		}
+		shown.MergedInto = into
 		item.Shown = &shown
 		out = *cloneWorkShown(&shown)
 		return nil, true
@@ -236,6 +352,7 @@ func (s *Store) applyWorkShown(workID string, verdict shownVerdict, now time.Tim
 
 // personMessage is one message the person typed to Brain.
 type personMessage struct {
+	Seq  int64
 	At   time.Time
 	Text string
 }
@@ -259,7 +376,7 @@ func (s *Store) personMessagesFor(item Work, now time.Time) []personMessage {
 	if s == nil || s.db == nil {
 		return nil
 	}
-	rows, err := s.db.Query(`SELECT body FROM timeline WHERE json_extract(body, '$.role') = 'user' ORDER BY seq DESC LIMIT ?`, personScanRows)
+	rows, err := s.db.Query(`SELECT seq, body FROM timeline WHERE json_extract(body, '$.role') = 'user' ORDER BY seq DESC LIMIT ?`, personScanRows)
 	if err != nil {
 		return nil
 	}
@@ -268,11 +385,13 @@ func (s *Store) personMessagesFor(item Work, now time.Time) []personMessage {
 	start := item.CreatedAt.Add(10 * time.Minute)
 	var before, after []personMessage
 	for rows.Next() {
+		var seq int64
 		var body string
-		if rows.Scan(&body) != nil {
+		if rows.Scan(&seq, &body) != nil {
 			continue
 		}
 		message, ok := personMessageOf([]byte(body))
+		message.Seq = seq
 		if !ok || message.At.After(now) {
 			continue
 		}
@@ -304,18 +423,20 @@ func (s *Store) personRecent(n int, now time.Time) []personMessage {
 	if s == nil || s.db == nil {
 		return nil
 	}
-	rows, err := s.db.Query(`SELECT body FROM timeline WHERE json_extract(body, '$.role') = 'user' ORDER BY seq DESC LIMIT ?`, personScanRows)
+	rows, err := s.db.Query(`SELECT seq, body FROM timeline WHERE json_extract(body, '$.role') = 'user' ORDER BY seq DESC LIMIT ?`, personScanRows)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 	var out []personMessage
 	for rows.Next() && len(out) < n {
+		var seq int64
 		var body string
-		if rows.Scan(&body) != nil {
+		if rows.Scan(&seq, &body) != nil {
 			continue
 		}
 		if message, ok := personMessageOf([]byte(body)); ok && !message.At.After(now) {
+			message.Seq = seq
 			out = append(out, message)
 		}
 	}
@@ -361,13 +482,13 @@ func buildShownContext(item Work, messages []personMessage, projects []string, n
 	if len(messages) == 0 {
 		b.WriteString("(none)\n")
 	}
-	for _, message := range messages {
+	for index, message := range messages {
 		offset := message.At.Sub(item.CreatedAt)
 		sign := "+"
 		if offset < 0 {
 			sign, offset = "-", -offset
 		}
-		fmt.Fprintf(&b, "- %s%s: %s\n", sign, progressDuration(offset), message.Text)
+		fmt.Fprintf(&b, "[%d] %s%s: %s\n", index+1, sign, progressDuration(offset), message.Text)
 	}
 	b.WriteString("\n## Projects already in use\n")
 	if len(projects) == 0 {

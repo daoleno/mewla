@@ -2130,7 +2130,7 @@ func runBrainGC(args []string, stderr io.Writer) error {
 
 func runBrainWork(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: mewla brain work <list|get|create|update|close|event|resolve> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla brain work <list|get|create|update|close|event|resolve|show-set> [flags]")
 		return flag.ErrHelp
 	}
 	switch args[0] {
@@ -2148,9 +2148,53 @@ func runBrainWork(args []string, stderr io.Writer) error {
 		return runBrainWorkEventResolve(args[1:], stderr)
 	case "resolve":
 		return runBrainWorkResolve(args[1:], stderr)
+	case "show-set":
+		return runBrainWorkShowSet(args[1:], stderr)
 	default:
 		return fmt.Errorf("unknown brain work command: %s", args[0])
 	}
+}
+
+// runBrainWorkShowSet sets how a Work reads in the person's list, as the
+// person asked: a title or project the judge then keeps, or the Work it is
+// shown under. One field per call; an empty value hands it back.
+func runBrainWorkShowSet(args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla brain work show-set", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	var workID string
+	values := map[string]*string{}
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
+	fs.StringVar(&workID, "id", "", "Work id")
+	for _, field := range []struct{ name, usage string }{
+		{"title", "the person's title for the row (empty: back to the judge)"},
+		{"project", "the person's project for the row (empty: back to the judge)"},
+		{"merge-into", "show this Work under that Work id (empty: on its own again)"},
+	} {
+		values[field.name] = fs.String(field.name, "", field.usage)
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+	var set []string
+	fs.Visit(func(f *flag.Flag) {
+		if _, ok := values[f.Name]; ok {
+			set = append(set, f.Name)
+		}
+	})
+	if strings.TrimSpace(workID) == "" || len(set) != 1 {
+		return fmt.Errorf("a Work id and exactly one of -title, -project or -merge-into are required")
+	}
+	field := map[string]brain.ShownField{"title": brain.ShownTitle, "project": brain.ShownProject, "merge-into": brain.ShownMergedInto}[set[0]]
+	resp, err := callControl(cfg, control.Request{Type: "brain_work_shown_set", WorkID: workID, Name: string(field), Text: *values[set[0]]})
+	if err != nil {
+		return err
+	}
+	return writeControlResponse(os.Stdout, resp, cfg.json)
 }
 
 func runBrainWorkClose(args []string, stderr io.Writer) error {

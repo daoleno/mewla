@@ -270,6 +270,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainWorkUpdate(req)
 	case "brain_work_close":
 		return a.handleBrainWorkClose(req)
+	case "brain_work_shown_set":
+		return a.handleBrainWorkShownSet(req)
 	case "brain_work_event":
 		return a.handleBrainWorkEvent(req)
 	case "brain_work_event_resolve":
@@ -1195,6 +1197,22 @@ func (a *controlApp) handleBrainWorkClose(req control.Request) control.Response 
 		return brainWorkControlError(err)
 	}
 	return control.Response{OK: true, BrainWork: &item, Confirmation: "Brain Work closed under audited operator authority."}
+}
+
+// handleBrainWorkShownSet sets the person's title, project or merge for a
+// Work's row (Name is the field, Text the value; empty hands it back).
+func (a *controlApp) handleBrainWorkShownSet(req control.Request) control.Response {
+	if a == nil || a.brainService == nil {
+		return control.ErrorResponse("brain_unavailable", "Brain is not configured.")
+	}
+	item, err := a.brainService.SetWorkShown(req.WorkID, brain.ShownField(strings.TrimSpace(req.Name)), req.Text)
+	if err != nil {
+		if errors.Is(err, brain.ErrShownField) || errors.Is(err, brain.ErrShownMerge) {
+			return control.ErrorResponse("invalid_brain_work_shown", err.Error())
+		}
+		return brainWorkControlError(err)
+	}
+	return control.Response{OK: true, BrainWork: &item, Confirmation: "Set as the person's own: the judge keeps it."}
 }
 
 func (a *controlApp) handleBrainWorkEvent(req control.Request) control.Response {

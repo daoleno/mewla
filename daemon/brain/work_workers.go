@@ -412,7 +412,7 @@ func (s *Store) WorkDetail(workID string, workers []WorkerRef) (WorkDetail, erro
 	return WorkDetail{
 		ID: item.ID, Revision: item.Revision, Title: item.Title, Objective: PersonBrief(item.Objective), Status: item.Status,
 		CreatedAt: item.CreatedAt.UTC(), UpdatedAt: item.UpdatedAt.UTC(), WorkerSessions: sessions,
-		ResultActions: []work.ResultAction{}, Progress: item.Progress.view(), Shown: item.Shown.view(),
+		ResultActions: []work.ResultAction{}, Progress: item.Progress.view(), Shown: item.Shown.detailView(),
 	}, nil
 }
 

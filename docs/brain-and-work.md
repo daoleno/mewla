@@ -57,6 +57,17 @@ hashes and UTC times never reach a row. Several Workers on one Work are still on
 row for Work detail; tap the Worker's logo, with its ring, to open its Session
 directly.
 
+Work detail reads top down: Brain's question when it asks one, **Now** (the
+row's line), **Next**, **Outcomes**, **So far** (each line the row has read,
+with when), **Asked** (your own messages to Brain that asked for it, as the
+judge picked them) and **Workers**, each opening its Session. Under ⋯:
+**Rename** and **Move to project** set the title or project as you write it,
+and the judge never changes it again (clear it to hand it back); **Merge
+with…** shows the Work's row under another Work, with its Workers, until you
+unmerge it. Merging changes only the list, never the Work itself. Brain does
+the same from the command line: `mewla brain work show-set -id <work>
+-title|-project|-merge-into <value>`.
+
 **The goal.** When Brain has set one, it is the tray's first line, with how
 much has come back: "Ship atlas-notes v1.4 this week · 2 of 5 back". A new chat
 starts without one. The app stops showing it once it is no longer current: all
@@ -90,7 +101,10 @@ passing run, a file written, a posted review.
   its Worker sent, or for a Work with no finish line. A Work Brain parked on
   something else (a review, a date, a release) keeps its ring: it asks nothing
   of you.
-- **Tap the Work** to see its outcomes and which are done.
+- **Tap the Work** to see its outcomes and which are done. Outcomes are
+  written in your language; one first written in another is said again in
+  yours, once. An outcome not yet done that Brain's later message replaced or
+  withdrew leaves the list; a done one never does.
 
 The judge runs only on new evidence (a progress report with new words, a turn
 ending, Brain's next message to the Worker, Brain parking or closing the Work or
