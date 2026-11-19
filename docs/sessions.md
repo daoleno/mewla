@@ -335,7 +335,10 @@ Codex's app-server, and a Claude Code Bash command (run in the background or
 not) is ended by its process group. Commands an earlier turn started keep
 running. The chat says what was ended in one line under the turn, such as
 "Stopped 1 command this turn started: seq 1 30", or "1 command could not be
-stopped: …" when one could not be. OpenCode and Pi end their running command
+stopped: …" when one could not be. If a Claude Code update changes how it
+runs Bash commands so that Mewla recognizes none of the turn's, Stop leaves
+them alone, the line says "N commands may still be running", and the daemon
+log names the Claude Code version. OpenCode and Pi end their running command
 when they stop, and have no background commands. The line is not kept when
 the daemon restarts.
 

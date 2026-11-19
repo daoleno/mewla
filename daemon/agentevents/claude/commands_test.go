@@ -1,6 +1,12 @@
 package claude
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/daoleno/mewla/daemon/agentevents"
+)
 
 // The argv joined as the process table shows it, captured from Claude Code
 // 2.1.328 on Linux (zsh) for `sleep 61; echo "it's done"`.
@@ -33,5 +39,22 @@ func TestTurnCommandRefusesClaudesOtherChildren(t *testing.T) {
 		if got, ok := (Adapter{}).TurnCommand(args); ok {
 			t.Fatalf("TurnCommand(%q) = %q, want refused", args, got)
 		}
+	}
+}
+
+func TestAgentVersionIsTheTranscriptsLastVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	transcript := `{"type":"user","version":"2.1.300"}
+{"type":"assistant","version":"2.1.328","message":{}}
+{"type":"summary"}
+{"type":"assis`
+	if err := os.WriteFile(path, []byte(transcript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := (Adapter{}).AgentVersion(agentevents.Binding{Ref: path}); got != "2.1.328" {
+		t.Fatalf("version = %q", got)
+	}
+	if got := (Adapter{}).AgentVersion(agentevents.Binding{Ref: filepath.Join(t.TempDir(), "missing")}); got != "" {
+		t.Fatalf("missing transcript version = %q", got)
 	}
 }

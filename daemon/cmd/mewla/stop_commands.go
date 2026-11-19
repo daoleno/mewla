@@ -32,9 +32,19 @@ func turnCommandScope(w *watcher.Watcher, execs *work.ExecutorConfig, adapters *
 			return watcher.TurnCommandScope{}, false
 		}
 		turnID := state.Current.ID
+		provider := adapter.Descriptor().Provider
 		return watcher.TurnCommandScope{
 			Since: state.Current.StartedAt,
 			Match: matcher.TurnCommand,
+			Agent: func() string {
+				version := "unknown version"
+				if reader, ok := adapter.(agentevents.AgentVersionReader); ok {
+					if read := reader.AgentVersion(state.Binding); read != "" {
+						version = read
+					}
+				}
+				return provider + " " + version
+			},
 			Report: func(stopped []agentevents.StoppedCommand) {
 				hub.Publish(agentevents.Event{WorkerID: sessionID, Kind: agentevents.KindCommandsStopped, At: time.Now().UTC(), TurnID: turnID, Stopped: stopped})
 			},
@@ -47,7 +57,7 @@ func turnCommandScope(w *watcher.Watcher, execs *work.ExecutorConfig, adapters *
 func stoppedCommandsRecord(e agentevents.Event) server.StoppedCommands {
 	record := server.StoppedCommands{SessionID: e.WorkerID, TurnID: e.TurnID, At: e.At}
 	for _, command := range e.Stopped {
-		record.Commands = append(record.Commands, server.StoppedCommand{Command: command.Command, Ended: command.Ended, Reason: command.Reason})
+		record.Commands = append(record.Commands, server.StoppedCommand{Command: command.Command, Ended: command.Ended, Reason: command.Reason, Unrecognized: command.Unrecognized})
 	}
 	return record
 }

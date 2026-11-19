@@ -28,6 +28,9 @@ type StoppedCommand struct {
 	Ended   bool
 	// Reason says why a command that did not end could not be stopped.
 	Reason string
+	// Unrecognized: a process the turn started that Mewla could not read as
+	// a command and left alone; it may still be running.
+	Unrecognized bool
 }
 
 // StoppedCommands is what one Stop did to the commands its turn started.
@@ -124,7 +127,12 @@ func stoppedCommandsEvent(record StoppedCommands) work.CodexConversationEvent {
 // any it could not end "1 command could not be stopped: … (why)".
 func StoppedCommandsLine(commands []StoppedCommand) string {
 	var ended, left []string
+	unrecognized := 0
 	for _, command := range commands {
+		if command.Unrecognized {
+			unrecognized++
+			continue
+		}
 		shown := shownCommand(command.Command)
 		if command.Ended {
 			ended = append(ended, shown)
@@ -141,6 +149,9 @@ func StoppedCommandsLine(commands []StoppedCommand) string {
 	}
 	if len(left) > 0 {
 		parts = append(parts, fmt.Sprintf("%s could not be stopped: %s", countCommands(len(left)), strings.Join(left, ", ")))
+	}
+	if unrecognized > 0 {
+		parts = append(parts, countCommands(unrecognized)+" may still be running")
 	}
 	return strings.Join(parts, " · ")
 }
