@@ -526,6 +526,9 @@ func TestNoDailyCapStopsAJudgmentOfNewEvidence(t *testing.T) {
 	f.restart()
 	if ran := f.scan(); ran != 0 {
 		t.Fatalf("a restart judged %d times without new evidence", ran)
+	}
+}
+
 func TestAWordOrTwoIsNotAReading(t *testing.T) {
 	prior := &WorkShown{Title: "Xcode Gemma 工具调用错乱根因", Line: "错乱出在 Bedrock 端，报告待出。", Next: "写出根因报告"}
 	got, changed := applyShownVerdict(prior, shownVerdict{Title: "根因", Line: "矫正", Next: "ok"}, time.Now())
