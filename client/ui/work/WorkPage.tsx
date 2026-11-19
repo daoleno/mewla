@@ -8,7 +8,7 @@ import type { BrainWorkDetail, BrainWorkStatus } from "../../core/work/types";
 import { workDetailWorkerRow, workProject, workWorkerLines, type WorkWorkerLine } from "../../core/work/workers";
 import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import {
-  BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, brainWorkWaitForLine, type BrainWorkAction,
+  BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, type BrainWorkAction,
 } from "../../core/work/actions";
 import type { BrainWorkSlip } from "../../core/work/surface";
 import { progressBackLine, progressOutcomes, type BrainWorkProgress, type JudgedOutcomeState } from "../../core/work/judgedProgress";
@@ -366,6 +366,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const askWorker = () => slip()?.sessionId ?? (workerLines().length === 1 ? workerLines()[0]!.sessionId : undefined);
   // The dock is made once while the Work is open: snapshots and the clock rebuild the slip, never the field under a reply.
   const docked = computed(() => Boolean(slip() && !slip()!.closed));
+  const nowLine = () => (slip()?.closed && slip()!.shownStatus !== "done" ? "" : slip()?.shownLine) || slip()?.summary || "";
 
   return (
     <NavPage title={titleAway() ? title() : ""} testID="work-detail" capsuleUnder>
@@ -386,8 +387,8 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                     <View class="absolute" style={{ left: 0, top: 0 }}><ProgressHalo mark={() => mark()!} size={56} testID="work-progress-ring" /></View>
                     <If when={workerLines().length === 1} else={<Icon name="brain" size={26} tone="ink" />}><AgentIcon kind={workerLines()[0]?.agent ?? "terminal"} flavor={workerLines()[0]?.flavor} size={28} /></If>
                   </View></View>}</If>
-                <If when={slip()!.summary && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-summary" class="text-body">{slip()!.summary!}</Text></View></If>
-                <If when={brainWorkWaitForLine(slip()!)}><View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View></If>
+                {/* Where it stands, as the judge wrote it in the person's language; Brain's wait note is never shown (owner 2026-11-19). */}
+                <If when={nowLine() && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-summary" class="text-body">{nowLine()}</Text></View></If>
                 <Brief text={brief} />
                 <Progress progress={() => slip()!.progress} />
                 <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
@@ -416,7 +417,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
               <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
             </View></If>
         </Scroll>
-        <If when={docked()}><Composer text={text} placeholder="Reply about this Work" active={shown}
+        <If when={docked()}><Composer text={text} placeholder={slip()?.question ? "Reply about this Work" : "Tell Brain about this Work"} active={shown}
             canSend={() => !busy() && !uploading()} attached={() => files.ready().length > 0}
             disabled={() => connection() !== "connected"} disabledReason={() => "Offline"}
             running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}

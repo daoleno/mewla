@@ -43,10 +43,10 @@ const (
 	progressPerWorkDay = 80
 	progressPerDay     = 600
 	progressReportsMax = 12
-	// A Work with no name in the person's list is asked for one on every
-	// progressUnnamedEvery-th tick, and again after progressUnnamedRetry.
-	progressUnnamedEvery = 6
-	progressUnnamedRetry = 30 * time.Minute
+	// Brain's disposition of each Work is read every progressChangedEvery-th
+	// tick; a closed Work while it closed within progressClosedWindow.
+	progressChangedEvery = 6
+	progressClosedWindow = 24 * time.Hour
 )
 
 // ProgressAskFunc asks a model one structured question: the system prompt,
@@ -181,8 +181,8 @@ func (s *Service) RunProgressJudge(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if ticks%progressUnnamedEvery == 0 {
-				s.requestUnnamed()
+			if ticks%progressChangedEvery == 0 {
+				s.requestChanged()
 			}
 			ticks++
 		case <-wake:
@@ -232,11 +232,14 @@ func (s *Service) seedProgressLimits() {
 	sort.Slice(p.runs, func(i, j int) bool { return p.runs[i].Before(p.runs[j]) })
 }
 
-// requestUnnamed asks for a first judgment of every open Work the person's
-// list has no name for yet, so a new Work reads as itself before its first
-// report. A Work judged a while ago that still has none waits
-// progressUnnamedRetry before it is asked again.
-func (s *Service) requestUnnamed() {
+// requestChanged notes where Brain has put each Work for the person (parked,
+// closed, what it waits on, what it asks them) and asks for a judgment of
+// each one whose disposition the last judgment did not see. A Work new to the
+// judge has seen nothing yet, so it is named before its first report. Kept
+// on the Work, so a restart finds nothing changed and asks the model nothing.
+// A closed Work is read once more, while it was closed within
+// progressClosedWindow, so its row says how it ended.
+func (s *Service) requestChanged() {
 	if s.store == nil {
 		return
 	}
@@ -247,18 +250,28 @@ func (s *Service) requestUnnamed() {
 	p := &s.progress
 	now := s.nowUTC()
 	for _, item := range items {
-		// Once per Work: a Work the judge has named, or tried to, waits for evidence like any other.
-		if item.Status == WorkDone || item.Status == WorkCancelled || (item.Shown != nil && !item.Shown.JudgedAt.IsZero()) {
+		if item.Status == WorkCancelled || strings.HasPrefix(item.ID, resourcePressureWorkPrefix) ||
+			(item.Status == WorkDone && now.Sub(item.UpdatedAt) > progressClosedWindow) {
+			continue
+		}
+		key := brainKey(item)
+		if item.Progress != nil && item.Progress.Seen != nil && item.Progress.Seen.Brain == key {
 			continue
 		}
 		p.mu.Lock()
-		last, ran := p.lastRun[item.ID]
 		_, pending := p.pending[item.ID]
 		p.mu.Unlock()
-		if pending || (ran && now.Sub(last) < progressUnnamedRetry) {
+		if pending {
 			continue
 		}
-		s.requestProgress(item.ID, "", true)
+		due, err := s.store.noteBrainEvidence(item.ID, key)
+		if err != nil {
+			log.Printf("brain progress evidence %s: %v", item.ID, err)
+			continue
+		}
+		if due {
+			s.requestProgress(item.ID, "", true)
+		}
 	}
 }
 
@@ -333,7 +346,8 @@ func (s *Service) judgeProgress(ctx context.Context, workID string) {
 	ask := p.ask
 	p.mu.Unlock()
 	item, ok := s.workByID(workID)
-	if !ok || item.Status == WorkDone || item.Status == WorkCancelled || ask == nil {
+	// A closed Work is judged only for its row: how it ended. Its checklist stays as it closed.
+	if !ok || item.Status == WorkCancelled || ask == nil {
 		return
 	}
 	brief, scopeAdded := s.progressBrief(item)
@@ -398,10 +412,14 @@ Keep a checklist of the Work's outcomes and mark it.
 - Later, keep every outcome's id, text and weight as given. Add an outcome only when a later message adds to the Work. Remove none.
 - state: done needs concrete evidence in the context; doing means visibly started; todo otherwise.
 - An outcome given as done goes back to doing or todo only when the context shows it was reopened (Brain or a person sent it back, a later check failed). List each such outcome in reopened with the reason in a few words.
-Also say how the Work reads in the person's list of everything they asked for. Write it in the language of the person's own messages (given below); when there are none, in the brief's language.
+Also say how the Work reads in the person's list of everything they asked for. Write title, line and next in the language the person writes their own messages in (given below), even when the brief, the reports and Brain's notes are in another language; when what was shown so far is in another language, write it anew in theirs. Only when there are no messages of theirs, in the brief's language.
 - title: a short name for the outcome the person wants, which they recognise at once, at most 6 words in English or 14 characters in Chinese or Japanese. Name the thing, not the activity, and never a code name, file name or id. Lead with the product when it helps.
-- line: where it stands now, in plain words, at most 14 words (28 CJK characters): what is done or found, and what it waits on and on whom when it waits. Never a status word alone ("Running", "In progress"), a percentage, or how long it has run.
+- line: where it stands now, in plain words, at most 14 words (28 CJK characters): what is done or found, and what it waits on. Never a status word alone ("Running", "In progress"), a percentage, or how long it has run.
+  - When it is parked and Brain asks the person nothing, begin the line by saying nothing is needed from the person ("Nothing needed from you:", "无需你操作："), then say in a few words what it waits for (a Worker, a review, a date, a release). A phone shows one line, so this comes first. Only when Brain asks the person a question may the line ask anything of them.
+  - When it is closed, say how it ended: what came out.
+  - Brain's notes are shorthand for Brain: say what they mean in your own plain words; never copy them.
 - next: the next step, one short sentence.
+- In title, line and next: no ids or hashes (of a Session, Work, Trigger, commit or run), no internal words (turn, lease, wake, wait_for, judged, fence, tick), and a time only as the person's local time (given below), as they would say it ("明早 11:17", "tomorrow 11:17"), never UTC.
 - project: the product or repository it belongs to, in one or two words as the person calls it. Reuse a name from the projects already in use when it fits. Empty when it belongs to no project (a one-off question).`
 
 const progressSchema = `{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string"},"line":{"type":"string"},"next":{"type":"string"},"project":{"type":"string"},"measurable":{"type":"boolean"},"outcomes":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"text":{"type":"string"},"weight":{"type":"integer","minimum":1,"maximum":3},"state":{"type":"string","enum":["todo","doing","done"]}},"required":["id","text","weight","state"]}},"reopened":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"why":{"type":"string"}},"required":["id","why"]}},"reason":{"type":"string"}},"required":["title","line","next","project","measurable","outcomes","reopened","reason"]}`
@@ -426,7 +444,7 @@ func (s *Service) progressBrief(item Work) (string, bool) {
 	events, _ := s.store.ListWorkEvents(item.ID)
 	brief, scopeAdded := buildProgressBrief(item, s.progressConversation(item), events, files, s.nowUTC())
 	all, _ := s.store.ListWork()
-	return brief + buildShownContext(item, s.store.personMessagesFor(item, s.nowUTC()), projectsInUse(all, item.ID)), scopeAdded
+	return brief + buildShownContext(item, s.store.personMessagesFor(item, s.nowUTC()), projectsInUse(all, item.ID), s.nowUTC()), scopeAdded
 }
 
 // buildProgressBrief renders the judge's context. Only a message that carries
@@ -612,7 +630,16 @@ func progressDuration(d time.Duration) string {
 // a person sees changed, and tells the clients.
 func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeAdded bool, seen *ProgressEvidence, now time.Time) error {
 	return s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
-		if item.Status == WorkDone || item.Status == WorkCancelled {
+		if item.Status == WorkCancelled {
+			return nil, false
+		}
+		if item.Status == WorkDone {
+			kept := WorkProgress{}
+			if item.Progress != nil {
+				kept = *cloneWorkProgress(item.Progress)
+			}
+			markProgressJudged(&kept, seen, now)
+			item.Progress = &kept
 			return nil, false
 		}
 		next, changed := applyProgressVerdict(item.Progress, verdict, scopeAdded, now)

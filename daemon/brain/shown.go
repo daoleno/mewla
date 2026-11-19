@@ -29,6 +29,20 @@ type WorkShown struct {
 	ChangedAt time.Time `json:"changed_at,omitempty"`
 	// ByPerson names the fields the person set ("title", "project").
 	ByPerson []string `json:"by_person,omitempty"`
+	// Status is where the Work stood when the judge last wrote the line
+	// ("active", "waiting" or "done"), so a list can tell a line written
+	// while it ran from one that says how it ended.
+	Status string `json:"status,omitempty"`
+}
+
+func shownStatus(status WorkStatus) string {
+	switch status {
+	case WorkDone, WorkCancelled:
+		return "done"
+	case WorkWaiting:
+		return "waiting"
+	}
+	return "active"
 }
 
 // Limits on what the judge writes, in characters: a row has one line for the
@@ -203,10 +217,11 @@ func projectsInUse(items []Work, except string) []string {
 // keeps its last text.
 func (s *Store) applyWorkShown(workID string, verdict shownVerdict, now time.Time) error {
 	return s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
-		if item.Status == WorkDone || item.Status == WorkCancelled {
+		if item.Status == WorkCancelled {
 			return nil, false
 		}
 		next, changed := applyShownVerdict(item.Shown, verdict, now)
+		next.Status = shownStatus(item.Status)
 		item.Shown = &next
 		return nil, changed
 	})
@@ -303,8 +318,9 @@ func personMessageOf(body []byte) (personMessage, bool) {
 
 // buildShownContext is what the judge reads besides the Work to say how it
 // reads: the person's messages around it and the projects in use.
-func buildShownContext(item Work, messages []personMessage, projects []string) string {
+func buildShownContext(item Work, messages []personMessage, projects []string, now time.Time) string {
 	var b strings.Builder
+	b.WriteString(workStanding(item, now))
 	b.WriteString("\n<<<PERSON\n## The person's own messages to Brain around this Work (oldest first; many are about other Work)\n")
 	if len(messages) == 0 {
 		b.WriteString("(none)\n")
@@ -330,6 +346,93 @@ func buildShownContext(item Work, messages []personMessage, projects []string) s
 		}
 	}
 	b.WriteString("PERSON>>>\n")
+	// Last, so it is the rule the judge reads nearest its answer: a brief, reports and notes in another
+	// language pull the words toward theirs.
+	if language := personLanguage(messages); language != "" {
+		fmt.Fprintf(&b, "\nThe person writes in %s: write title, line and next in %s.\n", language, language)
+	} else {
+		b.WriteString("\nWrite title, line and next in the language of the person's own messages above.\n")
+	}
+	return b.String()
+}
+
+// personLanguage names the language the person writes in when their script
+// says it: most of their messages carry Han, kana or Hangul (a Chinese message
+// is often half English words and ids, so it is counted by message, not by
+// letter). Else "": the judge reads the messages for any other language.
+func personLanguage(messages []personMessage) string {
+	counts := map[string]int{}
+	for _, message := range messages {
+		var han, kana, hangul int
+		for _, r := range message.Text {
+			switch {
+			case unicode.In(r, unicode.Hiragana, unicode.Katakana):
+				kana++
+			case unicode.Is(unicode.Hangul, r):
+				hangul++
+			case unicode.Is(unicode.Han, r):
+				han++
+			}
+		}
+		switch {
+		case kana > 0:
+			counts["Japanese"]++
+		case hangul >= 2:
+			counts["Korean"]++
+		case han >= 2:
+			counts["Chinese"]++
+		}
+	}
+	for language, n := range counts {
+		if n*2 > len(messages) {
+			return language
+		}
+	}
+	return ""
+}
+
+// workStanding tells the judge where Brain has put the Work for the person:
+// whether anything runs on it, whether Brain asks the person anything (only a
+// question does), and Brain's own notes, which are shorthand for Brain and
+// never words for the person. And the person's local time, so a time in the
+// line is one they read without converting.
+func workStanding(item Work, now time.Time) string {
+	var b strings.Builder
+	b.WriteString("\n<<<STANDING\n## Where the Work stands\n")
+	switch item.Status {
+	case WorkDone, WorkCancelled:
+		b.WriteString("Closed by Brain: nothing more runs on it.\n")
+	case WorkWaiting:
+		b.WriteString("Parked: nothing runs on it now; it waits for something before it goes on.\n")
+	case WorkNeedsInput:
+		b.WriteString("Brain is reviewing what its Worker sent.\n")
+	case WorkRunning:
+		b.WriteString("A Worker is on it.\n")
+	default:
+		b.WriteString("Not started yet: it starts when Brain sends it or its trigger fires.\n")
+	}
+	if question := strings.TrimSpace(item.Question); question != "" {
+		fmt.Fprintf(&b, "Brain asks the person: %s\n", judgeClip(question, 600))
+	} else {
+		b.WriteString("Brain asks the person nothing: nothing is needed from them.\n")
+	}
+	if item.Wake != nil {
+		switch item.Wake.Kind {
+		case WorkWakeSessionTerminal:
+			b.WriteString("It goes on when its Worker's turn ends.\n")
+		case WorkWakeCalendarResult:
+			b.WriteString("It goes on when a scheduled run reports.\n")
+		}
+	}
+	if wait := strings.TrimSpace(item.WaitFor); wait != "" {
+		fmt.Fprintf(&b, "Brain's own note on what it waits for (Brain's shorthand, never words for the person): %s\n", judgeClip(wait, 600))
+	}
+	if next := strings.TrimSpace(item.NextAction); next != "" {
+		fmt.Fprintf(&b, "Brain's own note on its next step (Brain's shorthand, never words for the person): %s\n", judgeClip(next, 600))
+	}
+	local := now.In(time.Local)
+	fmt.Fprintf(&b, "The person's local time now: %s (UTC%s)\n", local.Format("2006-01-02 15:04 Mon"), local.Format("-07:00"))
+	b.WriteString("STANDING>>>\n")
 	return b.String()
 }
 

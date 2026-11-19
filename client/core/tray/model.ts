@@ -339,12 +339,6 @@ function workerLine(row: WorkWorkerSession | undefined): string {
   return row.provider ? typeLabel(agentKindFromProvider(row.provider), "shell") : "";
 }
 
-/** What a waiting Work waits for, as Brain wrote it; a bare reference ("operator:2985…") is plumbing. */
-function readableWait(value: string | undefined): string {
-  const line = readableSummary(value);
-  return line.includes(" ") ? line : "";
-}
-
 /** A Work's own word that says something (§11 Tray row): not one that only repeats its section ("Working", "Queued"). */
 function telling(word: string | undefined): string {
   return word && !BARE_STATE_WORDS.has(word) && word !== "Queued" && word !== "Running" ? word : "";
@@ -369,14 +363,18 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
   // what came back; a queued or waiting one, what it waits for, else what its Worker is (the live case: a
   // Claude Session reports neither status nor progress), else the Work's own context (Brain's summary, its
   // Session's agent and project), and only then why it sits quiet ("Not started yet"), never "Queued".
+  // Brain's wait note (`waitFor`) is Brain's shorthand, never the row's words (owner 2026-11-19): a parked Work
+  // asks nothing of the person, and says so until the judge has said what it waits for.
   const quietLine = () =>
-    (slip.group === "waiting" ? readableWait(slip.waitFor) || telling(slip.statusLabel) : "")
+    (slip.group === "waiting" ? telling(slip.statusLabel) : "")
     || doing || slip.summary || slip.who
-    || (slip.group === "queued" ? "Not started yet" : "Waiting to go on");
+    || (slip.group === "queued" ? "Not started yet" : "Nothing needed from you");
+  // A result's line is the judge's once it read how the Work ended; until then what came back.
+  const ended = done && slip.shownStatus === "done" ? judged : "";
   const line = several
     ? [`${joined.length} Workers`, judged || (running || !done ? doing : "")].filter(Boolean).join(" · ")
-    : judged || (done ? slip.summary || doing || slip.who || ""
-    : running ? doing || telling(slip.statusLabel) || slip.summary || slip.who || ""
+    : done ? ended || slip.summary || judged || doing || slip.who || ""
+    : judged || (running ? doing || telling(slip.statusLabel) || slip.summary || slip.who || ""
     : quietLine());
   const changed = slip.changedAt ? Date.parse(slip.changedAt) : NaN;
   return {

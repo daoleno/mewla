@@ -75,6 +75,8 @@ export type BrainWorkShown = {
   /** When what a person sees (title, line or project) last changed. */
   changed_at?: string;
   by_person?: ("title" | "project")[];
+  /** Where the Work stood when the line was written: "done" says how it ended. */
+  status?: "active" | "waiting" | "done";
 };
 
 /** `brain_work_detail`'s Work: one Work's page, current or closed. */

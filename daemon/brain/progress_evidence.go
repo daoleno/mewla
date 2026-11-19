@@ -12,13 +12,15 @@ import (
 // finds Seen equal to Judged and asks the model nothing.
 //
 // The gate: a new turn (Brain or a person wrote to the Worker), a turn that
-// ended, or a report whose kind, phase or words differ from the last one. A
-// heartbeat that repeats the last report, or a fact replayed after a restart,
-// is not evidence.
+// ended, a report whose kind, phase or words differ from the last one, or
+// Brain changing where the Work stands for the person (parked, closed, what it
+// waits on, what it asks them). A heartbeat that repeats the last report, or a
+// fact replayed after a restart, is not evidence.
 type ProgressEvidence struct {
 	Turn   string `json:"turn,omitempty"`
 	Ended  bool   `json:"ended,omitempty"`
 	Report string `json:"report,omitempty"`
+	Brain  string `json:"brain,omitempty"`
 }
 
 func reportKey(report ProgressReport) string {
@@ -43,7 +45,7 @@ func (s *Store) noteProgressEvidence(workID, turnID string, turnEnd bool, report
 			seen = *progress.Seen
 		}
 		if turnID != "" && turnID != seen.Turn {
-			seen = ProgressEvidence{Turn: turnID, Report: seen.Report}
+			seen = ProgressEvidence{Turn: turnID, Report: seen.Report, Brain: seen.Brain}
 		}
 		if turnEnd {
 			seen.Ended = true
@@ -58,6 +60,50 @@ func (s *Store) noteProgressEvidence(workID, turnID string, turnEnd bool, report
 				}
 			}
 		}
+		progress.Seen = &seen
+		item.Progress = &progress
+		judged := ProgressEvidence{}
+		if progress.Judged != nil {
+			judged = *progress.Judged
+		}
+		due = seen != judged
+		return nil, false
+	})
+	return due, err
+}
+
+// brainKey is where Brain has put the Work for the person: closed, parked or
+// active, what it waits on and what it asks them. A Work moving between
+// running and Brain's review is not a change the person reads.
+func brainKey(item Work) string {
+	stand := "active"
+	switch item.Status {
+	case WorkDone, WorkCancelled:
+		stand = "done"
+	case WorkWaiting:
+		stand = "waiting"
+	}
+	return strings.Join([]string{stand, strings.TrimSpace(item.WaitFor), strings.TrimSpace(item.Question)}, "\x1f")
+}
+
+// noteBrainEvidence folds Brain's current disposition of the Work into its
+// Seen evidence. due says Seen now differs from what was last judged. A
+// closed Work takes it too, once, so its row says how it ended; a cancelled
+// one leaves the list and takes nothing.
+func (s *Store) noteBrainEvidence(workID, key string) (due bool, err error) {
+	err = s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
+		if item.Status == WorkCancelled {
+			return nil, false
+		}
+		progress := WorkProgress{}
+		if item.Progress != nil {
+			progress = *cloneWorkProgress(item.Progress)
+		}
+		seen := ProgressEvidence{}
+		if progress.Seen != nil {
+			seen = *progress.Seen
+		}
+		seen.Brain = key
 		progress.Seen = &seen
 		item.Progress = &progress
 		judged := ProgressEvidence{}

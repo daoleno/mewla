@@ -170,6 +170,8 @@ export type BrainWorkSlip = {
   workerSessions?: readonly WorkWorkerSession[];
   /** Where it stands, as the judge wrote it in the person's language (`shown.line`); absent before a judgment. */
   shownLine?: string;
+  /** Where the Work stood when that line was written (`shown.status`): "done" says how it ended. */
+  shownStatus?: "active" | "waiting" | "done";
   /** The project the judge or the person put it under (`shown.project`); the tray's chips filter by it. */
   shownProject?: string;
   /** When what the person sees of it last changed (`shown.changed_at`, else its last update): the tray's order. */
@@ -325,13 +327,14 @@ export function brainWorkSurface(
       status: "blocked",
       statusLabel: BRAIN_WORK_GROUP_LABELS[group],
       title: shownTitle(work.shown) || brainWorkTitle(work.title),
-      summary: waiting && !work.calendar ? readableLine(work.wait_for) : undefined,
+      // Brain's wait note is Brain's shorthand, never words for the person (owner 2026-11-19): the judge says it.
+      summary: undefined,
       updatedAt: work.updated_at,
       unread: false,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
       workerSessions: work.worker_sessions,
       progress: work.progress,
-      mark: workProgressMark({ status: work.status, progress: work.progress, wake: work.wake, wait_for: work.wait_for }),
+      mark: workProgressMark({ status: work.status, progress: work.progress }),
       ...shownParts(work.shown, work.updated_at),
     });
   }
@@ -346,9 +349,10 @@ function shownTitle(shown: BrainWorkShown | undefined): string {
 }
 
 /** What the judge wrote for the row, beside the slip's own fields. */
-function shownParts(shown: BrainWorkShown | undefined, updatedAt: string | undefined): Pick<BrainWorkSlip, "shownLine" | "shownProject" | "changedAt"> {
+function shownParts(shown: BrainWorkShown | undefined, updatedAt: string | undefined): Pick<BrainWorkSlip, "shownLine" | "shownStatus" | "shownProject" | "changedAt"> {
   return {
     shownLine: shown?.line?.trim() || undefined,
+    shownStatus: shown?.status,
     shownProject: shown?.project?.trim() || undefined,
     changedAt: shown?.changed_at ?? updatedAt,
   };
@@ -358,12 +362,6 @@ function isSurfacedOpenWork(work: BrainOpenWork): boolean {
   if (work.work_id.startsWith(RESOURCE_PRESSURE_WORK_PREFIX)) return false;
   // A Calendar occurrence that has not run yet: Calendar owns it.
   return work.wake?.kind !== "calendar_result";
-}
-
-/** A line worth reading: a bare reference ("operator:2985…") is plumbing. */
-function readableLine(value: string | undefined): string | undefined {
-  const line = value?.replace(/\s+/g, " ").trim();
-  return line && line.includes(" ") ? line : undefined;
 }
 
 function isSurfacedWork(work: BrainCurrentWork): boolean {
@@ -409,11 +407,8 @@ function slipSummary(
   group: BrainWorkGroup,
   worker: BrainWorkerRef | undefined,
 ): string | undefined {
-  // A wait owned by a Session ("Session %90") or a Calendar run says nothing
-  // the slip doesn't.
-  const waitFor = (work.wait_for && !work.wake && work.attempt_session_id) || work.calendar
-    ? undefined
-    : work.wait_for;
+  // Brain's wait note (`wait_for`) is Brain's shorthand ("11-20 03:17Z retention run; Trigger c57a7c00 pings…"),
+  // never words for the person (owner 2026-11-19): what a Work waits on is the judge's line to say.
   // A Session's summary is what it reported only once it reported a phase; before, it is the daemon reading
   // its screen (a pasted command, the provider's footer), as core/sessions/activity says.
   const reported = worker?.phase?.trim() ? worker.summary : undefined;
@@ -421,8 +416,8 @@ function slipSummary(
     group === "running"
       ? [reported, work.summary]
       : group === "back"
-        ? [work.summary, reported, waitFor]
-        : [waitFor, work.summary];
+        ? [work.summary, reported]
+        : [work.summary];
   // A bare reference ("operator:2985…"), the runtime's reason code ("worker_stalled: stopped") and a terminal's
   // footer chrome are plumbing: none is something to read.
   return candidates

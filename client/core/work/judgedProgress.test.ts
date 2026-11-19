@@ -40,18 +40,18 @@ describe("judged progress", () => {
     expect(sameProgress(moving, { ...moving, outcomes: [moving.outcomes![0], { ...moving.outcomes![1], state: "doing" }] })).toBe(false);
   });
 
-  test("a Work keeps its mark while Brain reads its result, and loses it while a person has a part", () => {
+  test("a Work keeps its mark while Brain reads its result or it is parked, and loses it only while a person has a part", () => {
     const last: BrainWorkProgress = { stage: "last", percent: 99 };
     const back: BrainWorkProgress = { stage: "back", percent: 60, back: "More was asked" };
     // The Worker reported: the Work waits on Brain reading, the last stretch.
     expect(workProgressMark({ status: "waiting", progress: last })).toEqual({ kind: "last" });
     expect(workProgressMark({ status: "waiting", progress: back })).toEqual({ kind: "percent", percent: 60, tone: "back" });
     expect(workProgressMark({ status: "running", progress: moving })).toEqual({ kind: "percent", percent: 40, tone: "moving" });
-    // A person's part: a question, a needs-you state or wake, or Brain parking it on something named.
+    // A person's part: Brain's question, or Brain reviewing a Worker's request.
     expect(workProgressMark({ status: "running", progress: moving, question: "Ship it now?" })).toBeUndefined();
     expect(workProgressMark({ status: "needs_input", progress: moving })).toBeUndefined();
-    expect(workProgressMark({ status: "waiting", progress: moving, wake: { kind: "user_input", ref: "operator:1" } })).toBeUndefined();
-    expect(workProgressMark({ status: "waiting", progress: moving, wait_for: "The owner's pick of the look" })).toBeUndefined();
+    // Brain parking it on something else asks nothing of the person: it keeps its mark (owner 2026-11-19).
+    expect(workProgressMark({ status: "waiting", progress: moving })).toEqual({ kind: "percent", percent: 40, tone: "moving" });
     // Closed Work has no mark.
     expect(workProgressMark({ status: "done", progress: last })).toBeUndefined();
     expect(workProgressMark({ status: "cancelled", progress: moving })).toBeUndefined();

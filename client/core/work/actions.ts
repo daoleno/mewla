@@ -123,13 +123,6 @@ export function brainWorkUserAction(kind: BrainWorkActionKind): BrainWorkUserAct
 /** Snooze's length: the computer ends it on its own clock (SPEC "Snooze 1 hour"). */
 export const BRAIN_WORK_SNOOZE_SECONDS = 3600;
 
-/** "Waiting for: …" on a Work's page, when it says something the page does not already. */
-export function brainWorkWaitForLine(slip: Pick<BrainWorkSlip, "waitFor" | "calendar" | "summary" | "question">): string | undefined {
-  const wait = slip.waitFor?.trim();
-  if (!wait || slip.calendar || slip.question || wait === slip.summary || !wait.includes(" ")) return undefined;
-  return `Waiting for: ${wait}`;
-}
-
 /** The composer text for "Ask Brain about this". */
 export function brainWorkAskDraft(slip: Pick<BrainWorkSlip, "title" | "workId" | "summary">): string {
   const quote = slip.summary ? `\n> ${slip.summary}` : "";

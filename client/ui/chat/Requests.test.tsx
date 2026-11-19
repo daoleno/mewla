@@ -367,6 +367,31 @@ describe("a Work in Brain's thread", () => {
   }, 20_000);
 });
 
+describe("a parked Work in Brain's thread (owner 2026-11-19: \"看不懂这个，你需要我干啥？\")", () => {
+  test("its card is the Work as the judge names it, never its Session's code name, Brain's note or its Worker's last words; it asks nothing", async () => {
+    const x = "mh-e446ef4e423358b21b991722";
+    const note = "11-20 03:17Z retention run; Trigger c57a7c00 pings the Worker after 04:40Z to collect repair numbers and remove the recorder";
+    const current_work = [{ work_id: "w-x", revision: 1, title: "XcodeLogsViewerHang", status: "waiting", progress_mode: "waiting", unread_result: false, wait_for: note,
+      wake: { kind: "user_input", ref: note }, progress: { stage: "moving", percent: 95 },
+      shown: { title: "Xcode Logs 查看器卡死修复", line: "无需你操作：等明早 11:17 日志清理跑完，再核对修复效果", status: "waiting" },
+      worker_sessions: [{ session_id: x, name: "XcodeLogsViewerHang", provider: "claude", state: "ended", summary: "#10 released: CI rerun green, pin freeride-aws#114 (e7daa7b)", live: false, joined_at: "2026-11-19T05:00:00Z", updated_at: "2026-11-19T09:56:55Z" }] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work },
+      conversations: { "brain-host": [{ id: "wx", seq: 1, timestamp: new Date().toISOString(), kind: "status", source: "work_result", status: "session.uncertain",
+        title: "XcodeLogsViewerHang", body: "Worker's turn ended without a progress report; review the result.", work_id: "w-x", work_session_id: x, session_name: x, unread: false,
+        work_review_state: "resolved", work_session_state: "open", work_result_current: true }] },
+    }) });
+    await app.waitFor("id:work-card-one", { timeout: 10_000 });
+    expect(app.texts()).toContain("Xcode Logs 查看器卡死修复");
+    expect(app.texts()).toContain("无需你操作：等明早 11:17 日志清理跑完，再核对修复效果");
+    for (const raw of ["XcodeLogsViewerHang", "Trigger c57a7c00", "#10 released"]) expect(app.texts().some((t) => t.includes(raw))).toBe(false);
+    // Parked on something else, it keeps its ring and is never a request.
+    expect(app.shows("label:95 percent")).toBe(true);
+    expect(app.count("id:work-asks")).toBe(0);
+    expect(app.texts()).not.toContain("1 needs you");
+  }, 20_000);
+});
+
 describe("a real question, as the owner meets it (owner 2026-11-13, shot 11)", () => {
   const QUESTION = "The plaza fix is live on test. Prod has zero channels, so the plaza stays empty there until a channel is added: do I add the Gemini channel to prod now, with the same group and mappings as test, or wait for your review of the test setup first?";
 

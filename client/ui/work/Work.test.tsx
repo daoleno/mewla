@@ -101,13 +101,19 @@ describe("Brain's Work", () => {
     expect(app.shows("id:home-header")).toBe(true);
   }, 20_000);
 
-  test("a Work's page says what it waits for when its summary says something else", async () => {
+  test("a parked Work's page says where it stands in the judge's words, never Brain's wait note, and asks nothing (owner 11-19)", async () => {
     const waiting = brain();
-    waiting.current_work.push({ work_id: "w-wait", revision: 1, title: "merge-the-push-change", status: "waiting", progress_mode: "ready", attention_state: "queued", unread_result: false, summary: "Pushed the change for review.", wait_for: "Reviewer approval on the pull request", updated_at: now() } as never);
+    const note = "11-20 03:17Z retention run; Trigger c57a7c00 pings the Worker after 04:40Z";
+    waiting.current_work.push({ work_id: "w-wait", revision: 1, title: "XcodeLogsViewerHang", status: "waiting", progress_mode: "waiting", unread_result: false, wait_for: note, wake: { kind: "user_input", ref: note },
+      shown: { title: "Xcode Logs 查看器卡死修复", line: "无需你操作：等明早 11:17 日志清理跑完，再核对修复效果", status: "waiting" }, updated_at: now() } as never);
     const app = await workApp({ brain: waiting });
     await openWork(app, "w-wait");
-    await app.waitFor("id:work-wait-for");
-    expect(app.texts()).toContain("Waiting for: Reviewer approval on the pull request");
+    await app.waitFor("text:无需你操作：等明早 11:17 日志清理跑完，再核对修复效果");
+    expect(app.texts()).toContain("Xcode Logs 查看器卡死修复");
+    expect(app.texts().some((t) => t.includes("Trigger c57a7c00"))).toBe(false);
+    expect(app.shows("id:work-wait-for")).toBe(false);
+    expect(app.shows("id:work-asks")).toBe(false);
+    expect(app.shows("text:Tell Brain about this Work")).toBe(true);
   }, 20_000);
 
   test("Not needed anymore asks first, and only then tells Brain", async () => {
