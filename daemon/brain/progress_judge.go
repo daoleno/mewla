@@ -259,10 +259,14 @@ func (s *Service) requestChanged() {
 		p.mu.Lock()
 		_, pending := p.pending[item.ID]
 		p.mu.Unlock()
-		if pending {
+		// Already queued: only Brain's change is worth noting (and makes it fresh); requeueing would only delay it.
+		if pending && seen.Brain == key {
 			continue
 		}
 		due := seen != judged
+		// Only what moves a Work at once is fresh: Brain's change, a new turn or one ending. A report left
+		// unjudged by a restart keeps its gap; a restart is not news.
+		fresh := seen.Brain != key || seen.Turn != judged.Turn || seen.Ended != judged.Ended
 		if seen.Brain != key {
 			var err error
 			if due, err = s.store.noteBrainEvidence(item.ID, key); err != nil {
@@ -272,7 +276,7 @@ func (s *Service) requestChanged() {
 		}
 		// Evidence seen before a restart and not yet judged is still evidence: a restart drops the queue, not it.
 		if due {
-			s.requestProgress(item.ID, "", true)
+			s.requestProgress(item.ID, "", fresh)
 		}
 	}
 }
@@ -697,7 +701,7 @@ func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeA
 		next, changed := applyProgressVerdict(item.Progress, verdict, scopeAdded, now)
 		if item.Progress != nil {
 			kept := cloneWorkProgress(item.Progress)
-			next.Reports, next.Seen, next.Judged, next.Runs = kept.Reports, kept.Seen, kept.Judged, kept.Runs
+			next.Reports, next.Seen, next.Judged, next.Runs, next.Past = kept.Reports, kept.Seen, kept.Judged, kept.Runs, kept.Past
 		}
 		markProgressJudged(&next, seen, now, usd)
 		item.Progress = &next
