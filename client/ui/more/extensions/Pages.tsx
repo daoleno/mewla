@@ -2,7 +2,7 @@ import { computed, effect, signal, Text, untracked, View } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { accountRow } from "../../../core/extensions/accountListModel";
 import { cloudProfilesSummary } from "../../../core/extensions/cloudProfilesModel";
-import { isConnecting, pluginCatalogRows, toolUpdates, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
+import { isConnecting, needsReconnect, pluginCatalogRows, toolUpdates, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { connectionStateTone } from "../../../core/extensions/colour";
 import { daemon } from "../daemon";
@@ -171,7 +171,7 @@ function rowSubtitle(row: ServiceRow): string {
 
 /** The accounts of a row under Needs fixing that need signing in again. */
 function expiredAccounts(row: ServiceRow) {
-  return row.accounts.filter((account) => account.enabled && account.status === "authorization_required");
+  return row.accounts.filter(needsReconnect);
 }
 
 /**

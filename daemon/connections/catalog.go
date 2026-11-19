@@ -125,8 +125,11 @@ type oauthSpec struct {
 	// ChangeScopes must be in a grant before changes can be allowed; when one
 	// is missing the service has to ask the person again.
 	ChangeScopes func() []string
-	Static       *staticOAuth
-	Device       *deviceFlow
+	// ReadScopes must all be in a grant for the service's reviewed reads; a
+	// sign-in that lacks one shows Reconnect.
+	ReadScopes func() []string
+	Static     *staticOAuth
+	Device     *deviceFlow
 	// Loopback: the service takes only a loopback return address. The sign-in
 	// returns to this daemon's own port, which a browser on the daemon's
 	// computer reaches by itself; from any other device the person pastes the
@@ -340,12 +343,13 @@ func buildCatalog() []*entry {
 				Static:           &staticOAuth{Issuer: "https://slack.com", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access", AuthMethods: []string{"client_secret_post"}, ScopeParam: "user_scope"},
 				PublicViaAccount: true,
 				Scopes: func(writes bool) []string {
-					scopes := []string{"channels:read", "channels:history", "search:read"}
+					scopes := append([]string(nil), slackReadScopes...)
 					if writes {
 						scopes = append(scopes, "chat:write")
 					}
 					return scopes
 				},
+				ReadScopes:   func() []string { return append([]string(nil), slackReadScopes...) },
 				ChangeScopes: func() []string { return []string{"chat:write"} },
 				Codec:        "slack",
 			},

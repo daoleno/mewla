@@ -89,9 +89,17 @@ export function networkLabel(network: PluginAccount["network"]): string | null {
   return network === "testnet" ? "Testnet" : network === "mainnet" ? "Mainnet" : null;
 }
 
+/**
+ * An account that only signing in again fixes: its sign-in expired, or it was
+ * made before Mewla read more of the service (Slack's files and DMs).
+ */
+export function needsReconnect(account: PluginAccount): boolean {
+  return account.enabled && (account.status === "authorization_required" || (account.status === "connected" && !!account.access?.read_consent));
+}
+
 export function serviceState(plugin: PluginIntegration, accounts: readonly PluginAccount[]): ServiceState {
   if (!accounts.length) return plugin.available ? { kind: "connect" } : { kind: "unavailable", label: "Not yet available" };
-  const expired = accounts.find((account) => account.enabled && account.status === "authorization_required");
+  const expired = accounts.find((account) => account.enabled && account.status === "authorization_required") ?? accounts.find(needsReconnect);
   if (expired && plugin.available) return { kind: "reconnect", account: expired };
   // An account that is off reads Off only when every account is off.
   const on = accounts.filter((account) => account.enabled);
@@ -272,6 +280,10 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   }
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
+  }
+  if (account.access?.read_consent && account.status === "connected") {
+    // Signed in before Mewla read files and private conversations: one Reconnect asks for them.
+    return { title: "Reconnect to read files and DMs", detail: `${serviceName}'s sign-in predates reading files and private conversations.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
   if (account.status === "error" && account.unavailable) {
     return { title: "Unavailable", detail: `${serviceName} can't be reached: ${account.unavailable}. Mewla keeps trying and reconnects by itself.`, action: "refresh", actionLabel: "Check now", tone: "warning" };
