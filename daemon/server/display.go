@@ -13,7 +13,6 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/link"
-	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/gorilla/websocket"
@@ -263,7 +262,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 				screencast.Stats
 			}{"stats", path, st})
 		},
-		NewEncoder:   screen.CastEncoder(),
+		NewEncoder:   castEncoder(),
 		SignOffer:    signOffer,
 		VerifyAnswer: verifyAnswer,
 		LoopbackOnly: s.screenLoopbackOnly,

@@ -16,6 +16,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// castEncoder makes the views' encoder (nil: ffmpeg); tests replace it.
+var castEncoder = screen.CastEncoder
+
 // The screen socket carries only signalling and small control messages.
 var screenUpgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
@@ -283,7 +286,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	session, err = screencast.Start(ctx, screencast.Config{
 		Source:     cast,
 		Input:      cast.Input,
-		NewEncoder: screen.CastEncoder(),
+		NewEncoder: castEncoder(),
 		Signal:     func(v any) { sendJSON(v) },
 		Stats: func(st screencast.Stats) {
 			total.Lock()

@@ -110,3 +110,36 @@ func TestDisplayListStopAndViewer(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// A revoked device loses its view of an agent's display within seconds,
+// though it sends nothing on the socket (trust is checked on the display
+// viewer too, not only on the computer's own screen).
+func TestARevokedDisplayViewerIsCutOff(t *testing.T) {
+	requireVideo(t)
+	if err := vdisplay.Capability(); err != nil {
+		t.Skip(err)
+	}
+	a, priv, device := sessionFileAuthFixture(t)
+	service := vdisplay.NewService("")
+	defer service.Close()
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetDisplays(service)
+	s.SetScreenLoopbackOnly(true)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	defer s.shutdownAuthenticatedClients()
+	if _, err := service.Act(context.Background(), "w1", vdisplay.Action{Action: "open", Command: []string{"xmessage", "-center", "hello"}}); err != nil {
+		t.Fatal(err)
+	}
+	v := dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/display/viewer?worker=w1", viewerIdentity(priv, a, device))
+	v.next("ready")
+	v.picture()
+	if _, err := a.RevokeDevice(device); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_ = v.closedWith()
+	if took := time.Since(start); took > 5*time.Second {
+		t.Fatalf("cut off after %v", took)
+	}
+}

@@ -2,13 +2,16 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/screen"
+	"github.com/daoleno/mewla/daemon/screencast"
 )
 
 // The computer's own screen as pushed video: the socket carries the offer,
@@ -110,3 +113,48 @@ func TestARevokedSilentViewerIsCutOff(t *testing.T) {
 		t.Fatalf("cut off after %v", took)
 	}
 }
+
+// An encoder that fails mid-view ends it with the computer saying why, not
+// with a lost connection.
+func TestScreenViewerHearsAFailedEncoder(t *testing.T) {
+	failing := make(chan struct{})
+	castEncoder = func() func(int) (screencast.Encoder, error) {
+		return func(int) (screencast.Encoder, error) { return &failingEncoder{failed: failing}, nil }
+	}
+	t.Cleanup(func() { castEncoder = screen.CastEncoder })
+	a, priv, device := sessionFileAuthFixture(t)
+	fake := screen.NewFakeBackend(320, 200)
+	service := screen.NewServiceWith(t.TempDir(), fake)
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(service)
+	s.SetScreenLoopbackOnly(true)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
+		t.Fatal(err)
+	}
+	v := dialVideoViewer(t, "ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer", viewerIdentity(priv, a, device))
+	v.next("ready")
+	select {
+	case <-failing:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the encoder was never asked for a picture")
+	}
+	if got := v.errorText(); got != screencast.ErrEncoder.Error() {
+		t.Fatalf("the computer said %q", got)
+	}
+}
+
+// failingEncoder fails its first picture.
+type failingEncoder struct {
+	failed chan struct{}
+	once   sync.Once
+}
+
+func (e *failingEncoder) Encode(screencast.Picture, bool) ([]byte, error) {
+	e.once.Do(func() { close(e.failed) })
+	return nil, errors.New("the hardware encoder went away")
+}
+func (e *failingEncoder) SetBitrate(int) {}
+func (e *failingEncoder) Name() string   { return "failing" }
+func (e *failingEncoder) Close()         {}

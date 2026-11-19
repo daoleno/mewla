@@ -178,6 +178,50 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 	}
 }
 
+// Past ConnsPerIP connections from one address, a TCP connection is closed at
+// once while the ones before it stay open (Idle is long here, so only the cap
+// can close them), and a closed one gives its slot back.
+func TestTURNCapsConnectionsPerAddress(t *testing.T) {
+	tcpAddr := freeTURNPort(t, "tcp")
+	srv, err := StartTURN(TURNConfig{
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: freeTURNPort(t, "udp"), TCPAddr: tcpAddr, Secret: testTURNSecret,
+		Limits: TURNLimits{ConnsPerIP: 2, Idle: time.Minute},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	dial := func() net.Conn {
+		c, err := net.Dial("tcp4", tcpAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Close() })
+		return c
+	}
+	// open reports whether the server still holds c after a moment.
+	open := func(c net.Conn) bool {
+		_ = c.SetReadDeadline(time.Now().Add(700 * time.Millisecond))
+		_, err := c.Read(make([]byte, 1))
+		var ne net.Error
+		return errors.As(err, &ne) && ne.Timeout()
+	}
+	first, second := dial(), dial()
+	time.Sleep(200 * time.Millisecond) // the server's first reads take the two slots
+	third := dial()
+	if open(third) {
+		t.Fatal("a third connection from one address stayed open")
+	}
+	if !open(first) || !open(second) {
+		t.Fatal("a connection under the cap was closed")
+	}
+	_ = first.Close()
+	time.Sleep(200 * time.Millisecond)
+	if !open(dial()) {
+		t.Fatal("a closed connection's slot was not given back")
+	}
+}
+
 // Credentials signed with the shared secret outlive the TURN process: a new
 // one with the same secret file accepts them.
 func TestTURNCredentialsSurviveARestart(t *testing.T) {
