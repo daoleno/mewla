@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { BrainCurrentWork } from "./types";
 import { workCardModel } from "./workCardModel";
+import { workForCards } from "./model";
 
 const event = (patch: Partial<BrainWorkResultEvent> = {}): BrainWorkResultEvent => ({
   event_id: "e1", kind: "session.done", work_id: "w1", work_title: "Ship the docs", summary: "Docs are live.", session_id: "s1", session_name: "docs",
@@ -63,6 +64,16 @@ describe("a Work in Brain's thread", () => {
     expect(workCardModel({ event: event(), currentWork: work({ shown }) })).toMatchObject({ kind: "result", title: "文档上线", summary: "文档已在新地址上线" });
     // A line written while it ran is not how it ended.
     expect(workCardModel({ event: event(), currentWork: work({ summary: "Docs are live.", shown: { ...shown, line: "等部署", status: "active" } }) })).toMatchObject({ title: "文档上线", summary: "Docs are live." });
+  });
+
+  test("a Work no Worker runs now still names its card: open Work reaches the thread too (owner's phone 11-19 22:45)", () => {
+    const open = [{ work_id: "w-ci", title: "ZeroGProdCi", status: "waiting" as const, shown: { title: "0G 应用 main 自动部署", line: "无需你操作：dev 上部署已跑通，等 Brain 审阅后再合 main。", status: "waiting" as const } }];
+    const works = workForCards([work({ work_id: "w1" })], open);
+    expect(works.map((item) => item.work_id)).toEqual(["w1", "w-ci"]);
+    const card = workCardModel({ event: event({ work_id: "w-ci", work_title: "ZeroGProdCi", summary: "Deploy workflow on dev (5e29f45, c50d05a, 26ea0b4)" }), currentWork: works[1] });
+    expect(card).toMatchObject({ kind: "live", title: "0G 应用 main 自动部署", summary: "无需你操作：dev 上部署已跑通，等 Brain 审阅后再合 main。" });
+    // The current Work wins over an open entry of the same Work.
+    expect(workForCards([work({ work_id: "w-ci", title: "current" })], open)).toHaveLength(1);
   });
 
   test("the Session that ran it is named without the id the daemon appends", () => {

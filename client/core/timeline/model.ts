@@ -7,6 +7,7 @@ import type {
 } from "../conversation/conversation";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import type { BrainCurrentWork } from "./types";
+import type { BrainOpenWork } from "../work/types";
 import { brainWorkEventFromConversationEvent } from "./brainWorkEventProjection";
 import {
   buildExpandedToolDetails,
@@ -640,6 +641,17 @@ function countBrainWorkSources(events: BrainWorkResultEvent[]) {
     }
   });
   return sourceIds.size > 0 ? sourceIds.size : undefined;
+}
+
+/**
+ * The Work a thread card reads its name and line from: the current Work, and the open Work no Worker runs now
+ * (parked on a review, a release, a Trigger). Without the open Work its card fell back to its event: Brain's code
+ * name and a Worker's report ("ZeroGProdCi · Deploy workflow on dev (5e29f45…", owner's phone 11-19 22:45).
+ */
+export function workForCards(current?: readonly BrainCurrentWork[], open?: readonly BrainOpenWork[]): BrainCurrentWork[] {
+  const listed = new Set((current ?? []).map((work) => work.work_id));
+  const parked = (open ?? []).filter((work) => !listed.has(work.work_id)).map((work): BrainCurrentWork => ({ ...work, revision: 0, unread_result: false }));
+  return [...(current ?? []), ...parked];
 }
 
 export function attachBrainWorkEventActions(
