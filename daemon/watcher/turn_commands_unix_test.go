@@ -4,12 +4,14 @@ package watcher
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -163,6 +165,52 @@ wait`
 	}
 }
 
+// TestStopWithNoRecognizedCommandSaysSomeMayStillRun runs a fake agent whose
+// only command this turn is in a form match does not read (as after a Claude
+// update): the Stop leaves it alone and reports one command that may still be
+// running, instead of nothing.
+func TestStopWithNoRecognizedCommandSaysSomeMayStillRun(t *testing.T) {
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("no setsid on this system")
+	}
+	goFile := filepath.Join(t.TempDir(), "go")
+	script := `while [ ! -e ` + goFile + ` ]; do sleep 0.05; done
+setsid sh -c 'echo turn-cmd: new-form; while :; do sleep 1; done' &
+wait`
+	agent := exec.Command("sh", "-c", script)
+	agent.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := agent.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = syscall.Kill(-agent.Process.Pid, syscall.SIGKILL)
+		_ = agent.Wait()
+	}()
+	time.Sleep(300 * time.Millisecond)
+	since := time.Now()
+	if err := os.WriteFile(goFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := waitForChild(t, agent.Process.Pid, "new-form")
+	defer syscall.Kill(-command, syscall.SIGKILL)
+
+	reports := make(chan []agentevents.StoppedCommand, 1)
+	never := func(string) (string, bool) { return "", false }
+	w := &Watcher{}
+	w.stopTurnCommands(agent.Process.Pid, TurnCommandScope{Since: since, Match: never, Agent: func() string { return "claude 9.9.9" }, Report: func(stopped []agentevents.StoppedCommand) { reports <- stopped }})
+	select {
+	case stopped := <-reports:
+		if want := []agentevents.StoppedCommand{{Unrecognized: true}}; !reflect.DeepEqual(stopped, want) {
+			t.Fatalf("stopped = %+v, want %+v", stopped, want)
+		}
+	case <-time.After(6 * time.Second):
+		t.Fatal("no report within 6 s")
+	}
+	if err := syscall.Kill(-command, 0); err != nil {
+		t.Fatalf("a command Mewla did not recognize was ended: %v", err)
+	}
+}
+
 // waitForChild returns the pid of agent's direct child whose command line
 // names tag.
 func waitForChild(t *testing.T, agent int, tag string) int {
@@ -181,4 +229,93 @@ func waitForChild(t *testing.T, agent int, tag string) int {
 	}
 	t.Fatalf("no child %q of %d", tag, agent)
 	return 0
+}
+
+// A turn whose own-group children the matcher reads none of (Claude changed
+// how it runs commands) is reported, leaving out what started before the turn,
+// what shares the agent's group, and Mewla's own hooks and servers.
+func TestUnrecognizedTurnChildrenAreThisTurnsOwnGroupsNoMatchReads(t *testing.T) {
+	since := time.Date(2026, 11, 19, 12, 0, 10, 0, time.UTC)
+	starts := map[int]time.Time{
+		201: since.Add(2 * time.Second),  // a command in a form match does not know
+		202: since.Add(-5 * time.Second), // an earlier turn's
+		203: since.Add(time.Second),      // in the agent's own group
+		204: since.Add(time.Second),      // Mewla's permission hook
+		205: since.Add(3 * time.Second),  // a recognized command
+	}
+	processes := map[int]processInfo{
+		200: {pid: 200, ppid: 1, pgid: 200, args: "claude"},
+		201: {pid: 201, ppid: 200, pgid: 201, args: "bash -c run-v3 'sleep 300'"},
+		202: {pid: 202, ppid: 200, pgid: 202, args: "bash -c run-v3 'sleep 1'"},
+		203: {pid: 203, ppid: 200, pgid: 200, args: "node mcp-server.js"},
+		204: {pid: 204, ppid: 200, pgid: 204, args: "/opt/mewla/bin/mewla agent-event claude-hook"},
+		205: {pid: 205, ppid: 200, pgid: 205, args: "zsh -c turn-cmd: seq 1 30"},
+	}
+	startOf := func(pid int) (time.Time, bool) { start, ok := starts[pid]; return start, ok }
+	got := unrecognizedTurnChildren(200, processes, since, matchTurnCmd, startOf, "/opt/mewla/bin/mewla")
+	if len(got) != 1 || got[0].process.pid != 201 {
+		t.Fatalf("unrecognized = %+v, want only pid 201", got)
+	}
+}
+
+// What is still running after the grace is logged with the agent's version
+// and told to the chat as commands that may still be running; a hook that was
+// only passing through says nothing at all.
+func TestReportUnrecognizedNamesTheVersionAndIsNeverSilent(t *testing.T) {
+	logged := &syncBuilder{}
+	log.SetOutput(logged)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	unknown := []turnUnrecognized{
+		{process: turnCommandProcess{pid: 301}, args: "bash -c run-v3 'sleep 300'"},
+		{process: turnCommandProcess{pid: 302}, args: "telegram-notify.sh question"},
+	}
+	var reports [][]agentevents.StoppedCommand
+	scope := TurnCommandScope{
+		Agent:  func() string { return "claude 2.9.0" },
+		Report: func(stopped []agentevents.StoppedCommand) { reports = append(reports, stopped) },
+	}
+	slept := time.Duration(0)
+	reportUnrecognized(unknown, scope, func(p turnCommandProcess) bool { return p.pid == 301 }, func(d time.Duration) { slept += d })
+	if slept != turnCommandGrace {
+		t.Fatalf("waited %s before looking again, want %s", slept, turnCommandGrace)
+	}
+	if want := [][]agentevents.StoppedCommand{{{Unrecognized: true}}}; !reflect.DeepEqual(reports, want) {
+		t.Fatalf("reports = %+v, want %+v", reports, want)
+	}
+	if !strings.Contains(logged.String(), "WARN stop: claude 2.9.0 has 1 child") || !strings.Contains(logged.String(), "pid 301") || strings.Contains(logged.String(), "telegram") {
+		t.Fatalf("log = %q", logged.String())
+	}
+
+	logged.Reset()
+	reports = nil
+	reportUnrecognized(unknown[1:], scope, func(turnCommandProcess) bool { return false }, func(time.Duration) {})
+	if reports != nil || logged.Len() != 0 {
+		t.Fatalf("a hook that ended was reported: %+v %q", reports, logged.String())
+	}
+}
+
+// syncBuilder is a strings.Builder the log can write while the test reads.
+type syncBuilder struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuilder) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuilder) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func (s *syncBuilder) Len() int { return len(s.String()) }
+
+func (s *syncBuilder) Reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.b.Reset()
 }

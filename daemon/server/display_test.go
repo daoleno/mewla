@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -24,8 +23,7 @@ func TestDisplayListStopAndViewer(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetDisplays(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	defer s.shutdownAuthenticatedClients()
 	auth := func(purpose string) string { return calendarAuthHeader(priv, a.DaemonID(), device, purpose) }
 
@@ -125,8 +123,7 @@ func TestARevokedDisplayViewerIsCutOff(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetDisplays(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	defer s.shutdownAuthenticatedClients()
 	if _, err := service.Act(context.Background(), "w1", vdisplay.Action{Action: "open", Command: []string{"xmessage", "-center", "hello"}}); err != nil {
 		t.Fatal(err)

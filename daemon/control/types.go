@@ -20,6 +20,7 @@ import (
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
@@ -319,7 +320,21 @@ type Handler interface {
 	HandleControlRequest(Request) Response
 }
 
+// DefaultSocketPath is the daemon's control socket: control.sock in the state
+// directory's run folder, or a short name for it when that path is too long
+// for a unix socket (platform.SocketPath).
 func DefaultSocketPath(stateDir string) (string, error) {
+	runDir, err := RunDir(stateDir)
+	if err != nil {
+		return "", err
+	}
+	return platform.SocketPath(filepath.Join(runDir, SocketName)), nil
+}
+
+// RunDir is the state directory's run folder, where the daemon's lifecycle
+// locks live. It is never derived from the control socket, which may sit in
+// the shared short socket directory.
+func RunDir(stateDir string) (string, error) {
 	if stateDir == "" {
 		// A Session started by a daemon with its own state directory talks to
 		// that daemon, not to the one in the home directory.
@@ -332,7 +347,7 @@ func DefaultSocketPath(stateDir string) (string, error) {
 		}
 		stateDir = statedir.Default(home)
 	}
-	return filepath.Join(stateDir, "run", SocketName), nil
+	return filepath.Join(stateDir, "run"), nil
 }
 
 func ErrorResponse(code, message string) Response {
