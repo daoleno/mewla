@@ -62,6 +62,7 @@ const (
 	CodeInUse           = "in_use_on_main" // the person is using that app on their own screen
 	CodeNotReady        = "not_ready"      // phone is in Setup
 	CodeScreenOff       = "screen_off"     // the phone's screen is off: a picture only, no element list
+	CodeScreenBlank     = "screen_blank"   // the agent's screen is black with nothing to read: nothing can be taken as done
 	CodeFailed          = "failed"
 )
 

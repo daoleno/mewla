@@ -184,6 +184,7 @@ internal class PhoneHelper(
             if (took > 1_000) Log.w(TAG, "tree: interactive=$on read took $took ms")
             tree.put("ok", true).put("w", s.width).put("h", s.height).put("interactive", on)
                 .put("display_alive", s.alive()).put("drew_since_action", s.drewSinceAction()).put("frames", s.frameCount()).put("frame_age_ms", s.frameAgeMs())
+                .put("dark", s.dark())
         }
         "settle" -> {
             val s = screen ?: return fail("no display")
@@ -373,7 +374,11 @@ internal class PhoneHelper(
             // An app that is up on a live display draws within a moment. If nothing was ever drawn, the
             // display is stale (the system dropped it, or the helper outlived what it was made for):
             // make a fresh one and start the app there once.
-            if (!DisplayHealth.needsRecreate(target.alive(), target.drewSince(began, DRAW_WAIT_MS), target.frameCount() > 0, attempt)) break
+            val drew = target.drewSince(began, DRAW_WAIT_MS)
+            // Remaking a display destroys what is on it: a black one counts as showing nothing only when nothing on it reads either.
+            val blank = !drew && target.frameCount() > 0 && target.dark() && interactive() &&
+                DisplayHealth.showsNothing(readable(target.displayId), dark = true)
+            if (!DisplayHealth.needsRecreate(target.alive(), drew, target.frameCount() > 0, attempt, showsNothing = blank)) break
             Log.w(TAG, "display ${target.displayId} drew nothing after launching $pkg: recreating")
             val dims = intArrayOf(target.width, target.height, target.dpi)
             target.release()
@@ -384,6 +389,12 @@ internal class PhoneHelper(
             recovered = true
         }
         return ok().put("component", component).put("recovered", recovered).put("display", target.displayId)
+    }
+
+    /** How many elements the accessibility tree has on [displayId]. */
+    private fun readable(displayId: Int): Int {
+        val windows = reader.read(displayId).optJSONArray("windows") ?: return 0
+        return (0 until windows.length()).sumOf { windows.getJSONObject(it).optJSONArray("nodes")?.length() ?: 0 }
     }
 
     /**
