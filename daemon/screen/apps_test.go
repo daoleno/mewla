@@ -1220,17 +1220,19 @@ func TestAnEndedWorkersAppsGoBackAtOnce(t *testing.T) {
 	mu.Lock()
 	ended["%7"] = true
 	mu.Unlock()
+	// It is put back, then its claim goes (in that order: no other Worker
+	// may take an app that is not back yet).
 	waitFor(t, func() bool {
 		backend.mu.Lock()
 		defer backend.mu.Unlock()
 		return !backend.Parked[202] && len(backend.Restored) == 1
 	})
-	s.agentMu.Lock()
-	_, owned := s.appOwners[202]
-	s.agentMu.Unlock()
-	if owned {
-		t.Fatal("the app is still claimed")
-	}
+	waitFor(t, func() bool {
+		s.agentMu.Lock()
+		defer s.agentMu.Unlock()
+		_, owned := s.appOwners[202]
+		return !owned
+	})
 }
 
 // A Worker that ends while it is acting loses the screen and its apps go back.
