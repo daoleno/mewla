@@ -150,7 +150,13 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
     def test_the_upgrade_from_the_latest_release_runs_on_mains_schedule(self):
         upgrade = read(".github/workflows/upgrade.yml")
         for needle in ("schedule:", "script: client/scripts/release-upgrade.sh", "./scripts/android-release-apk.sh",
-                       "sha256sum -c -", 'MEWLA_UPGRADE_SAME_VERSION_OK: "1"', "gh issue create"):
+                       "sha256sum -c -", "gh issue create"):
+            self.assertIn(needle, upgrade)
+        # The start and the target are inputs: main (built) or a release tag (its published APK), and the start
+        # defaults to the release before the target. Only a main target may equal the latest release's versionCode.
+        for needle in ("      from:\n", "      to:\n", 'default: "main"', "if: env.TARGET != 'main'", "if: env.TARGET == 'main'",
+                       "tests a release against itself",
+                       "MEWLA_UPGRADE_SAME_VERSION_OK: ${{ (inputs.to || 'main') == 'main' && '1' || '' }}"):
             self.assertIn(needle, upgrade)
         script = read("client/scripts/release-upgrade.sh")
         for step in ("install -r", "is not an upgrade", "same device", "the draft is not in storage", "qr-camera", "MEWLA_NO_AUTOUPDATE=1"):
