@@ -18,23 +18,8 @@ import (
 
 var testTURNSecret = bytes.Repeat([]byte{7}, 32)
 
-func freeTURNPort(t *testing.T, network string) string {
-	t.Helper()
-	if network == "udp" {
-		c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer c.Close()
-		return c.LocalAddr().String()
-	}
-	l, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer l.Close()
-	return l.Addr().String()
-}
+// anyPort has StartTURN listen where the system picks; srv.Addrs says where.
+const anyPort = "127.0.0.1:0"
 
 // hostSocketInRange listens on the first port of the test relays' range
 // (61000-61200) that no allocation holds: the relay host's own socket where
@@ -102,9 +87,8 @@ func turnClient(t *testing.T, server string, conn net.Conn, user, pass string) *
 // another allocation, a few allocations per credential and per computer, and
 // TCP connections that send nothing are closed.
 func TestTURNOneCredentialReachesLittle(t *testing.T) {
-	udpAddr, tcpAddr := freeTURNPort(t, "udp"), freeTURNPort(t, "tcp")
 	srv, err := StartTURN(TURNConfig{
-		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udpAddr, TCPAddr: tcpAddr, Secret: testTURNSecret,
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: anyPort, TCPAddr: anyPort, Secret: testTURNSecret,
 		MinPort: 61000, MaxPort: 61200,
 		Limits: TURNLimits{AllocationsPerCredential: 2, AllocationsPerRoute: 3, ConnsPerIP: 4, Idle: time.Second},
 	})
@@ -112,6 +96,7 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	udpAddr, tcpAddr, _ := srv.Addrs()
 	const route = "0123456789abcdef0123456789abcdef"
 	user, pass := credential(t, route)
 
@@ -207,9 +192,8 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 // serves each connection on its own), stay within the credential's cap: the
 // quota is taken when it is checked, not only once the allocation exists.
 func TestTURNQuotaHoldsUnderConcurrentAllocations(t *testing.T) {
-	tcpAddr := freeTURNPort(t, "tcp")
 	srv, err := StartTURN(TURNConfig{
-		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: freeTURNPort(t, "udp"), TCPAddr: tcpAddr, Secret: testTURNSecret,
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: anyPort, TCPAddr: anyPort, Secret: testTURNSecret,
 		MinPort: 61000, MaxPort: 61200,
 		Limits: TURNLimits{AllocationsPerCredential: 2, ConnsPerIP: 64},
 	})
@@ -217,6 +201,7 @@ func TestTURNQuotaHoldsUnderConcurrentAllocations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	_, tcpAddr, _ := srv.Addrs()
 	const route = "0123456789abcdef0123456789abcdef"
 	user, pass := credential(t, route)
 	const tries = 12
@@ -252,9 +237,8 @@ func TestTURNQuotaHoldsUnderConcurrentAllocations(t *testing.T) {
 // A quota taken for an allocation the server then fails to make (a TCP one)
 // comes back at that client's next request, or after a second.
 func TestTURNQuotaOfAFailedAllocationComesBack(t *testing.T) {
-	udpAddr, tcpAddr := freeTURNPort(t, "udp"), freeTURNPort(t, "tcp")
 	srv, err := StartTURN(TURNConfig{
-		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udpAddr, TCPAddr: tcpAddr, Secret: testTURNSecret,
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: anyPort, TCPAddr: anyPort, Secret: testTURNSecret,
 		MinPort: 61000, MaxPort: 61200,
 		Limits: TURNLimits{AllocationsPerCredential: 1},
 	})
@@ -262,6 +246,7 @@ func TestTURNQuotaOfAFailedAllocationComesBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	udpAddr, tcpAddr, _ := srv.Addrs()
 	const route = "0123456789abcdef0123456789abcdef"
 	refusedTCP := func(user, pass string) *turn.Client {
 		stream, err := net.Dial("tcp4", tcpAddr)
@@ -303,15 +288,15 @@ func TestTURNQuotaOfAFailedAllocationComesBack(t *testing.T) {
 // once while the ones before it stay open (Idle is long here, so only the cap
 // can close them), and a closed one gives its slot back.
 func TestTURNCapsConnectionsPerAddress(t *testing.T) {
-	tcpAddr := freeTURNPort(t, "tcp")
 	srv, err := StartTURN(TURNConfig{
-		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: freeTURNPort(t, "udp"), TCPAddr: tcpAddr, Secret: testTURNSecret,
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: anyPort, TCPAddr: anyPort, Secret: testTURNSecret,
 		Limits: TURNLimits{ConnsPerIP: 2, Idle: time.Minute},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	_, tcpAddr, _ := srv.Addrs()
 	dial := func() net.Conn {
 		c, err := net.Dial("tcp4", tcpAddr)
 		if err != nil {
@@ -348,23 +333,23 @@ func TestTURNCapsConnectionsPerAddress(t *testing.T) {
 func TestTURNCredentialsSurviveARestart(t *testing.T) {
 	user, pass := credential(t, "0123456789abcdef0123456789abcdef")
 	for range 2 {
-		udpAddr := freeTURNPort(t, "udp")
-		srv, err := StartTURN(TURNConfig{PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udpAddr, Secret: testTURNSecret})
+		srv, err := StartTURN(TURNConfig{PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: anyPort, Secret: testTURNSecret})
 		if err != nil {
 			t.Fatal(err)
 		}
+		udpAddr, _, _ := srv.Addrs()
 		if _, err := turnClient(t, udpAddr, nil, user, pass).Allocate(); err != nil {
 			t.Fatal(err)
 		}
 		_ = srv.Close()
 	}
 	other := bytes.Repeat([]byte{8}, 32)
-	udpAddr := freeTURNPort(t, "udp")
-	srv, err := StartTURN(TURNConfig{PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udpAddr, Secret: other})
+	srv, err := StartTURN(TURNConfig{PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: anyPort, Secret: other})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	udpAddr, _, _ := srv.Addrs()
 	if _, err := turnClient(t, udpAddr, nil, user, pass).Allocate(); err == nil {
 		t.Fatal("a credential under another secret allocated")
 	}
@@ -373,15 +358,15 @@ func TestTURNCredentialsSurviveARestart(t *testing.T) {
 // TURN over TLS behind the relay's 443 SNI route, as the hosted relay runs it
 // (-sni-route-proxy-protocol): the connection starts with a PROXY header.
 func TestTURNOverTLSBehindAProxyHeader(t *testing.T) {
-	tlsAddr := freeTURNPort(t, "tcp")
 	srv, err := StartTURN(TURNConfig{
-		PublicIP: net.IPv4(127, 0, 0, 1), TLSAddr: tlsAddr, ProxyProtocol: true, Secret: testTURNSecret,
+		PublicIP: net.IPv4(127, 0, 0, 1), TLSAddr: anyPort, ProxyProtocol: true, Secret: testTURNSecret,
 		TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{selfSignedCertificate(t, "turn.relay.test")}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer srv.Close()
+	_, _, tlsAddr := srv.Addrs()
 	raw, err := net.Dial("tcp4", tlsAddr)
 	if err != nil {
 		t.Fatal(err)

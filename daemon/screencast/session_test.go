@@ -237,17 +237,17 @@ func TestSessionThroughTURN(t *testing.T) {
 	}
 	for _, transport := range []string{"udp", "tcp", "tls"} {
 		t.Run(transport, func(t *testing.T) {
-			udp, tcp, tlsAddr := freePort(t, "udp"), freePort(t, "tcp"), freePort(t, "tcp")
 			secret := []byte("0123456789abcdef0123456789abcdef")
 			cert, roots := testCertificate(t, "turn.relay.test")
 			turnServer, err := relay.StartTURN(relay.TURNConfig{
-				PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udp, TCPAddr: tcp, Secret: secret,
-				TLSAddr: tlsAddr, TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
+				PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: "127.0.0.1:0", TCPAddr: "127.0.0.1:0", Secret: secret,
+				TLSAddr: "127.0.0.1:0", TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer turnServer.Close()
+			udp, tcp, tlsAddr := turnServer.Addrs() // where the system put them
 			issuer, err := relay.NewTURNIssuer(secret, []string{"turn:" + udp + "?transport=udp", "turn:" + tcp + "?transport=tcp"}, 0, 0)
 			if err != nil {
 				t.Fatal(err)
@@ -317,17 +317,17 @@ func TestTwoRelayedViewsThroughThreeTURNAddresses(t *testing.T) {
 	if _, _, err := findEncoder(); err != nil {
 		t.Skip(err)
 	}
-	udp, tcp, tlsAddr := freePort(t, "udp"), freePort(t, "tcp"), freePort(t, "tcp")
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	cert, roots := testCertificate(t, "turn.relay.test")
 	turnServer, err := relay.StartTURN(relay.TURNConfig{
-		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udp, TCPAddr: tcp, Secret: secret,
-		TLSAddr: tlsAddr, TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: "127.0.0.1:0", TCPAddr: "127.0.0.1:0", Secret: secret,
+		TLSAddr: "127.0.0.1:0", TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer turnServer.Close()
+	udp, tcp, tlsAddr := turnServer.Addrs() // where the system put them
 	_, port, _ := net.SplitHostPort(tlsAddr)
 	issuer, err := relay.NewTURNIssuer(secret, []string{
 		"turn:" + udp + "?transport=udp",
@@ -443,22 +443,4 @@ func testCertificate(t *testing.T, host string) (tls.Certificate, *x509.CertPool
 	roots := x509.NewCertPool()
 	roots.AddCert(parsed)
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, roots
-}
-
-func freePort(t *testing.T, network string) string {
-	t.Helper()
-	if network == "udp" {
-		c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer c.Close()
-		return c.LocalAddr().String()
-	}
-	l, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer l.Close()
-	return l.Addr().String()
 }
