@@ -174,6 +174,9 @@ func TestStartFoldsADisconnectedTwinIntoTheLiveAccount(t *testing.T) {
 	// Another account's disconnected card, and a twin whose removal never finished, stay.
 	m.records["elsewhere"] = &record{Account: Account{ID: "elsewhere", Integration: "slack", Identity: "Other · me", Status: "disconnected", History: []Event{}}, Grants: map[string]string{}}
 	m.records["pending"] = &record{Account: Account{ID: "pending", Integration: "slack", Identity: "Team · me", Status: "disconnected", CredentialRemovalPending: true, History: []Event{}}, Grants: map[string]string{}}
+	// A Notion identity is only the workspace: two integrations there are not one account.
+	m.records["notion-live"] = &record{Account: Account{ID: "notion-live", Integration: "notion", Identity: "Workspace", Status: "connected", Enabled: true, History: []Event{}}, Grants: map[string]string{}}
+	m.records["notion-other"] = &record{Account: Account{ID: "notion-other", Integration: "notion", Identity: "Workspace", Status: "disconnected", History: []Event{}}, Grants: map[string]string{}}
 	if err := m.save(); err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +189,7 @@ func TestStartFoldsADisconnectedTwinIntoTheLiveAccount(t *testing.T) {
 	if _, ok := restarted.records[old]; ok {
 		t.Fatal("the twin is still there")
 	}
-	if restarted.records["elsewhere"] == nil || restarted.records["pending"] == nil || !contains(restarted.records["live"].Aliases, old) {
+	if restarted.records["elsewhere"] == nil || restarted.records["pending"] == nil || restarted.records["notion-other"] == nil || !contains(restarted.records["live"].Aliases, old) {
 		t.Fatalf("records %v, aliases %v", slackAccountIDs(restarted), restarted.records["live"].Aliases)
 	}
 	// Saved: a second start finds nothing to fold.

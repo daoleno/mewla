@@ -22,7 +22,10 @@ func twinsOf(a, b *record) bool {
 	if a == b || a.Account.Integration != b.Account.Integration || a.CLI != nil || b.CLI != nil {
 		return false
 	}
-	if e := lookup(a.Account.Integration); e == nil || e.Custom {
+	// Only a service whose identity names one person at one workspace, and
+	// whose Reconnect renews in place (KeepGrants: Slack). A Notion token's
+	// identity is its workspace alone; two integrations there are not twins.
+	if e := lookup(a.Account.Integration); e == nil || e.Custom || e.OAuth == nil || !e.OAuth.KeepGrants {
 		return false
 	}
 	return identityKnown(a.Account.Identity) && a.Account.Identity == b.Account.Identity
