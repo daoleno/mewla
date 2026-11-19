@@ -1,37 +1,98 @@
 package brain
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // A result, or the person's reply, waiting a day with nothing asked is
 // Brain's to settle: it is woken for it (owner 2026-11-19, FreerideOpsBatch).
 // Anything still moving, asked, or waiting on something is not.
-func TestUndecidedIsAResultWaitingADayWithNothingAsked(t *testing.T) {
+func TestUndecidedIsADecisionNobodyTakes(t *testing.T) {
 	now := time.Date(2026, 11, 19, 3, 37, 0, 0, time.UTC)
 	dayAgo := now.Add(-undecidedAfter - time.Minute)
 	hourAgo := now.Add(-time.Hour)
 	back := CurrentWork{ID: "w", Status: WorkWaiting, UnreadResult: true, AttentionSince: &dayAgo}
+	twoHoursAgo := now.Add(-parkedAfter - time.Minute)
+	parked := CurrentWork{ID: "w", Status: WorkWaiting, Wake: &WorkWake{Kind: WorkWakeUserInput, Ref: "brain-thread:b1"}, AttentionSince: &twoHoursAgo}
 	cases := []struct {
-		name string
-		work CurrentWork
-		want bool
+		name         string
+		work         CurrentWork
+		parked, want bool
 	}{
-		{"a result back a day", back, true},
-		{"the person's reply a day ago", CurrentWork{ID: "w", Status: WorkOpen, UserAction: &WorkUserAction{Kind: WorkUserReply}, AttentionSince: &dayAgo}, true},
-		{"back an hour", CurrentWork{ID: "w", Status: WorkWaiting, UnreadResult: true, AttentionSince: &hourAgo}, false},
-		{"asked the person", func() CurrentWork { w := back; w.Question = "Delete the package?"; return w }(), false},
-		{"a Worker on it", func() CurrentWork { w := back; w.AttemptSessionID = "mh-1"; return w }(), false},
-		{"waits on something", func() CurrentWork { w := back; w.Wake = &WorkWake{Kind: WorkWakeSessionTerminal, Ref: "x"}; return w }(), false},
-		{"Brain reviewing it", func() CurrentWork { w := back; w.AttentionState = WorkAttentionReviewing; return w }(), false},
-		{"closed", func() CurrentWork { w := back; w.Status = WorkDone; return w }(), false},
-		{"read and quiet", func() CurrentWork { w := back; w.UnreadResult = false; return w }(), false},
+		{"a result back a day", back, false, true},
+		{"the person's reply a day ago", CurrentWork{ID: "w", Status: WorkOpen, UserAction: &WorkUserAction{Kind: WorkUserReply}, AttentionSince: &dayAgo}, false, true},
+		{"back an hour", CurrentWork{ID: "w", Status: WorkWaiting, UnreadResult: true, AttentionSince: &hourAgo}, false, false},
+		{"parked on the person two hours, nothing asked", parked, true, true},
+		{"parked an hour", func() CurrentWork { w := parked; w.AttentionSince = &hourAgo; return w }(), true, false},
+		{"asked the person", func() CurrentWork { w := back; w.Question = "Delete the package?"; return w }(), false, false},
+		{"parked and asked", func() CurrentWork { w := parked; w.Question = "Ship it?"; return w }(), false, false},
+		{"a Worker on it", func() CurrentWork { w := back; w.AttemptSessionID = "mh-1"; return w }(), false, false},
+		{"waits on a Session", func() CurrentWork { w := back; w.Wake = &WorkWake{Kind: WorkWakeSessionTerminal, Ref: "x"}; return w }(), false, false},
+		{"Brain reviewing it", func() CurrentWork { w := back; w.AttentionState = WorkAttentionReviewing; return w }(), false, false},
+		{"queued for Brain", func() CurrentWork { w := back; w.AttentionState = WorkAttentionQueued; return w }(), false, false},
+		{"closed", func() CurrentWork { w := back; w.Status = WorkDone; return w }(), false, false},
+		{"read and quiet", func() CurrentWork { w := back; w.UnreadResult = false; return w }(), false, false},
 	}
 	for _, tc := range cases {
-		if got := undecided(tc.work, now); got != tc.want {
-			t.Errorf("%s: undecided = %v, want %v", tc.name, got, tc.want)
+		parked, got := undecided(tc.work, now)
+		if got != tc.want || got && parked != tc.parked {
+			t.Errorf("%s: undecided = %v (parked %v), want %v (parked %v)", tc.name, got, parked, tc.want, tc.parked)
 		}
+	}
+}
+
+// A Work Brain parked on the person with nothing asked goes back to Brain
+// after two hours: its wait ends and the Host gets the event once (owner
+// 2026-11-19: such a Work is never shown to the person).
+func TestNudgeHandsAParkedWorkBackToBrainOnce(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetHostSession("host", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
+		"host": {ID: "host", Hidden: true, State: classifier.StateRunning},
+	}}
+	service := NewService(store, fw, nil)
+	item, err := store.CreateWork(Work{Title: "MewlaScreenVideo", Objective: "ship the H.264 path"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting := WorkWaiting
+	if _, err := service.BrainUpdateWork(item.ID, WorkUpdate{Status: &waiting}); err != nil {
+		t.Fatal(err)
+	}
+	sent := func() int {
+		count := 0
+		for _, call := range fw.sentCalls {
+			if call.sessionID == "host" && strings.Contains(call.text, UndecidedEventKind) {
+				count++
+			}
+		}
+		return count
+	}
+	if got := service.nudgeUndecided(time.Now().Add(time.Hour)); got != 0 || sent() != 0 {
+		t.Fatalf("an hour in, nothing is raised: delivered %d, sent %d", got, sent())
+	}
+	if got := service.nudgeUndecided(time.Now().Add(3 * time.Hour)); got != 1 || sent() != 1 {
+		t.Fatalf("two hours in, Brain gets it once: delivered %d, sent %d", got, sent())
+	}
+	work, err := store.Work(item.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if work.Wake != nil {
+		t.Fatalf("the wait parked on the person ended: wake %+v", work.Wake)
+	}
+	if got := service.nudgeUndecided(time.Now().Add(4 * time.Hour)); got != 0 || sent() != 1 {
+		t.Fatalf("never twice for one wait: delivered %d, sent %d", got, sent())
 	}
 }
 
