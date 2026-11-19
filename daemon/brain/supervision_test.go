@@ -141,7 +141,7 @@ func TestSupervisorFreshProgressVersusCachedRunningAndDeadProducer(t *testing.T)
 				observation.ProgressAt = now
 			}
 			fw := &fakeWatcher{providerEvidence: map[string]watcher.ProviderActivityObservation{"worker": observation}}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			service.now = func() time.Time { return now }
 			workers := []*classifier.Worker{worker}
 			if mode == "dead" {

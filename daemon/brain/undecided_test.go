@@ -85,7 +85,7 @@ func TestNudgeHandsAParkedWorkBackToBrainOnce(t *testing.T) {
 	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
 		"host": {ID: "host", Hidden: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	item, err := store.CreateWork(Work{Title: "MewlaScreenVideo", Objective: "ship the H.264 path"})
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestNudgeUndecidedLeavesFreshWorkAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	if _, err := store.CreateWork(Work{Title: "fresh", Objective: "just made"}); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestNudgeLeavesNamedAndTriggerWaitsAlone(t *testing.T) {
 	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
 		"host": {ID: "host", Hidden: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	waiting := WorkWaiting
 	named, err := store.CreateWork(Work{Title: "CiSessionStoreReview", Objective: "re-check the PR heads"})
 	if err != nil {

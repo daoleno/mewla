@@ -221,7 +221,7 @@ func runBDDProviderDecision(t *testing.T, call bddProviderCall, evidenceKind str
 		"host": {ID: "host", Hidden: true, State: classifier.StateDone}, "worker": {ID: "worker", Delegated: true, State: classifier.StateDone},
 		"user": {ID: "user", State: classifier.StateDone},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, err := fw.SubmitDelegatedWorkInput("worker", item.Objective, item.ID, "provider-turn", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}

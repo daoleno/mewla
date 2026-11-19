@@ -23,7 +23,7 @@ func TestAdmissionEchoAfterLateHostTranscriptBinding(t *testing.T) {
 			if err := store.SetHostSession(hostID, "codex"); err != nil {
 				t.Fatal(err)
 			}
-			service := NewService(store, nil, nil)
+			service := newTestService(t, store, nil, nil)
 			base := time.Date(2026, 10, 1, 8, 57, 18, 0, time.UTC)
 			store.now = func() time.Time { return base }
 			prepared, created, err := service.PrepareHostUserInput(hostID, "receipt-late", "same input", "brain-thread:"+thread)
@@ -67,7 +67,7 @@ func TestAdmissionEchoAfterLateHostTranscriptBinding(t *testing.T) {
 					t.Fatalf("immutable admission changed: %+v %v", persisted, err)
 				}
 			}
-			service = NewService(store, nil, nil)
+			service = newTestService(t, store, nil, nil)
 			if _, created, err := service.PrepareHostUserInput(hostID, prepared.RequestID, "same input", "brain-thread:"+thread); err != nil || created {
 				t.Fatalf("receipt replay created=%v err=%v", created, err)
 			}
@@ -144,7 +144,7 @@ func TestLateBindingPreservesFailedRetryAndDistinctIdenticalSends(t *testing.T) 
 	}
 	base := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
 	store.now = func() time.Time { return base }
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	failed, created, err := service.PrepareHostUserInput(hostID, "receipt-a", "same", "brain-thread:"+thread)
 	if err != nil || !created {
 		t.Fatalf("prepare %v %v", created, err)

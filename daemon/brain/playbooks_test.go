@@ -159,7 +159,7 @@ func TestHousekeepingCreatesMissingPlaybooks(t *testing.T) {
 		t.Fatalf("remove playbooks dir: %v", err)
 	}
 
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	report, err := service.Housekeeping()
 	if err != nil {
 		t.Fatalf("Housekeeping() error = %v", err)

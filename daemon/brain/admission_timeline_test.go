@@ -27,7 +27,7 @@ func TestAdmitUserMessageSurvivesEmptyHostAndDedupesProviderEcho(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	body := "P0 admit durable user before provider echo"
 	receipt := "request-admit-1"
 	store.now = func() time.Time {
@@ -148,7 +148,7 @@ func TestAdmitUserMessageUsesScopedThreadNotCurrentGuess(t *testing.T) {
 	if err := store.SetHostSession(hostID, "codex"); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	receipt := "scoped-request-id"
 	body := "display body for scoped thread"
 	prepared, created, err := service.PrepareHostUserInput(hostID, receipt, body, "brain-thread:"+target)
@@ -218,7 +218,7 @@ func TestHostBoundTranscriptSurvivesCWDDeletion(t *testing.T) {
 
 	// Simulate cwd deletion: workspace path still exists for Brain store, but
 	// the bound transcript is the only ingestion authority.
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	bound, err := service.HostBoundProviderConversation()
 	if err != nil {
 		t.Fatal(err)

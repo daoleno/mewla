@@ -41,7 +41,7 @@ func TestARestartJudgesNothingWithoutNewEvidence(t *testing.T) {
 		t.Fatal("not judged")
 	}
 	// A restart: a new Service on the same store, and the watcher replays the turn's facts.
-	restarted := NewService(f.store, nil, nil)
+	restarted := newTestService(t, f.store, nil, nil)
 	restarted.SetProgressAsker(f.model.ask)
 	restarted.now = func() time.Time { return f.clock }
 	f.service = restarted

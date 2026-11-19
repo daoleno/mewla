@@ -24,7 +24,7 @@ func TestRoutingGuideSeedsOnceAndSurvivesHousekeeping(t *testing.T) {
 	if err := os.WriteFile(store.routingGuidePath(), []byte(edited), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	report, err := service.Housekeeping()
 	if err != nil {
 		t.Fatal(err)

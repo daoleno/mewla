@@ -28,7 +28,7 @@ func hostHandlingFixture(t *testing.T) (*Store, *Service, Work, WorkReviewAction
 		"host":   {ID: "host", Hidden: true, State: classifier.StateRunning},
 		"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, err := fw.SubmitDelegatedWorkInput("worker", "deploy", item.ID, "turn:first", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		service := NewService(store, &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}}, nil)
+		service := newTestService(t, store, &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}}, nil)
 		item, err := store.CreateWork(Work{Title: "idle", Objective: "nothing running"})
 		if err != nil {
 			t.Fatal(err)

@@ -94,7 +94,7 @@ func TestHostOwnershipLossHistoryDoesNotBlockCanonicalEventDelivery(t *testing.T
 		ownedGenerations: map[string]string{hostID: "stable-host-generation"},
 		outcomes:         map[string]watcher.InputOutcome{}, turnStore: store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if woke, err := service.ReconcileHostLane(); err != nil || !woke {
 		t.Fatalf("automatic delivery woke=%v err=%v", woke, err)
 	}
@@ -133,7 +133,7 @@ func TestHostOwnershipLossHistoryDoesNotBlockCanonicalEventDelivery(t *testing.T
 		t.Fatal(err)
 	}
 	fw.turnStore = reopened
-	if woke, err := NewService(reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
+	if woke, err := newTestService(t, reopened, fw, nil).ReconcileHostLane(); err != nil || woke {
 		t.Fatalf("reload reconcile woke=%v err=%v", woke, err)
 	}
 	reloaded, _ := reopened.FSM().State(lifecycle.WorkID(completed.ID))
@@ -208,7 +208,7 @@ func TestHistoricalRunningHostTurnIsAuditOnlyAtSerializedAdmission(t *testing.T)
 		},
 		outcomes: map[string]watcher.InputOutcome{}, turnStore: store,
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if delivered, err := service.ReconcileHostLane(); err != nil || !delivered {
 		t.Fatalf("exact terminal reconciliation delivery=%v err=%v", delivered, err)
 	}
@@ -271,7 +271,7 @@ func TestHistoricalHostTurnDoesNotLockOutOrdinaryUserInput(t *testing.T) {
 		ownedGenerations: map[string]string{hostID: "current-host-generation"},
 		outcomes:         map[string]watcher.InputOutcome{}, turnStore: store,
 	}
-	admission, created, err := NewService(store, fw, nil).PrepareHostUserInput(
+	admission, created, err := newTestService(t, store, fw, nil).PrepareHostUserInput(
 		hostID, "ordinary-user-input", "continue", "",
 	)
 	if err != nil || !created || admission.State != BrainInputAdmissionPending {
@@ -303,7 +303,7 @@ func TestUnreadableProviderDefersUntilExecutionCanBeProbed(t *testing.T) {
 		providerProbeErr: map[string]error{hostID: errors.New("provider transcript unreadable")},
 		turnStore:        store,
 	}
-	if delivered, err := NewService(store, fw, nil).ReconcileHostLane(); err == nil || delivered {
+	if delivered, err := newTestService(t, store, fw, nil).ReconcileHostLane(); err == nil || delivered {
 		t.Fatalf("unreadable current Activity delivery=%v err=%v", delivered, err)
 	}
 	after, _ := store.FSM().State(lifecycle.WorkID(item.ID))
@@ -311,7 +311,7 @@ func TestUnreadableProviderDefersUntilExecutionCanBeProbed(t *testing.T) {
 		t.Fatalf("unreadable Activity mutated provider: after=%+v sends=%d", after, len(fw.sentCalls))
 	}
 	delete(fw.providerProbeErr, hostID)
-	if delivered, err := NewService(store, fw, nil).ReconcileHostLane(); err != nil || !delivered {
+	if delivered, err := newTestService(t, store, fw, nil).ReconcileHostLane(); err != nil || !delivered {
 		t.Fatalf("recovered probe: %v %v", delivered, err)
 	}
 }

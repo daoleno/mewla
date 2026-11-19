@@ -75,7 +75,7 @@ func captureFixture(t *testing.T) (*Store, *Service, *fakeWatcher) {
 		t.Fatal(err)
 	}
 	watcher := &fakeWatcher{sessions: map[string]*classifier.Worker{}}
-	service := NewService(store, watcher, nil)
+	service := newTestService(t, store, watcher, nil)
 	return store, service, watcher
 }
 
@@ -249,7 +249,7 @@ func TestHostTranscriptCaptureDiscardsReadAcrossThreadAndHostSwitch(t *testing.T
 			t.Error(err)
 		}
 	}}
-	service := NewService(store, watcher, nil)
+	service := newTestService(t, store, watcher, nil)
 	state := &hostTranscriptCaptureState{}
 	captured, err := service.captureHostTranscript(work.NewProviderConversationReader(), state)
 	if err != nil || !captured {

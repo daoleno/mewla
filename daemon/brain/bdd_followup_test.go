@@ -27,7 +27,7 @@ func TestBDD_005_PartialResultNeedsScopedFollowup(t *testing.T) {
 		"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
 		"worker": {ID: "worker", Delegated: true, State: classifier.StateDone},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, err := fw.SubmitDelegatedWorkInput("worker", "deliver A and B", item.ID, "first", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestBDD_005_PartialResultNeedsScopedFollowup(t *testing.T) {
 				t.Fatal(err)
 			}
 			fw.turnStore = store
-			service = NewService(store, fw, nil)
+			service = newTestService(t, store, fw, nil)
 		} else {
 			// Then only the later complete evidence is accepted, explicitly.
 			done := WorkDone

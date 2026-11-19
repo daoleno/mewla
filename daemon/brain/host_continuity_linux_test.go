@@ -52,7 +52,7 @@ func TestClaudeHostRecoveryAndConcurrentResumeFence(t *testing.T) {
 				fw.workers = []*classifier.Worker{worker}
 				fw.sessions[worker.ID] = worker
 			}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			ref, err := service.ensureHostWorker(work.WorkerExecutor{ID: "claude", Provider: "claude", Command: "claude"})
 			if observed {
 				if err != nil || ref.ID != worker.ID {

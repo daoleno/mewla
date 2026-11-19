@@ -28,7 +28,7 @@ func TestInitialBrainHostPrepareCommitUsesExecutorDefault(t *testing.T) {
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -82,7 +82,7 @@ func TestNewChatPrepareCommitFreshHost(t *testing.T) {
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -126,7 +126,7 @@ func TestExecutorMismatchReplacementPrepareCommit(t *testing.T) {
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
@@ -185,7 +185,7 @@ func TestMissingSessionResumeUsesImmutableBindingNotDefaultPrepare(t *testing.T)
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -242,7 +242,7 @@ func TestMissingSessionResumeWithoutBindingPreparesDefault(t *testing.T) {
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -281,7 +281,7 @@ func TestBrainHostCreateFailureAbortsProvisional(t *testing.T) {
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -312,7 +312,7 @@ func TestBrainHostCommitPersistFailureCleansUp(t *testing.T) {
 		},
 		commitErr: errors.New("route persist failed"),
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -345,7 +345,7 @@ func TestBrainHostAliasPrepareUsesCanonicalClientHint(t *testing.T) {
 			Persist:       modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"primary": {Name: "primary", Command: "codex", Kind: "codex"},
 		},
@@ -373,7 +373,7 @@ func TestBrainHostClaudeAliasPrepareUsesCanonicalClientHint(t *testing.T) {
 			Persist: modelprofiles.PersistResult{Applied: true, Durable: true},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"desk-claude": {Name: "desk-claude", Command: "claude", Kind: "claude"},
 		},
@@ -396,7 +396,7 @@ func TestBrainHostRawCustomBypassSkipsPrepareBinding(t *testing.T) {
 	}
 	fw := &fakeWatcher{}
 	routes := &fakeRouteLifecycle{} // default PrepareLaunch bypass
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"custom": {Name: "custom", Command: "my-custom-agent", Kind: "custom"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -437,7 +437,7 @@ func TestPrepareNondurableThenDurableCommitIsDurabilityBarrier(t *testing.T) {
 		prepareErr:    modelprofiles.ErrPersistDirSync,
 		commitPersist: modelprofiles.PersistResult{Applied: true, Durable: true},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -480,7 +480,7 @@ func TestInitialCommitNondurableFailsClosedNoHostBind(t *testing.T) {
 		commitPersist: modelprofiles.PersistResult{Applied: true, Durable: false},
 		commitErr:     modelprofiles.ErrPersistDirSync,
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -543,7 +543,7 @@ func TestNewChatCommitNondurableFailsClosedNoHostBind(t *testing.T) {
 		commitPersist: modelprofiles.PersistResult{Applied: true, Durable: false},
 		commitErr:     modelprofiles.ErrPersistDirSync,
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -593,7 +593,7 @@ func TestAliasCommitNondurableFailsClosedNoHostBind(t *testing.T) {
 		commitPersist: modelprofiles.PersistResult{Applied: true, Durable: false},
 		commitErr:     modelprofiles.ErrPersistDirSync,
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"primary": {Name: "primary", Command: "codex", Kind: "codex"},
 		},
@@ -639,7 +639,7 @@ func TestCommitNondurableCleanupKillFailurePreservesRouteNoHostBind(t *testing.T
 		commitPersist: modelprofiles.PersistResult{Applied: true, Durable: false},
 		commitErr:     modelprofiles.ErrPersistDirSync,
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)

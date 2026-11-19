@@ -24,7 +24,7 @@ func stalledReviewFixture(t *testing.T) (*Store, *Service, *fakeWatcher, Work) {
 	appendSignalTestEvent(t, store, item, "old-review")
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{host: {ID: host, Hidden: true}}, turnStore: store,
 		sendErr: &watcher.InputSubmissionError{Result: watcher.InputResult{Outcome: watcher.InputNotSubmitted}, Cause: fmt.Errorf("Brain Host provider activity is unreadable")}}
-	return store, NewService(store, fw, nil), fw, item
+	return store, newTestService(t, store, fw, nil), fw, item
 }
 
 func TestReviewDeliveryFailureDoesNotReclaimOnEveryWake(t *testing.T) {
@@ -107,7 +107,7 @@ func TestReviewDeliveryFailureBackoffExhaustionSurvivesRestart(t *testing.T) {
 	if after.Revision != before.Revision || after.Review.DeliveryFailure.Attempts != 5 || len(fw.sentCalls) != 5 {
 		t.Fatalf("exhaustion churn: %+v", after.Review)
 	}
-	context, err := NewService(reopened, fw, nil).Context()
+	context, err := newTestService(t, reopened, fw, nil).Context()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,7 @@ func TestRaiseWorkEventOpensTheReviewThatWakesBrain(t *testing.T) {
 	if err = store.SetChatState(ChatState{ThreadID: "trigger-thread"}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	item, err := store.CreateWork(Work{Title: "Trigger: PR loop", Objective: "standing", SourceThreadID: "trigger-thread", CompletionPolicy: CompletionBounded})
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func TestDeliverWorkEventReachesTheHost(t *testing.T) {
 	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
 		"host": {ID: "host", Hidden: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	item, err := store.CreateWork(Work{Title: "PRLoopWatcher", Objective: "standing PR loop"})
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestTriggerFiringEndsATypedWaitButNotAWorkersTurn(t *testing.T) {
 	if err = store.SetChatState(ChatState{ThreadID: "trigger-thread"}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	waitOn := func(title, waitFor string) Work {
 		t.Helper()
 		item, err := store.CreateWork(Work{Title: title, Objective: "standing", SourceThreadID: "trigger-thread", CompletionPolicy: CompletionBounded})

@@ -21,7 +21,7 @@ func newSessionProjectionService(t *testing.T, workers map[string]*classifier.Wo
 		all = append(all, worker)
 	}
 	fw := &fakeWatcher{sessions: workers, workers: all}
-	return NewService(store, fw, nil)
+	return newTestService(t, store, fw, nil)
 }
 
 func TestDelegatedSessionsOnlyUserVisibleDelegated(t *testing.T) {
@@ -56,7 +56,7 @@ func TestWorkForSessionPrefersLiveWork(t *testing.T) {
 	bootstrapAdmittedTurnFixture(t, store, liveItem.ID, watcher.AdmittedTurn{
 		SessionID: "sess-1", TurnID: "sess-1:turn:1", AcceptedAt: acceptedAt,
 	})
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	workItem, found, err := service.WorkForSession("sess-1")
 	if err != nil || !found || workItem.ID != liveItem.ID || workItem.AttemptSessionID != "sess-1" {
 		t.Fatalf("live work=%+v found=%v err=%v", workItem, found, err)
@@ -78,7 +78,7 @@ func TestSubmitExternalSessionInputReceiptOutcomes(t *testing.T) {
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{
 		"sess-1": {ID: "sess-1", Delegated: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	disposition, err := service.SubmitExternalSessionInput("sess-1", wantReceipt, "direct text")
 	if err != nil || disposition != ExternalInputAccepted {
 		t.Fatalf("accepted disposition=%q err=%v", disposition, err)
@@ -130,7 +130,7 @@ func TestSessionProjectionVisibleLifecycleAndSanitizedAssistant(t *testing.T) {
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{
 		"sess-1": {ID: "sess-1", Name: "Worker", Delegated: true, State: classifier.StateRunning, Command: "codex"},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	service.sessionConversationHook = func(_ *classifier.Worker, _ string, _ time.Time) (work.CodexConversation, error) {
 		return work.CodexConversation{Events: []work.CodexConversationEvent{
 			{ID: "tool-1", Kind: "tool", Title: "exec", Input: "secret tool payload", Output: "raw output"},
@@ -184,7 +184,7 @@ func TestSessionProjectionAbsentStillReportsTurnAndWork(t *testing.T) {
 		SessionID: "gone-session", TurnID: "gone-session:turn:1", AcceptedAt: acceptedAt,
 	})
 	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	projection, err := service.SessionProjection("gone-session")
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +216,7 @@ func TestSessionProjectionDoesNotInferAbsenceFromUnreadableInventory(t *testing.
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{probeErr: errors.New("session host inventory temporarily unavailable")}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	projection, err := service.SessionProjection("missing-from-snapshot")
 	if err != nil || projection.Present || projection.AbsenceConfirmed {
 		t.Fatalf("observation gap became absence: %+v %v", projection, err)

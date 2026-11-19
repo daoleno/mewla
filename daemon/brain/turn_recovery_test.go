@@ -27,7 +27,7 @@ func TestTurnRecoveryRecordsSurviveRestartAndStallEscalatesOnce(t *testing.T) {
 		"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
 		"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	if _, err := fw.SubmitDelegatedWorkInput("worker", "render the trailer", item.ID, "turn:first", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestTurnRecoveryRecordsSurviveRestartAndStallEscalatesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw.turnStore = store
-	service = NewService(store, fw, nil)
+	service = newTestService(t, store, fw, nil)
 	_, records, found, err = service.TurnRecoveries("worker", "turn:first")
 	if err != nil || !found || len(records) != 2 || records[0].Attempt != 1 || records[1].Attempt != 2 ||
 		records[1].TurnID != "turn:resume-2" || records[1].Outcome != watcher.InputAccepted {
@@ -145,7 +145,7 @@ func TestStallBeforeFirstProgressOpensOneUnknownDeliveryReview(t *testing.T) {
 		"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
 		"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
 	}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	// Delivered by transport; the Worker never reported progress.
 	if _, _, err := store.PrepareInputAdmission(watcher.InputAdmission{
 		WorkID: item.ID, SessionID: "worker", ProposedTurnID: "turn:initial", Receipt: "turn:initial",
@@ -200,7 +200,7 @@ func TestStoppedWorkerThenLateDoneReachesBrainExactlyOnce(t *testing.T) {
 				"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
 				"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
 			}}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			if _, err := fw.SubmitDelegatedWorkInput("worker", "build stage 1", item.ID, "turn:first", "", "", time.Now()); err != nil {
 				t.Fatal(err)
 			}
@@ -266,7 +266,7 @@ func TestAnsweredWorkerBlockResolvesTheReview(t *testing.T) {
 			"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
 			"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
 		}}
-		service := NewService(store, fw, nil)
+		service := newTestService(t, store, fw, nil)
 		if _, err := fw.SubmitDelegatedWorkInput("worker", "deploy", item.ID, "turn:first", "", "", time.Now()); err != nil {
 			t.Fatal(err)
 		}

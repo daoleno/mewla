@@ -249,6 +249,7 @@ const (
 // parkedFixture is a Work with no Worker on it, as Brain parks one on a
 // condition, judged by a fake model on a clock the test moves.
 type parkedFixture struct {
+	t       *testing.T
 	store   *Store
 	service *Service
 	model   *fakeProgressModel
@@ -262,7 +263,7 @@ func newParkedFixture(t *testing.T, answers ...string) *parkedFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &parkedFixture{store: store, model: &fakeProgressModel{answers: answers}, clock: time.Now().UTC()}
+	f := &parkedFixture{t: t, store: store, model: &fakeProgressModel{answers: answers}, clock: time.Now().UTC()}
 	f.restart()
 	item, _, err := store.EnsureWork(Work{ID: "w-xcode", Title: "XcodeLogsViewerHang", Objective: "Find why the Xcode Logs viewer hangs and fix it.", CompletionPolicy: CompletionBounded})
 	if err != nil {
@@ -274,7 +275,7 @@ func newParkedFixture(t *testing.T, answers ...string) *parkedFixture {
 
 // restart is a new daemon on the same store.
 func (f *parkedFixture) restart() {
-	f.service = NewService(f.store, nil, nil)
+	f.service = newTestService(f.t, f.store, nil, nil)
 	f.service.SetProgressAsker(f.model.ask)
 	f.service.now = func() time.Time { return f.clock }
 	f.service.progress.loading = func(WorkTranscriptLink) (work.CodexConversation, error) { return work.CodexConversation{}, nil }

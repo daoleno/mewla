@@ -42,7 +42,7 @@ func TestHostNegativeProbeRequiresReachableConfirmation(t *testing.T) {
 				t.Fatal(err)
 			}
 			fw := &fakeWatcher{sessions: map[string]*classifier.Worker{id: {ID: id, Command: "codex", Hidden: true, Cwd: store.WorkspacePath()}}}
-			service := NewService(store, &confirmingHostWatcher{fakeWatcher: fw, confirmErr: tc.confirmErr}, nil)
+			service := newTestService(t, store, &confirmingHostWatcher{fakeWatcher: fw, confirmErr: tc.confirmErr}, nil)
 			_, err = service.ensureHostWorker(work.WorkerExecutor{ID: "codex", Provider: "codex", Command: "codex"})
 			if tc.confirmErr != nil && (err == nil || !strings.Contains(err.Error(), "liveness unknown")) {
 				t.Fatalf("err=%v", err)
@@ -68,7 +68,7 @@ func TestLiveHostWithUnknownIdentityBlocksResume(t *testing.T) {
 	}
 	worker := &classifier.Worker{ID: "mewla-worker-brain-alive:@1", Name: "Brain", Command: "claude", Cwd: store.WorkspacePath(), Hidden: true}
 	fw := &fakeWatcher{workers: []*classifier.Worker{worker}, sessions: map[string]*classifier.Worker{worker.ID: worker}}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	_, err = service.ensureHostWorker(work.WorkerExecutor{ID: "claude", Provider: "claude", Command: "claude"})
 	if err == nil || !strings.Contains(err.Error(), "identity is unproven") || len(fw.created) > 0 {
 		t.Fatalf("err=%v created=%v", err, fw.created)
@@ -76,7 +76,7 @@ func TestLiveHostWithUnknownIdentityBlocksResume(t *testing.T) {
 }
 
 func TestFreshClaudeHostLaunchHasExplicitIdentity(t *testing.T) {
-	service := NewService(nil, nil, nil)
+	service := newTestService(t, nil, nil, nil)
 	executor := work.WorkerExecutor{ID: "claude", Provider: "claude", Command: "claude"}
 	first, err := service.prepareHostLaunch(executor, "", "claude", "")
 	if err != nil {
@@ -102,7 +102,7 @@ func TestConcurrentHostEnsuresLaunchOnlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	executor := work.WorkerExecutor{ID: "claude", Provider: "claude", Command: "claude"}
 	var wg sync.WaitGroup
 	for range 8 {

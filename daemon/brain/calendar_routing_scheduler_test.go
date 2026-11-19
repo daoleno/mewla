@@ -94,7 +94,7 @@ func TestScheduledActionRunThroughCalendarSchedulerGivesOneWorkAndOneWorker(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted := NewService(reopened, nil, nil)
+	restarted := newTestService(t, reopened, nil, nil)
 	finished, _ := calStore.Get(item.ID)
 	for _, replay := range []calendar.Item{running, finished} {
 		if _, err := restarted.RouteCalendarEvent(calendar.Event{Item: replay}); err != nil {

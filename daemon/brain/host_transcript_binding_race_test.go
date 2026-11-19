@@ -49,7 +49,7 @@ func TestHostTranscriptResolutionCannotOverwriteReplacement(t *testing.T) {
 				if err := store.SetHostExecutorID(pair[1]); err != nil {
 					t.Fatal(err)
 				}
-				transitional := NewService(store, &fakeWatcher{sessions: map[string]*classifier.Worker{
+				transitional := newTestService(t, store, &fakeWatcher{sessions: map[string]*classifier.Worker{
 					oldHost: {ID: oldHost, Command: "claude --resume claude-session", Cwd: cwd},
 				}}, nil)
 				identity, err := transitional.BindHostProviderTranscript()
@@ -73,7 +73,7 @@ func TestHostTranscriptResolutionCannotOverwriteReplacement(t *testing.T) {
 					t.Fatal(err)
 				}
 			}}
-			service := NewService(store, fw, nil)
+			service := newTestService(t, store, fw, nil)
 			identity, err := service.BindHostProviderTranscript()
 			if err != nil {
 				t.Fatal(err)

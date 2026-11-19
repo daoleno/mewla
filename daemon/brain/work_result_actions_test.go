@@ -40,7 +40,7 @@ func TestWorkResultActionsAreOnlyWhatTheDaemonCanShow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	workspace := store.WorkspacePath()
 	writeTestFile(t, filepath.Join(workspace, "worklog", "release", "RESULT.md"), "done\n")
 	writeTestFile(t, filepath.Join(workspace, "worklog", "release", "BRIEF.md"), "do it\n")
@@ -102,7 +102,7 @@ func TestWorkResultRowsCarryTheirActions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	item, err := store.CreateWork(Work{Title: "open the PR", Objective: "open it", CompletionPolicy: CompletionBounded})
 	if err != nil {
 		t.Fatal(err)

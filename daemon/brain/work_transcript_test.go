@@ -166,7 +166,7 @@ func TestTurnEndRecordsTranscriptBeforeAttemptIsReleased(t *testing.T) {
 	if _, err := fw.SubmitDelegatedWorkInput("worker", "input", item.ID, "turn-1", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	service.recordTranscriptSync = true
 	resolves := 0
 	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
@@ -251,7 +251,7 @@ func TestTurnEndOfFastWorkerLinksThroughPendingAdmission(t *testing.T) {
 	if _, found, _ := store.WorkByAttemptSession("worker"); found {
 		t.Fatal("test premise: no attempt before the first signal")
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	service.recordTranscriptSync = true
 	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
 		return "claude", work.HostTranscriptIdentity{SessionID: "conv-fast", Path: "/t/conv-fast.jsonl"}, true, nil

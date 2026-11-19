@@ -212,7 +212,7 @@ func TestWorkEventStaysOnFrozenThreadAfterSwitch(t *testing.T) {
 	if err := store.SetChatState(ChatState{ThreadID: threadB, ThreadIDs: []string{threadA, threadB}}); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	event, created, err := service.AppendWorkEvent(WorkEvent{
 		WorkID:     item.ID,
 		Kind:       "session.needs_input",
@@ -277,7 +277,7 @@ func TestMarkWorkReadClearsTimelineUnread(t *testing.T) {
 	if _, _, err := store.SyncWorkCard(item.ID, &event); err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	if err := service.MarkWorkRead(item.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestServiceAppendWorkEventMaterializesCard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, nil, nil)
+	service := newTestService(t, store, nil, nil)
 	event, created, err := service.AppendWorkEvent(WorkEvent{
 		WorkID:     item.ID,
 		Kind:       "session.needs_input",

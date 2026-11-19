@@ -164,7 +164,7 @@ func TestMissingSessionTransferPersistFailureKillsAndKeepsOldResumable(t *testin
 		transferErr:     errors.New("injected transfer persist failure"),
 		transferApplied: false,
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -220,7 +220,7 @@ func TestMissingSessionTransferAppliedNondurableFailsClosedNoSuccess(t *testing.
 		transferErr:     modelprofiles.ErrPersistDirSync,
 		transferApplied: true, // forward and compensation both Applied+!Durable
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -267,7 +267,7 @@ func TestNewChatReleasesRoutedHostBinding(t *testing.T) {
 		},
 	}
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -299,7 +299,7 @@ func TestProviderMismatchReplacementReleasesRoute(t *testing.T) {
 	}
 	fw.workers = append(fw.workers, fw.sessions[oldID])
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
@@ -337,7 +337,7 @@ func TestProviderMismatchKillFailureStillLivePreservesAndAborts(t *testing.T) {
 	}
 	fw.workers = append(fw.workers, fw.sessions[oldID])
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
@@ -379,7 +379,7 @@ func TestProviderMismatchReleaseFailureSurfaced(t *testing.T) {
 	routes := &fakeRouteLifecycle{
 		releaseErr: errors.New("injected release failure"),
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{
 			"grok":  {Name: "grok", Command: "grok", Kind: "grok"},
 			"codex": {Name: "codex", Command: "codex", Kind: "codex"},
@@ -417,7 +417,7 @@ func TestResumeRouteTransferFailureSurfacesKillError(t *testing.T) {
 		resumeCmd:   "codex resume " + providerSessionID,
 		transferErr: errors.New("injected transfer failure"),
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -458,7 +458,7 @@ func TestRecoverLiveTransfersRouteBeforeHostBind(t *testing.T) {
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -517,7 +517,7 @@ func TestRecoverLiveRouteTransferFailurePreservesBindingNoAudit(t *testing.T) {
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
 	routes := &fakeRouteLifecycle{transferErr: errors.New("injected recover transfer failure")}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -569,7 +569,7 @@ func TestRecoverLiveNoRouteTransferIsNoOp(t *testing.T) {
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
 	routes := &fakeRouteLifecycle{transferErr: modelprofiles.ErrBindingNotFound}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -630,7 +630,7 @@ func TestRecoverLiveRouteTransferAppliedNondurableCompensatesNoBind(t *testing.T
 			{persist: modelprofiles.PersistResult{Applied: true, Durable: true}, err: nil},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -699,7 +699,7 @@ func TestRecoverLiveRouteTransferAppliedNondurableCompensationAmbiguityPreserves
 			{persist: modelprofiles.PersistResult{Applied: true, Durable: false}, err: modelprofiles.ErrPersistDirSync},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -751,7 +751,7 @@ func TestResumeRouteTransferAppliedNondurableCompensatesKillsSpawn(t *testing.T)
 			{persist: modelprofiles.PersistResult{Applied: true, Durable: true}, err: nil},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -815,7 +815,7 @@ func TestResumeRouteTransferAppliedNondurableCompensationFailurePreservesLive(t 
 			{persist: modelprofiles.PersistResult{Applied: false, Durable: false}, err: errors.New("injected compensation failure")},
 		},
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -875,7 +875,7 @@ func TestRecoverLiveBindFailureAfterTransferRollsRouteNoAudit(t *testing.T) {
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -928,7 +928,7 @@ func TestRouteTransferRollbackFailureRetainsLiveOwner(t *testing.T) {
 		resumeCmd:     "codex resume " + providerSessionID,
 		failTransferN: 2, // forward ok, rollback fails
 	}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -991,7 +991,7 @@ func TestHostTeardownResourceReleaseFailurePreservesAndSurfaces(t *testing.T) {
 		killErr: errors.New("delegated resource release failed: injected"),
 	}
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -1023,7 +1023,7 @@ func TestHostTeardownProbeFailurePreservesRoute(t *testing.T) {
 		probeErr:       errors.New("injected probe failure"),
 	}
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -1053,7 +1053,7 @@ func TestHostTeardownMissingRetryAfterResourceFailureConverges(t *testing.T) {
 		killErr: errors.New("delegated resource release failed: injected"),
 	}
 	routes := &fakeRouteLifecycle{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(routes)
@@ -1163,7 +1163,7 @@ func TestResumeNondurableTransferRealOwnerRestoresRestartVisibleRoute(t *testing
 		return nil
 	})
 	fw := &fakeWatcher{}
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(owner)
@@ -1236,7 +1236,7 @@ func TestRecoverNondurableTransferRealOwnerRestoresRestartVisibleRoute(t *testin
 		},
 	}
 	fw.workers = append(fw.workers, fw.sessions[aliveID])
-	service := NewService(store, fw, &work.ExecutorConfig{
+	service := newTestService(t, store, fw, &work.ExecutorConfig{
 		ByName: map[string]work.Executor{"codex": {Name: "codex", Command: "codex", Kind: "codex"}},
 	})
 	service.SetSessionRouteLifecycle(owner)

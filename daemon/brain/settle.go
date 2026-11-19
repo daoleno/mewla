@@ -154,7 +154,7 @@ func (s *Service) settleWorkLocked() error {
 	}
 	s.settle.running = true
 	s.settle.mu.Unlock()
-	go s.judgeCandidates(candidates)
+	s.background.Go(func() { s.judgeCandidates(candidates) })
 	return nil
 }
 

@@ -11,7 +11,7 @@ func TestPluginSignInLostShowsInChatOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	at := time.Date(2026, 11, 16, 8, 40, 0, 0, time.UTC)
 	for i := 0; i < 2; i++ {
 		service.NotePluginSignInLost("a14f", at, "Slack sign-in ended", "Slack stopped accepting “Team”. Reconnect it in Extensions.")
@@ -52,7 +52,7 @@ func TestAgentBrowserSignInsLostShowsInChatOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := NewService(store, &fakeWatcher{}, nil)
+	service := newTestService(t, store, &fakeWatcher{}, nil)
 	at := time.Date(2026, 11, 18, 11, 52, 40, 0, time.UTC)
 	for i := 0; i < 2; i++ {
 		service.NoteAgentBrowserSignInsLost([]string{"accounts.google.com", "github.com"}, at)

@@ -57,7 +57,7 @@ func TestStartupCleanupRefusalIsReportedAsFinalAndNeverKills(t *testing.T) {
 		refuse: map[string]error{"%6": fmt.Errorf("Session %%6 is %w", watcher.ErrNotOwnedDelegatedWorker)},
 		calls:  map[string]int{},
 	}
-	service := NewService(store, fw, nil)
+	service := newTestService(t, store, fw, nil)
 	completeWorkOn(t, store, service, fw, "%6")
 
 	complete, err := service.ReconcileSignalSystemStartup([]*classifier.Worker{{ID: "%6", State: classifier.StateDone}}, 8)

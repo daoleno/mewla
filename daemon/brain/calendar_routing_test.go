@@ -19,7 +19,7 @@ func newCalendarRouteService(t *testing.T) (*Store, *Service) {
 	if err := store.SetChatState(ChatState{ThreadID: calendarRouteThread}); err != nil {
 		t.Fatal(err)
 	}
-	return store, NewService(store, nil, nil)
+	return store, newTestService(t, store, nil, nil)
 }
 
 func calendarRouteItem(itemID string, runs ...calendar.Run) calendar.Item {
@@ -132,7 +132,7 @@ func TestRouteCalendarEventLaunchedRunSurvivesRestartAndNeverBecomesLost(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	restarted := NewService(reopened, nil, nil)
+	restarted := newTestService(t, reopened, nil, nil)
 	calendarRouteRoute(t, restarted, claimed, nil)
 	calendarRouteRoute(t, restarted, launched, nil)
 	after, err := reopened.Work(workID)
