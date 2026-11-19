@@ -118,6 +118,21 @@ describe("account status and capability boundaries", () => {
     expect(accountRecovery(account({ status: "authorization_required" }), "GitHub")?.action).toBe("reconnect");
     expect(accountRecovery(account({ status: "error" }), "GitHub")?.action).toBe("refresh");
   });
+
+  test("a sign-in that predates file and DM reading offers one Reconnect, on the card and the list row", () => {
+    const access = { read: "allowed" as const, write: "allowed" as const, allowed: 6, tools: 6, read_consent: true };
+    const old = account({ integration: "slack", name: "FreeRide AI · paul", access });
+    expect(accountRecovery(old, "Slack")).toMatchObject({ action: "reconnect", actionLabel: "Reconnect", tone: "warning" });
+    // Its row says so, not Connected.
+    expect(accountStatus(old)).toBe("Needs Reconnect");
+    expect(accountTone(old)).toBe("warning");
+    expect(pluginCatalogRows([plugin("slack", "Slack")], [old], { slack: {} }).services[0]!.state).toEqual({ kind: "reconnect", account: old });
+    // Off stays off; a full grant has nothing to fix.
+    expect(accountRecovery({ ...old, enabled: false }, "Slack")).toBeNull();
+    expect(accountRecovery(account({ integration: "slack", access: { ...access, read_consent: false } }), "Slack")).toBeNull();
+    // Reconnect keeps changes the account allowed.
+    expect(reconnectsWithWrites(old)).toBe(true);
+  });
 });
 
 describe("authorization progress", () => {

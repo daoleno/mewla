@@ -81,6 +81,8 @@ export type PluginAccess = {
   write: AccessState;
   /** Allowing changes needs the service to ask again (its sign-in lacks the write scope). */
   write_consent?: boolean;
+  /** The sign-in predates reads Mewla now offers (Slack's files and private conversations): Reconnect asks for them. */
+  read_consent?: boolean;
   allowed: number;
   tools: number;
 };
@@ -136,6 +138,8 @@ export type ConnectionResponse = {
 export function accountStatus(account: PluginAccount): string {
   if (account.status === "disconnected") return "Disconnected";
   if (!account.enabled) return "Off";
+  // Signed in before Mewla read more of the service (Slack's files and DMs): works, but wants one Reconnect.
+  if (account.status === "connected" && account.access?.read_consent) return "Needs Reconnect";
   return {
     connected: "Connected",
     configured: "Not checked yet",

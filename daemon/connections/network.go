@@ -342,10 +342,11 @@ func (m *Manager) request(ctx context.Context, r *record, endpoint, secret, meth
 	}
 	if rule != nil && rule.OKEnvelope {
 		var result struct {
-			OK bool `json:"ok"`
+			OK    bool   `json:"ok"`
+			Error string `json:"error"`
 		}
 		if json.Unmarshal(raw, &result) != nil || !result.OK {
-			return nil, errors.New("Slack rejected the call; check account authorization and required scopes")
+			return nil, slackRejected(result.Error)
 		}
 	}
 	return raw, nil

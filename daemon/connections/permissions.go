@@ -109,6 +109,23 @@ func groupState(tools []Tool, group string) string {
 	return "partial"
 }
 
+// readConsent reports a sign-in whose grant lacks a read scope the service's
+// sign-in asks for now: it was made before Mewla read more of the service
+// (Slack's files and private conversations), and only connecting again asks
+// the person for the rest.
+func readConsent(r *record) bool {
+	e := lookup(r.Account.Integration)
+	if r.OAuth == nil || e == nil || e.OAuth == nil || e.OAuth.ReadScopes == nil {
+		return false
+	}
+	for _, scope := range e.OAuth.ReadScopes() {
+		if !contains(r.Account.Scopes, scope) {
+			return true
+		}
+	}
+	return false
+}
+
 // writeConsent reports a sign-in whose grant lacks the service's write scope,
 // so allowing changes means connecting again with writes. Tokens and imported
 // logins carry whatever the person granted them.

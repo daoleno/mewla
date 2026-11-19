@@ -299,7 +299,7 @@ func (m *Manager) projection(r *record) Account {
 			}
 		}
 	}
-	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), Tools: len(a.Tools)}
+	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), ReadConsent: readConsent(r), Tools: len(a.Tools)}
 	for _, t := range a.Tools {
 		if t.Allowed {
 			a.Access.Allowed++
@@ -332,6 +332,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (response Response, 
 		// A remote MCP tool that waits for its work (Onlora's wait_s) can take
 		// minutes; it runs outside the manager lock.
 		if response, handled, err := m.invokeMCPAccount(parent, q); handled {
+			return response, err
+		}
+		// A Slack file download can outlast the lock's 20 seconds.
+		if response, handled, err := m.invokeSlackFile(parent, q); handled {
 			return response, err
 		}
 	}
@@ -670,6 +674,11 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 		}
 	}
 	if t == nil {
+		if readConsent(r) {
+			// The tool is newer than this sign-in's grant: only signing in again adds it.
+			service := accountService(r)
+			return Tool{}, nil, callRefused(service + " has no " + cutRunes(q.Tool, 60) + " on this account yet: its sign-in was made before Mewla offered it. Ask the person to Reconnect " + service + " in Extensions, then call again")
+		}
 		return Tool{}, nil, errors.New("tool not found")
 	}
 	if _, updated := r.Updates[t.Name]; updated && r.Grants[t.Name] != fingerprint(*t) {
