@@ -52,12 +52,13 @@ const places = computed((): Pressable[] =>
 const ends = computed(() => railEnds(windowSize(), safeArea(), rail(), keyboardFrame().height));
 const layout = computed(() => railLayout(pageControls(), places(), railRoom(windowSize().height, ends())));
 
-/** A rail button: 44 pt, the glyph 22, the accent well while it is where the person is. */
-function RailButton(props: { item: Pressable; selected?: boolean; children?: JSX.Element }) {
+/** A rail button: 44 pt, the glyph 22, the accent well while it is where the person is. Made once per id (`Each`): the
+ * item's label, action and state are read through `item`, so a change elsewhere never remakes the button under a finger. */
+function RailButton(props: { item: () => Pressable; selected?: () => boolean; children: JSX.Element }) {
   return (
-    <Button ref={props.item.ref} testID={`rail-${props.item.id}`} accessibilityLabel={props.item.label} onPress={props.item.onPress} disabled={props.item.disabled?.()}
-      class={`items-center justify-center rounded-full active:bg-accent disabled:opacity-40 ${props.selected ? "bg-accent" : ""}`} style={{ width: RAIL.target, height: RAIL.target }}>
-      {props.children ?? <Icon name={props.item.icon ?? "dot"} size={RAIL.glyph} tone="ink" />}
+    <Button ref={props.item().ref} testID={`rail-${props.item().id}`} accessibilityLabel={props.item().label} onPress={() => props.item().onPress()} disabled={props.item().disabled?.()}
+      class={`items-center justify-center rounded-full active:bg-accent disabled:opacity-40 ${props.selected?.() ? "bg-accent" : ""}`} style={{ width: RAIL.target, height: RAIL.target }}>
+      {props.children}
     </Button>
   );
 }
@@ -68,8 +69,8 @@ function CornerDot(props: { tone: "grey" | "red" | "ink"; testID: string }) {
   return <View testID={props.testID} class={`absolute right-1.5 top-1.5 size-2 rounded-full ${tone()}`} />;
 }
 
-function Item(props: { item: Pressable }) {
-  const id = props.item.id;
+function Item(props: { item: () => Pressable }) {
+  const id = untracked(props.item).id;
   if (id === "back") {
     const mark = () => backMark(tray().state.kind);
     return (
@@ -81,7 +82,7 @@ function Item(props: { item: Pressable }) {
   }
   if (id === "brain") {
     return (
-      <RailButton item={props.item} selected={homeShown()}>
+      <RailButton item={props.item} selected={homeShown}>
         <Icon name="brain" size={RAIL.glyph} tone="ink" />
         <If when={brainTurn()}><CornerDot testID="rail-brain-live" tone="ink" /></If>
       </RailButton>
@@ -91,7 +92,7 @@ function Item(props: { item: Pressable }) {
     // The state's dot, and its count while something needs the person.
     const count = () => (tray().state.kind === "needs" ? tray().state.count ?? 0 : 0);
     return (
-      <RailButton item={props.item} selected={homeShown() && trayOpen()}>
+      <RailButton item={props.item} selected={() => homeShown() && trayOpen()}>
         <View class="flex-row items-center gap-1">
           <StateDotMark dot={tray().state.dot} />
           <If when={count() > 0}><Text testID="rail-state-count" class="text-sub font-semibold text-foreground">{String(count())}</Text></If>
@@ -100,7 +101,13 @@ function Item(props: { item: Pressable }) {
       </RailButton>
     );
   }
-  return <RailButton item={props.item} />;
+  // The glyph is made once with its button; only its name follows the item.
+  return <RailButton item={props.item}><Icon name={props.item().icon ?? "dot"} size={RAIL.glyph} tone="ink" /></RailButton>;
+}
+
+/** The rail's buttons in order, each made once per id and kept while its id stays. */
+function Items(props: { of: () => readonly Pressable[] }) {
+  return <Each of={props.of()} key={(item: Pressable) => item.id}>{(item: () => Pressable) => <Item item={item} />}</Each>;
 }
 
 /** What did not fit: one More at the foot, its menu in the rail's order. */
@@ -110,7 +117,8 @@ function More(props: { items: readonly Pressable[] }) {
     const chosen = await showMenu({ items: items.map((item) => ({ id: item.id, label: item.label, icon: item.icon, disabled: item.disabled?.() })), testID: "rail-more-menu" });
     items.find((item) => item.id === chosen)?.onPress();
   };
-  return <RailButton item={{ id: "more", label: "More", icon: "more-horizontal", onPress: () => void press() }} />;
+  const more: Pressable = { id: "more", label: "More", icon: "more-horizontal", onPress: () => void press() };
+  return <RailButton item={() => more}><Icon name="more-horizontal" size={RAIL.glyph} tone="ink" /></RailButton>;
 }
 
 /**
@@ -123,10 +131,10 @@ export function Rail() {
   return (
     <><If when={rail()}><View testID="rail" class="absolute bottom-0 top-0 items-center" role="toolbar"
         style={{ width: width(), left: rail() === "left" ? 0 : undefined, right: rail() === "right" ? 0 : undefined, paddingTop: ends().top, paddingBottom: ends().bottom, pointerEvents: "box-none" }}>
-        <View testID="rail-page" class="items-center">{layout().top.map((item) => <Item item={item} />)}</View>
+        <View testID="rail-page" class="items-center"><Items of={() => layout().top} /></View>
         <View class="flex-1" style={{ minHeight: RAIL.groupGap, pointerEvents: "none" }} />
         <View testID="rail-places" class="items-center">
-          {layout().bottom.map((item) => <Item item={item} />)}
+          <Items of={() => layout().bottom} />
           <If when={layout().more.length > 0}><More items={layout().more} /></If>
         </View>
       </View></If></>

@@ -240,6 +240,12 @@ upright never have it.
   the cat alone (a 44 circle), and on the inner screen beside the pane Brain has no header at all. A Session's
   keeps its mark and name on one line (44, never two lines). A pushed page's capsule has the title once it has
   scrolled away, and nothing (not drawn) at rest, so its content starts 6 under the top.
+- **A press is never lost.** Each button is made once per id and kept while it stays in the rail; the
+  state, labels and the tray change it in place. Remaking the rail on every change dropped one press in five
+  on the device (round 4, 11-19).
+- **No scroll-to-top under the rail.** With the rail up the window has no status bar, yet UIKit still takes a
+  tap at the window's top (the cat) for a status-bar tap and scrolls the list to its top. The message list
+  turns scroll-to-top off while the rail is up.
 - **Not followed yet.** NSH reports neither the bar's edge nor where the system's items end: the edge comes
   from the safe area and the system's end from measured constants per screen and posture, so a Live Activity growing the Island down the bar
   can cover the first button.
