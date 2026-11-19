@@ -173,7 +173,24 @@ type TURNServer struct {
 	total   int
 	byRoute map[string]int
 	byCred  map[string]int
+	// pending are quotas taken by admit whose allocation is not made yet: the
+	// server checks the quota, then allocates, on each connection's own
+	// goroutine, so a quota only counted once the allocation exists lets
+	// requests at once all pass.
+	pending []reservation
 }
+
+// reservation is one quota admit took, for username's request from client,
+// at at.
+type reservation struct {
+	username, client string
+	at               time.Time
+}
+
+// reserveFor is how long a quota admit took waits for its allocation: the
+// server says nothing of one it failed to make (a TCP allocation, no port
+// left), so its quota comes back then, or at the client's next request.
+const reserveFor = time.Second
 
 // StartTURN listens and serves TURN until Close.
 func StartTURN(config TURNConfig) (*TURNServer, error) {
@@ -263,10 +280,12 @@ func StartTURN(config TURNConfig) (*TURNServer, error) {
 		PacketConnConfigs: packetConns,
 		ListenerConfigs:   listeners,
 		LoggerFactory:     logs,
-		QuotaHandler:      func(username, _ string, _ net.Addr) bool { return t.admit(username) },
+		QuotaHandler:      func(username, _ string, client net.Addr) bool { return t.admit(username, client.String()) },
 		EventHandler: turn.EventHandler{
-			OnAllocationCreated: func(_, _ net.Addr, _, username, _ string, _ net.Addr, _ int) { t.count(username, 1) },
-			OnAllocationDeleted: func(_, _ net.Addr, _, username, _ string) { t.count(username, -1) },
+			OnAllocationCreated: func(client, _ net.Addr, _, username, _ string, _ net.Addr, _ int) {
+				t.created(username, client.String())
+			},
+			OnAllocationDeleted: func(_, _ net.Addr, _, username, _ string) { t.deleted(username) },
 		},
 	})
 	if err != nil {
@@ -296,18 +315,56 @@ func turnRoute(username string) string {
 	return fields[1]
 }
 
-func (t *TURNServer) admit(username string) bool {
+// admit takes a quota for one allocation of username, asked by client, when
+// there is one left in all, of its route and of the credential.
+func (t *TURNServer) admit(username, client string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.total < t.limits.Allocations &&
-		t.byRoute[turnRoute(username)] < t.limits.AllocationsPerRoute &&
-		t.byCred[username] < t.limits.AllocationsPerCredential
+	now := time.Now()
+	live := t.pending[:0]
+	for _, r := range t.pending {
+		// One client's requests are served in turn: a reservation of its
+		// earlier one is an allocation that failed.
+		if now.Sub(r.at) < reserveFor && r.client != client {
+			live = append(live, r)
+		} else {
+			t.add(r.username, -1)
+		}
+	}
+	t.pending = live
+	if t.total >= t.limits.Allocations ||
+		t.byRoute[turnRoute(username)] >= t.limits.AllocationsPerRoute ||
+		t.byCred[username] >= t.limits.AllocationsPerCredential {
+		return false
+	}
+	t.add(username, 1)
+	t.pending = append(t.pending, reservation{username: username, client: client, at: now})
+	return true
 }
 
-func (t *TURNServer) count(username string, n int) {
-	route := turnRoute(username)
+// created turns the reservation of client's request into its allocation
+// (counted already), or counts one whose reservation lapsed.
+func (t *TURNServer) created(username, client string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	for i, r := range t.pending {
+		if r.username == username && r.client == client {
+			t.pending = append(t.pending[:i], t.pending[i+1:]...)
+			return
+		}
+	}
+	t.add(username, 1)
+}
+
+func (t *TURNServer) deleted(username string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.add(username, -1)
+}
+
+// add counts n allocations of username; t.mu is held.
+func (t *TURNServer) add(username string, n int) {
+	route := turnRoute(username)
 	t.total += n
 	t.byRoute[route] += n
 	t.byCred[username] += n

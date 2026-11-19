@@ -623,7 +623,9 @@ relay yet, and each step needs the owner's approval.
 
 **What it is.** The relay (`-turn-url`, `-turn-secret-file`) answers a
 computer's signed `turn_request` with a credential `<expiry>:<route>:<nonce>`
-(12 h; the computer asks again at half of that, and after it registers again).
+(12 h). The computer asks for a fresh one for each side of each view: a peer
+takes one allocation per TURN URL, so with the recipe's three URLs a view holds
+six, three per credential.
 A separate process (`mewla-relay -turn-only`, the same image) serves TURN with
 the same secret file, so credentials survive either one restarting and TURN's
 sockets, file descriptors and CPU never take the relay's. What a credential can
@@ -637,7 +639,11 @@ do (`daemon/relay/turn.go`, proven by `TestTURNOneCredentialReachesLittle`):
   benchmark nets, multicast, 240/4, and the IPv6 equivalents (ULA, link-local,
   NAT64, 6to4, Teredo, documentation).
 - Quotas: `-turn-allocations-per-credential` 4, `-turn-allocations-per-route`
-  16, `-turn-allocations` 512; `-turn-kbps` 8000 per allocation each way (told
+  16 (two views at six each, plus a phone's stale ones after a network switch,
+  which live up to 10 minutes), `-turn-allocations` 512, each taken when the
+  request is checked (one the server then fails to make comes back at the
+  client's next request or after a second; `TestTURNQuotaHoldsUnderConcurrentAllocations`);
+  `-turn-kbps` 8000 per allocation each way (told
   to computers, which keep video at 85 % of it while relayed),
   `-turn-total-kbps` for all of them. Past a rate, packets are dropped.
 - TCP and TLS connections to TURN: `-turn-conns` 512, `-turn-conns-per-ip` 16,
