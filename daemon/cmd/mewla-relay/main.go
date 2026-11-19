@@ -107,7 +107,7 @@ func run(args []string) error {
 	flags.IntVar(&turnLimits.Kbps, "turn-kbps", 8000, "most one allocation relays each way, in kbit/s; computers keep their video under it")
 	flags.IntVar(&turnLimits.TotalKbps, "turn-total-kbps", 400000, "most all allocations relay together each way, in kbit/s")
 	flags.IntVar(&turnLimits.Allocations, "turn-allocations", 512, "maximum TURN allocations in all")
-	flags.IntVar(&turnLimits.AllocationsPerRoute, "turn-allocations-per-route", 16, "maximum TURN allocations of one computer and its viewers")
+	flags.IntVar(&turnLimits.AllocationsPerRoute, "turn-allocations-per-route", 32, "maximum TURN allocations of one computer and its viewers")
 	flags.IntVar(&turnLimits.AllocationsPerCredential, "turn-allocations-per-credential", 4, "maximum TURN allocations of one credential")
 	flags.IntVar(&turnLimits.Conns, "turn-conns", 512, "maximum TCP and TLS connections to the TURN server")
 	flags.IntVar(&turnLimits.ConnsPerIP, "turn-conns-per-ip", 16, "maximum TCP and TLS connections to the TURN server from one address")

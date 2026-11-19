@@ -639,8 +639,8 @@ do (`daemon/relay/turn.go`, proven by `TestTURNOneCredentialReachesLittle`):
   benchmark nets, multicast, 240/4, and the IPv6 equivalents (ULA, link-local,
   NAT64, 6to4, Teredo, documentation).
 - Quotas: `-turn-allocations-per-credential` 4, `-turn-allocations-per-route`
-  16 (two views at six each, plus a phone's stale ones after a network switch,
-  which live up to 10 minutes), `-turn-allocations` 512, each taken when the
+  32 (five views at six each, or fewer with a phone's stale ones after a
+  network switch, which live up to 10 minutes), `-turn-allocations` 512, each taken when the
   request is checked (one the server then fails to make comes back at the
   client's next request or after a second; `TestTURNQuotaHoldsUnderConcurrentAllocations`);
   `-turn-kbps` 8000 per allocation each way (told
@@ -655,8 +655,20 @@ device it trusts and allows has opened a view; a modified computer could ask
 anyway, which the quotas above bound. Credentials reach the viewer in the
 signed offer; on `mewla --lan` plain HTTP they cross the LAN in cleartext.
 
+**What must ship first.** Nothing breaks without TURN: views go direct when
+ICE finds a path and say "connection lost" when it does not. To deploy:
+- The relay image must be built from main at or after the merge of
+  `screen-webrtc`. That merge brings quotas taken when checked (an older image
+  lets concurrent allocations past every cap) and the per-computer cap of 32.
+- Only computers on the Mewla release with the WebRTC Screen ask for
+  credentials. Older computers never send `turn_request`, so the order against
+  the app and daemon release does not matter.
+- Approval needs the owner's yes, the Let's Encrypt certificate (step 3) or a
+  decision to go without `turns:`, and the total bit rate (Cost, below).
+
 **Deploy recipe** (the host, as `config/deploy.yml` and the guard are today):
 
+0. Build and deliver the image from that main: `kamal build deliver --version $V`.
 1. DNS: `turn.connect.mewla.ai` A to the host's address, unproxied (Cloudflare).
 2. Secret: `openssl rand -hex 32 > .kamal/files/turn.secret` (mode 0600, never
    committed), uploaded to both accessories as `/run/mewla-link/turn.secret`.
@@ -705,6 +717,21 @@ signed offer; on `mewla --lan` plain HTTP they cross the LAN in cleartext.
    `ufw allow 49160:49671/udp`, and `ufw allow in on <kamal bridge> to <kamal
    bridge gateway> port 5349 proto tcp`. The guard stays as it is.
 
+**Check after deploy**, in order; stop and roll back at the first failure:
+1. `kamal accessory logs turn` shows `turn: serving udp=… tcp=… tls=…` with
+   the port range; `ssh ubuntu@167.114.116.27 ss -lunt | grep -e 3478 -e 5349`
+   lists the listeners.
+2. The relay's log has no `TURN` start error, and `/readyz` answers as before.
+3. From a computer on the new release, signed in to the hosted relay: open
+   Screen from a phone on mobile data with Wi-Fi off. The Connection panel
+   says route `relay` and a live picture comes. Open a second device's view
+   at the same time; both get pictures.
+4. From a network that blocks UDP (or a laptop with `iptables -A OUTPUT -p
+   udp -j DROP`, removed afterwards), the web app's view still comes over
+   `turns:` on 443.
+5. Onlora still answers, and `kamal relay-logs` shows computers
+   re-registered.
+
 **Order and what people see.** Boot `turn` first (nothing uses it yet, no one
 notices). Then the relay with its new flags, by the stop / remove_container /
 boot sequence: the last relay upgrade was down about 80 s; computers
@@ -712,17 +739,34 @@ re-registered 4 s after it was ready, phones within their 30 s back-off (at once
 when the app comes to the front). Every Mewla Relay connection drops and comes
 back, as with any relay upgrade.
 
-**Cost.** One relayed view at the ceiling is 6.8 Mbit/s into the host and the
-same out (about 3 GB each way an hour); a still screen sends nearly nothing.
-`-turn-total-kbps=200000` caps all of TURN at 200 Mbit/s each way, about 29 views
-at the ceiling. The host is shared with Onlora; set the total below what the
-OVH plan guarantees minus Onlora's peak (check the plan's bandwidth in the OVH
-manager: no doc here records it).
+**Cost.** Only views with no direct path go through TURN (most LAN and home
+Wi-Fi views do not). Each relayed byte crosses the host twice: in from one side
+and out to the other.
 
-**Rollback.** `kamal accessory stop turn` / `remove turn` ends TURN at once;
-computers keep handing out credentials that no longer reach anything, so
-viewers fall back to direct paths only, with no relay restart. Removing the
-relay's TURN flags is the usual relay redeploy (about 80 s) and can wait.
+| Relayed view | Each way | An hour, each way |
+|---|---|---|
+| At the ceiling (85 % of `-turn-kbps` 8000) | 6.8 Mbit/s | about 3 GB |
+| An agent working in a browser (an estimate, not measured) | ~2 Mbit/s | about 0.9 GB |
+| A still screen | a few kbit/s | negligible |
+
+For example, one person watching agents through TURN for an hour a day at
+about 2 Mbit/s is about 27 GB each way a month. `-turn-total-kbps=200000` caps
+all of TURN at 200 Mbit/s each way, about 29 views at the ceiling. The host is
+shared with Onlora, so set the total below what the OVH plan guarantees minus
+Onlora's peak. Check the plan's bandwidth in the OVH manager; no doc here
+records it. CPU is small (pion relays packets without decoding them). Each
+allocation holds one UDP port of the 512 in the range.
+
+**Rollback.**
+- `kamal accessory stop turn` / `remove turn` ends TURN at once.
+- Computers keep handing out credentials that no longer reach anything, so
+  viewers fall back to direct paths only, with no relay restart. A view that
+  was relayed ends with "connection lost", and the person reopens it.
+- Removing the relay's TURN flags (the `-sni-route` for TURN, `-turn-url`,
+  `-turn-secret-file`) is the usual relay upgrade sequence (about 80 s) and can
+  wait.
+- Close the ufw rules from step 6 (`ufw delete allow …`).
+- The DNS name and the certificate can stay.
 
 ### Local end-to-end environment
 
