@@ -6,17 +6,39 @@ import java.nio.ByteBuffer
 internal object DisplayHealth {
     /**
      * After an app was started on the display: a display the system dropped, one that has never drawn a single frame,
-     * or one that drew nothing for the launch and [showsNothing] (a black picture and no element to read), is replaced,
-     * once, and the app started there. Replacing destroys what is on the display, so a display with anything on it to
-     * read or see is kept: an app that is merely already in front draws nothing new, and a dark video or splash still
-     * reads. (11-19: a display that had drawn earlier stayed black with nothing to read after Chrome, X and 小红书 were
-     * opened, and every launch answered success.)
+     * or one that drew nothing for the launch and [showsNothing] (black, and no app window on it at all), is replaced,
+     * once, and the app started there. Replacing destroys what is on the display, so a display with any app window on
+     * it is kept, even one that draws black with nothing to read (a video, a splash): an app that is merely already in
+     * front draws nothing new. (11-19: a display that had drawn earlier stayed black with nothing on it after Chrome,
+     * X and 小红书 were opened, and every launch answered success.)
      */
     fun needsRecreate(alive: Boolean, drewSinceLaunch: Boolean, everDrew: Boolean, attempt: Int, showsNothing: Boolean = false): Boolean =
         attempt == 0 && (!alive || (!drewSinceLaunch && (!everDrew || showsNothing)))
 
-    /** A reading that shows nothing: no element to name and a black picture. It is never an answer that worked. */
-    fun showsNothing(elements: Int, dark: Boolean): Boolean = elements == 0 && dark
+    /** What a reading with nothing to read is, from the app windows on the display, its elements and its picture. */
+    enum class Empty {
+        /** Something to read: not this case. */
+        NONE,
+        /** A launch left no app window on the display: the app did not open there. The one case that is a failure. */
+        NOT_OPENED,
+        /** No app is open on the display (black, no window): nothing was opened yet, or what was there closed. */
+        NOTHING_OPEN,
+        /** An app window is there and draws black with nothing to read: a cold start, a video, a camera. */
+        BLACK_APP,
+        /** No app window answers while the picture shows something: the app hung or closed and the picture may be stale. */
+        NOT_ANSWERING,
+        /** An app window draws a picture with nothing to read: an app that draws its own UI (WeChat). */
+        OWN_UI,
+    }
+
+    fun empty(windows: Int, elements: Int, dark: Boolean, launched: Boolean): Empty = when {
+        elements > 0 -> Empty.NONE
+        windows == 0 && launched -> Empty.NOT_OPENED
+        windows == 0 && dark -> Empty.NOTHING_OPEN
+        windows == 0 -> Empty.NOT_ANSWERING
+        dark -> Empty.BLACK_APP
+        else -> Empty.OWN_UI
+    }
 }
 
 /** Whether a frame is black: what a display shows when nothing draws on it. */
