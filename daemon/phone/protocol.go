@@ -99,6 +99,9 @@ type State struct {
 	Problem string `json:"problem,omitempty"`
 	// Display is the agent display's density as asked and as the system has it, next to the phone's own screen.
 	Display string `json:"display,omitempty"`
+	// Warning is what will stop a ready phone later that the person can see to now (the phone refused
+	// Mewla the permission to switch Wireless debugging back on).
+	Warning string `json:"warning,omitempty"`
 }
 
 // Event is something the person did on the phone.

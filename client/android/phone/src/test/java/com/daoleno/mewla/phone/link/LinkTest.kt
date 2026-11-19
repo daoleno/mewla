@@ -31,8 +31,17 @@ class PhoneFramesTest {
         assertEquals("setup", hello.getString("state"))
     }
 
-    private fun status(state: String, w: Int = 0, h: Int = 0, problem: Any = JSONObject.NULL, display: Any = JSONObject.NULL) =
-        JSONObject().put("state", state).put("w", w).put("h", h).put("problem", problem).put("display_info", display)
+    private fun status(state: String, w: Int = 0, h: Int = 0, problem: Any = JSONObject.NULL, display: Any = JSONObject.NULL, warning: Any = JSONObject.NULL) =
+        JSONObject().put("state", state).put("w", w).put("h", h).put("problem", problem).put("display_info", display).put("warning", warning)
+
+    @Test
+    fun aReadyPhoneSaysWhatWillStopItLater() {
+        val warning = "Mewla could not give itself the one-time permission"
+        assertEquals(warning, PhoneFrames.state(status("ready", warning = warning)).getString("warning"))
+        assertFalse(PhoneFrames.state(status("ready")).has("warning"))
+        assertFalse(PhoneFrames.state(status("setup", warning = warning)).has("warning"))
+        assertNotEquals(PhoneFrames.stateKey(status("ready")), PhoneFrames.stateKey(status("ready", warning = warning)))
+    }
 
     @Test
     fun aStateFrameLeavesOutWhatIsNotThereYet() {
