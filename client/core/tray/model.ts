@@ -11,7 +11,7 @@ import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
 import type { WorkWorkerSession } from "../work/types";
 import { liveWorkerIds } from "../work/workers";
-import { brainWorkSurface, type BrainWorkSlip } from "../work/surface";
+import { brainWorkSurface, foldMergedSlips, type BrainWorkSlip } from "../work/surface";
 import type { ProgressMark } from "../work/judgedProgress";
 import type { BrainCurrentWork, BrainOpenWork } from "../work/types";
 
@@ -460,7 +460,7 @@ export function trayModel(input: TrayInput): TrayModel {
   // the Work has no row of its own until it is answered.
   const asking = new Set(input.workers.filter(hasRequest).map((worker) => worker.id));
   const triggerWork = new Set(input.triggerWorkIds ?? []);
-  const slips = brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips
+  const slips = foldMergedSlips(brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now, input.openWork).slips)
     .filter((slip) => !triggerWork.has(slip.workId) || slip.group === "running" || slip.group === "needs")
     .filter((slip) => slip.group === "needs" || ![slip.sessionId, ...liveWorkerIds(slip.workerSessions)].some((id) => id && asking.has(id)));
   const folded = new Set(slips.flatMap((slip) => [slip.sessionId, ...liveWorkerIds(slip.workerSessions)]).filter((id): id is string => Boolean(id)));

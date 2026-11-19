@@ -10,7 +10,7 @@ import { RowEnd, RowHair, RowText, RowTile } from "../tray/rowParts";
 import {
   BRAIN_WORK_SNOOZE_SECONDS, brainWorkActions, brainWorkAskDraft, brainWorkUserAction, type BrainWorkAction,
 } from "../../core/work/actions";
-import type { BrainWorkSlip } from "../../core/work/surface";
+import { mergedWorkers, type BrainWorkSlip } from "../../core/work/surface";
 import { progressBackLine, progressOutcomes, type BrainWorkProgress, type JudgedOutcomeState } from "../../core/work/judgedProgress";
 import { OutcomeMark, ProgressHalo } from "../kit/ProgressHalo";
 import { AgentIcon } from "../icons/AgentIcon";
@@ -232,13 +232,55 @@ function TopBlock(props: { project: () => string | undefined; title: () => strin
   );
 }
 
-/** The brief (SPEC §11 Work detail): a paragraph at 15/22, soft, four lines until tapped, then whole. */
+/**
+ * The brief (SPEC §11 Work detail): what Brain wrote for the Worker, labelled as such and below what the judge wrote
+ * for the person; a paragraph at 15/22, soft, four lines until tapped, then whole.
+ */
 function Brief(props: { text: () => string }) {
   const whole = signal(false);
   // Read in the JSX: a component runs once, and the brief arrives after the page opens.
-  return <><If when={props.text()}><View selectable testID="work-brief-toggle" onPress={() => whole.set(!whole())} class="px-1 pt-3">
-      <Text testID="work-brief" class={`text-sub leading-[22px] text-muted-foreground ${whole() ? "" : "line-clamp-4"}`}>{props.text()}</Text>
-    </View></If></>;
+  return <><If when={props.text()}><>
+      <Caption role="header" class="mb-2 mt-6 px-4" text="Brief" />
+      <View selectable testID="work-brief-toggle" onPress={() => whole.set(!whole())} class="px-1">
+        <Text testID="work-brief" class={`text-sub leading-[22px] text-muted-foreground ${whole() ? "" : "line-clamp-4"}`}>{props.text()}</Text>
+      </View>
+    </></If></>;
+}
+
+/** One of Work detail's paragraphs under its label (Now, Next): the judge's words, in the person's language. */
+function Paragraph(props: { testID: string; label: string; text: () => string }) {
+  return <><If when={props.text()}><>
+      <Caption role="header" class="mb-2 mt-6 px-4" text={props.label} />
+      <View selectable class="rounded-(--radius-group) bg-card px-4 py-3"><Text testID={props.testID} class="text-body">{props.text()}</Text></View>
+    </></If></>;
+}
+
+/** "14:05" today, "Nov 18 14:05" before. */
+function momentTime(at: string): string {
+  const ms = Date.parse(at);
+  if (!Number.isFinite(ms)) return "";
+  const c = clock();
+  const zone = c.zones.device;
+  const time = c.format.time(ms, zone);
+  return c.zones.dateKey(ms, zone) === c.zones.dateKey(c.now, zone) ? time : `${c.format.shortDate(ms, zone)} ${time}`;
+}
+
+/**
+ * Dated lines under a label (SPEC §11 Work detail): So far, each line the row read with when, and Asked, the
+ * person's own messages that asked for it, quoted. Both in their words or the judge's, never Brain's notes.
+ */
+function Moments(props: { testID: string; label: string; items: () => readonly { at: string; text: string }[]; quoted?: boolean }) {
+  return <><If when={props.items().length}><>
+      <Caption role="header" class="mb-2 mt-6 px-4" text={props.label} />
+      <View testID={props.testID} class="overflow-hidden rounded-(--radius-group) bg-card">
+        {props.items().map((item, index) => (
+          <View selectable testID={`${props.testID}-item`} class={`gap-0.5 px-4 py-2.5 ${index === 0 ? "" : "border-t border-border"}`}>
+            <Text class="text-caption text-muted-foreground">{momentTime(item.at)}</Text>
+            <Text class={`text-sub ${props.quoted ? "italic" : ""}`}>{props.quoted ? `“${item.text}”` : item.text}</Text>
+          </View>
+        ))}
+      </View>
+    </></If></>;
 }
 
 /**
@@ -288,18 +330,25 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
     asked = true;
     workDetail(transport, props.workId).then((work) => closed.set(work), (error) => closedFailure.set(error instanceof Error ? error.message : ""));
   });
-  // The brief (SPEC §11 Work detail): only the Work's own page carries it, so an open Work asks for it once.
-  const openBrief = signal("");
-  let briefAsked = false;
+  // The brief, So far and Asked (SPEC §11 Work detail): only the Work's own page carries them, so an open Work asks
+  // for them when it opens and again when its line moves on.
+  const openDetail = signal<BrainWorkDetail | null>(null);
+  let detailFor: string | undefined;
   effect(() => {
     const transport = connection() === "connected" ? currentTransport() : null;
-    if (!slip() || briefAsked || !transport) return;
-    briefAsked = true;
-    workDetail(transport, props.workId).then((work) => openBrief.set(work.objective?.trim() ?? ""), () => {});
+    const key = slip() ? slip()!.shownLine ?? "" : undefined;
+    if (key === undefined || key === detailFor || !transport) return;
+    detailFor = key;
+    workDetail(transport, props.workId).then((work) => openDetail.set(work), () => {});
   });
-  const brief = () => (slip() ? openBrief() : closed()?.objective?.trim() ?? "");
+  const detail = () => (slip() ? openDetail() : closed());
+  const brief = () => detail()?.objective?.trim() ?? "";
+  const soFar = () => detail()?.shown?.so_far ?? [];
+  const askedWords = () => detail()?.shown?.asked ?? [];
+  // Works the person merged into this one: their Workers are listed here too.
+  const mergedHere = () => workSurface().slips.filter((other) => other.mergedInto === props.workId && other.workId !== props.workId);
   const sessions = computed(() => new Map(workers().map((w) => [w.id, w] as const)));
-  const workerLines = () => workWorkerLines(slip() ? slip()!.workerSessions : closed()?.worker_sessions, sessions());
+  const workerLines = () => workWorkerLines(slip() ? mergedWorkers(slip()!, mergedHere()) : closed()?.worker_sessions, sessions());
   const project = () => workProject(slip()?.project, workerLines());
   // Opening a result that came back reads it, from whichever way it was opened (the tray, a card, a notification).
   let read = false;
@@ -387,11 +436,14 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                     <View class="absolute" style={{ left: 0, top: 0 }}><ProgressHalo mark={() => mark()!} size={56} testID="work-progress-ring" /></View>
                     <If when={workerLines().length === 1} else={<Icon name="brain" size={26} tone="ink" />}><AgentIcon kind={workerLines()[0]?.agent ?? "terminal"} flavor={workerLines()[0]?.flavor} size={28} /></If>
                   </View></View>}</If>
-                {/* Where it stands, as the judge wrote it in the person's language; Brain's wait note is never shown (owner 2026-11-19). */}
-                <If when={nowLine() && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-summary" class="text-body">{nowLine()}</Text></View></If>
-                <Brief text={brief} />
+                {/* Where it stands and what comes next, as the judge wrote them in the person's language; Brain's notes never show (owner 2026-11-19). */}
+                <Paragraph testID="work-summary" label="Now" text={() => (slip()!.question ? "" : nowLine())} />
+                <Paragraph testID="work-next" label="Next" text={() => (slip()!.closed ? "" : slip()!.shownNext ?? "")} />
                 <Progress progress={() => slip()!.progress} />
+                <Moments testID="work-so-far" label="So far" items={soFar} />
+                <Moments testID="work-asked" label="Asked" items={askedWords} quoted />
                 <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+                <Brief text={brief} />
               </View></If>
               <View testID="work-links" class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
                 <If when={file()}><GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first
@@ -413,8 +465,12 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
                 <Text class="text-title font-semibold tracking-title">{closedFailure() || "This Work is no longer open"}</Text>
               </View></If></If>}><View>
               <TopBlock project={project} title={title} dot={() => null} done={() => closed()!.status === "done"} state={() => CLOSED_STATUS[closed()!.status] ?? "Closed"} since={() => since(closed()!.updated_at)} />
-              <Brief text={brief} />
+              {/* How it ended, when the judge read it after it closed. */}
+              <Paragraph testID="work-summary" label="How it ended" text={() => (closed()!.shown?.status === "done" ? closed()!.shown?.line?.trim() ?? "" : "")} />
+              <Moments testID="work-so-far" label="So far" items={soFar} />
+              <Moments testID="work-asked" label="Asked" items={askedWords} quoted />
               <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+              <Brief text={brief} />
             </View></If>
         </Scroll>
         <If when={docked()}><Composer text={text} placeholder={slip()?.question ? "Reply about this Work" : "Tell Brain about this Work"} active={shown}

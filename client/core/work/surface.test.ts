@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarItem } from "../calendar/model";
 import { testClock } from "../calendar/testClock";
-import { brainCurrentWorkLifecycle, brainWorkCalendarOrigins, brainWorkGroup, brainWorkSurface } from "./surface";
+import { brainCurrentWorkLifecycle, brainWorkCalendarOrigins, brainWorkGroup, brainWorkSurface, foldMergedSlips } from "./surface";
 import type { BrainCurrentWork, BrainWorkerRef } from "./types";
 
 const clock = testClock("2026-10-27T14:00:00Z", "Asia/Shanghai");
@@ -218,5 +218,32 @@ describe("Calendar runs on the Work rail", () => {
     const [slip] = brainWorkCalendarOrigins(brainWorkSurface([calendarWork], []), [item("completed")], clock).slips;
     expect(slip.calendarLink).toBe("运营：从今天的工作里挖稿 · Oct 27");
     expect(slip.sessionId).toBeUndefined();
+  });
+});
+
+describe("a Work the person merged into another", () => {
+  const now = Date.parse("2026-10-27T14:00:00Z");
+  const worker = (session_id: string) => ({ session_id, joined_at: "2026-10-27T13:00:00Z" }) as never;
+  const surface = (extra: Partial<BrainCurrentWork>) =>
+    brainWorkSurface([
+      work({ work_id: "board", status: "running", attempt_session_id: "%1", worker_sessions: [worker("%1")] }),
+      work({ work_id: "review", status: "running", attempt_session_id: "%2", worker_sessions: [worker("%2"), worker("%1")], shown: { merged_into: "board" }, ...extra }),
+    ], [], now).slips;
+
+  test("shows under it: its row goes, its Workers join the other's once", () => {
+    const folded = foldMergedSlips(surface({}));
+    expect(folded.map((slip) => slip.workId)).toEqual(["board"]);
+    expect(folded[0]!.workerSessions?.map((w) => w.session_id)).toEqual(["%1", "%2"]);
+    expect(folded[0]!.merged).toEqual([{ workId: "review", title: expect.any(String) }]);
+  });
+
+  test("keeps its own row while it asks the person something or has a result they have not read", () => {
+    expect(foldMergedSlips(surface({ question: "Ship it?", choices: ["Yes"] })).map((slip) => slip.workId).sort()).toEqual(["board", "review"]);
+    expect(foldMergedSlips(surface({ status: "waiting", attempt_session_id: undefined, unread_result: true })).map((slip) => slip.workId).sort()).toEqual(["board", "review"]);
+  });
+
+  test("keeps its own row when what it was merged into is not listed", () => {
+    const slips = surface({}).filter((slip) => slip.workId === "review");
+    expect(foldMergedSlips(slips).map((slip) => slip.workId)).toEqual(["review"]);
   });
 });
