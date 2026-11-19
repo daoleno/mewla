@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -256,8 +257,16 @@ func TestStopIsHeardByTheIPhone(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.StopAgentFor("%7")
+	if len(heard) != 1 || heard[0] != "%7" {
+		t.Fatalf("heard %v", heard)
+	}
+	// Stop for all: another Worker's session (the stopped one leaves on its
+	// own goroutine, so it may still be heard too).
+	if err := s.MirrorTap(context.Background(), "%8", 10, 10, 0); err != nil {
+		t.Fatal(err)
+	}
 	s.StopAgent()
-	if len(heard) != 2 || heard[0] != "%7" || heard[1] != "%7" {
+	if !slices.Contains(heard[1:], "%8") {
 		t.Fatalf("heard %v", heard)
 	}
 }

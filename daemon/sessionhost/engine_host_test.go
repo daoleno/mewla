@@ -131,15 +131,24 @@ func TestEngineProgramStatusRecords(t *testing.T) {
 		return len(list) == 1 && list[0].ID == ""
 	})
 
+	// The last event may still be on its way when the record shows cleared:
+	// wait for three, then take whatever else came.
 	statusEvents := 0
-	for drained := false; !drained; {
+	deadline := time.After(5 * time.Second)
+	for waiting := true; waiting; {
 		select {
 		case event := <-events:
 			if event.Type == EventStatus && event.Session == "agent" {
 				statusEvents++
 			}
+		case <-deadline:
+			waiting = false
 		default:
-			drained = true
+			if statusEvents >= 3 {
+				waiting = false
+			} else {
+				time.Sleep(10 * time.Millisecond)
+			}
 		}
 	}
 	if statusEvents != 3 {

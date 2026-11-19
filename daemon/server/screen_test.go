@@ -313,11 +313,14 @@ func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
 		Encode  float64 `json:"encode_ms"`
 		Route   string  `json:"route"`
 	}
+	// The screen keeps changing: stats that counted the first picture may have
+	// gone by while the lock state was awaited (a slow runner).
 	deadline := time.Now().Add(10 * time.Second)
 	for stats.Updates == 0 {
 		if time.Now().After(deadline) {
 			t.Fatalf("no stats with updates: %+v", stats)
 		}
+		fake.ScrollTick()
 		_ = json.Unmarshal(v.next("stats"), &stats)
 	}
 	if stats.Path != "loopback" || stats.Encoder == "" || stats.Bytes == 0 || stats.Encode <= 0 {
