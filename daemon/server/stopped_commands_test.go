@@ -19,6 +19,8 @@ func TestStoppedCommandsLineSaysWhatEndedAndWhatCouldNot(t *testing.T) {
 		{[]StoppedCommand{{Command: "a", Ended: true}, {Command: "b"}}, "Stopped 1 command this turn started: a · 1 command could not be stopped: b"},
 		{[]StoppedCommand{{Command: "for i in 1 2\ndo echo $i\ndone", Ended: true}}, "Stopped 1 command this turn started: for i in 1 2 …"},
 		{[]StoppedCommand{{Command: strings.Repeat("x", 200), Ended: true}}, "Stopped 1 command this turn started: " + strings.Repeat("x", 79) + "…"},
+		{[]StoppedCommand{{Unrecognized: true}, {Unrecognized: true}}, "2 commands may still be running"},
+		{[]StoppedCommand{{Unrecognized: true}}, "1 command may still be running"},
 	} {
 		if got := StoppedCommandsLine(tc.commands); got != tc.want {
 			t.Fatalf("StoppedCommandsLine(%+v) = %q, want %q", tc.commands, got, tc.want)

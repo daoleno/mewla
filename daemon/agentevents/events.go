@@ -41,6 +41,13 @@ type TurnCommandMatcher interface {
 	TurnCommand(args string) (command string, ok bool)
 }
 
+// AgentVersionReader is implemented by an adapter that can say which version
+// of its agent a Worker runs, from what the Worker already left behind (no
+// process is started to ask).
+type AgentVersionReader interface {
+	AgentVersion(binding Binding) string
+}
+
 // Capability is one thing an adapter can do for a Worker.
 type Capability string
 
@@ -194,6 +201,10 @@ type StoppedCommand struct {
 	// which.
 	Ended  bool
 	Reason string
+	// Unrecognized marks a process the agent started this turn that the
+	// adapter could not read as one of its commands: Mewla left it alone, so
+	// it may still be running.
+	Unrecognized bool
 }
 
 // Event is one normalized fact about one Worker.
