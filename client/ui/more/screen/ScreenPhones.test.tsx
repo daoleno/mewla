@@ -1,7 +1,7 @@
 import { describe, expect, open, test, type StubResponse } from "nsh/test";
 
 const HARNESS = "../testing/Harness.tsx";
-const SCREEN = "http://desk.test:9877/screen";
+const SCREEN = "http://desk.test:9877/screen?video=webrtc";
 const IPHONE = "http://desk.test:9877/iphone";
 
 function secureStore() {
@@ -16,7 +16,7 @@ function secureStore() {
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 const agents = [{ worker: "w1", name: "Codex", since: "2026-11-11T08:00:00Z" }];
-const screen = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: false, permissions: [], agent: agents[0], agents };
+const screen = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: false, permissions: [], video: "webrtc", agent: agents[0], agents };
 const iphoneFree = { enabled: true, state: "ready", summary: "Ready", running: true };
 const iphoneBusy = { ...iphoneFree, active: { worker: "w2", name: "Writer", since: "2026-11-11T08:05:00Z" } };
 

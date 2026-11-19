@@ -7,7 +7,7 @@ const BASE = "http://127.0.0.1:1";
 const json = (body: unknown): StubResponse => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const session = (id: string, patch: Record<string, unknown> = {}) => ({ id, name: "", status: "running", cwd: "/home/me/mewla", command: "claude", provider: "claude", updated_at: Date.now(), ...patch });
 const display = (id: string, patch: Record<string, unknown> = {}) => ({ id, width: 1280, height: 800, control: "agent", apps: 1, idle_s: 2, ...patch });
-const linux = { supported: false, platform: "linux", name: "Desk", ready: false };
+const linux = { supported: false, platform: "linux", name: "Desk", ready: false, video: "webrtc" };
 /** Brain's thread with one Work, whose card holds its one Worker's row. */
 const workThread = (id: string, name: string) => ({
   brain: { chat_thread_id: "t-now", host_worker: { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-15T07:00:00.000Z" },
@@ -28,8 +28,8 @@ async function app(daemon: Record<string, unknown>, network: Record<string, Stub
 describe("the floating screen: agents' displays and the Mac", () => {
   test("on a wide window it docks in a strip beside the page, sized by the strip (no resize handle); at 1024 it floats in its corner", async () => {
     const network = {
-      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
-      [`GET ${BASE}/screen`]: json(linux),
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
     };
     const daemon = { worker_sessions: [session("%1", { name: "Writer" })] };
     const docked = await app(daemon, network, "android", { width: 1440, height: 900 });
@@ -43,8 +43,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   test("an agent's display floats while its Worker runs, named after it; Stop in its menu stops that display", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer" })] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
-      [`GET ${BASE}/screen`]: json(linux),
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
       [`POST ${BASE}/display`]: json({ ok: true }),
     });
     let offered: string[] = [];
@@ -68,8 +68,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   test("Open goes to Screen, where the float is not; a display its agent has stopped, or one long idle, does not float", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer" }), session("%2", { name: "Coder" }), session("%3", { name: "Idle" })] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("%1"), display("%2", { stopped: true }), display("%3", { idle_s: 600 })], available: true }),
-      [`GET ${BASE}/screen`]: json(linux),
+      [`GET ${BASE}/display`]: json({ displays: [display("%1"), display("%2", { stopped: true }), display("%3", { idle_s: 600 })], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
     });
     await shown.waitFor("id:screen-float", { timeout: 10_000 });
     expect(shown.texts()).not.toContain("Coder");
@@ -82,20 +82,20 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   test("nothing floats while no Worker runs: the displays are read once (a page left for the person), the Mac's screen not at all", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer", status: "done" })] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
-      [`GET ${BASE}/screen`]: json(linux),
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
     });
     await shown.wait(1_500);
     expect(shown.shows("id:screen-float")).toBe(false);
     expect(shown.requests().filter((r) => r.url === `${BASE}/display`).length).toBe(1);
-    expect(shown.requests().some((r) => r.url === `${BASE}/screen`)).toBe(false);
+    expect(shown.requests().some((r) => r.url === `${BASE}/screen?video=webrtc`)).toBe(false);
   }, 25_000);
 
   test("a Worker whose turn ended with its sign-in page open: its Work card's Screen opens Screen at its display, named after it", async () => {
     const id = "mh-signin";
     const shown = await app(workThread(id, "ZeroGAccounts"), {
-      [`GET ${BASE}/display`]: json({ displays: [display(id, { apps: 0, browser: 1, idle_s: 600 })], available: true }),
-      [`GET ${BASE}/screen`]: json({ ...linux, agent_displays: true }),
+      [`GET ${BASE}/display`]: json({ displays: [display(id, { apps: 0, browser: 1, idle_s: 600 })], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json({ ...linux, agent_displays: true }),
     });
     await shown.waitFor("id:work-card-screen", { timeout: 10_000 });
     expect(shown.shows("id:screen-float")).toBe(false);
@@ -108,10 +108,10 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   test("on a Mac, a Chrome-only Worker's sign-in window: its Work card's Screen opens Screen at that window, not the Mac's own screen", async () => {
     const id = "mh-signin";
-    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [] };
+    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [], video: "webrtc" };
     const shown = await app(workThread(id, "SignIn"), {
-      [`GET ${BASE}/display`]: json({ displays: [display(id, { name: "SignIn", width: 800, height: 500, apps: 0, browser: 1, idle_s: 600 })], available: true }),
-      [`GET ${BASE}/screen`]: json(mac),
+      [`GET ${BASE}/display`]: json({ displays: [display(id, { name: "SignIn", width: 800, height: 500, apps: 0, browser: 1, idle_s: 600 })], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(mac),
     });
     await shown.waitFor("id:work-card-screen", { timeout: 10_000 });
     await shown.press("id:work-card-screen");
@@ -123,10 +123,10 @@ describe("the floating screen: agents' displays and the Mac", () => {
   }, 25_000);
 
   test("on a Mac, a running Chrome-only Worker's window floats under its name", async () => {
-    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [] };
+    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: true, permissions: [], video: "webrtc" };
     const shown = await app({ worker_sessions: [session("mh-signin", { name: "SignIn" })] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("mh-signin", { width: 800, height: 500, apps: 0, browser: 1, idle_s: 1 })], available: true }),
-      [`GET ${BASE}/screen`]: json(mac),
+      [`GET ${BASE}/display`]: json({ displays: [display("mh-signin", { width: 800, height: 500, apps: 0, browser: 1, idle_s: 1 })], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(mac),
     });
     await shown.waitFor("id:screen-float", { timeout: 10_000 });
     expect(shown.texts()).toContain("SignIn");
@@ -135,7 +135,7 @@ describe("the floating screen: agents' displays and the Mac", () => {
   test("a display with nothing left on it gives the Work card no Screen", async () => {
     const id = "mh-empty";
     const shown = await app(workThread(id, "Tidy"), {
-      [`GET ${BASE}/display`]: json({ displays: [display(id, { apps: 0 })], available: true }),
+      [`GET ${BASE}/display`]: json({ displays: [display(id, { apps: 0 })], available: true, video: "webrtc" }),
     });
     await shown.waitFor("id:work-card-one", { timeout: 10_000 });
     await shown.wait(800);
@@ -145,8 +145,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
   test("a running Worker's own news (its activity, its output) does not ask the computer again", async () => {
     const writer = session("%1", { name: "Writer" });
     const shown = await app({ worker_sessions: [writer] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
-      [`GET ${BASE}/screen`]: json(linux),
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
     });
     await shown.waitFor("id:screen-float", { timeout: 10_000 });
     const asked = () => shown.requests().filter((r) => r.url === `${BASE}/display`).length;
@@ -165,8 +165,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   test("a Session's page shows its own Worker's screen only", async () => {
     const shown = await app({ worker_sessions: [session("%1", { name: "Writer" }), session("%2", { name: "Coder" })] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("%2")], available: true }),
-      [`GET ${BASE}/screen`]: json(linux),
+      [`GET ${BASE}/display`]: json({ displays: [display("%2")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
     });
     await shown.waitFor("id:screen-float", { timeout: 10_000 });
     await shown.host.send("links.open", { url: "mewla://sessions/%251" });
@@ -175,10 +175,10 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   // That the Mac's is a watch, never a take-over, is core/screen/float.test.ts's "what opens a screen".
   test("an agent on the Mac's screen floats on an iPhone too; two screens take turns on the title", async () => {
-    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: false, permissions: [], agent: { worker: "%2", name: "Coder", since: "" }, agents: [{ worker: "%2", name: "Coder", since: "" }] };
+    const mac = { supported: true, platform: "darwin", name: "Studio", disabled: false, approved: true, ready: true, keep_awake: false, permissions: [], video: "webrtc", agent: { worker: "%2", name: "Coder", since: "" }, agents: [{ worker: "%2", name: "Coder", since: "" }] };
     const shown = await app({ worker_sessions: [session("%2", { name: "Coder" }), session("%1", { name: "Writer" })] }, {
-      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true }),
-      [`GET ${BASE}/screen`]: json(mac),
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(mac),
     }, "ios");
     await shown.waitFor("id:screen-float", { timeout: 10_000 });
     await shown.waitUntil(() => shown.texts().some((text) => /1\/2$/.test(text)), { timeout: 10_000 });
@@ -190,8 +190,8 @@ describe("the floating screen: agents' displays and the Mac", () => {
 
   /** Two agents' displays on a manual clock: taps and drags land at the times the test says. */
   const two = () => app({ worker_sessions: [session("%2", { name: "Coder" }), session("%1", { name: "Writer" })] }, {
-    [`GET ${BASE}/display`]: json({ displays: [display("%1"), display("%2")], available: true }),
-    [`GET ${BASE}/screen`]: json(linux),
+    [`GET ${BASE}/display`]: json({ displays: [display("%1"), display("%2")], available: true, video: "webrtc" }),
+    [`GET ${BASE}/screen?video=webrtc`]: json(linux),
   }, "android", { clock: {} });
   const on = (shown: Awaited<ReturnType<typeof app>>, n: number) => shown.texts().some((text) => new RegExp(`${n}/2$`).test(text));
 

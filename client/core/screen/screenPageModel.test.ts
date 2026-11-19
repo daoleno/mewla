@@ -9,13 +9,13 @@ import {
   KEYBOARD_SENTINEL,
   typingKeyboardStep,
   keyboardEdit,
+  FieldTyping,
   fieldNeedsReset,
   NO_MODIFIERS,
   nextSlowStreak,
   powerSummary,
   powerWarning,
   floatedScreenAgents,
-  qualityReduced,
   screenAgents,
   screenEntry,
   slowestStage,
@@ -27,6 +27,64 @@ import {
 import { parseScreenViewerMessage } from "./screenViewerProtocol";
 import type { ScreenStatus } from "./screen";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
+
+describe("an input method's composition", () => {
+  const S = KEYBOARD_SENTINEL;
+  const typing = () => {
+    const sent: { backspace: number; text: string }[] = [];
+    return { field: new FieldTyping((edit) => sent.push(edit)), sent };
+  };
+
+  test("Pinyin: nothing while composing, the chosen characters once", () => {
+    const { field, sent } = typing();
+    field.composition(true);
+    for (const shown of ["n", "ni", "ni h", "ni ha", "ni hao"]) expect(field.change(S + shown)).toBe(false);
+    // The commit reaches the field before the composition ends.
+    field.change(`${S}你好`);
+    field.composition(false);
+    expect(field.flush()).toBe(`${S}你好`);
+    expect(sent).toEqual([{ backspace: 0, text: "你好" }]);
+  });
+
+  test("a sentence with a candidate picked part way, then more text", () => {
+    const { field, sent } = typing();
+    field.change(`${S}a`);
+    field.composition(true);
+    for (const shown of ["aw", "aw o", "a我 men", "a我们"]) field.change(S + shown);
+    field.composition(false);
+    field.flush();
+    field.change(`${S}a我们 `);
+    expect(sent).toEqual([{ backspace: 0, text: "a" }, { backspace: 0, text: "我们" }, { backspace: 0, text: " " }]);
+  });
+
+  test("a commit that comes after the composition ends is sent once", () => {
+    const { field, sent } = typing();
+    field.composition(true);
+    field.change(`${S}mewla`);
+    field.composition(false);
+    // The committed change arrives before the settle runs out.
+    expect(field.change(`${S}么`)).toBe(true);
+    expect(field.flush()).toBe(null);
+    expect(sent).toEqual([{ backspace: 0, text: "么" }]);
+  });
+
+  test("a composition given up sends nothing", () => {
+    const { field, sent } = typing();
+    field.composition(true);
+    field.change(`${S}ni`);
+    field.change(S);
+    field.composition(false);
+    field.flush();
+    expect(sent).toEqual([]);
+  });
+
+  test("Latin keys with no composition go at once", () => {
+    const { field, sent } = typing();
+    field.change(`${S}m`);
+    field.change(`${S}me`);
+    expect(sent).toEqual([{ backspace: 0, text: "m" }, { backspace: 0, text: "e" }]);
+  });
+});
 
 describe("soft keyboard diffing", () => {
   const S = KEYBOARD_SENTINEL;
@@ -127,31 +185,28 @@ describe("unsupported computers", () => {
 });
 
 describe("viewer messages", () => {
-  test("only known types and base64 payloads pass", () => {
-    expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "AQID" }))).toEqual({ type: "send", data: "AQID" });
-    expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "<script>" }))).toBeNull();
+  test("only known types pass", () => {
+    expect(parseScreenViewerMessage(JSON.stringify({ type: "haptic" }))).toEqual({ type: "haptic" });
+    expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "AQID" }))).toBeNull();
     expect(parseScreenViewerMessage(JSON.stringify({ type: "navigate", url: "https://x" }))).toBeNull();
     expect(parseScreenViewerMessage("not json")).toBeNull();
   });
 });
 
 const daemonStats = (over: Partial<ScreenStreamStats> = {}): ScreenStreamStats => ({
-  path: "relay", updates: 24, bytes: 400_000, dirtyPct: 60, video: 0, captureSeq: 90, captureMs: 12, encodeMs: 10, encodeMaxMs: 15,
-  ackMs: 180, ackMaxMs: 300, quality: 6, inFlight: 2, ...over,
+  path: "relay", updates: 24, bytes: 400_000, encodeMs: 10, encodeMaxMs: 15, rttMs: 0, targetKbps: 3000, ...over,
 });
-const readout = (over = {}) => ({ rttMs: 142, inputMs: 210, fps: 18, kbps: 2100, bridgeMs: 12, presentMs: 30, daemon: daemonStats(), ...over });
+const readout = (over = {}) => ({ rttMs: 142, inputMs: 210, fps: 18, kbps: 2100, daemon: daemonStats(), ...over });
 
 describe("stream stages", () => {
   test("the slowest of the disjoint stages is named", () => {
     expect(slowestStage(readout())).toEqual({ stage: "network", label: "network", ms: 142 });
-    expect(slowestStage(readout({ rttMs: 20, presentMs: 95 }))?.stage).toBe("draw");
     expect(slowestStage(readout({ rttMs: 20, daemon: daemonStats({ encodeMs: 64 }) }))?.stage).toBe("encode");
-    expect(slowestStage(readout({ rttMs: 8, bridgeMs: 70, presentMs: 5 }))?.stage).toBe("bridge");
   });
   test("an unmeasured stage never wins, and nothing measured names nothing", () => {
-    expect(slowestStage(readout({ rttMs: null, bridgeMs: undefined, presentMs: null, daemon: null }))).toBeNull();
-    expect(slowestStage(readout({ rttMs: null, bridgeMs: null, presentMs: null, daemon: daemonStats({ updates: 0, encodeMs: 50 }) }))).toBeNull();
-    expect(slowestStage(readout({ rttMs: 30, daemon: null, bridgeMs: null, presentMs: null }))?.stage).toBe("network");
+    expect(slowestStage(readout({ rttMs: null, daemon: null }))).toBeNull();
+    expect(slowestStage(readout({ rttMs: null, daemon: daemonStats({ updates: 0, encodeMs: 50 }) }))).toBeNull();
+    expect(slowestStage(readout({ rttMs: 30, daemon: null }))?.stage).toBe("network");
   });
   test("a healthy stream has nothing to say, whatever the route", () => {
     expect(connectionProblem(readout())).toBeNull();
@@ -165,9 +220,6 @@ describe("stream stages", () => {
       .toEqual({ title: "Slow connection", fix: "Join your computer's Wi-Fi or Tailscale" });
     expect(connectionProblem(readout({ rttMs: 466, viaPath: "relay", directHint: "none" }))?.fix).toBeNull();
     expect(connectionProblem(readout({ rttMs: 466, viaPath: "lan", directHint: "announced" }))?.fix).toBeNull();
-  });
-  test("reduced quality counts as slow even when the round trip is fine", () => {
-    expect(connectionProblem(readout({ daemon: daemonStats({ quality: 3 }) }))?.title).toBe("Slow connection");
   });
   test("slowness must last before it shows, and a good sample ends it", () => {
     let streak = 0;
@@ -185,51 +237,44 @@ describe("stream stages", () => {
     expect(indicatorTone(false, { label: "On battery", action: null })).toBe("quiet");
   });
   test("the diagnostics list each number once, in plain labels", () => {
-    const rows = diagnosticRows(readout({ rttMs: 466, inputMs: 622, fps: 29, kbps: 421, viaPath: "relay", daemon: daemonStats({ quality: 3 }) }), "Charger · 100% · Staying awake");
+    const rows = diagnosticRows(readout({ rttMs: 466, inputMs: 622, fps: 29, kbps: 421, viaPath: "relay" }), "Charger · 100% · Staying awake");
     expect(rows).toEqual([
       { label: "Route", value: "Relay" },
       { label: "Network", value: "466 ms" },
       { label: "To screen", value: "622 ms" },
       { label: "Frame rate", value: "29 fps" },
       { label: "Data", value: "421 kb/s" },
-      { label: "Quality", value: "Reduced" },
       { label: "Computer", value: "Charger · 100% · Staying awake" },
     ]);
     expect(rows.filter((r) => r.value.includes("466")).length).toBe(1);
   });
-  test("diagnostics format small rates, fast links, video and a non-network bottleneck", () => {
-    const rows = diagnosticRows(readout({ rttMs: null, inputMs: null, fps: 7.25, kbps: 1500, viaPath: "lan", presentMs: 95, daemon: daemonStats({ video: 20 }) }), null);
+  test("diagnostics format small rates, fast links and a non-network bottleneck", () => {
+    const rows = diagnosticRows(readout({ rttMs: null, inputMs: null, fps: 7.25, kbps: 1500, viaPath: "lan", daemon: daemonStats({ encodeMs: 95 }) }), null);
     expect(rows).toEqual([
-      { label: "Route", value: "LAN · video" },
+      { label: "Route", value: "LAN" },
       { label: "Frame rate", value: "7.3 fps" },
       { label: "Data", value: "1.5 Mb/s" },
-      { label: "Slowest", value: "draw 95 ms" },
+      { label: "Slowest", value: "encode 95 ms" },
     ]);
-  });
-  test("quality is reduced only below the viewer's level", () => {
-    expect(qualityReduced(daemonStats({ quality: 6 }))).toBe(false);
-    expect(qualityReduced(daemonStats({ quality: 2 }))).toBe(true);
-    expect(qualityReduced(null)).toBe(false);
-    expect(qualityReduced(daemonStats({ quality: 0 }))).toBe(false);
   });
 });
 
 describe("daemon stream stats", () => {
   test("a stats message becomes numbers and a known path", () => {
-    const stats = parseStreamStats({ type: "stats", path: "relay", updates: 3, bytes: 900, dirty_pct: 40, encode_ms: 9.5, ack_ms: 120, quality: 4, in_flight: 3 });
-    expect(stats).toMatchObject({ path: "relay", updates: 3, bytes: 900, dirtyPct: 40, encodeMs: 9.5, ackMs: 120, quality: 4, inFlight: 3 });
+    const stats = parseStreamStats({ type: "stats", path: "lan", route: "relay", transport: "webrtc", updates: 3, bytes: 900, encode_ms: 9.5, rtt_ms: 41, kbps: 2500 });
+    expect(stats).toEqual({ path: "relay", updates: 3, bytes: 900, encodeMs: 9.5, encodeMaxMs: 0, rttMs: 41, targetKbps: 2500 });
   });
   test("anything else is dropped or zeroed rather than trusted", () => {
     expect(parseStreamStats({ type: "pong" })).toBeNull();
-    const odd = parseStreamStats({ type: "stats", path: "somewhere", updates: "x", bytes: Infinity, ack_ms: null });
-    expect(odd).toMatchObject({ path: null, updates: 0, bytes: 0, ackMs: 0 });
+    const odd = parseStreamStats({ type: "stats", route: "somewhere", updates: "x", bytes: Infinity, rtt_ms: null });
+    expect(odd).toMatchObject({ path: null, updates: 0, bytes: 0, rttMs: 0 });
   });
 });
 
 describe("viewer messages", () => {
-  test("a viewer stats message with the page's stages parses", () => {
-    const raw = JSON.stringify({ type: "stats", fps: 20, kbps: 900, inputMs: 120, bridgeMs: 9, presentMs: 22, width: 1512, height: 982 });
-    expect(parseScreenViewerMessage(raw)).toMatchObject({ type: "stats", bridgeMs: 9, presentMs: 22 });
+  test("a viewer stats message parses", () => {
+    const raw = JSON.stringify({ type: "stats", fps: 20, kbps: 900, inputMs: 120, width: 1512, height: 982 });
+    expect(parseScreenViewerMessage(raw)).toMatchObject({ type: "stats", fps: 20, inputMs: 120 });
   });
 });
 

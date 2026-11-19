@@ -4,27 +4,17 @@ import (
 	"context"
 	"errors"
 	"image"
-	"net"
 )
 
 // ErrNoAgent means no agent is using the screen, so there is nothing to watch.
 var ErrNoAgent = errors.New("No agent is using this computer's screen")
 
-// Watch lets an allowed device watch the agent using the screen without
-// taking it over: the viewer sees the agent's own capture, and its input is
-// dropped. Like Open, it returns the viewer's end right before ClientInit.
-// The session ends when the agent does.
-func (s *Service) Watch(ctx context.Context, deviceID string, obs *Observer) (net.Conn, error) {
-	return s.WatchWorker(ctx, deviceID, "", obs)
-}
-
-// WatchWorker is Watch for one Worker's agent; without one, the longest-running.
-func (s *Service) WatchWorker(ctx context.Context, deviceID, worker string, obs *Observer) (net.Conn, error) {
-	if err := s.allowed(deviceID); err != nil {
-		return nil, err
-	}
+// watchedAgent is the agent of worker using the screen; without a worker, the
+// longest-running one. Nil when there is none.
+func (s *Service) watchedAgent(worker string) *agentSession {
 	var agent *agentSession
 	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
 	for _, candidate := range s.agents {
 		if candidate.ctx.Err() != nil || (worker != "" && candidate.worker != worker) {
 			continue
@@ -33,16 +23,7 @@ func (s *Service) WatchWorker(ctx context.Context, deviceID, worker string, obs 
 			agent = candidate
 		}
 	}
-	s.agentMu.Unlock()
-	if agent == nil {
-		return nil, ErrNoAgent
-	}
-	viewer, server := net.Pipe()
-	go func() {
-		defer server.Close()
-		_ = serveRFB(ctx, server, &agentWatch{agent: agent}, computerName(), obs)
-	}()
-	return viewer, nil
+	return agent
 }
 
 // agentWatch is a Session over an agent's capture: the viewer sees what the

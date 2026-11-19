@@ -185,6 +185,39 @@ func TestTakingOverInterruptsAnActionAndLetsGo(t *testing.T) {
 	}
 }
 
+// The person's Stop tells the agent plainly, once, and does not lock it out:
+// with no action under way, its next one is refused saying so and the one
+// after runs; an action under way hears it itself and the next one runs.
+func TestStopTellsTheAgentOnceAndLocksNothing(t *testing.T) {
+	for name, stop := range map[string]func(*Service){
+		"one":   func(s *Service) { s.StopAgentFor("%7") },
+		"every": func(s *Service) { s.StopAgentsByPerson() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, _, _ := newAgentService(t)
+			act(t, s, "%7", AgentAction{Action: "screenshot"})
+			stop(s)
+			_, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot"})
+			if !errors.Is(err, ErrStoppedByPerson) || !strings.Contains(err.Error(), "pressed Stop") {
+				t.Fatalf("the action after Stop: %v", err)
+			}
+			act(t, s, "%7", AgentAction{Action: "screenshot"})
+		})
+	}
+	// Turned off is not a Stop: nothing is said for it later.
+	s, _, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	s.StopAgent()
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+}
+
+// A Stop for a Worker that is not using the screen says nothing to it later: its next action runs.
+func TestStopForAWorkerWithNoSessionTellsItNothing(t *testing.T) {
+	s, _, _ := newAgentService(t)
+	s.StopAgentFor("%9")
+	act(t, s, "%9", AgentAction{Action: "screenshot"})
+}
+
 // However the agent's control ends, a button it left down comes up.
 func TestAnEndedAgentLeavesNoButtonDown(t *testing.T) {
 	for name, end := range map[string]func(*Service){

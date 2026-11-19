@@ -3,7 +3,7 @@ import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
 import { ScreenConnection, type ScreenRoute } from "../../../core/screen/screen";
-import { activeModifiers, FIELD_RESET_MS, fieldNeedsReset, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
+import { activeModifiers, COMMIT_SETTLE_MS, FIELD_RESET_MS, FieldTyping, fieldNeedsReset, KEYBOARD_SENTINEL, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
 import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
@@ -67,7 +67,7 @@ export function canShowFullSize(): boolean {
 }
 
 
-/** Pixel-only document with no network access: the app relays the RFB bytes. */
+/** The viewer document: it plays the computer's video over WebRTC; the app carries its signalling. */
 export function viewerHtml(): string {
   const source = SCREEN_VIEWER_SOURCE.replace(/<\/(script)/gi, "<\\/$1");
   return `<!doctype html><html><head><meta charset="utf-8">
@@ -86,15 +86,12 @@ export interface ViewerStats {
   fps: number;
   kbps: number;
   inputMs: number | null;
-  bridgeMs: number | null;
-  presentMs: number | null;
 }
 
 /**
  * One live view of a remote screen: the socket to the computer, the viewer in
- * its WebView, and what passes between them. RFB bytes from the socket are
- * batched to the viewer once a frame and always ahead of later control; the
- * viewer's bytes go to the socket as they come.
+ * its WebView, and what passes between them: the WebRTC signalling both ways
+ * and the control messages. The picture and the input go peer to peer.
  */
 export class RemoteSession {
   readonly phase = signal<RemotePhase>("connecting");
@@ -111,14 +108,12 @@ export class RemoteSession {
   readonly viewSize = signal<StageSize | null>(null);
   /** The size the window was last laid out for, while held. */
   private fitted: StageSize | null = null;
-  /** The viewer felt a long press (a right-click) or the remote bell rang. No haptic: the app has two (SPEC §16.3). */
+  /** The viewer felt a long press (a right-click). No haptic: the app has two (SPEC §16.3). */
   onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
   private web: WebViewRef | null = null;
   private viewerReady = false;
   private outbox: ScreenHostMessage[] = [];
-  private chunks: string[] = [];
-  private flushQueued = false;
   private stopDeadline: (() => void) | null = null;
   private attempt = 0;
   mode: ScreenPointerMode = "touch";
@@ -155,19 +150,16 @@ export class RemoteSession {
         this.post([{ type: "mode", mode: this.mode }, { type: "align", align: this.align }], true);
         this.flush();
         return;
-      case "send":
-        this.connection?.send(message.data);
+      case "signal":
+        this.connection?.signal(message.signal);
         return;
       case "connected":
         this.stopDeadline?.();
         this.stopDeadline = null;
         this.phase.set("live");
         return;
-      case "closed":
-        this.lose(null);
-        return;
       case "stats":
-        this.viewerStats.set({ fps: message.fps, kbps: message.kbps, inputMs: message.inputMs, bridgeMs: message.bridgeMs ?? null, presentMs: message.presentMs ?? null });
+        this.viewerStats.set({ fps: message.fps, kbps: message.kbps, inputMs: message.inputMs });
         return;
       case "haptic":
         this.onHaptic?.();
@@ -197,19 +189,15 @@ export class RemoteSession {
       this.server,
       {
         open: () => attempt === this.attempt && this.post([{ type: "open" }]),
-        data: (chunk) => {
-          if (attempt !== this.attempt) return;
-          this.chunks.push(chunk);
-          this.schedule();
-        },
+        signal: (signal) => attempt === this.attempt && this.post([{ type: "signal", signal }]),
         ready: () => {},
         rtt: (ms) => attempt === this.attempt && this.rtt.set(ms),
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
         reflow: (state) => attempt === this.attempt && this.reflow.set(state),
         streamStats: (stats) => attempt === this.attempt && this.stats.set(stats),
-        closed: (reason) => {
+        closed: (reason, outdated) => {
           if (attempt !== this.attempt) return;
-          if (this.options.onSocketClosed?.(reason)) this.disconnect();
+          if (!outdated && this.options.onSocketClosed?.(reason)) this.disconnect();
           else this.lose(reason);
         },
       },
@@ -248,8 +236,6 @@ export class RemoteSession {
     this.reflow.set(NO_REFLOW);
     this.fitted = null;
     this.rtt.set(null);
-    this.chunks = [];
-    this.outbox = this.outbox.filter((message) => message.type !== "rfb");
     if (connection) this.post([{ type: "close" }]);
   }
 
@@ -308,31 +294,13 @@ export class RemoteSession {
     this.post([{ type: "text", text, mods }]);
   }
 
-  private schedule(): void {
-    if (this.flushQueued) return;
-    this.flushQueued = true;
-    requestAnimationFrame(() => {
-      this.flushQueued = false;
-      this.flush();
-    });
-  }
-
-  /** Queued bytes always go ahead of later control messages. */
   private post(messages: ScreenHostMessage[], front = false): void {
-    if (this.chunks.length) {
-      this.outbox.push({ type: "rfb", data: this.chunks, at: Date.now() });
-      this.chunks = [];
-    }
     if (front) this.outbox.unshift(...messages);
     else this.outbox.push(...messages);
     this.flush();
   }
 
   private flush(): void {
-    if (this.chunks.length) {
-      this.outbox.push({ type: "rfb", data: this.chunks, at: Date.now() });
-      this.chunks = [];
-    }
     if (!this.viewerReady || !this.web || !this.outbox.length) return;
     const batch = this.outbox;
     this.outbox = [];
@@ -377,24 +345,9 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   // sentinel: a key that lands before a reset reaches the field extends what it held (screen [67] kept every
   // key in the field; resetting on each key sent a fast key twice). The field goes back to the sentinel once
   // typing pauses, or at once when a backspace would have nothing left to delete.
-  let seen = KEYBOARD_SENTINEL;
-  let resetTimer: ReturnType<typeof setTimeout> | null = null;
-  const resetField = () => {
-    if (resetTimer) clearTimeout(resetTimer);
-    resetTimer = null;
-    seen = KEYBOARD_SENTINEL;
-    value.set(KEYBOARD_SENTINEL);
-  };
-  cleanup(() => resetTimer && clearTimeout(resetTimer));
-  const typed = (next: string) => {
-    const edit = keyboardEdit(seen, next);
-    seen = next;
-    // The signal follows the field, so putting the sentinel back is a change the field sees.
-    value.set(next);
-    if (resetTimer) clearTimeout(resetTimer);
-    if (fieldNeedsReset(next)) queueMicrotask(resetField);
-    else resetTimer = setTimeout(resetField, FIELD_RESET_MS);
-    if (!edit.backspace && !edit.text) return;
+  // An input method's composition (pinyin before its characters are chosen) is held by `field` and only
+  // its commit is sent; the field is not put back while one is open.
+  const field = new FieldTyping((edit) => {
     const active = activeModifiers(mods());
     for (let i = 0; i < edit.backspace; i++) props.session.key("BackSpace", active);
     if (edit.text) props.session.text(edit.text, active);
@@ -403,8 +356,55 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
       if (edit.text) echoed({ kind: "text", text: edit.text });
     }
     mods.set(spendModifiers(mods()));
+  });
+  let resetTimer: ReturnType<typeof setTimeout> | null = null;
+  let commitTimer: ReturnType<typeof setTimeout> | null = null;
+  const stopReset = () => {
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = null;
+  };
+  const resetField = () => {
+    stopReset();
+    if (field.composing) return;
+    field.reset();
+    value.set(KEYBOARD_SENTINEL);
+  };
+  cleanup(() => {
+    stopReset();
+    if (commitTimer) clearTimeout(commitTimer);
+  });
+  // The field holds next: the signal follows it (so putting the sentinel back is a change the field
+  // sees), and it goes back to the sentinel once typing pauses.
+  const settle = (next: string) => {
+    value.set(next);
+    stopReset();
+    if (fieldNeedsReset(next)) queueMicrotask(resetField);
+    else resetTimer = setTimeout(resetField, FIELD_RESET_MS);
+  };
+  const typed = (next: string) => {
+    if (field.change(next)) settle(next);
+    else stopReset();
+  };
+  const composed = (on: boolean) => {
+    field.composition(on);
+    if (on) {
+      stopReset();
+      return;
+    }
+    // The commit reaches onChange before the composition ends; a moment's wait also takes one that comes after.
+    if (commitTimer) clearTimeout(commitTimer);
+    commitTimer = setTimeout(commitNow, COMMIT_SETTLE_MS);
+  };
+  // A composition's commit waiting out its moment goes now, before a key that follows it (the key bar,
+  // Return): the key would overtake it ("ls" then Tab arrived as Tab then "ls").
+  const commitNow = () => {
+    if (commitTimer) clearTimeout(commitTimer);
+    commitTimer = null;
+    const next = field.flush();
+    if (next !== null) settle(next);
   };
   const press = (key: ScreenKey) => {
+    commitNow();
     const active = activeModifiers(mods());
     props.session.key(key, active);
     if (key === "BackSpace" && !active.length) echoed({ kind: "backspace", count: 1 });
@@ -415,6 +415,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   const paste = async () => {
     const text = await Clipboard.readText().catch(() => "");
     if (!text) return;
+    commitNow();
     props.session.text(text, []);
     echo.set(pushEcho(untracked(echo), { kind: "text", text: "\u2022".repeat(Math.min(Array.from(text).length, 24)) }, 0));
     tickEcho();
@@ -453,12 +454,15 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
           accessibilityLabel="Type on the remote screen"
           class="absolute h-px w-px opacity-0"
           value={value()}
+          // The caret stays at the end: what is typed comes after the sentinel, and a backspace always has it to delete.
+          selectedRange={{ start: value().length }}
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete="off"
           caret={false}
           keyboardType="default"
           onChange={({ value: next }) => typed(next)}
+          onCompositionChange={({ composing }) => composed(composing)}
           onSubmit={() => press("Return")}
           onBlur={() => props.onTypingChange(false)}
         /></If>

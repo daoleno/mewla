@@ -67,6 +67,9 @@ type Config struct {
 	StaticRouteProxyProtocol bool
 	// Logf receives anonymous operational events. Nil disables logging.
 	Logf func(format string, args ...any)
+	// TURN, when set, issues TURN credentials to registered computers
+	// (turn_request), for Screen's video.
+	TURN *TURNIssuer
 
 	MaxRoutes          int
 	MaxClients         int
@@ -847,6 +850,36 @@ func (server *Server) handleConnectorWithRelease(
 			RouteID:  strings.ToLower(message.RouteID),
 			Alias:    strings.ToLower(message.Alias),
 			StreamID: strings.ToLower(message.StreamID),
+		}); err != nil {
+			outcome.reject(rejectionProtocol)
+			return
+		}
+		outcome.succeed()
+	case linkproto.TypeTURNRequest:
+		if server.config.TURN == nil {
+			_ = rejectHandshake("turn_unavailable", "this relay has no TURN")
+			return
+		}
+		if err := server.verifySignedRequest(message); err != nil {
+			reason := rejectionReasonForError(err, rejectionAuth)
+			outcome.reject(reason)
+			_ = rejectHandshake("turn_rejected", err.Error())
+			return
+		}
+		urls, username, password, expires, err := server.config.TURN.Credentials(strings.ToLower(message.RouteID))
+		if err != nil {
+			_ = rejectHandshake("turn_unavailable", err.Error())
+			return
+		}
+		releaseHandshake()
+		if err := linkproto.WriteMessage(conn, linkproto.Message{
+			Type:         linkproto.TypeTURNCredentials,
+			RouteID:      strings.ToLower(message.RouteID),
+			TURNURLs:     urls,
+			TURNUsername: username,
+			TURNPassword: password,
+			TURNMaxKbps:  server.config.TURN.MaxKbps(),
+			ExpiresAtMS:  expires.UnixMilli(),
 		}); err != nil {
 			outcome.reject(rejectionProtocol)
 			return

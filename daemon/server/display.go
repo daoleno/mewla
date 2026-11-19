@@ -4,19 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/clientaddr"
+	"github.com/daoleno/mewla/daemon/link"
+	"github.com/daoleno/mewla/daemon/screencast"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/gorilla/websocket"
+	"github.com/pion/webrtc/v4"
 )
 
 var displayUpgrader = websocket.Upgrader{
-	ReadBufferSize:  32 << 10,
-	WriteBufferSize: 256 << 10,
+	ReadBufferSize:  16 << 10,
+	WriteBufferSize: 16 << 10,
 	CheckOrigin:     func(*http.Request) bool { return true },
 }
 
@@ -31,6 +37,10 @@ type Displays interface {
 	Halt(worker string) error
 	Resume(worker string) error
 }
+
+// SetScreenLoopbackOnly keeps Screen's video on this computer's loopback
+// address, for a daemon reachable from this computer only.
+func (s *Server) SetScreenLoopbackOnly(on bool) { s.screenLoopbackOnly = on }
 
 // SetDisplays installs the agents' displays.
 func (s *Server) SetDisplays(service Displays) { s.displays = service }
@@ -58,12 +68,20 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 		capability := s.displays.Capability()
 		if capability != nil {
 			reason = capability.Error()
-		} else if _, agentScreen := s.displays.(*vdisplay.Service); agentScreen && s.browsers != nil {
-			if c := s.browsers.Capability(r.Context()); !c.Available {
-				reason = c.Reason
+		} else if _, agentScreen := s.displays.(*vdisplay.Service); agentScreen {
+			if s.browsers != nil {
+				if c := s.browsers.Capability(r.Context()); !c.Available {
+					reason = c.Reason
+				}
+			}
+			// Agents work without ffmpeg; watching them does not.
+			if reason == "" {
+				if err := s.videoReady(); err != nil {
+					reason = err.Error()
+				}
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": capability == nil, "reason": reason})
+		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": capability == nil, "reason": reason, "video": "webrtc"})
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 		var q struct {
@@ -91,9 +109,10 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleDisplayViewer bridges an authenticated WebSocket to one agent's
-// display, speaking RFB to the viewer as the Mac's Screen does. What the
-// person does is told to the agent. A {"type":"hold","on":true} message holds
+// handleDisplayViewer shows one agent's display to an authenticated device as
+// pushed video over WebRTC (package screencast); the WebSocket carries the
+// signalling and these control messages. What the person does is told to the
+// agent (never what they typed). A {"type":"hold","on":true} message holds
 // the agent off until released or the socket closes. While held, a
 // {"type":"fit","width":w,"height":h,"dpr":d} message lays the agent's browser
 // window out for the person's screen (width 0 puts it back); the socket answers
@@ -113,20 +132,16 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+	if !playsVideo(r) {
+		refuseOldApp(conn)
+		return
+	}
 	ctx, cancel := context.WithCancelCause(r.Context())
 	defer cancel(nil)
 
-	var writeMu sync.Mutex
-	write := func(kind int, data []byte) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		return conn.WriteMessage(kind, data)
-	}
-	sendJSON := func(v any) {
-		raw, _ := json.Marshal(v)
-		_ = write(websocket.TextMessage, raw)
-	}
+	out := startViewerOutbox(ctx, cancel, conn, func(error) string { return "display closed" })
+	defer out.wait()
+	sendJSON := func(v any) { out.sendJSON(v) }
 	view, err := s.displays.View(worker)
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
@@ -155,12 +170,15 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	viewerReader, viewerWriter := io.Pipe()
-	defer viewerReader.Close()
+	if view.Next == nil || view.Input == nil {
+		sendJSON(map[string]string{"type": "error", "error": "This display can't be shown"})
+		return
+	}
+	var cast *screencast.Session
+	castReady := make(chan struct{})
 	conn.SetReadLimit(1 << 20)
+	go s.keepTrusted(ctx, cancel, device.ID, nil)
 	go func() {
-		defer viewerWriter.Close()
-		trusted := time.Now()
 		for {
 			_ = conn.SetReadDeadline(time.Now().Add(45 * time.Second))
 			kind, data, err := conn.ReadMessage()
@@ -168,96 +186,202 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 				cancel(err)
 				return
 			}
-			if time.Since(trusted) > 2*time.Second {
-				if !s.auth.IsDeviceTrusted(device.ID) {
-					cancel(errors.New("device revoked"))
-					return
-				}
-				trusted = time.Now()
+			if kind != websocket.TextMessage {
+				continue // input rides the data channels
 			}
-			switch kind {
-			case websocket.BinaryMessage:
-				if _, err := viewerWriter.Write(data); err != nil {
-					cancel(err)
+			var msg struct {
+				Type string          `json:"type"`
+				T    json.RawMessage `json:"t"`
+				On   bool            `json:"on"`
+				// fit
+				Width  float64 `json:"width"`
+				Height float64 `json:"height"`
+				DPR    float64 `json:"dpr"`
+			}
+			if json.Unmarshal(data, &msg) != nil {
+				continue
+			}
+			switch msg.Type {
+			case "rtc", "ice":
+				select {
+				case <-castReady:
+				case <-ctx.Done():
 					return
 				}
-			case websocket.TextMessage:
-				var msg struct {
-					Type string          `json:"type"`
-					T    json.RawMessage `json:"t"`
-					On   bool            `json:"on"`
-					// fit
-					Width  float64 `json:"width"`
-					Height float64 `json:"height"`
-					DPR    float64 `json:"dpr"`
+				if cast != nil {
+					if err := cast.HandleSignal(data); err != nil {
+						log.Printf("display: viewer for %s: signalling: %v", worker, err)
+					}
 				}
-				if json.Unmarshal(data, &msg) != nil {
+			case "ping":
+				sendJSON(map[string]any{"type": "pong", "t": msg.T})
+			case "hold":
+				view.Hold(msg.On)
+			case "fit":
+				if view.Fit == nil {
+					sendJSON(map[string]any{"type": "reflow", "on": false})
 					break
 				}
-				switch msg.Type {
-				case "ping":
-					raw, _ := json.Marshal(map[string]any{"type": "pong", "t": msg.T})
-					_ = write(websocket.TextMessage, raw)
-				case "hold":
-					view.Hold(msg.On)
-				case "fit":
-					if view.Fit == nil {
-						sendJSON(map[string]any{"type": "reflow", "on": false})
-						break
-					}
-					select {
-					case <-fits:
-					default:
-					}
-					fits <- [3]float64{msg.Width, msg.Height, msg.DPR}
+				select {
+				case <-fits:
+				default:
 				}
+				fits <- [3]float64{msg.Width, msg.Height, msg.DPR}
 			}
 		}
 	}()
 	go func() {
 		<-ctx.Done()
 		view.Close()
-		_ = viewerReader.CloseWithError(context.Cause(ctx))
 	}()
 
-	if err := vdisplay.AcceptViewer(displayViewerStream{reader: viewerReader, write: write}); err != nil {
+	// The person's input goes through the display's own relay, which tells
+	// the agent what they did.
+	inputReader, inputWriter := io.Pipe()
+	defer inputWriter.Close()
+	go func() {
+		err := view.Input(inputReader)
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) && ctx.Err() == nil {
+			log.Printf("display: viewer for %s: input ended: %v", worker, err)
+		}
+		_ = inputReader.CloseWithError(err)
+	}()
+	path := clientaddr.Path(r)
+	signOffer, verifyAnswer := s.screenBinding(device.ID)
+	iceServers, viewerICE, relayMaxKbps := s.screenICE(ctx)
+	cast, err = screencast.Start(ctx, screencast.Config{
+		Source: displaySource{view},
+		Input: func(msg []byte) error {
+			_, err := inputWriter.Write(msg)
+			return err
+		},
+		Signal: func(v any) { sendJSON(v) },
+		Stats: func(st screencast.Stats) {
+			out.advise(struct {
+				Type string `json:"type"`
+				Path string `json:"path"`
+				screencast.Stats
+			}{"stats", path, st})
+		},
+		NewEncoder:       castEncoder(),
+		SignOffer:        signOffer,
+		VerifyAnswer:     verifyAnswer,
+		LoopbackOnly:     s.screenLoopbackOnly,
+		ICEServers:       iceServers,
+		ViewerICEServers: viewerICE,
+		RelayMaxKbps:     relayMaxKbps,
+	})
+	close(castReady)
+	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return
 	}
+	defer cast.Close()
 	sendJSON(map[string]string{"type": "ready"})
-	go func() {
-		err := view.Relay(viewerReader)
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) && ctx.Err() == nil {
-			log.Printf("display: viewer for %s ended: %v", worker, err)
+	select {
+	case <-ctx.Done():
+	case <-cast.Done():
+		if ctx.Err() == nil {
+			message := "The connection to the display was lost"
+			if errors.Is(cast.Err(), screencast.ErrEncoder) {
+				message = screencast.ErrEncoder.Error()
+			}
+			sendJSON(map[string]string{"type": "error", "error": message})
 		}
-		cancel(err)
-	}()
-	buf := make([]byte, 256<<10)
+	}
+}
+
+// screenBinding binds a Screen session's DTLS certificates to this computer
+// and to the viewer's paired device: the offer carries this computer's
+// signature over its fingerprints, and an answer is used only when the same
+// device (the one this socket authenticated) signed the answer's.
+func (s *Server) screenBinding(deviceID string) (func([]string) (any, error), func([]string, string) error) {
+	sign := func(fingerprints []string) (any, error) {
+		if len(fingerprints) == 0 {
+			return nil, errors.New("the offer names no DTLS certificate")
+		}
+		assertion, err := s.auth.CreateServerAssertion(auth.ScreenDTLSPurpose(fingerprints))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"timestamp": assertion.Timestamp, "nonce_hex": assertion.NonceHex, "signature_hex": assertion.SignatureHex}, nil
+	}
+	verify := func(fingerprints []string, authorization string) error {
+		if len(fingerprints) == 0 {
+			return errors.New("the viewer's answer names no DTLS certificate")
+		}
+		device, err := s.auth.VerifyAuthorization(authorization, auth.ScreenDTLSPurpose(fingerprints), 5*time.Minute)
+		if err != nil {
+			return fmt.Errorf("the viewer's answer is not signed by a paired device: %w", err)
+		}
+		if device.ID != deviceID {
+			return errors.New("the viewer's answer is signed by another device")
+		}
+		return nil
+	}
+	return sign, verify
+}
+
+// screenICE gives a view's two peers, the computer's and the viewer's, a
+// fresh TURN credential each from the relay this computer is registered with
+// (none: direct paths only), and the most the relay carries for one
+// allocation. A credential holds a few allocations and a peer takes one per
+// TURN address, so no credential is shared between peers or views.
+func (s *Server) screenICE(ctx context.Context) (computer, viewer []webrtc.ICEServer, relayMaxKbps int) {
+	if s.screenLoopbackOnly {
+		return nil, nil, 0
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var both [2]link.TURNCredentials
+	var errs [2]error
+	var wg sync.WaitGroup
+	for i := range both {
+		wg.Go(func() { both[i], errs[i] = link.TURN(ctx) })
+	}
+	wg.Wait()
+	servers := func(i int) []webrtc.ICEServer {
+		if errs[i] != nil {
+			return nil
+		}
+		relayMaxKbps = both[i].MaxKbps
+		return screencast.ICEServersFor(both[i].URLs, both[i].Username, both[i].Password)
+	}
+	computer, viewer = servers(0), servers(1)
+	if viewer == nil {
+		viewer = []webrtc.ICEServer{} // not the computer's credential
+	}
+	return computer, viewer, relayMaxKbps
+}
+
+// keepTrusted ends a view (cancel) within 2 s of its device being revoked,
+// or of allowed, when given, saying no.
+func (s *Server) keepTrusted(ctx context.Context, cancel context.CancelCauseFunc, device string, allowed func() error) {
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
 	for {
-		n, err := view.Conn.Read(buf)
-		if n > 0 {
-			if write(websocket.BinaryMessage, append([]byte(nil), buf[:n]...)) != nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if !s.auth.IsDeviceTrusted(device) {
+				cancel(errors.New("device revoked"))
 				return
 			}
-		}
-		if err != nil {
-			if ctx.Err() == nil {
-				sendJSON(map[string]string{"type": "error", "error": "The display ended"})
+			if allowed != nil {
+				if err := allowed(); err != nil {
+					cancel(err)
+					return
+				}
 			}
-			return
 		}
 	}
 }
 
-type displayViewerStream struct {
-	reader io.Reader
-	write  func(int, []byte) error
-}
+// displaySource is a display view's pictures for screencast.
+type displaySource struct{ view *vdisplay.Viewer }
 
-func (v displayViewerStream) Read(p []byte) (int, error) { return v.reader.Read(p) }
-func (v displayViewerStream) Write(p []byte) (int, error) {
-	if err := v.write(websocket.BinaryMessage, append([]byte(nil), p...)); err != nil {
-		return 0, err
-	}
-	return len(p), nil
+func (d displaySource) Next(ctx context.Context, after uint64) (screencast.Picture, error) {
+	p, err := d.view.Next(ctx, after)
+	return screencast.Picture{Pix: p.Pix, Width: p.Width, Height: p.Height, Stride: p.Stride, RGB: p.RGB, Seq: p.Seq}, err
 }

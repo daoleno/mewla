@@ -28,10 +28,14 @@ import (
 // is refused while a person is in control.
 var (
 	ErrPersonControlling = errors.New("A person is using this computer's screen; try again when they are done")
-	ErrAgentStopped      = errors.New("A person took over this computer's screen; the agent's control ended")
-	ErrScreenReplaced    = errors.New("Another device took over this screen")
-	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once it's unlocked")
-	ErrDisplayAsleep     = errors.New("This computer's display went to sleep or off, so the agent lost its view; try again and Mewla wakes it (a closed lid with no external display stays off)")
+	// ErrStoppedByPerson is what an agent hears when the person pressed Stop:
+	// its action then, or its next one, does not run. It is not locked out.
+	errAgentsOff       = errors.New("Agents' use of this computer's screen was turned off")
+	ErrStoppedByPerson = errors.New("The person pressed Stop on this computer's screen in Mewla, so this action did not run. Do not just try it again: tell them what is done and what is left, and use the screen again only if they ask you to.")
+	ErrAgentStopped    = errors.New("A person took over this computer's screen; the agent's control ended")
+	ErrScreenReplaced  = errors.New("Another device took over this screen")
+	ErrScreenLocked    = errors.New("This computer's screen is locked; agents can use it again once it's unlocked")
+	ErrDisplayAsleep   = errors.New("This computer's display went to sleep or off, so the agent lost its view; try again and Mewla wakes it (a closed lid with no external display stays off)")
 )
 
 // Someone using the computer itself does not pause an agent: it is told what
@@ -329,17 +333,27 @@ func (s *Service) Agents() []AgentState {
 	return states
 }
 
-// StopAgent ends the agent's control, from the app.
-func (s *Service) StopAgent() {
+// StopAgent ends every agent's control when Screen or agents' use of it is
+// turned off.
+func (s *Service) StopAgent() { s.stopAgents(errAgentsOff, false) }
+
+// StopAgentsByPerson is the person's Stop for every agent, from the app: each
+// hears that the person pressed it (its next action, when none is under way).
+func (s *Service) StopAgentsByPerson() { s.stopAgents(ErrStoppedByPerson, true) }
+
+func (s *Service) stopAgents(cause error, tell bool) {
 	s.agentMu.Lock()
 	var stop []*agentSession
 	for _, agent := range s.agents {
 		stop = append(stop, agent)
+		if tell {
+			s.tellStoppedLocked(agent.worker)
+		}
 	}
 	hook := s.stopHook
 	s.agentMu.Unlock()
 	for _, agent := range stop {
-		agent.cancel(errors.New("You stopped the agent from the app"))
+		agent.cancel(cause)
 		if hook != nil {
 			hook(agent.worker)
 		}
@@ -352,14 +366,28 @@ func (s *Service) StopAgentFor(worker string) {
 	s.agentMu.Lock()
 	agent := s.agents[worker]
 	hook := s.stopHook
+	// Only a Worker using the screen hears it: one with no session (it ended, or never began) would be
+	// refused once, perhaps days later, for a Stop it was never under.
+	if agent != nil && agent.ctx.Err() == nil {
+		s.tellStoppedLocked(worker)
+	}
 	s.agentMu.Unlock()
 	if agent != nil {
-		agent.control.cancel(errors.New("You stopped the agent from the app"))
+		agent.control.cancel(ErrStoppedByPerson)
 	}
 	s.dropHold(worker)
 	if hook != nil {
 		hook(worker)
 	}
+}
+
+// tellStoppedLocked marks a stopped Worker's next action to be refused once,
+// saying the person pressed Stop (agentMu held).
+func (s *Service) tellStoppedLocked(worker string) {
+	if s.stopTold == nil {
+		s.stopTold = map[string]bool{}
+	}
+	s.stopTold[worker] = true
 }
 
 // SetStopHook tells what else a Worker uses through this screen (the
@@ -478,7 +506,21 @@ func (s *Service) act(ctx context.Context, worker string, action AgentAction) (r
 // a person's viewer and leaves an audit line without typed text. What the
 // person did at the computer since the agent last heard is added to the text.
 func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (AgentResult, error) {
+	// Stopped with no action under way: this one says so, and the next runs.
+	s.agentMu.Lock()
+	told := s.stopTold[worker]
+	delete(s.stopTold, worker)
+	s.agentMu.Unlock()
+	if told {
+		return AgentResult{}, ErrStoppedByPerson
+	}
 	result, err := s.act(ctx, worker, action)
+	if errors.Is(err, ErrStoppedByPerson) {
+		// An action under way heard it.
+		s.agentMu.Lock()
+		delete(s.stopTold, worker)
+		s.agentMu.Unlock()
+	}
 	if err == nil && result.notes != "" {
 		result.Text = strings.TrimSpace(result.Text + "\n" + result.notes)
 		result.notes = ""

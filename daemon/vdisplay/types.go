@@ -1,9 +1,10 @@
 package vdisplay
 
 import (
+	"bytes"
+	"context"
 	"image"
 	"io"
-	"net"
 	"time"
 )
 
@@ -76,13 +77,50 @@ type Reflower interface {
 	Restore(worker string) error
 }
 
+// Picture is one picture of a view: rows of 4 bytes a pixel, B G R X (or
+// R G B X when RGB), Stride bytes apart, numbered in order.
+type Picture struct {
+	Pix           []byte
+	Width, Height int
+	Stride        int
+	RGB           bool
+	Seq           uint64
+}
+
+// Pictures numbers what get returns, a new number each time it differs, and
+// waits on changed between: a Viewer's Next for a display that tells when it
+// may have changed but not what.
+func Pictures(get func() ([]byte, int, int), changed <-chan struct{}) func(ctx context.Context, after uint64) (Picture, error) {
+	var last []byte
+	var size [2]int
+	var seq uint64
+	return func(ctx context.Context, after uint64) (Picture, error) {
+		for {
+			pix, w, h := get()
+			if seq == 0 || [2]int{w, h} != size || !bytes.Equal(pix, last) {
+				seq++
+				last, size = pix, [2]int{w, h}
+			}
+			if seq > after {
+				return Picture{Pix: last, Width: w, Height: h, Stride: w * 4, Seq: seq}, nil
+			}
+			select {
+			case <-changed:
+			case <-ctx.Done():
+				return Picture{}, context.Cause(ctx)
+			}
+		}
+	}
+}
+
 // Viewer is a person's connection to a Worker's display.
 type Viewer struct {
-	// Conn is the display's RFB stream, past the handshake with no security:
-	// the next bytes in either direction are ClientInit and then updates.
-	Conn net.Conn
-	// Relay passes the person's messages to the display and counts them.
-	Relay func(src io.Reader) error
+	// Next is the view's next picture after the one numbered after (0: what
+	// it shows now), waiting for it: what Screen pushes as video.
+	Next func(ctx context.Context, after uint64) (Picture, error)
+	// Input passes the person's input, RFB client messages, to the display
+	// and tells the agent what they did (Relay).
+	Input func(src io.Reader) error
 	// Hold holds the agent off (true) or lets it go on (false). A held view
 	// that closes lets go by itself.
 	Hold func(on bool)

@@ -7,11 +7,13 @@ import { authSubprotocol } from "../webSocketAuth";
 import { screenFailureText } from "./screenFailure";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 import { parseReflow, type StageReflow } from "./stage";
+import { offerIsTheComputers, signAnswer } from "./screenIdentity";
+import { isSignal, type ScreenSignal } from "./screenViewerProtocol";
 
 /**
  * Screen: the computer's own screen (Mac, Windows) or an agent's display (Linux),
  * over the computer's HTTP doors `/screen` and `/display` and two viewer sockets
- * that carry RFB bytes (binary) beside JSON control (text).
+ * that carry JSON: WebRTC signalling for the pushed video beside control.
  */
 
 export interface ScreenPower {
@@ -39,6 +41,8 @@ export interface ScreenStatus {
   supported: boolean;
   platform: string;
   reason?: string;
+  /** "webrtc": the computer pushes its screen as video. A computer from before the video sends none. */
+  video?: string;
   /** The computer's own name. */
   name?: string;
   /** Turned off at the computer with `mewla screen disable`. */
@@ -98,13 +102,31 @@ async function readAnswer(response: Response): Promise<{ result: Record<string, 
   return { result, body, json: (response.headers.get("content-type") || "").includes("application/json") };
 }
 
+/** A computer whose Mewla serves Screen as RFB, or not at all: this app plays only pushed video. */
+export const SCREEN_TOO_OLD = "Update Mewla on this computer to see its screen";
+
+/**
+ * Whether each computer (by id) sends its screen as pushed video, from its last Screen status
+ * or display list (`video: "webrtc"`). A viewer for one that does not is never opened: an
+ * older computer would take control, wake its display and say so, for a picture this app
+ * cannot play.
+ */
+const sendsVideo = new Map<string, boolean>();
+
+/**
+ * Says this app plays pushed video, on Screen requests and viewer sockets. A computer
+ * tells an app without it (a release from before the video) to update.
+ */
+const PLAYS_VIDEO = { video: "webrtc" } as const;
+
 /** Reads Screen status, or runs one action and returns the new status. */
 export async function screenRequest(server: StoredServer, action?: ScreenAction): Promise<ScreenStatus> {
-  const response = await signedFetch(server, action ? "POST" : "GET", "/screen", "mewla-screen", { body: action, timeoutMs: action && "action" in action && action.action === "enable" ? 300_000 : undefined });
+  const response = await signedFetch(server, action ? "POST" : "GET", "/screen", "mewla-screen", { body: action, query: PLAYS_VIDEO, timeoutMs: action && "action" in action && action.action === "enable" ? 300_000 : undefined });
   const { result, body, json } = await readAnswer(response);
   // An older daemon answers 404, or its web UI answers with HTML.
-  if (response.status === 404 || (response.ok && !json)) throw new ScreenRequestError("This server's Mewla is too old for Screen. Update it on that computer.", response.status);
+  if (response.status === 404 || (response.ok && !json)) throw new ScreenRequestError(SCREEN_TOO_OLD, response.status);
   if (!response.ok || !result) throw new ScreenRequestError((typeof result?.error === "string" && result.error) || screenFailureText(response.status, body), response.status);
+  sendsVideo.set(server.id, result.video === "webrtc");
   return result as unknown as ScreenStatus;
 }
 
@@ -145,6 +167,7 @@ async function displayRequest(server: StoredServer, body?: object): Promise<Reco
 
 export async function listDisplays(server: StoredServer): Promise<DisplayList> {
   const result = await displayRequest(server);
+  sendsVideo.set(server.id, result.video === "webrtc");
   return {
     displays: Array.isArray(result.displays) ? (result.displays as AgentDisplay[]) : [],
     available: result.available !== false,
@@ -160,19 +183,6 @@ export async function haltDisplay(server: StoredServer, worker: string): Promise
 /** Lifts a Stop: the agent may use its display again. */
 export async function resumeDisplay(server: StoredServer, worker: string): Promise<void> {
   await displayRequest(server, { action: "resume", worker });
-}
-
-export function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
-  return btoa(binary);
-}
-
-export function base64ToBytes(text: string): Uint8Array {
-  const binary = atob(text);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
-  return out;
 }
 
 /** A viewer socket other than the computer's own screen. */
@@ -192,11 +202,9 @@ export function viewerURL(server: StoredServer, path: string, params: Record<str
 }
 
 export interface ScreenConnectionHandlers {
-  /** The socket is open; the viewer may start its RFB client. */
+  /** The socket is open; the computer's offer follows. */
   open(): void;
-  /** RFB bytes from the screen, base64. */
-  data(chunk: string): void;
-  /** The daemon finished the RFB handshake on the viewer's behalf. */
+  /** The computer is streaming: its picture comes once the viewer has answered. */
   ready(): void;
   rtt(ms: number): void;
   /** The computer is locked, or not: sent when the viewer opens and on a change. */
@@ -205,8 +213,13 @@ export interface ScreenConnectionHandlers {
   streamStats?(stats: ScreenStreamStats): void;
   /** An agent display's browser window was laid out for this view, or put back (the display viewer's `fit`). */
   reflow?(state: StageReflow): void;
-  /** The socket ended; `reason` is the daemon's explanation when it gave one. */
-  closed(reason: string | null): void;
+  /** WebRTC signalling from the computer, for the viewer page. */
+  signal?(signal: ScreenSignal): void;
+  /**
+   * The socket ended; `reason` is the daemon's explanation when it gave one. `outdated`:
+   * the computer's Mewla is from before the video (it spoke RFB), so looking again cannot help.
+   */
+  closed(reason: string | null, outdated: boolean): void;
 }
 
 const OPEN = 1;
@@ -221,10 +234,11 @@ export class ScreenConnection {
   private closed = false;
   private timer: ReturnType<typeof setInterval> | undefined;
   private reason: string | null = null;
+  private outdated = false;
 
   /**
    * watch: see the agent using the screen without taking over; input goes nowhere.
-   * route: another viewer socket that speaks the same RFB, such as an agent's display.
+   * route: another viewer socket, such as an agent's display.
    */
   constructor(
     private server: StoredServer,
@@ -235,7 +249,13 @@ export class ScreenConnection {
   ) {}
 
   async connect(): Promise<void> {
-    const params: Record<string, string> = { ...(this.route?.params ?? {}) };
+    if (sendsVideo.get(this.server.id) === false) {
+      this.outdated = true;
+      this.reason = SCREEN_TOO_OLD;
+      this.finish();
+      return;
+    }
+    const params: Record<string, string> = { ...(this.route?.params ?? {}), ...PLAYS_VIDEO };
     if (!this.route && this.watch) params.watch = "1";
     if (!this.route && this.watch && this.worker) params.worker = this.worker;
     const url = viewerURL(this.server, this.route?.path ?? "/screen/viewer", params);
@@ -249,7 +269,6 @@ export class ScreenConnection {
       this.finish();
       return;
     }
-    (socket as SocketLike & { binaryType?: string }).binaryType = "arraybuffer";
     this.socket = socket;
     socket.onopen = () => {
       if (this.closed) return;
@@ -261,8 +280,10 @@ export class ScreenConnection {
     socket.onmessage = (event) => {
       if (this.closed) return;
       if (typeof event.data !== "string") {
-        const data = event.data instanceof ArrayBuffer ? new Uint8Array(event.data) : ArrayBuffer.isView(event.data) ? new Uint8Array((event.data as ArrayBufferView).buffer) : null;
-        if (data) this.handlers.data(bytesToBase64(data));
+        // Only an older computer sends bytes: its RFB stream's version, first thing.
+        this.outdated = true;
+        this.reason = SCREEN_TOO_OLD;
+        this.finish();
         return;
       }
       let message: { type?: string; t?: number; error?: string; locked?: unknown };
@@ -282,7 +303,8 @@ export class ScreenConnection {
       } else if (message.type === "reflow") {
         const state = parseReflow(message as Record<string, unknown>);
         if (state) this.handlers.reflow?.(state);
-      } else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
+      } else if ((message.type === "rtc" || message.type === "ice") && isSignal(message)) this.fromComputer(message);
+      else if (message.type === "error" && typeof message.error === "string") this.reason = message.error;
     };
     socket.onerror = () => {
       if (!this.closed) this.finish();
@@ -293,21 +315,47 @@ export class ScreenConnection {
     };
   }
 
-  /** RFB bytes from the viewer, base64. */
-  send(chunk: string): void {
-    this.enqueue(base64ToBytes(chunk).buffer as ArrayBuffer);
+  // Signalling from the computer reaches the viewer in order, and an offer only
+  // once its certificates are known to be the computer's.
+  private signals: Promise<void> = Promise.resolve();
+  private fromComputer(signal: ScreenSignal): void {
+    this.signals = this.signals.then(async () => {
+      if (this.closed) return;
+      if (signal.type === "rtc" && !(await offerIsTheComputers(this.server, signal.sdp, signal.assertion))) {
+        this.reason = "The computer's video could not be verified";
+        this.finish();
+        return;
+      }
+      if (!this.closed) this.handlers.signal?.(signal);
+    });
   }
 
-  /** A control message beside the RFB bytes, such as {type:"hold",on:true}. */
+  /** Signalling from the viewer page: its answer goes signed by this device. */
+  signal(signal: ScreenSignal): void {
+    if (signal.type !== "rtc" || signal.sdp_type !== "answer") {
+      this.enqueue(JSON.stringify(signal));
+      return;
+    }
+    signAnswer(this.server, signal.sdp).then(
+      (authorization) => this.enqueue(JSON.stringify({ ...signal, authorization })),
+      (error: unknown) => {
+        if (this.closed) return;
+        this.reason = error instanceof Error && error.message ? error.message : "This device could not sign in to the video";
+        this.finish();
+      },
+    );
+  }
+
+  /** A control message, such as {type:"hold",on:true}. */
   control(message: Record<string, unknown>): void {
     this.enqueue(JSON.stringify(message));
   }
 
-  private outbox: Array<string | ArrayBuffer> = [];
+  private outbox: string[] = [];
   private draining = false;
 
   /** NSH holds a few queued sends per socket; the rest wait here, in order. */
-  private enqueue(data: string | ArrayBuffer): void {
+  private enqueue(data: string): void {
     if (this.closed || this.socket?.readyState !== OPEN) return;
     this.outbox.push(data);
     this.drain();
@@ -315,7 +363,7 @@ export class ScreenConnection {
 
   private drain(): void {
     if (this.draining) return;
-    const socket = this.socket as unknown as { readyState: number; send(data: string | ArrayBuffer): void } | null;
+    const socket = this.socket as unknown as { readyState: number; send(data: string): void } | null;
     while (socket && !this.closed && this.outbox.length) {
       try {
         socket.send(this.outbox[0]);
@@ -338,7 +386,7 @@ export class ScreenConnection {
   private finish(): void {
     const reason = this.reason;
     this.close();
-    this.handlers.closed(reason);
+    this.handlers.closed(reason, this.outdated);
   }
 
   close(): void {

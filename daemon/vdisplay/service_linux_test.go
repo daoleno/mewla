@@ -28,11 +28,7 @@ func viewerInput(t *testing.T, v *Viewer, msgs ...[]byte) {
 	t.Helper()
 	r, w := io.Pipe()
 	done := make(chan error, 1)
-	go func() { _, _ = io.Copy(io.Discard, v.Conn) }()
-	go func() { done <- v.Relay(r) }()
-	if _, err := w.Write([]byte{1}); err != nil { // ClientInit
-		t.Fatal(err)
-	}
+	go func() { done <- v.Input(r) }()
 	for _, m := range msgs {
 		if _, err := w.Write(m); err != nil {
 			t.Fatal(err)

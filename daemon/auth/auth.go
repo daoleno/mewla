@@ -596,6 +596,14 @@ func BuildSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex stri
 	}, "\n"))
 }
 
+// ScreenDTLSPurpose is what a Screen viewer and its computer sign to bind the
+// video's DTLS certificates to themselves: the sha256 of the fingerprints
+// (screencast.Fingerprints), one a line.
+func ScreenDTLSPurpose(fingerprints []string) string {
+	sum := sha256.Sum256([]byte(strings.Join(fingerprints, "\n")))
+	return "mewla-screen-dtls:sha256=" + hex.EncodeToString(sum[:])
+}
+
 func DeviceRevokePurpose(deviceID string) string {
 	target := sha256.Sum256([]byte(strings.TrimSpace(deviceID)))
 	return "mewla-device-admin:revoke:DELETE:/devices:sha256=" +
