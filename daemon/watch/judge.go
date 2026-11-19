@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -17,13 +18,17 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/daoleno/mewla/daemon/brain"
 )
 
 // Judgment hands batches of new signals to one read-only agent run. The run
 // places unplaced signals on projects, says who wrote ambiguous Worker
 // messages, and turns signals into a few problems with a cost and a reason.
 // It runs only while Watch is enabled and only when there are new signals.
-// Its bounds are internal constants, not settings.
+// Its bounds are internal constants, not settings. Nothing stops it after a
+// number of runs (owner 11-19: a cap switches a feature off); a batch that
+// keeps failing, the only run without new signals, retries with a growing wait.
 
 const (
 	// Claude Code judges with Sonnet, the cheapest Claude model that judges
@@ -36,10 +41,9 @@ const (
 	judgeMinBatchChars = 12_000
 	judgeBatchSignals  = 300
 	judgeRunTimeout    = 15 * time.Minute
-	judgeIdleEvery     = 2 * time.Hour // a partial batch waits this long; rules flag severe problems at once
-	judgeBacklogEvery  = time.Minute   // a full batch runs at once
-	judgeFailureWait   = 10 * time.Minute
-	judgeMaxRunsPerDay = 60
+	judgeIdleEvery     = 2 * time.Hour    // a partial batch waits this long; rules flag severe problems at once
+	judgeBacklogEvery  = time.Minute      // a full batch runs at once
+	judgeFailureWait   = 10 * time.Minute // doubles per failure in a row, up to judgeIdleEvery
 	judgeBudgetUSD     = "3"
 	judgeTick          = time.Minute
 	judgeOutputLimit   = 4 << 20
@@ -88,7 +92,10 @@ type judge struct {
 	failedAt   time.Time
 	batchChars int
 	lastError  string
-	recent     []time.Time
+	// failures counts failed runs in a row: a failed batch keeps its signals,
+	// so its retry is the one run without new evidence, and it waits longer
+	// each time.
+	failures int
 }
 
 func newJudge(store *Store, home string) *judge {
@@ -106,23 +113,52 @@ func newJudge(store *Store, home string) *judge {
 }
 
 // resume restores the pacing from the run log, so a daemon restart neither
-// runs a partial batch early nor resets the daily cap.
+// runs a partial batch early nor retries a failing batch sooner.
 func (j *judge) resume() {
 	runs, err := j.store.Runs()
 	if err != nil || len(runs) == 0 {
 		return
-	}
-	now := j.now()
-	for _, run := range runs {
-		if now.Sub(run.FinishedAt) < 24*time.Hour {
-			j.recent = append(j.recent, run.FinishedAt)
-		}
 	}
 	last := runs[len(runs)-1]
 	j.lastRun = last.FinishedAt
 	if last.Error != "" {
 		j.failedAt, j.lastError = last.FinishedAt, last.Error
 	}
+	for index := len(runs) - 1; index >= 0 && runs[index].Error != ""; index-- {
+		j.failures++
+	}
+}
+
+// failureWait is how long a failed batch waits before it is tried again.
+func failureWait(failures int) time.Duration {
+	wait := judgeFailureWait
+	for range max(failures-1, 0) {
+		if wait >= judgeIdleEvery {
+			break
+		}
+		wait *= 2
+	}
+	return min(wait, judgeIdleEvery)
+}
+
+// day is what judgment did in the last 24 hours, from the run log.
+func (j *judge) day(now time.Time) brain.WatchJudgeDay {
+	var day brain.WatchJudgeDay
+	runs, _ := j.store.Runs()
+	for _, run := range runs {
+		if now.Sub(run.FinishedAt) >= 24*time.Hour {
+			continue
+		}
+		day.Runs++
+		if run.Error != "" {
+			day.Failed++
+		} else {
+			day.Signals += run.Signals
+		}
+		day.USD += run.Usage.CostUSD
+	}
+	day.USD = math.Round(day.USD*10000) / 10000
+	return day
 }
 
 // JudgeStatus summarizes judgment for the CLI.
@@ -172,10 +208,7 @@ func (j *judge) due(pending []Signal) bool {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	now := j.now()
-	if !j.failedAt.IsZero() && now.Sub(j.failedAt) < judgeFailureWait {
-		return false
-	}
-	if j.runsToday(now) >= judgeMaxRunsPerDay {
+	if !j.failedAt.IsZero() && now.Sub(j.failedAt) < failureWait(j.failures) {
 		return false
 	}
 	_, chars := batchSize(pending, j.batchChars)
@@ -184,17 +217,6 @@ func (j *judge) due(pending []Signal) bool {
 		return now.Sub(j.lastRun) >= judgeBacklogEvery
 	}
 	return now.Sub(j.lastRun) >= judgeIdleEvery
-}
-
-func (j *judge) runsToday(now time.Time) int {
-	kept := j.recent[:0]
-	for _, at := range j.recent {
-		if now.Sub(at) < 24*time.Hour {
-			kept = append(kept, at)
-		}
-	}
-	j.recent = kept
-	return len(kept)
 }
 
 // loop runs judgment in the background while Watch is enabled.
@@ -226,12 +248,6 @@ func (j *judge) runBatches(ctx context.Context, n int) ([]JudgeRun, error) {
 	}
 	var runs []JudgeRun
 	for index := 0; index < max(n, 1); index++ {
-		j.mu.Lock()
-		capped := j.runsToday(j.now()) >= judgeMaxRunsPerDay
-		j.mu.Unlock()
-		if capped {
-			return runs, fmt.Errorf("judgment already ran %d times in the last 24 hours", judgeMaxRunsPerDay)
-		}
 		run, err := j.batch(ctx)
 		if run.ID != "" {
 			runs = append(runs, run)
@@ -296,15 +312,15 @@ func (j *judge) batch(ctx context.Context) (JudgeRun, error) {
 	run.FinishedAt = j.now()
 	j.mu.Lock()
 	j.lastRun = run.FinishedAt
-	j.recent = append(j.recent, run.FinishedAt)
 	if err != nil {
 		run.Error = excerpt(err.Error(), 500)
 		j.lastError = run.Error
 		j.failedAt = run.FinishedAt
+		j.failures++
 		// A smaller batch is likelier to fit the output limit next time.
 		j.batchChars = max(judgeMinBatchChars, j.batchChars/2)
 	} else {
-		j.lastError, j.failedAt, j.batchChars = "", time.Time{}, judgeBatchChars
+		j.lastError, j.failedAt, j.batchChars, j.failures = "", time.Time{}, judgeBatchChars, 0
 	}
 	j.mu.Unlock()
 	if errors.Is(err, context.Canceled) {

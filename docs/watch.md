@@ -165,10 +165,13 @@ without tools, hooks, MCP servers or a saved session. Claude Code
 (`claude -p`, Sonnet), Codex (`codex exec`) and Pi (`pi -p`) can judge. A run
 takes at most 300 signals or about 60,000 characters. A full batch runs at once; a partial one waits two hours, since the rules
 above already flag severe problems at once.
-There are at most 60 runs a day, and a failed run waits 10 minutes and retries
-with a smaller batch. Nothing runs when there are no new signals. Signal text
-is treated as data, never as instructions, and secrets are removed again
-before it is sent. Each run's tokens and cost are logged.
+Nothing runs when there are no new signals, and nothing stops judgment after a
+number of runs: a busy day is judged like a quiet one. A failed run keeps its
+signals and retries with a smaller batch, after 10 minutes, then twice as long
+for each failure in a row, up to two hours. Signal text is treated as data,
+never as instructions, and secrets are removed again before it is sent. Each
+run's tokens and cost are logged, and `mewla brain context --json` shows the
+last 24 hours (`watch_judge`: runs, failed runs, signals, dollars).
 
 #### Which agent judges
 

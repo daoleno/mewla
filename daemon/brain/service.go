@@ -122,6 +122,9 @@ type Service struct {
 	standing func(workID string) bool
 	settle   settler
 	progress progressJudge
+	// watchJudgeDay reports Watch's last 24 hours for the context; nil
+	// without Watch.
+	watchJudgeDay func() WatchJudgeDay
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
 	// BrainInputAdmission + watcher receipt state remain the restart authority.
@@ -952,8 +955,17 @@ func (s *Service) Context() (BrainContext, error) {
 		Workers:       snapshot.Workers,
 		Stale:         s.staleList(snapshot.Workers),
 		ProgressJudge: progressJudgeDay(items, s.nowUTC()),
+		WatchJudge:    s.watchJudge(),
 		GeneratedAt:   s.nowUTC(),
 	}, nil
+}
+
+func (s *Service) watchJudge() *WatchJudgeDay {
+	if s.watchJudgeDay == nil {
+		return nil
+	}
+	day := s.watchJudgeDay()
+	return &day
 }
 
 func (s *Service) Housekeeping() (HousekeepingReport, error) {

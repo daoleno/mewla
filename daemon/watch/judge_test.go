@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -204,11 +205,80 @@ func TestJudgmentWaitsForAFullBatchOrIdleTime(t *testing.T) {
 	if !j.due(full) {
 		t.Fatal("a full batch waits")
 	}
-	for range judgeMaxRunsPerDay {
-		j.recent = append(j.recent, now.Add(-time.Hour))
+}
+
+// Nothing switches judgment off after a number of runs (owner 11-19): the
+// 61st and the 200th run in a day are judged like the first.
+func TestJudgmentHasNoDailyCap(t *testing.T) {
+	home := t.TempDir()
+	collector, store := newTestCollector(t, home)
+	if _, err := store.SetEnabled(true); err != nil {
+		t.Fatal(err)
 	}
-	if j.due(full) {
-		t.Fatal("the daily run cap is not enforced")
+	now := time.Now().UTC()
+	for index := range 200 {
+		at := now.Add(-time.Duration(200-index) * time.Minute)
+		if err := store.AppendRun(JudgeRun{ID: fmt.Sprintf("r%03d", index), StartedAt: at, FinishedAt: at, Signals: 2, Usage: Usage{CostUSD: 0.01}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := now.Add(-25 * time.Hour)
+	if err := store.AppendRun(JudgeRun{ID: "old", StartedAt: old, FinishedAt: old, Signals: 9, Usage: Usage{CostUSD: 5}}); err != nil {
+		t.Fatal(err)
+	}
+	restarted := newJudge(store, home)
+	restarted.execute, _ = fakeJudge(`{"attributions":[],"authors":[],"problems":[]}`)
+	collector.judge = restarted
+	full := make([]Signal, judgeBatchSignals)
+	restarted.lastRun = now.Add(-judgeBacklogEvery)
+	if !restarted.due(full) {
+		t.Fatal("a full batch waits after 200 runs in a day")
+	}
+	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: kindRuntimeError, Time: now, Excerpt: "boom"}}); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := collector.Handle(context.Background(), Request{Action: "judge"})
+	if err != nil {
+		t.Fatalf("judge after 200 runs in a day: %v (%v)", err, runs)
+	}
+	day := collector.JudgeDay()
+	if day.Runs != 201 || day.Signals != 401 || day.USD != 2.05 {
+		t.Fatalf("last 24 hours = %+v, want 201 runs, 401 signals, $2.05 (the 25-hour-old run left out)", day)
+	}
+}
+
+// A failed batch keeps its signals, so its retry is the one run without new
+// evidence: it waits 10 minutes, then twice as long each failure in a row, up
+// to the idle wait, and a restart keeps the count.
+func TestAFailingBatchWaitsLongerEachTime(t *testing.T) {
+	home := t.TempDir()
+	_, store := newTestCollector(t, home)
+	now := time.Now().UTC()
+	for index := range 3 {
+		at := now.Add(-time.Duration(3-index) * time.Hour)
+		if err := store.AppendRun(JudgeRun{ID: fmt.Sprintf("f%d", index), StartedAt: at, FinishedAt: at, Error: "output does not match the schema"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	j := newJudge(store, home)
+	j.now = func() time.Time { return now }
+	if j.failures != 3 {
+		t.Fatalf("failures after restart = %d, want 3", j.failures)
+	}
+	few := []Signal{{ID: "a", Excerpt: "x"}}
+	j.lastRun, j.failedAt = now.Add(-judgeIdleEvery), now.Add(-39*time.Minute)
+	if j.due(few) {
+		t.Fatal("a third failure in a row retries before 40 minutes")
+	}
+	j.failedAt = now.Add(-40 * time.Minute)
+	if !j.due(few) {
+		t.Fatal("a third failure in a row never retries")
+	}
+	if got := failureWait(1); got != judgeFailureWait {
+		t.Fatalf("first failure waits %v", got)
+	}
+	if got := failureWait(50); got != judgeIdleEvery {
+		t.Fatalf("many failures wait %v, want the idle wait", got)
 	}
 }
 
@@ -269,8 +339,8 @@ func TestJudgmentPacingSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	for index := range judgeMaxRunsPerDay {
-		at := now.Add(-time.Duration(judgeMaxRunsPerDay-index) * time.Minute)
+	for index := range 60 {
+		at := now.Add(-time.Duration(60-index) * time.Minute)
 		if err := store.AppendRun(JudgeRun{ID: "r" + string(rune('A'+index%26)) + string(rune('a'+index/26)), StartedAt: at, FinishedAt: at}); err != nil {
 			t.Fatal(err)
 		}
@@ -278,15 +348,15 @@ func TestJudgmentPacingSurvivesRestart(t *testing.T) {
 	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: kindRuntimeError, Time: now, Excerpt: "boom"}}); err != nil {
 		t.Fatal(err)
 	}
-	// A new daemon reads the run log: a partial batch still waits, and the
-	// daily cap still holds, also for an explicit judge request.
+	// A new daemon reads the run log: a partial batch still waits, and an
+	// explicit judge request still runs.
 	restarted := newJudge(store, home)
 	restarted.execute, _ = fakeJudge(`{"attributions":[],"authors":[],"problems":[]}`)
 	if restarted.due(store.Unjudged()) {
 		t.Fatal("a restart ran a partial batch early")
 	}
 	collector.judge = restarted
-	if _, err := collector.Handle(context.Background(), Request{Action: "judge"}); err == nil || !strings.Contains(err.Error(), "times in the last 24 hours") {
-		t.Fatalf("judge past the daily cap: %v", err)
+	if _, err := collector.Handle(context.Background(), Request{Action: "judge"}); err != nil {
+		t.Fatalf("judge after a restart: %v", err)
 	}
 }

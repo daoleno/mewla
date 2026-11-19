@@ -522,6 +522,13 @@ func TestNoDailyCapStopsAJudgmentOfNewEvidence(t *testing.T) {
 	if day.ProgressJudge.Judgments < 702 || day.ProgressJudge.USD < 1.4 || day.ProgressJudge.Works != 2 {
 		t.Fatalf("Brain context shows %#v", day.ProgressJudge)
 	}
+	if day.WatchJudge != nil {
+		t.Fatal("Watch's day shown without Watch")
+	}
+	f.service.SetWatchJudgeDay(func() WatchJudgeDay { return WatchJudgeDay{Runs: 61, Signals: 900, USD: 7.5} })
+	if day, err = f.service.Context(); err != nil || day.WatchJudge == nil || day.WatchJudge.Runs != 61 {
+		t.Fatalf("Brain context shows Watch's day as %#v (%v)", day.WatchJudge, err)
+	}
 	// And still nothing without new evidence after a restart.
 	f.restart()
 	if ran := f.scan(); ran != 0 {
