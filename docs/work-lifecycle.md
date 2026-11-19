@@ -394,8 +394,10 @@ delivery-unknown; it is never replayed.
 **Judgment, made by a model.** When none of those facts holds (and the last
 fact is at least 3 minutes old, so a Work Brain just created is not judged
 before its Worker starts), the Work is a candidate. A `WorkJudge` is given the
-Work's objective, its recent events including the Worker's result, and the chat
-between the user and Brain since the last event, and returns `done`,
+Work's objective, its recent events including the Worker's result, every wait
+set on it (what Brain named with `-wait-for`, kept readable after the wait is
+released; a named step stays pending until something shows it happened), and
+the chat between the user and Brain since the last event, and returns `done`,
 `cancelled` or `keep` with a reason. The production judge runs the user's own Claude Code once, headless, the way
 Watch's judgment does (`watch/judge_agents.go`): Sonnet in print mode, no
 tools, MCP servers, hooks or saved session, only the user's own settings
@@ -522,7 +524,9 @@ clears both.
 window, any open Work with a question, a review whose handling ended without
 a disposition, or a reply still awaiting Brain. It adds `attention_since` (the
 open review's birth, the wait's start, or the question's time, which does
-not move while the Work waits; `updated_at` changes on every projection sync)
+not move while the Work waits; `updated_at` moves whenever the Work's
+projected state changes, and a daemon start that projects the same row leaves
+it alone)
 and `attention_reason`. The app derives the rest; elapsed time never writes
 daemon state. These are backstops for what the daemon cannot decide: a review
 no Host has received, a user reply Brain has not answered, or a judge that is

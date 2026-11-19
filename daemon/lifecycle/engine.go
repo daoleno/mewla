@@ -1514,6 +1514,12 @@ func (e *Engine) Cards() []Card {
 	return ProjectCards(e.ListViews())
 }
 
+// WaitHistory returns every wait set on one Work, oldest first: what Brain
+// said the Work waits for stays readable after the wait itself is released.
+func (e *Engine) WaitHistory(id WorkID) ([]Event, error) {
+	return eventsOf(e.db, id, KWakeSet, "")
+}
+
 // ReviewResolutions returns immutable resolution facts for one Work, including
 // resolutions committed by accepted follow-ups rather than an operator resolve.
 // Projection repair must not infer these decisions from current status alone.
