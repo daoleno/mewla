@@ -97,11 +97,9 @@ type Connector struct {
 	current *RelayCandidate
 
 	turnMu sync.Mutex
-	turn   TURNCredentials
-	// turnIssued is when turn was issued; noTURN, until when this relay is
-	// known to have no TURN (an older relay, or one without it).
-	turnIssued time.Time
-	noTURN     time.Time
+	// noTURN is until when this relay is known to have no TURN (an older
+	// relay, or one without it).
+	noTURN time.Time
 }
 
 // TURNCredentials are a relay's TURN addresses and a credential for them.
@@ -175,10 +173,9 @@ func (connector *Connector) Run(ctx context.Context) error {
 			connector.stateMu.Lock()
 			connector.current = &candidate
 			connector.stateMu.Unlock()
-			// A relay that restarted has a new TURN secret: what it issued
-			// before no longer allocates.
+			// This relay (another one, or one restarted) may have TURN now.
 			connector.turnMu.Lock()
-			connector.turn, connector.noTURN = TURNCredentials{}, time.Time{}
+			connector.noTURN = time.Time{}
 			connector.turnMu.Unlock()
 			registered.Store(connector, struct{}{})
 			connector.setState("connected", selected.candidate.Name, selected.rtt, "")
@@ -560,20 +557,18 @@ func TURN(ctx context.Context) (TURNCredentials, error) {
 	return found, err
 }
 
-// TURN returns TURN credentials from the relay this computer is registered
-// with, for Screen's video when a viewer has no direct path. They are kept
-// while more than half their life is left, so a view gets at least that long,
-// and dropped when the computer registers again (with this relay restarted,
-// or another one). A relay without TURN, or no relay, is an error, remembered
-// for a few minutes; Screen then offers direct paths only.
+// TURN returns a fresh TURN credential from the relay this computer is
+// registered with, for Screen's video when a viewer has no direct path. Each
+// call asks the relay (one control exchange): a credential is good for a few
+// allocations only, so each peer of each view gets its own. A relay without
+// TURN, or no relay, is an error, remembered for a few minutes; Screen then
+// offers direct paths only.
 func (connector *Connector) TURN(ctx context.Context) (TURNCredentials, error) {
-	connector.turnMu.Lock()
-	defer connector.turnMu.Unlock()
 	now := time.Now()
-	if left := connector.turn.ExpiresAt.Sub(now); left > 0 && left > connector.turn.ExpiresAt.Sub(connector.turnIssued)/2 {
-		return connector.turn, nil
-	}
-	if now.Before(connector.noTURN) {
+	connector.turnMu.Lock()
+	none := now.Before(connector.noTURN)
+	connector.turnMu.Unlock()
+	if none {
 		return TURNCredentials{}, errors.New("this relay has no TURN")
 	}
 	connector.stateMu.RLock()
@@ -591,15 +586,15 @@ func (connector *Connector) TURN(ctx context.Context) (TURNCredentials, error) {
 		return TURNCredentials{}, err
 	}
 	if response.Type != linkproto.TypeTURNCredentials || len(response.TURNURLs) == 0 || response.TURNUsername == "" {
+		connector.turnMu.Lock()
 		connector.noTURN = now.Add(5 * time.Minute)
+		connector.turnMu.Unlock()
 		if response.Type == linkproto.TypeError {
 			return TURNCredentials{}, errors.New(response.Message)
 		}
 		return TURNCredentials{}, errors.New("relay returned invalid TURN credentials")
 	}
-	connector.turnIssued = now
-	connector.turn = TURNCredentials{URLs: response.TURNURLs, Username: response.TURNUsername, Password: response.TURNPassword, ExpiresAt: time.UnixMilli(response.ExpiresAtMS), MaxKbps: response.TURNMaxKbps}
-	return connector.turn, nil
+	return TURNCredentials{URLs: response.TURNURLs, Username: response.TURNUsername, Password: response.TURNPassword, ExpiresAt: time.UnixMilli(response.ExpiresAtMS), MaxKbps: response.TURNMaxKbps}, nil
 }
 
 func (connector *Connector) consumeAdmission(

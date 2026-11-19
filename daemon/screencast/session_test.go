@@ -307,6 +307,107 @@ func TestSessionThroughTURN(t *testing.T) {
 	}
 }
 
+// Two views of one computer, every peer relay-only through the recipe's three
+// TURN addresses (UDP, TCP, TLS), both get pictures: each peer of each view
+// has a credential of its own (screenICE), the offer hands the viewer its own,
+// and every peer allocates on all three addresses under the relay's default
+// cap of 4 per credential. One credential shared by the computer and every
+// view (the re-review's RR2) filled that cap with the first view.
+func TestTwoRelayedViewsThroughThreeTURNAddresses(t *testing.T) {
+	if _, _, err := findEncoder(); err != nil {
+		t.Skip(err)
+	}
+	udp, tcp, tlsAddr := freePort(t, "udp"), freePort(t, "tcp"), freePort(t, "tcp")
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	cert, roots := testCertificate(t, "turn.relay.test")
+	turnServer, err := relay.StartTURN(relay.TURNConfig{
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udp, TCPAddr: tcp, Secret: secret,
+		TLSAddr: tlsAddr, TLS: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer turnServer.Close()
+	_, port, _ := net.SplitHostPort(tlsAddr)
+	issuer, err := relay.NewTURNIssuer(secret, []string{
+		"turn:" + udp + "?transport=udp",
+		"turn:" + tcp + "?transport=tcp",
+		"turns:turn.relay.test:" + port + "?transport=tcp",
+	}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const route = "0123456789abcdef0123456789abcdef"
+	fresh := func() []webrtc.ICEServer {
+		urls, user, pass, _, err := issuer.Credentials(route)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ICEServersFor(urls, user, pass)
+	}
+	// turns:turn.relay.test resolves to this relay, its certificate checked as
+	// a browser checks it; plain TCP goes where it says.
+	dial := relayDialer{name: "turn.relay.test", tlsAddr: tlsAddr, config: &tls.Config{ServerName: "turn.relay.test", RootCAs: roots, MinVersion: tls.VersionTLS12}}
+	var se webrtc.SettingEngine
+	se.SetICEProxyDialer(dial)
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(se))
+	for view := 1; view <= 2; view++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		computer, viewer := fresh(), fresh()
+		offered := make(chan []webrtc.ICEServer, 1)
+		session, peer, frames, _, _, _, _ := startViewerWith(ctx, t, api, webrtc.Configuration{
+			ICETransportPolicy: webrtc.ICETransportPolicyRelay, ICEServers: viewer,
+		}, computer, func(c *Config) {
+			c.ViewerICEServers = viewer
+			c.dialTURN = dial
+			signal := c.Signal
+			c.Signal = func(v any) {
+				if sig := v.(Signal); sig.Type == "rtc" {
+					offered <- sig.ICEServers
+				}
+				signal(v)
+			}
+		})
+		defer session.Close()
+		defer peer.Close()
+		if got := <-offered; len(got) == 0 || got[0].Username != viewer[0].Username {
+			t.Fatalf("view %d: the offer gave the viewer %+v, not its own credential", view, got)
+		}
+		select {
+		case <-frames:
+		case <-ctx.Done():
+			t.Fatalf("view %d: no picture (viewer %s)", view, peer.ConnectionState())
+		}
+		if r, _ := session.route(); r != "relay" {
+			t.Fatalf("view %d: route %q", view, r)
+		}
+		// Every peer so far holds an allocation at each of the three addresses.
+		want := 6 * view
+		deadline := time.Now().Add(5 * time.Second)
+		for total, _ := turnServer.Allocations(route); total != want; total, _ = turnServer.Allocations(route) {
+			if time.Now().After(deadline) {
+				t.Fatalf("view %d: %d allocations, want %d", view, total, want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+}
+
+// relayDialer dials TURN over TCP for a peer: a turns: URL naming name goes
+// over TLS to tlsAddr, anything else as plain TCP where it says.
+type relayDialer struct {
+	name, tlsAddr string
+	config        *tls.Config
+}
+
+func (d relayDialer) Dial(network, addr string) (net.Conn, error) {
+	if host, _, _ := net.SplitHostPort(addr); host == d.name {
+		return tls.Dial(network, d.tlsAddr, d.config)
+	}
+	return net.Dial(network, addr)
+}
+
 // tlsDialer dials the TURN server over TLS for a viewer whose turns: URL
 // names it (Pion uses the connection as it comes).
 type tlsDialer struct {

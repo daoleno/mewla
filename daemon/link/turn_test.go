@@ -88,9 +88,11 @@ func TestConnectorGetsTURNCredentials(t *testing.T) {
 	if len(creds.URLs) != 1 || !strings.Contains(creds.Username, ":"+identity.RouteID+":") || creds.Password == "" || time.Until(creds.ExpiresAt) < 6*time.Hour || creds.MaxKbps != 6000 {
 		t.Fatalf("credentials %+v", creds)
 	}
+	// Each call is a fresh credential: one per peer of each view, since a
+	// credential holds a few allocations only.
 	again, err := connector.TURN(ctx)
-	if err != nil || again.Username != creds.Username || again.Password != creds.Password {
-		t.Fatalf("kept credentials %+v, %v", again, err)
+	if err != nil || again.Username == creds.Username || again.Password == creds.Password {
+		t.Fatalf("a credential handed out twice: %+v, %v", again, err)
 	}
 
 	// The relay restarts (with another secret): the computer registers again
