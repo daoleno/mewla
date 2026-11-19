@@ -14,27 +14,11 @@ type Observer struct {
 	// Locked reports the computer's lock when the viewer opens and whenever
 	// it changes.
 	Locked func(locked bool)
-	// Stats is called about once a second while updates flow.
-	Stats func(StreamStats)
-	// Done is called once, when the session ends.
-	Done func(StreamSummary)
 }
 
 func (o *Observer) locked(locked bool) {
 	if o != nil && o.Locked != nil {
 		o.Locked(locked)
-	}
-}
-
-func (o *Observer) stats(stats StreamStats) {
-	if o != nil && o.Stats != nil {
-		o.Stats(stats)
-	}
-}
-
-func (o *Observer) done(summary StreamSummary) {
-	if o != nil && o.Done != nil {
-		o.Done(summary)
 	}
 }
 

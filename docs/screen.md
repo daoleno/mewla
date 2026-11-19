@@ -4,8 +4,12 @@ See and control a computer's screen from your phone or a browser, and watch
 agents use it. Tap the cat, then **Screen**.
 
 Screen shows the current computer: the one the Mewla daemon runs on. The
-picture and your input travel over the same signed connection as everything
-else, so Screen opens no new port and needs no extra password.
+picture comes as video that the computer pushes the moment its screen changes,
+and your input goes back beside it, encrypted end to end. Both are set up over
+the same signed connection as everything else, so Screen needs no extra
+password; they go straight between your phone and the computer when one can
+reach the other, and through Mewla Relay otherwise (see
+[How the picture travels](#how-the-picture-travels)).
 
 ## Which computers
 
@@ -13,7 +17,7 @@ else, so Screen opens no new port and needs no extra password.
 | --- | --- |
 | macOS 13 or later (Apple Silicon) | Supported |
 | Windows 10 or 11 | Supported, with no permission to grant. Mewla has to run in your signed-in session (its sign-in task does); started as a service or over SSH, it can't see the screen and says so |
-| Linux | Agents get displays of their own, off your desktop (see [below](#linux-agents-on-a-virtual-screen)); needs TigerVNC's `Xvnc` |
+| Linux | Agents get displays of their own, off your desktop (see [below](#linux-agents-on-a-virtual-screen)); needs TigerVNC's `Xvnc` and `ffmpeg` |
 
 On any other computer, Screen says it isn't supported. To use another
 computer's screen, switch to it: tap the cat, then the computer under
@@ -50,9 +54,15 @@ While an agent uses the screen you see, it has one switch, the same everywhere:
 
 - **Take over** gives you the controls; while you have them the agent waits,
   and a red frame goes round the picture.
-- **Give back** lets the agent go on (it is told how long you had it). Leaving
-  Screen gives it back by itself.
-- **Stop**, the square button beside it, stops the agent.
+- **Give back** lets the agent go on (it is told how long you had it): Screen
+  lets go of the computer's screen at once and shows the agent again as soon as
+  it uses it. Leaving Screen gives it back by itself.
+- **Stop**, the square button beside it, ends what the agent is doing on the
+  screen and tells it that you pressed Stop (its next action, if none was under
+  way, is refused saying so). It is not locked out: like everything you do on
+  an agent's screen, Stop informs the agent, and it uses the screen again only
+  if you ask it to. Screen lets go of the computer's screen too, and shows the
+  agent again if it comes back.
 
 On a phone the switch sits under the picture and steps aside while you type; on
 a desktop or a wide window it is in the bar on top. The bar also has Back, the
@@ -94,52 +104,66 @@ to the computer, and a paste sends your text there.
 
 **⋯ › Connection** shows the way out if there is one (join the computer's Wi-Fi
 or Tailscale, when the computer lists addresses the phone could not reach),
-then the route (Relay, Tailscale, LAN or Local; for a phone paired through
-Mewla Relay it is the path the phone chose, and **video** while motion is going
-as video), the round trip, the time from your tap until the screen redraws,
-updates per second, bandwidth, whether the picture is sent at reduced quality,
-the stage that takes longest when it isn't the network (the computer's
-encoding, the hop into the viewer or the viewer's own drawing), and the
-computer's power state.
+then the route the video takes (Relay, Tailscale, LAN or Local), the round
+trip, the time from your tap until the picture changes, frames per second,
+bandwidth, the computer's encoding when that is what holds the picture up, and
+the computer's power state.
 
-Screen sends only the parts of the screen that changed, and always the newest
-screen: a slow connection drops frames instead of queueing them. It watches how
-late the phone's answers are. When they are late it first tries more updates
-in flight, and keeps them only if more updates then arrive each second (a long
-round trip). Up to 4 are allowed; while the updates are small (about 16 KB or
-less each, as when scrolling text, typing or moving the pointer) up to 16, since
-with 4 in flight a 650 ms round trip, such as the relay across an ocean, caps
-the picture at 6 updates a second however little there is to send. When that
-doesn't help (too many bytes), it lowers the picture quality while the screen
-moves, down to a floor that is still readable, and sends what changed again at
-full quality once the screen is still. When nothing is late, nothing changes.
-The computer's screen never changes size; an agent's browser window does while
-you take it over from a phone (see [below](#agents-displays)).
+The computer sends a picture the moment its screen changes, up to 60 a second,
+and always the newest: on a slow link pictures are skipped, never queued. The
+video's rate follows what the link carries, falling at once when the link fills
+and rising again while it holds, so motion stays smooth and only goes softer on
+a thin link. When the screen stops moving, the computer sends the still picture
+again ten times in the next second, each sharper than the last, and then nothing
+until something changes: small text is readable at full size within that
+second. The first picture of a view is a whole one (a key frame), and so is the
+next after one was lost, so a view never waits on a broken stream. The
+computer's screen never changes size; an agent's browser window does while you
+take it over from a phone (see [below](#agents-displays)).
 
 A connection that does not show a picture within about twenty seconds is
 treated as lost: Screen says **Disconnected** and offers to reconnect, rather
 than spinning for good.
 
-### Video for motion
+### How the picture travels
 
-When much of the screen moves (a page scrolling, a video playing, a window being
-dragged) the changes are too many bytes as pictures: 100 to 300 KB a frame, more
-than a phone link carries. A viewer that can decode H.264 (RFB encoding 50, which
-the viewer's noVNC offers when the phone's web view has WebCodecs) then gets that
-motion as an H.264 stream from the computer's hardware encoder, a few KB a frame,
-and gets the sharp picture back as soon as the screen is still. Text and small
-changes (typing, the pointer) stay pictures. Input and the acknowledgements that
-pace the stream are unchanged, and an agent's own use of the screen
-(`mewla_computer`, screenshots, Watch) never uses video. The stream's bit rate
-follows the link: it falls below what was actually delivered when answers get
-late and rises again while they stay prompt.
+The picture is H.264 video over WebRTC, played by the phone's or browser's own
+video decoder the moment it is decoded, with no playout buffer. The computer
+encodes with its own hardware where it has an encoder (VideoToolbox on a Mac,
+Media Foundation on Windows) and with `ffmpeg` on Linux (VA-API first, then
+x264), without B-frames, so each picture leaves as soon as it is encoded.
 
-Video needs a hardware H.264 encoder (every Apple Silicon Mac has one) and a
-viewer that says it can decode it; otherwise nothing changes. It is **off by
-default** until it has been tried on real machines: start Mewla with
-`MEWLA_SCREEN_VIDEO=on` to turn it on, and `MEWLA_SCREEN_VIDEO=off` always
-turns it off. **⋯ › Connection** says **video** while motion is going as
-video, and the log line for a session says how many of its updates were.
+Your input goes back on the same connection, in two channels: keys, clicks,
+the wheel and paste in order and never lost, and pointer moves unordered and
+never resent, so a lost move is simply overtaken by the next.
+
+The connection is set up over Screen's signed socket: the computer offers, the
+viewer answers. It goes directly between the phone and the computer on the same
+Wi-Fi/LAN or over Tailscale, and through Mewla Relay's TURN service otherwise
+(mobile data, a strict network): over UDP, or TCP, or TLS on port 443 where UDP
+is blocked. **⋯ › Connection** names the route: **LAN**, **Tailscale**,
+**Local** or **Relay**.
+
+**End to end.** The video and your input are encrypted with DTLS-SRTP between
+your device and the computer; the relay forwards packets it cannot read. Each
+side signs the fingerprint of its DTLS certificate: the computer with its key
+from pairing, which the app checks, and your device with its own key, which the
+computer checks against the device that opened the view. The encryption is held
+to those two certificates, so nothing in between (the relay, a network) can
+read the picture or your input, or take either side's place.
+
+**The relay's TURN.** When an allowed device opens a view, the computer asks
+its relay for two fresh TURN credentials, one for its own side and one it hands
+that view; each lasts 12 hours, and no two views or sides share one.
+With one, the relay relays UDP only, to public addresses and to the other side's
+allocation on the same relay: never to the relay's own other ports, private or
+shared networks such as a tailnet's, or cloud metadata. It holds
+each credential to a few allocations, each computer to a few more, and each
+allocation to a bit rate; the computer keeps its video under that rate while
+the picture goes through the relay.
+
+An agent's own use of the screen (`mewla_computer`, screenshots, Watch) never
+goes through any of this.
 
 ## Keep the computer reachable
 
@@ -458,6 +482,12 @@ only your user can open, no network port is used, and an agent's monitor is
 given up when its Worker closes, when nothing is left on it, or after an hour
 nobody used it.
 
+Watching an agent's screen also needs `ffmpeg` with an H.264 encoder (VA-API,
+x264 or OpenH264), which encodes its video; the agents work without it. A
+computer without one says so on Screen, and `mewla doctor` lists what Screen
+is missing (`Xvnc`, `xauth`, `ffmpeg`, an H.264 encoder) on its **Screen**
+line.
+
 The browser has one profile for all agents on the computer, not your everyday
 Chrome: to give it a sign-in, take over an agent's screen, sign in yourself and
 give it back; every agent's window then has it, because they are windows of the
@@ -511,34 +541,27 @@ mewla screen enable     # allow devices to ask again
 
 ## When the picture is slow
 
-Open **⋯ › Connection**. The route says whether the phone reaches the computer
-through Mewla Relay or directly, and the slowest stage, when it isn't the
-network, says what holds the picture up.
+Open **⋯ › Connection**. The route says whether the video reaches you through
+Mewla Relay or directly, and the slowest stage, when it isn't the network,
+says what holds the picture up.
 
 - **Network** is high and the route is **Relay**: the round trip through the
   relay dominates, and it is set by where the relay is: a relay on another
-  continent adds its distance twice (phone to relay, relay to computer), so
-  even a few KB takes 400 to 700 ms to be answered. Input then reaches the
-  screen that much later too; only a nearer relay or a direct address
-  shortens that. A direct address (Tailscale, or Wi-Fi at home) avoids it,
-  and a phone paired through Mewla Relay uses one by itself when the computer
-  listens on that network and the phone can reach it; see
-  [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path
-  stays **Relay** at home, the phone can't reach the computer's private
-  address: another Wi-Fi network, client isolation on the router, or a firewall
-  blocking the port. When the computer listed private addresses and none could
-  be verified from this phone, Connection says "Join your computer's Wi-Fi or
-  Tailscale" (turn Tailscale on on the phone, or join the same Wi-Fi). When the
-  computer lists none (no private network address, or it was started on a
-  non-loopback address), the phone can't change that and the details give no
-  fix.
-- **Slowest** reads **encode**: the computer is busy; a full-screen update
-  normally takes about 10 ms.
-- **Slowest** reads **app** or **draw**: the phone is the limit (its bridge into
-  the viewer, or drawing the picture).
+  continent adds its distance twice (phone to relay, relay to computer). Input
+  then reaches the screen that much later too; only a nearer relay or a direct
+  path shortens that. A direct path (Tailscale, or Wi-Fi at home) avoids it,
+  and the video takes one by itself when the phone can reach the computer's
+  address on that network. If the route stays **Relay** at home, the phone
+  can't reach the computer's private address: another Wi-Fi network, client
+  isolation on the router, or a firewall. When the computer listed private
+  addresses and none could be verified from this phone, Connection says "Join
+  your computer's Wi-Fi or Tailscale" (turn Tailscale on on the phone, or join
+  the same Wi-Fi). When the computer lists none, the phone can't change that and
+  the details give no fix.
+- **Slowest** reads **encode**: the computer is busy; a picture normally takes
+  2 to 10 ms to encode.
 
-At the computer, one line per session in Mewla's log summarizes the same stages
-(`screen: device … stream via …`): updates, bytes, encode and acknowledgement
-times, and the lowest quality reached. It holds numbers only. Starting Mewla with
-`MEWLA_SCREEN_ADAPTIVE=off` turns the quality and window adaptation off, to
-compare a link with and without it.
+At the computer, one line per session in Mewla's log sums it up (`screen:
+device … session ended …`): how long it lasted, how the viewer arrived, the
+pictures and key frames sent, the bytes, the encoder and the route. It holds
+numbers only.

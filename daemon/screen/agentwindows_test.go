@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -511,7 +512,7 @@ func TestTheWindowViewCropsToItsPlaceAndAimsInputAtIt(t *testing.T) {
 	}
 }
 
-// View serves the window as RFB and holds the agent display while it is open.
+// View holds the agent display while it is open.
 func TestViewHoldsTheAgentDisplayWhileOpen(t *testing.T) {
 	a, viewer, _ := newTestWindows(t)
 	if _, err := a.View("mh-signin"); !errors.Is(err, errNoWindow) {
@@ -522,7 +523,7 @@ func TestViewHoldsTheAgentDisplayWhileOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if view.Conn == nil || !viewer.holds["view:mh-signin"] {
+	if view.Next == nil || !viewer.holds["view:mh-signin"] {
 		t.Fatalf("the view holds %v", viewer.holds)
 	}
 	view.Close()
@@ -600,5 +601,57 @@ func TestWindowPlaceIsTheWindowOfThePlacesSize(t *testing.T) {
 	}
 	if _, ok := windowPlace([]windowInfo{popup, other}, testAgentDisplay, testCell, chromium); ok {
 		t.Fatal("a popup or another app's window was taken for the place")
+	}
+}
+
+// As pushed video, the view gives the window's pictures and takes the
+// person's input, counted for the agent, with no RFB server behind it.
+func TestTheVideoViewGivesPicturesAndTakesInput(t *testing.T) {
+	a, viewer, _ := newTestWindows(t)
+	a.Opened("c1-1", "mh-signin", testCell)
+	view, err := a.View("mh-signin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer view.Close()
+	p, err := view.Next(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Width != 1600 || p.Height != 1000 || !p.RGB || p.Stride < p.Width*4 || len(p.Pix) < p.Stride*(p.Height-1)+p.Width*4 {
+		t.Fatalf("picture %dx%d stride %d rgb %v, %d bytes", p.Width, p.Height, p.Stride, p.RGB, len(p.Pix))
+	}
+	if r, g, b := p.Pix[0], p.Pix[1], p.Pix[2]; r != 255 || g != 255 || b != 255 {
+		t.Fatalf("the picture does not start at the window's corner: %d %d %d", r, g, b)
+	}
+	src, in := io.Pipe()
+	done := make(chan error, 1)
+	go func() { done <- view.Input(src) }()
+	msgs := [][]byte{
+		{5, 1, 0, 10, 0, 20},
+		{5, 0, 0, 10, 0, 20},
+		{4, 1, 0, 0, 0, 0, 0, 'h'},
+	}
+	for _, m := range msgs {
+		if _, err := in.Write(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = in.Close()
+	if err := <-done; err != nil && !errors.Is(err, io.EOF) {
+		t.Fatal(err)
+	}
+	fake := viewer.session
+	fake.mu.Lock()
+	clicks, keys := append([]string(nil), fake.clicks...), append([]uint32(nil), fake.keys...)
+	fake.mu.Unlock()
+	if len(clicks) != 1 || clicks[0] != "4242,77,1610,20,0,1" || len(keys) != 1 {
+		t.Fatalf("clicks %v keys %v", clicks, keys)
+	}
+	a.mu.Lock()
+	told := a.owners["mh-signin"].input
+	a.mu.Unlock()
+	if told == (vdisplay.Input{}) {
+		t.Fatal("the agent is not told the person used its window")
 	}
 }

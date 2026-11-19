@@ -132,3 +132,7 @@ func Local(r *http.Request) bool {
 	}
 	return true
 }
+
+// Kind names the path an address is on, as Path does: "loopback",
+// "tailscale", "lan" or "direct".
+func Kind(ip net.IP) string { return classify(ip) }

@@ -93,6 +93,23 @@ type Connector struct {
 
 	stateMu sync.RWMutex
 	state   ConnectorState
+	// current is the relay this computer is registered with, while it is.
+	current *RelayCandidate
+
+	turnMu sync.Mutex
+	// noTURN is until when this relay is known to have no TURN (an older
+	// relay, or one without it).
+	noTURN time.Time
+}
+
+// TURNCredentials are a relay's TURN addresses and a credential for them.
+type TURNCredentials struct {
+	URLs      []string
+	Username  string
+	Password  string
+	ExpiresAt time.Time
+	// MaxKbps is the most the relay carries for one allocation (0: no cap).
+	MaxKbps int
 }
 
 type registeredRelay struct {
@@ -152,9 +169,22 @@ func (connector *Connector) Run(ctx context.Context) error {
 		connector.setState("connecting", "", 0, "")
 		selected, err := connector.selectRelay(ctx)
 		if err == nil {
+			candidate := selected.candidate
+			connector.stateMu.Lock()
+			connector.current = &candidate
+			connector.stateMu.Unlock()
+			// This relay (another one, or one restarted) may have TURN now.
+			connector.turnMu.Lock()
+			connector.noTURN = time.Time{}
+			connector.turnMu.Unlock()
+			registered.Store(connector, struct{}{})
 			connector.setState("connected", selected.candidate.Name, selected.rtt, "")
 			startedAt := time.Now()
 			err = connector.runRegisteredRelay(ctx, selected)
+			registered.Delete(connector)
+			connector.stateMu.Lock()
+			connector.current = nil
+			connector.stateMu.Unlock()
 			if ctx.Err() != nil {
 				connector.setState("offline", "", 0, "")
 				return ctx.Err()
@@ -504,6 +534,67 @@ func (connector *Connector) pairingAdmissionHandler(
 		}
 		connector.handler.ServeHTTP(writer, request)
 	})
+}
+
+// registered holds the connectors registered with a relay now (a computer has
+// one for its own relay.json and one for remote access).
+var registered sync.Map
+
+// TURN returns TURN credentials from a relay this computer is registered with
+// now; an error when there is none, or none of them has TURN.
+func TURN(ctx context.Context) (TURNCredentials, error) {
+	err := errors.New("not registered with a relay")
+	var found TURNCredentials
+	registered.Range(func(key, _ any) bool {
+		creds, e := key.(*Connector).TURN(ctx)
+		if e != nil {
+			err = e
+			return true
+		}
+		found, err = creds, nil
+		return false
+	})
+	return found, err
+}
+
+// TURN returns a fresh TURN credential from the relay this computer is
+// registered with, for Screen's video when a viewer has no direct path. Each
+// call asks the relay (one control exchange): a credential is good for a few
+// allocations only, so each peer of each view gets its own. A relay without
+// TURN, or no relay, is an error, remembered for a few minutes; Screen then
+// offers direct paths only.
+func (connector *Connector) TURN(ctx context.Context) (TURNCredentials, error) {
+	now := time.Now()
+	connector.turnMu.Lock()
+	none := now.Before(connector.noTURN)
+	connector.turnMu.Unlock()
+	if none {
+		return TURNCredentials{}, errors.New("this relay has no TURN")
+	}
+	connector.stateMu.RLock()
+	current := connector.current
+	connector.stateMu.RUnlock()
+	if current == nil {
+		return TURNCredentials{}, errors.New("not registered with a relay")
+	}
+	message, err := signedRequest(ctx, connector.auth, connector.identity.RouteID, connector.config, linkproto.TypeTURNRequest, 0)
+	if err != nil {
+		return TURNCredentials{}, err
+	}
+	response, err := controlExchange(ctx, connector.config, *current, message)
+	if err != nil {
+		return TURNCredentials{}, err
+	}
+	if response.Type != linkproto.TypeTURNCredentials || len(response.TURNURLs) == 0 || response.TURNUsername == "" {
+		connector.turnMu.Lock()
+		connector.noTURN = now.Add(5 * time.Minute)
+		connector.turnMu.Unlock()
+		if response.Type == linkproto.TypeError {
+			return TURNCredentials{}, errors.New(response.Message)
+		}
+		return TURNCredentials{}, errors.New("relay returned invalid TURN credentials")
+	}
+	return TURNCredentials{URLs: response.TURNURLs, Username: response.TURNUsername, Password: response.TURNPassword, ExpiresAt: time.UnixMilli(response.ExpiresAtMS), MaxKbps: response.TURNMaxKbps}, nil
 }
 
 func (connector *Connector) consumeAdmission(

@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -141,29 +140,19 @@ func TestAcceptTold(t *testing.T) {
 
 	// 4. The Watch tap, through the daemon's Watch path.
 	time.Sleep(personMargin + 100*time.Millisecond)
-	conn, err := svc.WatchWorker(ctx, device, worker, nil)
+	cast, err := svc.WatchWorkerCast(ctx, device, worker)
 	if err != nil {
 		t.Fatalf("watch: %v", err)
 	}
-	defer conn.Close()
-	read := func(n int) []byte {
-		b := make([]byte, n)
-		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-		if _, err := io.ReadFull(conn, b); err != nil {
-			t.Fatalf("viewer read: %v", err)
-		}
-		return b
+	defer cast.Close()
+	if _, err := cast.Next(ctx, 0); err != nil {
+		t.Fatalf("watch picture: %v", err)
 	}
 	write := func(b []byte) {
-		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		if _, err := conn.Write(b); err != nil {
-			t.Fatalf("viewer write: %v", err)
+		if err := cast.Input(b); err != nil {
+			t.Fatalf("viewer input: %v", err)
 		}
 	}
-	write([]byte{1}) // ClientInit
-	init := read(24)
-	read(int(binary.BigEndian.Uint32(init[20:])))
-	write([]byte{3, 0, 0, 0, 0, 0, 0x04, 0, 0x04, 0}) // FramebufferUpdateRequest
 	at := area.Frame.Min.Add(image.Pt(10, 10))
 	pointer := func(buttons byte) {
 		b := []byte{5, buttons, 0, 0, 0, 0}

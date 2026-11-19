@@ -41,8 +41,8 @@ const WINDOWS_POLL_MS = 3_000;
 /** Window height (pt) below which a page header does not fit beside the picture: a phone held sideways. */
 const ROOMY_MIN_HEIGHT = 500;
 
-type Phase = "checking" | "failed" | "setup" | "agent" | "local" | "live";
-type How = "auto" | "takeOver" | "watch";
+type Phase = "checking" | "failed" | "setup" | "agent" | "waiting" | "local" | "live";
+type How = "auto" | "takeOver" | "watch" | "stopped";
 
 const MENU_POPUP = "rounded-[18px] bg-popover p-1.5 shadow-float";
 /** On wide Screen ⋯ is a popover at its button, 288 wide (SPEC §14.2). */
@@ -70,6 +70,8 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
   const watching = signal<{ worker?: string } | null>(null);
   /** The person took the screen over from an agent (Give back hands it back): the agent's worker, or "" for every agent. */
   const tookOver = signal<string | null>(null);
+  /** Given back: the agent it went back to (its worker, or "" for any), and its name, until it uses the screen again. */
+  const givenBack = signal<{ worker: string; name: string; stopped?: boolean } | null>(null);
   const session = signal<RemoteSession | null>(null);
   const typing = signal(false);
   const mode = signal<ScreenPointerMode>("touch");
@@ -116,6 +118,15 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     if (!target || gone) return;
     dropSession();
     if (how !== "takeOver") tookOver.set(null);
+    // Given back or stopped, the screen stays the agents' until the person takes over: nothing that
+    // happens by itself (the watched agent's session ending, the app coming back, a reconnect) opens a
+    // view of the person's own, which would keep the agent off the screen. It watches or waits instead.
+    const handsOff = untracked(givenBack);
+    if (how === "takeOver") givenBack.set(null);
+    else if (how === "auto" && handsOff) {
+      how = "watch";
+      worker ??= handsOff.worker || undefined;
+    }
     const token = ++epoch;
     const active = () => token === epoch && isCurrent(target.id);
     slowWatch.reset();
@@ -146,7 +157,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       }
       if (!active() || untracked(agentWindows)) return;
     }
-    const entry = screenEntry(next, how);
+    const entry = screenEntry(next, how === "stopped" ? "auto" : how);
     if (entry === "setup") {
       reason.set(next.reason || "");
       phase.set("setup");
@@ -157,13 +168,25 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       phase.set(entry);
       return;
     }
+    // Given back, stopped, or watching an agent that is between two steps: the person holds no view
+    // of the screen (a view of their own would keep the agent off it) and waits for the agent to come back.
+    if ((how === "watch" || how === "stopped") && !next.agent) {
+      const before = untracked(givenBack);
+      givenBack.set({ worker: worker ?? "", name: before?.name ?? "", stopped: how === "stopped" || (how === "watch" && !!before?.stopped) });
+      phase.set("waiting");
+      return;
+    }
     const watch = how === "watch" && !!next.agent;
+    if (!watch) givenBack.set(null);
+    // The agent is back after a Stop: should it pause again, it goes on rather than stopped.
+    else if (untracked(givenBack)?.stopped) givenBack.set({ ...untracked(givenBack)!, stopped: false });
     watching.set(watch ? { worker } : null);
     const viewer = new RemoteSession(target, {
       watch,
       worker: watch ? worker : undefined,
       align: untracked(immersive) ? "center" : "top",
-      // The watched agent finished: look again, which opens the screen.
+      // The watched agent finished: look again, which opens the screen (after Give back or Stop it waits for
+      // the agent instead).
       onSocketClosed: () => {
         if (!watch) return false;
         void connect();
@@ -237,10 +260,15 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     }
     if (isCurrent(target.id)) void connect();
   };
+  // Stop tells the agent and locks nothing: the page lets go of the screen too (a view of the
+  // person's own would keep the agent off it) and watches the agent if it uses the screen again.
   const stopAgent = async (worker?: string) => {
     if (untracked(busy)) return;
+    const current = untracked(status);
+    const name = withoutSessionId((worker ? screenAgents(current).find((a) => a.worker === worker)?.name : undefined) || current?.agent?.name) || "";
     await request(worker ? { action: "stop_agent", worker } : { action: "stop_agent" });
-    void connect();
+    givenBack.set({ worker: worker ?? "", name, stopped: true });
+    void connect("stopped", worker);
   };
   const stopWatching = () => {
     dropSession();
@@ -272,6 +300,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       epoch++;
       dropSession();
       ownScreen.set(false);
+      givenBack.set(null);
       status.set(null);
       iphone.set(null);
       watching.set(null);
@@ -368,7 +397,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     const target = server();
     if (!target || !inFront() || displaysPage()) return;
     const waitingForPermissions = p === "setup" && !!s?.supported && !s.disabled && s.approved && !s.ready;
-    if (!waitingForPermissions && p !== "agent" && p !== "local" && p !== "live") return;
+    if (!waitingForPermissions && p !== "agent" && p !== "waiting" && p !== "local" && p !== "live") return;
     const timer = setInterval(() => {
       void screenRequest(target)
         .then((next) => {
@@ -376,11 +405,13 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
           status.set(next);
           if (waitingForPermissions && next.ready) void connect();
           if (p === "agent" && screenAgents(next).length === 0) void connect();
+          // The agent it was given back to uses the screen again: watch it.
+          if (p === "waiting" && next.agent) void connect("watch", untracked(givenBack)?.worker || next.agent.worker);
         })
         .catch(() => {
           // Restarting, or a moment away: the next look says.
         });
-    }, p === "live" ? 30_000 : 3_000);
+    }, p === "live" ? 30_000 : p === "waiting" ? 1_000 : 3_000);
     return () => clearInterval(timer);
   });
 
@@ -415,12 +446,11 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     const stats = s?.stats() ?? null;
     const target = server();
     return {
-      rttMs: s?.rtt() ?? null,
+      // The media path's own round trip, once the computer has measured it; the socket's until then.
+      rttMs: stats && stats.rttMs > 0 ? Math.round(stats.rttMs) : s?.rtt() ?? null,
       inputMs: viewer?.inputMs ?? null,
       fps: viewer?.fps ?? 0,
       kbps: viewer?.kbps ?? 0,
-      bridgeMs: viewer?.bridgeMs,
-      presentMs: viewer?.presentMs,
       daemon: stats,
       viaPath: null,
       directHint: target ? directHint(target, stats?.path) : null,
@@ -460,7 +490,10 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     const worker = watching()?.worker;
     return withoutSessionId((worker ? screenAgents(status()).find((a) => a.worker === worker)?.name : undefined) || status()?.agent?.name) || "An agent";
   };
+  // The name of the agent taken over from, said when it is given back.
+  let tookOverFrom = "";
   const takeOver = () => {
+    tookOverFrom = agentLabel();
     tookOver.set(untracked(watching)?.worker ?? "");
     void connect("takeOver");
   };
@@ -468,6 +501,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
   const giveBack = () => {
     const worker = untracked(tookOver);
     tookOver.set(null);
+    givenBack.set({ worker: worker ?? "", name: tookOverFrom });
     void connect("watch", worker || undefined);
   };
   const stopWatched = () => void stopAgent(watching()?.worker);
@@ -594,6 +628,7 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
         <AgentCard agents={screenAgents(status())} busy={busy()} iphone={iphoneRow()} onWatch={(agent) => void connect("watch", agent.worker)} onStop={(agent) => void stopAgent(agent.worker)} onTakeOver={takeOver} />
       );
     }
+    if (p === "waiting") return <WaitingCard name={givenBack()?.name || "The agent"} stopped={!!givenBack()?.stopped} busy={busy()} onTakeOver={takeOver} />;
     if (p === "local") return <LocalCard agents={screenAgents(status())} busy={busy()} iphone={iphoneRow()} onStop={(agent) => void stopAgent(agent.worker)} />;
     const current = session();
     if (!current) return <EmptyState onBlack busy />;
@@ -823,6 +858,22 @@ function AgentCard(props: { agents: ScreenAgent[]; busy: boolean; iphone: JSX.El
         {props.iphone}
         <View class="pt-2">
           <SmallButton testID="take-over" title={props.agents.length > 1 ? "Take over (stops all)" : "Take over"} icon="hand" filled disabled={props.busy} onPress={props.onTakeOver} />
+        </View>
+      </View>
+    </Scroll>
+  );
+}
+
+/** Given back: the agent goes on and is watched as soon as it uses the screen again; Take over takes it back. */
+function WaitingCard(props: { name: string; stopped: boolean; busy: boolean; onTakeOver: () => void }) {
+  return (
+    <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="grow items-center justify-center gap-3 px-6 py-6">
+      <View testID="screen-given-back" class="w-full items-center gap-3">
+        <Icon name="desktop" size={36} tone="onBlackSoft" />
+        <Text class="text-center text-title font-semibold text-white">{props.stopped ? `${props.name} stopped` : `${props.name} goes on`}</Text>
+        <If when={!props.stopped}><Spinner label="Waiting for the agent" size={20} tone="onBlackSoft" /></If>
+        <View class="pt-2">
+          <SmallButton testID="take-over" title="Take over" icon="hand" filled disabled={props.busy} onPress={props.onTakeOver} />
         </View>
       </View>
     </Scroll>

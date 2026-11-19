@@ -933,11 +933,12 @@ func (s *Service) View(worker string) (*Viewer, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, monitorRelay, closeView := NewMonitorView(w.screen.client, func() image.Rectangle {
+	rect := func() image.Rectangle {
 		w.mu.Lock()
 		defer w.mu.Unlock()
 		return viewRect(w.rect, w.reflowed)
-	})
+	}
+	client := w.screen.client
 	w.mu.Lock()
 	w.viewers++
 	w.nextView++
@@ -975,22 +976,27 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		}
 	}
 	var once sync.Once
+	changed, stopWatch := client.Watch()
+	input := func(src io.Reader) error {
+		return Relay(monitorInput{up: client, rect: rect}, src, func(in Input) {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			if holding {
+				return // the agent is held off: it is told how long, not what
+			}
+			w.input = w.input.Add(in)
+			w.last = time.Now()
+			if w.acting > 0 {
+				w.during = true
+			}
+		})
+	}
 	return &Viewer{
-		Conn: conn,
-		Relay: func(src io.Reader) error {
-			return monitorRelay(src, func(in Input) {
-				w.mu.Lock()
-				defer w.mu.Unlock()
-				if holding {
-					return // the agent is held off: it is told how long, not what
-				}
-				w.input = w.input.Add(in)
-				w.last = time.Now()
-				if w.acting > 0 {
-					w.during = true
-				}
-			})
-		},
+		Input: input,
+		Next: Pictures(func() ([]byte, int, int) {
+			r := rect()
+			return client.Crop(r), r.Dx(), r.Dy()
+		}, changed),
 		Hold: hold,
 		Fit: func(width, height int, dpr float64) Reflow {
 			fitMu.Lock()
@@ -1020,7 +1026,7 @@ func (s *Service) View(worker string) (*Viewer, error) {
 		},
 		Close: func() {
 			once.Do(func() {
-				closeView()
+				stopWatch()
 				hold(false)
 				w.mu.Lock()
 				delete(w.notify, id)
