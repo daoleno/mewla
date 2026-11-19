@@ -107,6 +107,16 @@ describe("saving a picture from the viewer", () => {
     expect(saved).toEqual([]);
   }, 20_000);
 
+  test("on iOS a refused Photos access says why, and the viewer stays", async () => {
+    // What client/ios PictureSave rejects with when the person says no to Photos.
+    const { app } = await phone({ platform: "ios", save: () => { throw new Error("Photos permission denied."); } });
+    await app.press("id:tool-pictures >> id:chat-image-open");
+    await app.waitFor("id:picture-viewer-image");
+    await app.press("id:picture-viewer-save");
+    await app.waitFor("text:Couldn't save the picture: Mewla isn't allowed to save pictures");
+    expect(app.shows("id:picture-viewer-save")).toBe(true);
+  }, 20_000);
+
   test("on iOS it saves to Photos and can copy", async () => {
     const { app, saved } = await phone({ platform: "ios" });
     await app.press("id:tool-pictures >> id:chat-image-open");

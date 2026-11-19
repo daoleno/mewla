@@ -139,7 +139,14 @@ jobs:
         run: |
           xcrun simctl boot "$SIM" || true
           xcrun simctl bootstatus "$SIM" -b
-      # TerminalTests saves the terminal it drew as out/terminal.png.
+      # PictureSaveTests save a chat's picture to Photos (the add-only access the app asks for) and read
+      # it back to compare its bytes (full access): granted to the test host so no prompt waits on nobody.
+      - name: Let the test host use Photos
+        run: |
+          xcrun simctl privacy "$SIM" grant photos-add com.daoleno.mewla
+          xcrun simctl privacy "$SIM" grant photos com.daoleno.mewla
+      # TerminalTests saves the terminal it drew as out/terminal.png, PictureSaveTests the share sheet as
+      # out/share-sheet-ios.png.
       - name: Unit tests (the host and the terminal)
         working-directory: client/ios
         env:
@@ -147,10 +154,15 @@ jobs:
           # The render corpus TerminalTests draws into out/corpus (the Simulator reads the checkout).
           TEST_RUNNER_MEWLA_CORPUS: ${{ github.workspace }}/scripts/terminal-corpus
         run: |
-          set -o pipefail
           mkdir -p out
+          # On a failure, each failed assertion's line before the summary (`tail` alone named the test, never why).
           xcodebuild test-without-building -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -40
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= > "$RUNNER_TEMP/ios-test.log" 2>&1 || {
+            grep -E ": error:|failed \(" "$RUNNER_TEMP/ios-test.log" | head -40
+            tail -40 "$RUNNER_TEMP/ios-test.log"
+            exit 1
+          }
+          tail -40 "$RUNNER_TEMP/ios-test.log"
       # The app the tests ran in carries the same client/ui bundle as a Release build (the Bundle
       # client/ui phase runs `nsh build --release` in every configuration); ios-release.yml builds the
       # signed Release app on each release.

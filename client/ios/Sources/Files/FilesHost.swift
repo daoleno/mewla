@@ -1,5 +1,4 @@
 import NativeShell
-import Photos
 import UIKit
 import UniformTypeIdentifiers
 
@@ -40,90 +39,26 @@ final class FilesHost: NSObject, UIDocumentPickerDelegate {
 
   // MARK: Pictures
 
-  /// A picture a chat shows (client/ui/chat/pictureActions.tsx), handed over as the app holds its original:
-  /// `source` is a data URL (the computer's file read whole) or a web address, decoded or downloaded here,
-  /// then staged in the app's temporary folder (one at a time) under `name`.
-  nonisolated private static func stagePicture(_ data: Any?, _ done: @escaping (Result<URL, Error>) -> Void) {
-    let source = string(data, "source")
-    let given = string(data, "name").replacingOccurrences(of: "/", with: "_").trimmingCharacters(in: .whitespacesAndNewlines)
-    let name = given.isEmpty ? "picture" : given
-    let write = { (bytes: Data) in
-      do {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pictures", isDirectory: true)
-        try? FileManager.default.removeItem(at: folder)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appendingPathComponent(name)
-        try bytes.write(to: file)
-        done(.success(file))
-      } catch {
-        done(.failure(error))
-      }
-    }
-    if source.lowercased().hasPrefix("data:image/"), let comma = source.firstIndex(of: ","), source[..<comma].lowercased().hasSuffix(";base64") {
-      guard let bytes = Data(base64Encoded: String(source[source.index(after: comma)...]), options: .ignoreUnknownCharacters) else {
-        return done(.failure(PictureError("The picture is unreadable.")))
-      }
-      DispatchQueue.global(qos: .userInitiated).async { write(bytes) }
-    } else if let url = URL(string: source), url.scheme == "https" || url.scheme == "http" {
-      URLSession.shared.dataTask(with: url) { bytes, response, error in
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard let bytes, error == nil, (200..<300).contains(status) else {
-          return done(.failure(PictureError("The picture did not download (HTTP \(status)).")))
-        }
-        write(bytes)
-      }.resume()
-    } else {
-      done(.failure(PictureError("No picture to save.")))
-    }
-  }
-
-  private struct PictureError: LocalizedError {
-    let errorDescription: String?
-    init(_ message: String) { errorDescription = message }
-  }
-
-  /// `files.saveImage {source, name, mimeType}` → `{name, where}`: the original's bytes added to Photos.
-  /// Photos asks for add-only access the first time, at the moment of saving.
+  /// `files.saveImage {source, name, mimeType}` → `{name, where}` and `files.shareImage {source, name, mimeType}`:
+  /// a chat's picture added to Photos or shown in the share sheet (PictureSave).
   nonisolated private static func saveImage(_ data: Any?, _ reply: NshHostReply) {
-    stagePicture(data) { staged in
-      guard case let .success(file) = staged else {
-        if case let .failure(error) = staged { DispatchQueue.main.async { reply.reject(error.localizedDescription) } }
-        return
-      }
-      let name = file.lastPathComponent
-      PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-        guard status == .authorized || status == .limited else {
-          return DispatchQueue.main.async { reply.reject("Photos permission denied.") }
-        }
-        PHPhotoLibrary.shared().performChanges({
-          let options = PHAssetResourceCreationOptions()
-          options.originalFilename = name
-          PHAssetCreationRequest.forAsset().addResource(with: .photo, fileURL: file, options: options)
-        }) { saved, error in
-          DispatchQueue.main.async {
-            if saved { reply.resolve(["name": name, "where": "Photos"]) }
-            else { reply.reject(error?.localizedDescription ?? "Photos did not take the picture.") }
-          }
-        }
+    PictureSave.save(source: string(data, "source"), name: string(data, "name"), mimeType: string(data, "mimeType")) { result in
+      switch result {
+      case let .success(saved): reply.resolve(["name": saved.name, "where": "Photos"])
+      case let .failure(error): reply.reject(error.localizedDescription)
       }
     }
   }
 
-  /// `files.shareImage {source, name, mimeType}`: the original as a file in the system share sheet.
   private func shareImage(_ data: Any?, _ reply: NshHostReply) {
-    Self.stagePicture(data) { [weak self] staged in
+    PictureSave.stage(source: Self.string(data, "source"), name: Self.string(data, "name"), mimeType: Self.string(data, "mimeType")) { [weak self] staged in
       DispatchQueue.main.async {
         switch staged {
         case let .failure(error): reply.reject(error.localizedDescription)
         case let .success(file):
           guard let self, var top = self.app.window?.rootViewController else { return reply.reject("Could not open the share sheet.") }
           while let next = top.presentedViewController { top = next }
-          let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
-          // An iPad shows it as a popover from the middle of the window.
-          sheet.popoverPresentationController?.sourceView = top.view
-          sheet.popoverPresentationController?.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
-          sheet.popoverPresentationController?.permittedArrowDirections = []
-          top.present(sheet, animated: true)
+          PictureSave.present(file: file, over: top)
           reply.resolve(true)
         }
       }
