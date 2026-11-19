@@ -225,8 +225,10 @@ upright never have it.
   screen on its side (82), each measured with the bar on the right. The rail keeps clear of them
   (`railEnds`); a bar on the left (the other rotation, Split View's left app) keeps both ends clear, since its
   camera's end is not known. The rail's foot rises above the keyboard while it is up. From the rail's top down: the page's controls, moved out of its header, never duplicated: Back (with the
-  connection mark) when there is a page to go back to, Stop while a turn runs on the page shown, then the
-  page's actions (a Session's Git, view and ⋯; Brain's ⋯; Git review's ⋯; a file's Refresh, Download, Copy).
+  connection mark) when there is a page to go back to, then the page's actions (a Session's Git, view and ⋯;
+  Brain's ⋯; Git review's ⋯; a file's Download, Copy), then what comes and goes while the page is shown: Stop
+  while a turn runs, a changed file's Refresh (`railPageOrder`). A control that appears never moves another
+  under a finger: a Stop appearing above Brain's ⋯ once took a tap meant for the menu.
   At the bar's foot, the app's places (`RAIL_PLACES`, a table the owner may change): Brain (home, the accent
   well while on it, a dot while its turn runs), the state (its dot, and the count while something needs you;
   it opens the tray over Brain; gone while the left pane holds the tray), Search or run, Screen, New session.

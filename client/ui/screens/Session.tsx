@@ -655,7 +655,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"} capsule={header}
       // The side rail's: Stop while a turn runs, Git in a repository, the view, ⋯ (the capsule's actions, in its order).
       rail={[
-        { id: "stop", icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping" : "Stop", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
+        { id: "stop", transient: true, icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping" : "Stop", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
         { id: "session-git", icon: "git-compare", label: "Git changes", onPress: openGit, shown: () => isRepo() },
         { id: "session-mode", icon: mode() === "chat" ? "terminal" : "chat", label: mode() === "chat" ? "Show terminal" : "Show chat", onPress: () => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")), shown: () => Boolean(props.brain) || canChat() },
         { id: "session-menu", icon: "more-horizontal", label: "Session menu", onPress: () => void menu(), shown: () => hasMenu(), ref: menuAnchor.ref },

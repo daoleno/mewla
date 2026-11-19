@@ -1,7 +1,7 @@
 import { computed, keyboardFrame, safeArea, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
-import { RAIL, RAIL_PLACES, railEnds, railLayout, railRoom, type RailPlaceId } from "../../core/shell/rail";
+import { RAIL, RAIL_PLACES, railEnds, railLayout, railPageOrder, railRoom, type RailPlaceId } from "../../core/shell/rail";
 import { screenRoute } from "../../core/screen/float";
 import { backMark } from "../../core/tray/model";
 import { Icon, type IconName } from "../kit/Icon";
@@ -17,8 +17,8 @@ import { goHome, homeShown, nav, openPage, trayOpen } from "./nav";
 /** The shown page's controls in the rail, Back first when there is a page to go back to. */
 const pageControls = computed((): Pressable[] => {
   const own = (railPages().at(-1)?.actions() ?? []).filter((action) => action.shown?.() ?? true);
-  const back = nav.routes().length > 1 ? [{ id: "back", label: backMark(tray().state.kind)?.label ?? "Back", icon: "chevron-left" as const, onPress: () => nav.pop() }] : [];
-  return [...back, ...own];
+  const back: Pressable[] = nav.routes().length > 1 ? [{ id: "back", label: backMark(tray().state.kind)?.label ?? "Back", icon: "chevron-left" as const, onPress: () => nav.pop() }] : [];
+  return railPageOrder<Pressable & { transient?: boolean }>(back, own);
 });
 
 /** State: the tray, over Brain (home's own overlay); Pair again goes straight to pairing. */

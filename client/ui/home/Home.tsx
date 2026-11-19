@@ -480,7 +480,7 @@ export function Home() {
   });
   return (
     <NavPage title="Brain" column="reading" headerVisible={false} header={<View />} rail={[
-      { id: "stop", icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping Brain" : "Stop Brain", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
+      { id: "stop", transient: true, icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping Brain" : "Stop Brain", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
       { id: "brain-menu", icon: "more-horizontal", label: "Brain's menu", onPress: () => menuOpen.set(true), ref: menuAnchor.ref },
     ]}>
       <CapsulePage>

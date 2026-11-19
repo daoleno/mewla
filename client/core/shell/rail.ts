@@ -92,6 +92,16 @@ export function railRoom(height: number, ends: RailEnds): number {
   return Math.max(0, height - ends.top - ends.bottom);
 }
 
+/**
+ * A page's controls in the rail's order: Back first, then the controls that stay while the page is shown, then those
+ * that come and go during the stay (`transient`: Stop while a turn runs, a file's Refresh once it changed). A control
+ * that appears then never moves another under a finger: on the Duo simulator a Stop appearing above Brain's ⋯ took a
+ * tap meant for the menu and stopped a live turn (round 4, 11-19).
+ */
+export function railPageOrder<T extends { transient?: boolean }>(back: readonly T[], actions: readonly T[]): T[] {
+  return [...back, ...actions.filter((action) => !action.transient), ...actions.filter((action) => action.transient)];
+}
+
 export type RailLayout<T> = {
   /** The page's controls, from the top of the rail's room down. */
   top: T[];
