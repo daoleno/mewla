@@ -42,7 +42,8 @@ import (
 // TURNLimits bound what TURN may use. Zero is the default.
 type TURNLimits struct {
 	// AllocationsPerCredential (default 4), AllocationsPerRoute (default
-	// 16: a computer and its viewers) and Allocations in all (default 512).
+	// 32: a computer and its viewers, five views at six) and Allocations in
+	// all (default 512).
 	AllocationsPerCredential int
 	AllocationsPerRoute      int
 	Allocations              int
@@ -68,7 +69,7 @@ func (l TURNLimits) withDefaults() TURNLimits {
 		return v
 	}
 	l.AllocationsPerCredential = or(l.AllocationsPerCredential, 4)
-	l.AllocationsPerRoute = or(l.AllocationsPerRoute, 16)
+	l.AllocationsPerRoute = or(l.AllocationsPerRoute, 32)
 	l.Allocations = or(l.Allocations, 512)
 	l.Kbps = or(l.Kbps, 8000)
 	l.TotalKbps = or(l.TotalKbps, 400000)
