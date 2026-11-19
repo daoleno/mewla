@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // The agent screen has an accessibility bus of its own: the bus AT-SPI uses,
@@ -60,7 +62,10 @@ func startA11y(dir string) (*a11yBus, error) {
 	if config == "" || registry == "" || err != nil {
 		return nil, errNoA11y
 	}
-	socket := filepath.Join(dir, "a11y")
+	socket := platform.SocketPath(filepath.Join(dir, "a11y"))
+	if err := platform.EnsureSocketDir(socket); err != nil {
+		return nil, err
+	}
 	_ = os.Remove(socket)
 	address := "unix:path=" + socket
 	bus := exec.Command(daemon, "--config-file="+config, "--nofork", "--address="+address)

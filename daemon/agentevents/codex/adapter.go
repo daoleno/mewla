@@ -5,10 +5,12 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/codextrust"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/shellquote"
-	"github.com/google/uuid"
 )
 
 // Adapter follows a Codex Worker through an app-server of its own.
@@ -55,7 +57,12 @@ func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 	if !ok || a.ControlDir == "" {
 		return agentevents.Launch{Command: command}, nil
 	}
-	socket := filepath.Join(a.ControlDir, "codex-ctl-"+uuid.NewString()+".sock")
+	// A long state directory would put the socket past what a unix socket
+	// can name; platform.SocketPath gives it a short name then.
+	socket := platform.SocketPath(filepath.Join(a.ControlDir, "codex-ctl-"+uuid.NewString()+".sock"))
+	if err := platform.EnsureSocketDir(socket); err != nil {
+		return agentevents.Launch{Command: command}, nil
+	}
 	program := strings.Fields(command)[0]
 	// The app-server is the process that loads the folder's own config, so it
 	// carries the launch's folder trust; the attached TUI shows no trust screen.

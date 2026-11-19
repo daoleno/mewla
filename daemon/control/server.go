@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 type Server struct {
@@ -27,6 +29,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	if s.Path == "" {
 		return fmt.Errorf("control socket path required")
+	}
+	if err := platform.EnsureSocketDir(s.Path); err != nil {
+		return fmt.Errorf("create control socket dir: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return fmt.Errorf("create control socket dir: %w", err)
