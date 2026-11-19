@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,12 +93,14 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 	const route = "0123456789abcdef0123456789abcdef"
 	user, pass := credential(t, route)
 
-	// No TCP allocation (RFC 6062): no TCP proxy.
+	// No TCP allocation (RFC 6062): no TCP proxy. (Refused after its quota
+	// was taken, it holds that for a second: a credential of its own here.)
 	stream, err := net.Dial("tcp4", tcpAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := turnClient(t, tcpAddr, stream, user, pass).AllocateTCP(); err == nil {
+	tcpUser, tcpPass := credential(t, route)
+	if _, err := turnClient(t, tcpAddr, stream, tcpUser, tcpPass).AllocateTCP(); err == nil {
 		t.Fatal("a TCP allocation was granted")
 	}
 
@@ -175,6 +179,102 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 		if err == nil || (errors.As(err, &ne) && ne.Timeout()) {
 			t.Fatalf("an idle connection stayed open: %v", err)
 		}
+	}
+}
+
+// Allocations asked at once, each over its own TCP connection (the server
+// serves each connection on its own), stay within the credential's cap: the
+// quota is taken when it is checked, not only once the allocation exists.
+func TestTURNQuotaHoldsUnderConcurrentAllocations(t *testing.T) {
+	tcpAddr := freeTURNPort(t, "tcp")
+	srv, err := StartTURN(TURNConfig{
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: freeTURNPort(t, "udp"), TCPAddr: tcpAddr, Secret: testTURNSecret,
+		MinPort: 61000, MaxPort: 61200,
+		Limits: TURNLimits{AllocationsPerCredential: 2, ConnsPerIP: 64},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	const route = "0123456789abcdef0123456789abcdef"
+	user, pass := credential(t, route)
+	const tries = 12
+	clients := make([]*turn.Client, tries)
+	for i := range clients {
+		stream, err := net.Dial("tcp4", tcpAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clients[i] = turnClient(t, tcpAddr, stream, user, pass)
+	}
+	var wg sync.WaitGroup
+	var granted atomic.Int32
+	start := make(chan struct{})
+	for _, c := range clients {
+		wg.Go(func() {
+			<-start
+			if _, err := c.Allocate(); err == nil {
+				granted.Add(1)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	if n := granted.Load(); n > 2 {
+		t.Fatalf("%d allocations granted to one credential, cap 2", n)
+	}
+	if total, _ := srv.Allocations(route); total > 2 {
+		t.Fatalf("%d allocations counted, cap 2", total)
+	}
+}
+
+// A quota taken for an allocation the server then fails to make (a TCP one)
+// comes back at that client's next request, or after a second.
+func TestTURNQuotaOfAFailedAllocationComesBack(t *testing.T) {
+	udpAddr, tcpAddr := freeTURNPort(t, "udp"), freeTURNPort(t, "tcp")
+	srv, err := StartTURN(TURNConfig{
+		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udpAddr, TCPAddr: tcpAddr, Secret: testTURNSecret,
+		MinPort: 61000, MaxPort: 61200,
+		Limits: TURNLimits{AllocationsPerCredential: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	const route = "0123456789abcdef0123456789abcdef"
+	refusedTCP := func(user, pass string) *turn.Client {
+		stream, err := net.Dial("tcp4", tcpAddr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := turnClient(t, tcpAddr, stream, user, pass)
+		if _, err := c.AllocateTCP(); err == nil {
+			t.Fatal("a TCP allocation was granted")
+		}
+		return c
+	}
+
+	// The same client asks again: its earlier request failed.
+	user, pass := credential(t, route)
+	if _, err := refusedTCP(user, pass).Allocate(); err != nil {
+		t.Fatalf("the client's next allocation: %v", err)
+	}
+	if total, _ := srv.Allocations(route); total != 1 {
+		t.Fatalf("%d allocations counted, want 1", total)
+	}
+
+	// Another client: the quota is held a second, then given back.
+	user2, pass2 := credential(t, route)
+	refusedTCP(user2, pass2)
+	if _, err := turnClient(t, udpAddr, nil, user2, pass2).Allocate(); err == nil {
+		t.Fatal("the failed allocation's quota was free at once")
+	}
+	time.Sleep(reserveFor + 100*time.Millisecond)
+	if _, err := turnClient(t, udpAddr, nil, user2, pass2).Allocate(); err != nil {
+		t.Fatalf("after a second: %v", err)
+	}
+	if total, _ := srv.Allocations(route); total != 2 {
+		t.Fatalf("%d allocations counted, want 2", total)
 	}
 }
 
