@@ -633,7 +633,8 @@ otherwise. `mewla-relay` carries both halves.
 v0.4.17 or later computer and app with no direct path got "The connection to
 the screen was lost" after about 14 s: Screen is pushed only as WebRTC video
 since v0.4.17, and the relay's byte tunnel carries only the signalling. The
-`turn` process renews its certificate by itself (see Renewal below).
+certificate renews itself on the host, in a process that is not the one
+facing the internet (see Renewal below).
 
 **What it is.** The relay (`-turn-url`, `-turn-secret-file`) answers a
 computer's signed `turn_request` with a credential `<expiry>:<route>:<nonce>`
@@ -689,9 +690,9 @@ met on 2026-11-20):
    committed), uploaded to both accessories as `/run/mewla-link/turn.secret`.
 3. Certificate for `turn.connect.mewla.ai`: browsers and the app's WebView check
    a `turns:` server's certificate, so the relay's self-signed control
-   certificate does not do. The `turn` process issues and renews it itself
+   certificate does not do. The `turncert` accessory issues and renews it
    (Renewal below); a first certificate uploaded with the deploy is served
-   until then and is optional. That first one was a Let's Encrypt certificate by DNS-01 with the
+   while its directory holds none, and is optional. That first one was a Let's Encrypt certificate by DNS-01 with the
    Cloudflare token in `.kamal/files/turn.crt` (chain) and `turn.key`, issued
    with `golang.org/x/crypto/acme` the way `daemon/remote/cert.go` does it,
    writing the challenge with `daemon/account/dns.Cloudflare` and the ACME
@@ -710,8 +711,8 @@ met on 2026-11-20):
    `127.0.0.1:8080`, which on the host network is the host's loopback and not
    this process, so it is off; the process's own health and metrics are on
    `-operator-addr` (a `-turn-only` process opens it only when the flag is
-   given). The certificate renews itself: `-turn-tls-acme-*`, the Cloudflare
-   token under its own name, and a writable `acme` directory:
+   given). It reads its certificate from the `turncert` accessory's
+   directory, read only, and holds no DNS token:
 
    ```yaml
    turn:
@@ -728,18 +729,35 @@ met on 2026-11-20):
        -turn-secret-file=/run/mewla-link/turn.secret
        -turn-min-port=49160 -turn-max-port=49671
        -turn-kbps=8000 -turn-total-kbps=200000
-       -turn-tls-acme-dir=/var/lib/mewla-turn
-       -turn-tls-acme-domain=turn.connect.mewla.ai
-       -turn-tls-acme-cloudflare-zone-id=<zone id>
+       -turn-tls-cert-dir=/var/lib/mewla-turn
        -operator-addr=127.0.0.1:9181
-     env:
-       secret: [MEWLA_TURN_CLOUDFLARE_TOKEN:MEWLA_ACCOUNT_CLOUDFLARE_TOKEN]
-     directories: [acme:/var/lib/mewla-turn]
+     volumes: [/home/ubuntu/mewla-link-turncert/acme/cert:/var/lib/mewla-turn:ro]
      files: [turn.secret, turn.crt, turn.key, as the relay's files are]
      options:
        user: "1000:1000"
        no-healthcheck: true
+
+   turncert:
+     image: (as turn)
+     host: <host address>
+     cmd: >-
+       /usr/local/bin/mewla-relay -turn-cert-renew
+       -turn-tls-acme-dir=/var/lib/mewla-turncert/cert
+       -turn-tls-acme-account-key=/var/lib/mewla-turncert/account/account.pem
+       -turn-tls-acme-domain=turn.connect.mewla.ai
+       -turn-tls-acme-cloudflare-zone-id=<zone id>
+     env:
+       secret: [MEWLA_TURN_CLOUDFLARE_TOKEN:MEWLA_ACCOUNT_CLOUDFLARE_TOKEN]
+     directories: [acme:/var/lib/mewla-turncert]
+     options:
+       user: "1000:1000"
+       no-healthcheck: true
    ```
+
+   Create `/home/ubuntu/mewla-link-turncert/acme/cert` and `…/account`
+   (0700, owned by `ubuntu`) before booting `turn`: Docker would create a
+   missing bind source as root, and `turncert` (uid 1000) could not write it.
+   Boot `turncert` before `turn`.
 
    `<kamal bridge gateway>` is the gateway of the network the relay container
    is on (`docker network inspect kamal`), so the relay reaches it and the
@@ -763,9 +781,11 @@ met on 2026-11-20):
    connection itself (on 11-20 TCP 3478 "accepted" from the operator's machine
    while nothing listened on the host).
 2. The relay's log has no `TURN` start error, and `/readyz` answers as before.
-   The turn process logs `acmecert: turn.connect.mewla.ai valid until …`, and
-   `ssh ubuntu@167.114.116.27 curl -fsS http://127.0.0.1:9181/healthz` gives
-   its `tls_certificate` with `days_left` and `renewal_failures` 0.
+   `kamal accessory logs turncert` shows `acmecert: turn.connect.mewla.ai
+   valid until …`, the turn process `acmecert: serving [turn.connect.mewla.ai]
+   from /var/lib/mewla-turn …`, and `ssh ubuntu@167.114.116.27 curl -fsS
+   http://127.0.0.1:9181/healthz` gives its `tls_certificate` with
+   `days_left`, `renewer_checked` and `renewal_failures` 0.
 3. From a computer on the new release, signed in to the hosted relay: open
    Screen from a phone on mobile data with Wi-Fi off. The Connection panel
    says route `relay` and a live picture comes. Open a second device's view
@@ -786,26 +806,37 @@ re-registered within 10 s of ready, phones come back within their 30 s back-off
 (at once when the app comes to the front). Every Mewla Relay connection drops
 and comes back, as with any relay upgrade.
 
-**Renewal.** The `turn` process keeps its certificate valid by itself
-(`daemon/acmecert`, flags `-turn-tls-acme-*`): 30 days before expiry (half the
-lifetime for a certificate that lives less than 60 days) it orders a new one
-from Let's Encrypt by DNS-01, writing the challenge with the account
-service's Cloudflare token (`MEWLA_TURN_CLOUDFLARE_TOKEN`, the same secret),
-and keeps the ACME account key, the certificate and its key in the
-accessory's `acme` directory (`/home/ubuntu/mewla-link-turn/acme` on the host,
-0600 files of uid 1000). It runs on the host; nothing on an operator's machine
-needs to be on. A renewal reaches new TLS connections at once; TLS connections
-already open, and UDP and TCP TURN, are not touched, so no view drops. A
-restart serves the later of the stored and the uploaded certificate. A failed
-renewal is logged (`acmecert: … renewal failed (N in a row): …`) and retried
-every hour, and the old certificate is served meanwhile.
+**Renewal.** Two processes share the certificate, so the one that parses
+STUN, TURN and TLS from the whole internet never holds the DNS token:
+
+- `turncert` (`mewla-relay -turn-cert-renew`, `daemon/acmecert` Keeper) holds
+  the account service's Cloudflare token (`MEWLA_TURN_CLOUDFLARE_TOKEN`, the
+  same secret) and opens no listener and publishes no port. 30 days before
+  expiry (half the lifetime for a certificate that lives less than 60 days)
+  it orders a new one from Let's Encrypt by DNS-01 and writes `cert.pem`,
+  `key.pem` and `status.json` (its last look, failures, last error) into
+  `/home/ubuntu/mewla-link-turncert/acme/cert`; the ACME account key stays in
+  `…/acme/account`, which `turn` does not mount. A failed renewal is logged
+  (`acmecert: … renewal failed (N in a row): …`) and retried every hour; the
+  old certificate is served meanwhile.
+- `turn` (`-turn-tls-cert-dir`, the Watcher) mounts only `acme/cert`, read
+  only, looks at it every minute and serves a new pair to new TLS
+  connections at once. TLS connections already open, and UDP and TCP TURN,
+  are not touched, so no view drops. It serves the uploaded `turn.crt` only
+  while that directory holds no unexpired pair; what `turncert` wrote last
+  wins, whatever its lifetime.
+
+Both run on the host; nothing on an operator's machine needs to be on.
 
 - Health: `curl -fsS http://127.0.0.1:9181/healthz` on the host gives
-  `tls_certificate` (`domain`, `not_after`, `days_left`, `renewal_failures`,
+  `tls_certificate`: the served certificate's `not_after` and `days_left`,
+  and `turncert`'s report (`renewer_checked`, `renewed`, `renewal_failures`,
   `last_error`); it answers 503 once there is no valid certificate.
   `/metrics` has `mewla_turn_tls_certificate_days_left`,
   `mewla_turn_tls_certificate_not_after_seconds`,
-  `mewla_turn_tls_renewal_failures` and `mewla_turn_allocations`.
+  `mewla_turn_tls_renewal_failures`, `mewla_turn_tls_renewer_checked_seconds`
+  (a renewer that stopped looks older than 12 hours) and
+  `mewla_turn_allocations`.
 - Watch from anywhere: `scripts/turn-cert-check.sh [host] [port] [days]`
   (default `turn.connect.mewla.ai 443 21`) reads the certificate served on
   `turns:` 443. It prints nothing while that verifies and has 21 days or more
@@ -813,13 +844,15 @@ every hour, and the old certificate is served meanwhile.
   verify; and exits 1 when it reads no certificate. Brain runs it as a
   Trigger.
 - Renew now: `ssh ubuntu@167.114.116.27 docker kill --signal HUP
-  mewla-link-turn` (the log says `SIGHUP: renewing the TLS certificate now`
-  and then `renewed, serial …`). Let's Encrypt allows 5 certificates for the
-  same name a week.
+  mewla-link-turncert` (its log says `SIGHUP: renewing now` and then
+  `renewed, serial …`; `turn` serves it within a minute, or at once on its own
+  SIGHUP, which only rereads the directory). Let's Encrypt allows 5
+  certificates for the same name a week.
 - Upgrade the `turn` process alone: `MEWLA_TURN_VERSION=<version> kamal
   accessory stop turn`, `remove_container turn`, `boot turn` (`kamal accessory
   reboot` cannot pull from the local registry). Views relayed at that moment
   end and are reopened; the relay and every other view are not touched.
+  `turncert` upgrades the same way and nobody notices.
 
 **Cost.** Only views with no direct path go through TURN (most LAN and home
 Wi-Fi views do not). Each relayed byte crosses the host twice: in from one side

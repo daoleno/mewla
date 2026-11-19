@@ -105,16 +105,17 @@ signed offer, so on `mewla --lan` plain HTTP they cross the LAN in cleartext.
 `TestTURNOneCredentialReachesLittle` holds these limits. Deploying it is in
 [Mewla Relay operations](mewla-relay.md).
 
-The hosted TURN process renews its own `turns:` certificate by DNS-01
-(`daemon/acmecert`), so it holds the account service's Cloudflare token, which
-can edit every record of the `mewla.ai` zone. The account service already
-holds it and is reachable from the internet through the relay's SNI route on
-the same host and user; TURN adds its STUN, TURN and TLS parsing as one more
-remote surface for it. Whoever extracts the token can re-point
-`connect.mewla.ai` and `*.m.mewla.ai` and obtain certificates for them:
-phones pin each computer's key and are not exposed, browsers are. A stricter
-layout, not built: a renewer with no listener writes the shared certificate
-directory and the TURN process only reads it.
+The hosted TURN process never holds a DNS credential. Its `turns:`
+certificate is renewed by DNS-01 (`daemon/acmecert`) in a separate process
+(`turncert`) that holds the account service's Cloudflare token, which can edit
+every record of the `mewla.ai` zone, and opens no listener and publishes no
+port. TURN mounts only the certificate directory, read only (not the ACME
+account key), and reloads it. A bug in TURN's STUN, TURN or TLS parsing can
+therefore cost the relay's TURN key and the `turns:` certificate's key, not
+the zone: with the token an attacker could re-point `connect.mewla.ai` and
+`*.m.mewla.ai` and obtain certificates for them (phones pin each computer's
+key and would not be exposed; browsers would). The token still sits in the
+account service, which is reachable through the relay's SNI route.
 
 The daemon independently enforces device authorization and route-specific size
 limits. A public Relay operator still needs network DDoS controls, egress alerts,
