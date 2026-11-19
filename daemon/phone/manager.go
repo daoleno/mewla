@@ -82,7 +82,7 @@ var (
 	ErrLost         = &Error{CodeLost, "The phone disconnected while this was running. Read the screen again once it is back."}
 	ErrReplaced     = &Error{CodeLost, "The phone reconnected while this was running. Read the screen again."}
 	// ErrStandby refuses a connection from another device that is not ready while a ready phone has Phone use.
-	ErrStandby = &Error{CodeStandby, "Another Mewla on this phone has Phone use and is ready; this one takes it once it is ready itself."}
+	ErrStandby = &Error{CodeStandby, "Another Mewla on this phone has Phone use and is ready; this one takes it when it is opened, or once the other goes away."}
 )
 
 // Conn is the daemon's end of the phone's WebSocket. The server writes it as one JSON text frame
@@ -272,7 +272,7 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 		state = StateSetup
 	}
 	m.mu.Lock()
-	if cur := m.link; cur != nil && standsBy(cur, hello.Device, state) {
+	if cur := m.link; cur != nil && standsBy(cur, hello.Device, state, hello.Chosen) {
 		m.mu.Unlock()
 		log.Printf("phone: device %s (state %s) waits: device %s has Phone use and is ready", hello.Device, state, cur.hello.Device)
 		return nil, ErrStandby
@@ -301,11 +301,12 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 }
 
 // standsBy says whether a connection from device in state waits instead of taking cur's place: a
-// newer connection replaces the older one, except that another install on the phone (another paired
-// device) that is not ready never takes the place of one that is.
-func standsBy(cur *Link, device, state string) bool {
+// newer connection from the same device replaces the older one, but another install on the phone
+// (another paired device) takes the place of a ready one only when it is ready too and the person
+// just opened it. Two ready installs reconnecting by themselves never trade places (11-20).
+func standsBy(cur *Link, device, state string, chosen bool) bool {
 	return device != "" && cur.hello.Device != "" && device != cur.hello.Device &&
-		cur.state == StateReady && !cur.person && !cur.stopped && state != StateReady
+		cur.state == StateReady && !cur.person && !cur.stopped && (state != StateReady || !chosen)
 }
 
 // Detach tells the manager the connection ended.

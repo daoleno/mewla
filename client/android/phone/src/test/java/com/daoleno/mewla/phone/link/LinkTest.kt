@@ -31,6 +31,12 @@ class PhoneFramesTest {
         assertEquals("setup", hello.getString("state"))
     }
 
+    @Test
+    fun aHelloSaysChosenOnlyWhenThePersonJustOpenedTheApp() {
+        assertFalse(PhoneFrames.hello("Pixel 9", 36, "0.4.18", "ready").has("chosen"))
+        assertTrue(PhoneFrames.hello("Pixel 9", 36, "0.4.18", "ready", chosen = true).getBoolean("chosen"))
+    }
+
     private fun status(state: String, w: Int = 0, h: Int = 0, problem: Any = JSONObject.NULL, display: Any = JSONObject.NULL, warning: Any = JSONObject.NULL) =
         JSONObject().put("state", state).put("w", w).put("h", h).put("problem", problem).put("display_info", display).put("warning", warning)
 

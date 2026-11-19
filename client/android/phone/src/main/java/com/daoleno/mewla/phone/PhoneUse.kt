@@ -47,7 +47,7 @@ object PhoneUse {
     fun follow(target: LinkTarget?) = PhoneController.follow(target)
 
     /** The app is in front: a link waiting out its backoff tries now. */
-    fun foreground() = PhoneController.retryLinkNow()
+    fun foreground() = PhoneController.chosenByPerson()
 
     /** Pairs with this phone's own Wireless debugging; the code is read off the screen or typed into the notification when null. Blocks for minutes. */
     fun pair(context: Context, code: String?): Boolean {
