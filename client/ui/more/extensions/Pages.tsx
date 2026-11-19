@@ -2,7 +2,8 @@ import { computed, effect, signal, Text, untracked, View } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { accountRow } from "../../../core/extensions/accountListModel";
 import { cloudProfilesSummary } from "../../../core/extensions/cloudProfilesModel";
-import { isConnecting, pluginCatalogRows, toolUpdates, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
+import { isConnecting, needsReconnect, pluginCatalogRows, toolUpdates, type ServiceRow } from "../../../core/extensions/pluginConnectionsModel";
+import type { PluginAccount } from "../../../core/extensions/connections";
 import { pluginJobs } from "../../../core/extensions/pluginOnboarding";
 import { connectionStateTone } from "../../../core/extensions/colour";
 import { daemon } from "../daemon";
@@ -171,7 +172,7 @@ function rowSubtitle(row: ServiceRow): string {
 
 /** The accounts of a row under Needs fixing that need signing in again. */
 function expiredAccounts(row: ServiceRow) {
-  return row.accounts.filter((account) => account.enabled && account.status === "authorization_required");
+  return row.accounts.filter(needsReconnect);
 }
 
 /**
@@ -191,7 +192,9 @@ function rowLabel(row: ServiceRow): string {
   const state = row.state;
   if (state.kind === "reconnect") {
     const expired = expiredAccounts(row);
-    return expired.length > 1 ? `${row.plugin.name}, ${expired.length} accounts need sign-in again` : `${row.plugin.name}, ${state.account.name} needs sign-in again`;
+    // An account that only lacks newer permissions did not expire: it needs Reconnect, not "sign-in again".
+    const what = (account: PluginAccount) => (account.status === "authorization_required" ? "needs sign-in again" : "needs Reconnect");
+    return expired.length > 1 ? `${row.plugin.name}, ${expired.length} accounts need sign-in again` : `${row.plugin.name}, ${state.account.name} ${what(state.account)}`;
   }
   if (state.kind === "status") return `${row.plugin.name}, ${accountNames(row)}, ${state.label}`;
   if (state.kind === "unavailable") return `${row.plugin.name}, ${state.label}. ${row.plugin.unavailable_reason ?? ""}`.trim();

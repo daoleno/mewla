@@ -3190,12 +3190,19 @@
           "scopes": [
             "channels:read",
             "channels:history",
-            "search:read"
+            "groups:read",
+            "groups:history",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
+            "search:read",
+            "files:read"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
-        "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread",
+        "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread",
         "oauth": {
           "auth_style": 1,
           "auth_url": "https://slack.com/oauth/v2/authorize",
@@ -3226,12 +3233,19 @@
           "scopes": [
             "channels:read",
             "channels:history",
-            "search:read"
+            "groups:read",
+            "groups:history",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
+            "search:read",
+            "files:read"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
-        "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread",
+        "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread",
         "oauth": {
           "auth_style": 1,
           "auth_url": "https://slack.com/oauth/v2/authorize",
@@ -3282,13 +3296,20 @@
           "scopes": [
             "channels:read",
             "channels:history",
-            "search:read"
+            "groups:read",
+            "groups:history",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
+            "search:read",
+            "files:read"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
         "flow": {
-          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread",
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fdaemon.example%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread",
           "has_account": true,
           "integration": "slack",
           "status": "waiting",
@@ -3325,14 +3346,21 @@
           "scopes": [
             "channels:read",
             "channels:history",
+            "groups:read",
+            "groups:history",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
             "search:read",
+            "files:read",
             "chat:write"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
         "flow": {
-          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread%2Cchat%3Awrite",
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread%2Cchat%3Awrite",
           "has_account": true,
           "integration": "slack",
           "status": "waiting",
@@ -3377,14 +3405,21 @@
           "scopes": [
             "channels:read",
             "channels:history",
+            "groups:read",
+            "groups:history",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
             "search:read",
+            "files:read",
             "chat:write"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
         "flow": {
-          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread%2Cchat%3Awrite",
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread%2Cchat%3Awrite",
           "has_account": true,
           "integration": "slack",
           "status": "waiting",
@@ -4415,6 +4450,69 @@
       "access": {
         "read": "allowed",
         "write": "off",
+        "allowed": 5,
+        "tools": 7
+      },
+      "address": "",
+      "auth_method": "",
+      "enabled": true,
+      "endpoint": "https://slack.com/api",
+      "identity": "Team · User",
+      "integration": "slack",
+      "name": "S",
+      "network": "",
+      "scopes": null,
+      "status": "connected",
+      "tools": [
+        {
+          "allowed": true,
+          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
+          "group": "read",
+          "name": "get_me"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
+          "group": "read",
+          "name": "list_channels"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
+          "group": "read",
+          "name": "channel_history"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "c9517f2143ce76a0ee5b8ee5670531db9a82e3c07b8aee33be6e8d069aaead18",
+          "group": "read",
+          "name": "thread_replies"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "d6c57d89bf71804821656b1aa8d8df69eaa89935b5244da558e235a61382e134",
+          "group": "read",
+          "name": "search_messages"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
+          "group": "write",
+          "name": "send_message"
+        },
+        {
+          "allowed": false,
+          "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+          "group": "write",
+          "name": "update_message"
+        }
+      ],
+      "trusted_networks": null
+    },
+    "bot": {
+      "access": {
+        "read": "allowed",
+        "write": "off",
         "allowed": 4,
         "tools": 6
       },
@@ -4449,60 +4547,9 @@
         },
         {
           "allowed": true,
-          "fingerprint": "d6c57d89bf71804821656b1aa8d8df69eaa89935b5244da558e235a61382e134",
+          "fingerprint": "c9517f2143ce76a0ee5b8ee5670531db9a82e3c07b8aee33be6e8d069aaead18",
           "group": "read",
-          "name": "search_messages"
-        },
-        {
-          "allowed": false,
-          "fingerprint": "0cb1a3e120b1765ab1504d0d1e6912683fc5d87db24d8c139fe7e2680bd54b59",
-          "group": "write",
-          "name": "send_message"
-        },
-        {
-          "allowed": false,
-          "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
-          "group": "write",
-          "name": "update_message"
-        }
-      ],
-      "trusted_networks": null
-    },
-    "bot": {
-      "access": {
-        "read": "allowed",
-        "write": "off",
-        "allowed": 3,
-        "tools": 5
-      },
-      "address": "",
-      "auth_method": "",
-      "enabled": true,
-      "endpoint": "https://slack.com/api",
-      "identity": "Team · User",
-      "integration": "slack",
-      "name": "S",
-      "network": "",
-      "scopes": null,
-      "status": "connected",
-      "tools": [
-        {
-          "allowed": true,
-          "fingerprint": "83e422891b1711a6190598fc39c3214b2ae078c6b4fe34b59260613a9accb596",
-          "group": "read",
-          "name": "get_me"
-        },
-        {
-          "allowed": true,
-          "fingerprint": "5e5d1516f382c24593e3394d8591a1d19f20168883c0041df4a358aeb5da29bf",
-          "group": "read",
-          "name": "list_channels"
-        },
-        {
-          "allowed": true,
-          "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
-          "group": "read",
-          "name": "channel_history"
+          "name": "thread_replies"
         },
         {
           "allowed": false,
@@ -4562,8 +4609,8 @@
       "access": {
         "read": "allowed",
         "write": "none",
-        "allowed": 2,
-        "tools": 2
+        "allowed": 3,
+        "tools": 3
       },
       "address": "",
       "auth_method": "",
@@ -4587,6 +4634,12 @@
           "fingerprint": "45b26033b512ab53fabba35f5f24d32797fe454a7a3c6308a9ac077b5214f2e4",
           "group": "read",
           "name": "channel_history"
+        },
+        {
+          "allowed": true,
+          "fingerprint": "c9517f2143ce76a0ee5b8ee5670531db9a82e3c07b8aee33be6e8d069aaead18",
+          "group": "read",
+          "name": "thread_replies"
         }
       ],
       "trusted_networks": null
@@ -4945,12 +4998,32 @@
         "group_oauth": "read"
       },
       {
+        "name": "thread_replies",
+        "description": "Read a thread: its parent message and replies, with their files (one page). ts is the parent message's ts. Works in channels, private channels and DMs; read a file with get_file",
+        "method": "GET",
+        "path": "/conversations.replies",
+        "read": true,
+        "fingerprint": "c9517f2143ce76a0ee5b8ee5670531db9a82e3c07b8aee33be6e8d069aaead18",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
         "name": "search_messages",
         "description": "Search messages using this user's search:read grant (one page)",
         "method": "GET",
         "path": "/search.messages",
         "read": true,
         "fingerprint": "d6c57d89bf71804821656b1aa8d8df69eaa89935b5244da558e235a61382e134",
+        "group": "read",
+        "group_oauth": "read"
+      },
+      {
+        "name": "get_file",
+        "description": "Download a file shared in Slack (an image, PDF, document) to this computer. Pass its id (F…) from a message's files, or its files.slack.com address. Returns the local path, name, type and size; open the path to read it, an image with your image reader",
+        "method": "GET",
+        "path": "/files.info",
+        "read": true,
+        "fingerprint": "142cd6dfe4f5e52b0aa95919dd23c1194dfbfdfa907597adcee1794268bcafb6",
         "group": "read",
         "group_oauth": "read"
       },
