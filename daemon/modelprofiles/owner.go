@@ -1129,7 +1129,10 @@ func (o *Owner) PrepareLaunchModel(executorID, profileID, modelOverride, baseCom
 	// native thread after daemon restarts.
 	controlSocket := ""
 	if normalizeID(profile.ExecutorID) == ExecutorCodex && normalizeID(profile.Protocol) == ProtocolOpenAIResponses && o.codexControlDir != "" {
-		controlSocket = filepath.Join(o.codexControlDir, "codex-ctl-"+uuid.NewString()+".sock")
+		controlSocket = platform.SocketPath(filepath.Join(o.codexControlDir, "codex-ctl-"+uuid.NewString()+".sock"))
+		if err := platform.EnsureSocketDir(controlSocket); err != nil {
+			return SessionLaunchPlan{}, fmt.Errorf("codex control socket: %w", err)
+		}
 	}
 
 	auth := ContractAuth{Verifier: o.verifier}
