@@ -226,6 +226,40 @@ describe("the floating screen: agents' displays and the Mac", () => {
     expect(again.shows("id:screen-float")).toBe(false);
   }, 25_000);
 
+  test("a hidden phone comes back when its agent asks the person to take over; hidden again in that request, it stays hidden until the next one", async () => {
+    const working = {
+      supported: true, sdk: 35, enabled: true, link: true, link_state: "online", developer_options: true, wireless_debugging: true, wifi: true, paired: true, helper: true,
+      problem: null, accessibility: true, restricted: false, self_healing: true, guide: null, notifications: true, state: "ready", w: 720, h: 1600, display_info: null,
+      agent: "Writer", handoff: null as string | null, drawn: true, opening: null, launch_failed: null,
+    };
+    let status = working;
+    const handlers = { "phone.status": () => status, "phone.follow": () => null, "phone.setPipAuto": () => null };
+    const shown = await open(APP, { host: phoneHost({}, handlers), storage: paired, platform: "android", network: expoTokenService });
+    await shown.waitFor("id:composer");
+    const say = async (next: typeof working) => {
+      status = next;
+      await shown.host.send("phone.status", next);
+    };
+    await shown.waitFor("id:screen-float", { timeout: 10_000 });
+    await shown.press("id:screen-float-hide");
+    await shown.waitUntil(() => !shown.shows("id:screen-float"));
+    // The agent asks for the person: the window is where they act, so it comes back, ringed.
+    await say({ ...working, state: "person_in_control", handoff: "Sign in to Instagram" });
+    await shown.waitFor("id:screen-float-attention", { timeout: 5_000 });
+    // Hidden again in that request, it stays hidden through it, and after it.
+    await shown.press("id:screen-float-hide");
+    await shown.waitUntil(() => !shown.shows("id:screen-float"));
+    await say({ ...working, state: "person_in_control", handoff: "Sign in to Instagram" });
+    await shown.wait(300);
+    expect(shown.shows("id:screen-float")).toBe(false);
+    await say(working);
+    await shown.wait(300);
+    expect(shown.shows("id:screen-float")).toBe(false);
+    // The next request brings it back, even asking the same thing.
+    await say({ ...working, state: "person_in_control", handoff: "Sign in to Instagram" });
+    await shown.waitFor("id:screen-float-attention", { timeout: 5_000 });
+  }, 25_000);
+
   describe("its live view", () => {
     const VIEWER = "ws://127.0.0.1:1/display/viewer";
     const sockets = { "app.socketOpened": () => null, "app.socketClosed": () => null, "app.socketSent": () => null };
