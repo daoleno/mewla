@@ -138,6 +138,7 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 	// A row still holding a wake the engine has released (a never-run Work
 	// whose wait was answered) is engine-owned too, so the release projects.
 	engineOwnsExecution := st.Fence > 0 || st.TerminalAt != nil || st.Wake != nil || st.Review != nil || item.Wake != nil
+	before := item
 	if engineOwnsExecution {
 		item.Revision = st.Revision
 		item.Status, item.NextAction, item.WaitFor = fsmProjectLifecycle(st, database, item)
@@ -150,7 +151,6 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 			item.TerminalRevision = 0
 		}
 		item.Wake = fsmWakeFromState(st)
-		item.UpdatedAt = now
 	}
 	// A keep verdict holds only for the revision the judge saw; while it
 	// holds, the Work waits on what the judge named.
@@ -161,6 +161,12 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 		case st.Attempt == nil && st.Wake == nil && strings.TrimSpace(item.Question) == "":
 			item.Status, item.WaitFor = WorkWaiting, kept.Reason
 		}
+	}
+	// updated_at is when the Work last changed, so "what changed since" stays
+	// answerable: a sync that projects the same row (every Work on a daemon
+	// start) leaves it alone.
+	if engineOwnsExecution && fsmProjectionChanged(before, item) {
+		item.UpdatedAt = now
 	}
 
 	// Review projection: the engine owns event lifecycle and the handler
@@ -878,4 +884,13 @@ func (s *Store) rebuildWorkCardsLocked(database presentationDatabase, workIDs []
 		}
 	}
 	return s.rewriteTimelineLocked(out)
+}
+
+// fsmProjectionChanged reports whether a projection sync changed what the
+// lifecycle projects onto the row.
+func fsmProjectionChanged(before, after Work) bool {
+	return before.Revision != after.Revision || before.TerminalRevision != after.TerminalRevision ||
+		before.Status != after.Status || before.NextAction != after.NextAction || before.WaitFor != after.WaitFor ||
+		before.AttemptSessionID != after.AttemptSessionID || before.AttemptDelegated != after.AttemptDelegated ||
+		!workWakeEqual(before.Wake, after.Wake) || (before.Kept == nil) != (after.Kept == nil)
 }

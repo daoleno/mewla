@@ -308,7 +308,8 @@ type CurrentWork struct {
 	Recommended string `json:"recommended,omitempty"`
 	// AttentionSince is when the Work started waiting on a decision (the
 	// question, the open review or the wait), immutable while it waits;
-	// UpdatedAt moves on every projection sync and cannot age a Work.
+	// UpdatedAt moves whenever the projected state changes, so it cannot age
+	// a waiting Work.
 	AttentionSince *time.Time `json:"attention_since,omitempty"`
 	// AttentionReason is the open review's reason, e.g. turn_lost.
 	AttentionReason string     `json:"attention_reason,omitempty"`
