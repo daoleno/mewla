@@ -136,7 +136,16 @@ func startViewerWith(ctx context.Context, t *testing.T, api *webrtc.API, viewerC
 		raw, _ := json.Marshal(Signal{Type: "ice", Candidate: &init})
 		_ = session.HandleSignal(raw)
 	})
+	// The computer gathers from the moment it sets its offer, and its
+	// candidates may reach the viewer before the offer does: the viewer holds
+	// them until it has the offer, as the app's viewer (video.js) does.
 	go func() {
+		var early []webrtc.ICECandidateInit
+		add := func(c webrtc.ICECandidateInit) {
+			if err := viewer.AddICECandidate(c); err != nil && viewer.ConnectionState() != webrtc.PeerConnectionStateClosed {
+				t.Errorf("viewer refused a candidate: %v", err)
+			}
+		}
 		for sig := range toViewer {
 			switch sig.Type {
 			case "rtc":
@@ -144,6 +153,10 @@ func startViewerWith(ctx context.Context, t *testing.T, api *webrtc.API, viewerC
 					t.Error(err)
 					return
 				}
+				for _, c := range early {
+					add(c)
+				}
+				early = nil
 				answer, _ := viewer.CreateAnswer(nil)
 				_ = viewer.SetLocalDescription(answer)
 				raw, _ := json.Marshal(Signal{Type: "rtc", SDPType: "answer", SDP: answer.SDP})
@@ -151,12 +164,15 @@ func startViewerWith(ctx context.Context, t *testing.T, api *webrtc.API, viewerC
 					t.Error(err)
 				}
 			case "ice":
-				_ = viewer.AddICECandidate(*sig.Candidate)
+				if viewer.RemoteDescription() == nil {
+					early = append(early, *sig.Candidate)
+				} else {
+					add(*sig.Candidate)
+				}
 			}
 		}
 	}()
 
-	session.cfg.Source = src
 	return session, viewer, frames, channels, gotInput, inputs, inMu
 }
 
