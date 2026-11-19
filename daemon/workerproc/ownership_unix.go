@@ -23,6 +23,12 @@ type Process struct {
 	// readAt is when the record was read: a reader may keep it for a while
 	// instead of reading the process again (see readProcesses).
 	readAt time.Time
+	// envPending marks a process of this user whose environment read empty:
+	// one caught inside execve, after its new executable shows and before its
+	// environment is laid out (exec.Cmd.Start can return in that window, or
+	// even before the exec). What it is owned by is not known yet; the next
+	// list reads it again.
+	envPending bool
 }
 type ProcessIdentity struct {
 	PID   int    `json:"pid"`

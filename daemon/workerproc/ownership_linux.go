@@ -23,7 +23,7 @@ func readProcesses(previous map[int]Process, maxAge time.Duration) (map[int]Proc
 		if err != nil || pid <= 1 {
 			continue
 		}
-		if old, ok := previous[pid]; ok && now.Sub(old.readAt) < maxAge {
+		if old, ok := previous[pid]; ok && now.Sub(old.readAt) < maxAge && !old.envPending {
 			records[pid] = old
 			continue
 		}
@@ -52,7 +52,9 @@ func readProcesses(previous map[int]Process, maxAge time.Duration) (map[int]Proc
 		if info, err := os.Stat(root); err == nil {
 			p.UID = int(info.Sys().(*syscall.Stat_t).Uid)
 		}
-		if old, ok := previous[pid]; ok && old.Start == p.Start {
+		// The start time fences PID reuse, not exec: a child read before its
+		// exec held its parent's executable and environment.
+		if old, ok := previous[pid]; ok && old.Start == p.Start && old.Args == p.Args && !old.envPending {
 			p.ResourceID = old.ResourceID
 			p.WorkerID = old.WorkerID
 			p.ContainerID = old.ContainerID
@@ -60,6 +62,7 @@ func readProcesses(previous map[int]Process, maxAge time.Duration) (map[int]Proc
 			if p.UID == os.Getuid() {
 				if env := Environ(pid); env != nil {
 					p.ResourceID, p.WorkerID = workerEnvIdentity(env)
+					p.envPending = len(env) == 1 && env[0] == ""
 				}
 			}
 			if cg, err := os.ReadFile(root + "/cgroup"); err == nil {
