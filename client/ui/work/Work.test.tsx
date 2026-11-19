@@ -267,6 +267,24 @@ describe("Brain's Work", () => {
     expect(texts).toContain("“测试版能今天发吗？结账那个偶发失败先修掉”");
   }, 20_000);
 
+  test("⋯ › Rename and Merge with… send the person's own title and merge to the computer (mock round 2)", async () => {
+    const app = await workApp({ brain: brain(), replies: { brain_work_shown_set: { type: "brain_work_shown_set", work_id: "w-run" } } });
+    await openWork(app, "w-run");
+    app.onDialog((dialog) => (dialog.buttons.includes("Rename") ? "Rename" : null));
+    await app.press("id:work-menu");
+    await app.waitFor("id:work-edit-input");
+    await app.type("id:work-edit-input", "发布测试版");
+    await app.press("id:work-edit-save");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_shown_set").length === 1);
+    // The field starts with the title as it reads, to edit in place.
+    expect(framesOf(app.host.posts(), "brain_work_shown_set")[0]).toMatchObject({ id: "w-run", name: "title", text: "ship the beta发布测试版" });
+    await app.waitFor("text:Renamed");
+    app.onDialog((dialog) => (dialog.buttons.includes("Merge with…") ? "Merge with…" : dialog.buttons.find((button) => /fix.sync/.test(button)) ?? null));
+    await app.press("id:work-menu");
+    await app.waitUntil(() => framesOf(app.host.posts(), "brain_work_shown_set").length === 2);
+    expect(framesOf(app.host.posts(), "brain_work_shown_set")[1]).toMatchObject({ id: "w-run", name: "merged_into", text: "w-back" });
+  }, 20_000);
+
   test("a closed Work's page shows its brief too; a computer that sends none shows no brief", async () => {
     const at = now();
     const work = { work_id: "w-old", revision: 9, title: "rename-the-app", status: "done", created_at: at, updated_at: at, worker_sessions: [] };
