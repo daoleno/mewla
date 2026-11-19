@@ -46,6 +46,14 @@ object PhoneFrames {
         else -> "retry"
     }
 
+    /**
+     * Whether the person bringing the app to the front starts a stopped link afresh. A link another connection replaced
+     * (another Mewla on this phone took Phone use) does: opening this app is the person choosing it again. Only then, never
+     * on a timer, so two installs do not take it from each other in turns. A computer that does not know the protocol
+     * stays stopped. (Before 11-19 the app's tunnel port changed on every reconnect and brought a new link by accident.)
+     */
+    fun restartsOnForeground(state: String): Boolean = state == "replaced"
+
     private fun problem(status: JSONObject): String? = if (status.optString("state") == "setup") text(status, "problem") else null
 
     private fun text(status: JSONObject, name: String): String? =

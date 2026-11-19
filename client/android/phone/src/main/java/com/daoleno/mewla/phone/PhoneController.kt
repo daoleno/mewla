@@ -150,8 +150,14 @@ object PhoneController {
         }
     }
 
-    /** The app came to the front: a link waiting out its backoff tries now. */
+    /** The app came to the front: a link waiting out its backoff tries now; one another connection replaced starts again. */
     fun retryLinkNow() {
+        synchronized(linkLock) {
+            if (link != null && PhoneFrames.restartsOnForeground(linkState)) {
+                stopLink()
+                return ensureLink()
+            }
+        }
         link?.retryNow()
     }
 
