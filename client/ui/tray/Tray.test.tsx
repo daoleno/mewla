@@ -163,4 +163,32 @@ describe("the tray", () => {
     await app.press("id:tray-scrim");
     await app.waitUntil(() => !app.shows("id:tray"));
   }, 20_000);
+
+  test("counts and project chips filter the one list; a filter that leaves nothing says so", async () => {
+    const brain = { host_worker: { id: "host", name: "brain", status: "running" }, chat_thread_id: "t1", current_work: [
+      { work_id: "w1", revision: 1, title: "w1", status: "running", unread_result: false, attempt_session_id: "alpha", attempt_delegated: true, shown: { title: "Ship the docs", line: "Two pages left", project: "Docs", changed_at: new Date(NOW - 60_000).toISOString() } },
+      { work_id: "w2", revision: 1, title: "w2", status: "running", unread_result: false, attempt_session_id: "beta", attempt_delegated: true, shown: { title: "Fix sync", line: "Retry lands", project: "Sync", changed_at: new Date(NOW - 120_000).toISOString() } },
+      { work_id: "w3", revision: 1, title: "w3", status: "done", unread_result: true, shown: { title: "Sync on resume", line: "Merged", project: "Sync", changed_at: new Date(NOW - 180_000).toISOString() } },
+    ] };
+    const app = await open(HARNESS, { host: { params: { brain, workers: [worker("alpha"), worker("beta")] } }, platform: "android" });
+    await app.press("id:state-control");
+    await app.waitFor("id:tray");
+    await app.waitFor("text:Ship the docs");
+    expect(app.count("id:tray-project")).toBe(2);
+    await app.press("label:Sync, 2");
+    await app.waitUntil(() => !app.texts().includes("Ship the docs"));
+    expect(app.texts()).toContain("Fix sync");
+    expect(app.texts()).toContain("Sync on resume");
+    await app.press("id:tray-count-running");
+    await app.waitUntil(() => !app.texts().includes("Sync on resume"));
+    expect(app.texts()).toContain("Fix sync");
+    expect(app.shows("id:tray-filter-empty")).toBe(false);
+    // New, under Docs: nothing. Say so rather than show a blank tray.
+    await app.press("id:tray-count-fresh");
+    await app.press("label:Docs, 1");
+    await app.waitFor("id:tray-filter-empty");
+    await app.press("id:tray-count-fresh");
+    await app.waitFor("text:Ship the docs");
+    expect(app.shows("id:tray-filter-empty")).toBe(false);
+  }, 20_000);
 });
