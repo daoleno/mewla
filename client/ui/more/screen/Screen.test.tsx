@@ -202,6 +202,7 @@ describe("Screen: agents", () => {
     await app.press("label:Give back");
     await app.waitFor("id:screen-given-back");
     expect(app.texts()).toContain("Codex goes on");
+    expect(app.shows("label:Waiting for the agent")).toBe(true);
     expect(closed(app)).toHaveLength(1);
     await new Promise((resolve) => setTimeout(resolve, 1_500));
     expect(opened(app)).toHaveLength(1);
@@ -226,6 +227,7 @@ describe("Screen: agents", () => {
     expect(posted(app, SCREEN)[0]).toEqual({ action: "stop_agent", worker: "w1" });
     await app.waitFor("id:screen-given-back");
     expect(app.texts()).toContain("Codex stopped");
+    expect(app.shows("label:Waiting for the agent")).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 1_500));
     expect(opened(app)).toHaveLength(1);
     // Nothing is locked: its next call takes the screen, and the page watches it.

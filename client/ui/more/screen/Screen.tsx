@@ -857,7 +857,7 @@ function WaitingCard(props: { name: string; stopped: boolean; busy: boolean; onT
       <View testID="screen-given-back" class="w-full items-center gap-3">
         <Icon name="desktop" size={36} tone="onBlackSoft" />
         <Text class="text-center text-title font-semibold text-white">{props.stopped ? `${props.name} stopped` : `${props.name} goes on`}</Text>
-        <If when={() => !props.stopped}><Spinner size={20} tone="onBlackSoft" /></If>
+        <If when={!props.stopped}><Spinner label="Waiting for the agent" size={20} tone="onBlackSoft" /></If>
         <View class="pt-2">
           <SmallButton testID="take-over" title="Take over" icon="hand" filled disabled={props.busy} onPress={props.onTakeOver} />
         </View>
