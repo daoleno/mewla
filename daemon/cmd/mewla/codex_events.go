@@ -110,13 +110,17 @@ func (c *codexEvents) stop(workerID string) {
 
 // client returns the live connection of a Worker's session, if it has one.
 func (c *codexEvents) client(workerID string) (*codexctl.Client, string) {
-	c.mu.Lock()
-	s := c.sessions[workerID]
-	c.mu.Unlock()
+	s := c.session(workerID)
 	if s == nil {
 		return nil, ""
 	}
 	return s.connection()
+}
+
+func (c *codexEvents) session(workerID string) *codexSession {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sessions[workerID]
 }
 
 type codexSession struct {
@@ -133,7 +137,22 @@ type codexSession struct {
 	// tokens is the latest token use the server pushed for the thread; it
 	// serves no read for it.
 	tokens *codexctl.TokenDetails
+	// commands holds, per turn, the commandExecution items that started and
+	// have not completed: a Stop ends the ones of its own turn that still run
+	// as background terminals. turns orders the turns, oldest first.
+	commands map[string][]codexCommand
+	turns    []string
 }
+
+// codexCommand is one commandExecution item a turn started.
+type codexCommand struct {
+	itemID  string
+	command string
+}
+
+// codexCommandTurns bounds the turns whose commands a session remembers: only
+// the running turn's are ever stopped.
+const codexCommandTurns = 8
 
 func (s *codexSession) connection() (*codexctl.Client, string) {
 	s.mu.Lock()
@@ -208,6 +227,9 @@ func (s *codexSession) run(ctx context.Context) {
 			if notification.Method == "thread/tokenUsage/updated" {
 				s.noteTokens(notification.Params)
 			}
+			if notification.Method == "item/started" || notification.Method == "item/completed" {
+				s.noteCommand(notification.Method, notification.Params)
+			}
 			s.publish(s.mapper.Notification(notification.Method, notification.Params, s.owner.now().UTC())...)
 			if thread := s.mapper.Thread(); thread != "" {
 				s.setThread(thread)
@@ -271,6 +293,58 @@ func (s *codexSession) latestTokens() *codexctl.TokenDetails {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.tokens
+}
+
+// noteCommand keeps the commandExecution items each turn has open. An
+// interaction (write_stdin into a running terminal) is the earlier command's,
+// not a new one, so it is never recorded as this turn's.
+func (s *codexSession) noteCommand(method string, params json.RawMessage) {
+	var p struct {
+		TurnID string `json:"turnId"`
+		Item   struct {
+			Type    string `json:"type"`
+			ID      string `json:"id"`
+			Source  string `json:"source"`
+			Command string `json:"command"`
+		} `json:"item"`
+	}
+	if json.Unmarshal(params, &p) != nil || p.Item.Type != "commandExecution" || p.Item.ID == "" || p.TurnID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if method == "item/completed" {
+		open := s.commands[p.TurnID]
+		for i, command := range open {
+			if command.itemID == p.Item.ID {
+				s.commands[p.TurnID] = append(open[:i:i], open[i+1:]...)
+				break
+			}
+		}
+		return
+	}
+	if p.Item.Source == "unifiedExecInteraction" {
+		return
+	}
+	if s.commands == nil {
+		s.commands = map[string][]codexCommand{}
+	}
+	if _, known := s.commands[p.TurnID]; !known {
+		s.turns = append(s.turns, p.TurnID)
+		for len(s.turns) > codexCommandTurns {
+			delete(s.commands, s.turns[0])
+			s.turns = s.turns[1:]
+		}
+	}
+	s.commands[p.TurnID] = append(s.commands[p.TurnID], codexCommand{itemID: p.Item.ID, command: p.Item.Command})
+}
+
+// openCommands are the commandExecution items turnID started that have not
+// completed.
+func (s *codexSession) openCommands(turnID string) []codexCommand {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]codexCommand(nil), s.commands[turnID]...)
 }
 
 func (s *codexSession) setThread(thread string) {
@@ -339,9 +413,11 @@ func (s *codexSession) attach(ctx context.Context, client *codexctl.Client, thre
 	return attachOutcome{thread: thread, tries: tries, err: lastErr}
 }
 
-// interrupt stops the Worker's running turn through the app-server. A Worker
-// with a connected thread and no running turn has nothing to stop, and gets
-// no keystroke either: Ctrl-C at an idle Codex prompt starts its quit.
+// interrupt stops the Worker's running turn through the app-server, then ends
+// the background terminals that turn started: turn/interrupt aborts the tool
+// call but leaves its process running. A Worker with a connected thread and
+// no running turn has nothing to stop, and gets no keystroke either: Ctrl-C at
+// an idle Codex prompt starts its quit.
 func (c *codexEvents) interrupt(sessionID string) (handled bool, err error) {
 	client, thread := c.client(sessionID)
 	if client == nil || thread == "" {
@@ -351,9 +427,60 @@ func (c *codexEvents) interrupt(sessionID string) (handled bool, err error) {
 	if !ok || state.Current == nil || state.Current.Status != agentevents.TurnRunning {
 		return true, nil
 	}
+	turnID := state.Current.ID
 	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
 	defer cancel()
-	return true, client.InterruptTurn(ctx, thread, state.Current.ID)
+	if err := client.InterruptTurn(ctx, thread, turnID); err != nil {
+		return true, err
+	}
+	if s := c.session(sessionID); s != nil {
+		if stopped := stopCodexTurnCommands(ctx, client, thread, s.openCommands(turnID)); len(stopped) > 0 {
+			c.hub.Publish(agentevents.Event{WorkerID: sessionID, Kind: agentevents.KindCommandsStopped, At: c.now().UTC(), TurnID: turnID, Stopped: stopped})
+		}
+	}
+	return true, nil
+}
+
+// stopCodexTurnCommands terminates the background terminals among a turn's
+// open commands, by the item id that started each one; another turn's
+// terminal is never touched. A command the server cannot list or end is
+// reported as not ended.
+func stopCodexTurnCommands(ctx context.Context, client *codexctl.Client, thread string, open []codexCommand) []agentevents.StoppedCommand {
+	if len(open) == 0 {
+		return nil
+	}
+	terminals, err := client.ListBackgroundTerminals(ctx, thread)
+	if err != nil {
+		log.Printf("codex events: cannot list the background terminals of thread %s: %v", thread, err)
+		stopped := make([]agentevents.StoppedCommand, 0, len(open))
+		for _, command := range open {
+			stopped = append(stopped, agentevents.StoppedCommand{Command: command.command, Reason: "Codex could not list its background terminals"})
+		}
+		return stopped
+	}
+	mine := make(map[string]bool, len(open))
+	for _, command := range open {
+		mine[command.itemID] = true
+	}
+	var stopped []agentevents.StoppedCommand
+	for _, terminal := range terminals {
+		if !mine[terminal.ItemID] {
+			continue
+		}
+		result := agentevents.StoppedCommand{Command: terminal.Command}
+		terminated, err := client.TerminateBackgroundTerminal(ctx, thread, terminal.ProcessID)
+		switch {
+		case err != nil:
+			log.Printf("codex events: cannot terminate background terminal %s of thread %s: %v", terminal.ProcessID, thread, err)
+			result.Reason = "Codex refused to end it"
+		case !terminated:
+			result.Reason = "Codex no longer had it"
+		default:
+			result.Ended = true
+		}
+		stopped = append(stopped, result)
+	}
+	return stopped
 }
 
 // send submits a message to the Worker's thread through the app-server.

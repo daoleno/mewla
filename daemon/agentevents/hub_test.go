@@ -253,3 +253,20 @@ func TestHubKeepsTheActivityOfTheRunningTurnOnly(t *testing.T) {
 		t.Fatalf("activity after the turn = %+v", s)
 	}
 }
+
+func TestCommandsStoppedIsReportedAndMovesNothing(t *testing.T) {
+	h := NewHub()
+	at := time.Date(2026, 11, 19, 4, 0, 0, 0, time.UTC)
+	h.Publish(Event{WorkerID: "w", Kind: KindTurnStarted, TurnID: "t1", At: at})
+	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, At: at, Approval: &Approval{ID: "a1"}})
+	var got []Event
+	h.OnCommandsStopped(func(e Event) { got = append(got, e) })
+	h.Publish(Event{WorkerID: "w", Kind: KindCommandsStopped, TurnID: "t1", At: at.Add(time.Minute), Stopped: []StoppedCommand{{Command: "seq 1 30", Ended: true}}})
+	if len(got) != 1 || got[0].TurnID != "t1" || len(got[0].Stopped) != 1 || !got[0].Stopped[0].Ended {
+		t.Fatalf("reported %+v", got)
+	}
+	state, _ := h.State("w")
+	if len(state.Approvals) != 1 || !state.LastEvent.Equal(at) || state.Current == nil || state.Current.Status != TurnRunning {
+		t.Fatalf("the report moved the state: %+v", state)
+	}
+}
