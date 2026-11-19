@@ -100,8 +100,11 @@ type BrainContext struct {
 	// Stale lists open Work nothing live is pending on (kept by the closure
 	// judge, a read result, or plain idle) and delegated Sessions left idle
 	// with no open Work, for Brain to close or continue (stale.go).
-	Stale       *StaleList `json:"stale,omitempty"`
-	GeneratedAt time.Time  `json:"generated_at"`
+	Stale *StaleList `json:"stale,omitempty"`
+	// ProgressJudge is what the progress judge did in the last 24 hours, so
+	// Brain and the person can see its count and spend without the log.
+	ProgressJudge ProgressJudgeDay `json:"progress_judge"`
+	GeneratedAt   time.Time        `json:"generated_at"`
 }
 
 // WorkspaceNote locates a private Brain note without inlining it; Brain reads

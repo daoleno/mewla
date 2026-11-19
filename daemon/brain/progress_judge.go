@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,9 +28,11 @@ import (
 // runs. A Work is judged at most once per progressMinGap, except when a turn
 // ended or a new one began since its last judgment. A new turn (a send-back, a
 // further ask) settles after progressTurnSettle: until it is judged the row
-// still shows the last stretch of the turn before. One judgment runs at a time, and
-// a day holds at most progressPerWorkDay judgments of one Work and
-// progressPerDay in all. Its limits are constants, not settings. The model is
+// still shows the last stretch of the turn before. One judgment runs at a time.
+// There is no daily cap of any kind (owner 11-19 22:13: a cap stops the rings
+// and lines on a busy day): cost follows from judging only new evidence, one
+// call per Work, and the model the person routes; the day's count and spend
+// are in Brain context (progress_judge). Its gaps are constants, not settings. The model is
 // the person's choice: the "Work progress" row of the Brain workspace's
 // routing.md, as Watch reads its own row.
 const (
@@ -43,8 +46,6 @@ const (
 	progressTick       = 10 * time.Second
 	progressTimeout    = 2 * time.Minute
 	progressRetryAfter = 10 * time.Minute
-	progressPerWorkDay = 80
-	progressPerDay     = 600
 	progressReportsMax = 12
 	// Brain's disposition of each Work is read every progressChangedEvery-th
 	// tick; a closed Work while its row was written within progressClosedWindow.
@@ -79,8 +80,6 @@ type progressJudge struct {
 	lastRun  map[string]time.Time
 	turns    map[string]string
 	failed   map[string]time.Time
-	runs     []time.Time
-	perWork  map[string][]time.Time
 	wake     chan struct{}
 	loading  func(link WorkTranscriptLink) (work.CodexConversation, error)
 	inFlight bool
@@ -175,7 +174,7 @@ func (s *Service) RunProgressJudge(ctx context.Context) {
 	}
 	wake := p.wake
 	p.mu.Unlock()
-	s.seedProgressLimits()
+	s.seedProgressLastRun()
 	ticker := time.NewTicker(progressTick)
 	defer ticker.Stop()
 	ticks := 0
@@ -200,9 +199,9 @@ func (s *Service) RunProgressJudge(ctx context.Context) {
 	}
 }
 
-// seedProgressLimits reads the last day's judgments kept on each Work, so a
-// restart starts with the day's limits where they were.
-func (s *Service) seedProgressLimits() {
+// seedProgressLastRun reads when each Work was last judged, so a restart
+// keeps the minimum gap between judgments of the same Work.
+func (s *Service) seedProgressLastRun() {
 	if s.store == nil {
 		return
 	}
@@ -211,28 +210,16 @@ func (s *Service) seedProgressLimits() {
 		return
 	}
 	p := &s.progress
-	now := s.nowUTC()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.perWork == nil {
-		p.perWork = map[string][]time.Time{}
-	}
 	if p.lastRun == nil {
 		p.lastRun = map[string]time.Time{}
 	}
 	for _, item := range items {
-		if item.Progress == nil || len(item.Progress.Recent) == 0 {
-			continue
+		if item.Progress != nil && len(item.Progress.Runs) > 0 {
+			p.lastRun[item.ID] = item.Progress.Runs[len(item.Progress.Runs)-1].At
 		}
-		recent := withinDay(append([]time.Time(nil), item.Progress.Recent...), now)
-		if len(recent) == 0 {
-			continue
-		}
-		p.perWork[item.ID] = recent
-		p.runs = append(p.runs, recent...)
-		p.lastRun[item.ID] = recent[len(recent)-1]
 	}
-	sort.Slice(p.runs, func(i, j int) bool { return p.runs[i].Before(p.runs[j]) })
 }
 
 // requestChanged notes where Brain has put each Work for the person (parked,
@@ -299,7 +286,7 @@ func closedInList(item Work, now time.Time) bool {
 	return shown != nil && shown.Status != "done" && !shown.JudgedAt.IsZero() && now.Sub(shown.JudgedAt) <= progressClosedWindow
 }
 
-// nextProgressDue picks one Work whose evidence has settled and whose limits
+// nextProgressDue picks one Work whose evidence has settled and whose gaps
 // allow a judgment, and takes it off the pending list.
 func (s *Service) nextProgressDue() string {
 	p := &s.progress
@@ -309,10 +296,6 @@ func (s *Service) nextProgressDue() string {
 		return ""
 	}
 	now := s.nowUTC()
-	p.runs = withinDay(p.runs, now)
-	if len(p.runs) >= progressPerDay {
-		return ""
-	}
 	for workID, pending := range p.pending {
 		settled := now.Sub(pending.latest) >= progressQuietGap || now.Sub(pending.first) >= progressMaxWait
 		if pending.newTurn && now.Sub(pending.first) >= progressTurnSettle {
@@ -327,35 +310,57 @@ func (s *Service) nextProgressDue() string {
 		if last, ok := p.lastRun[workID]; ok && !pending.fresh && now.Sub(last) < progressMinGap {
 			continue
 		}
-		if p.perWork == nil {
-			p.perWork = map[string][]time.Time{}
-		}
-		p.perWork[workID] = withinDay(p.perWork[workID], now)
-		if len(p.perWork[workID]) >= progressPerWorkDay {
-			delete(p.pending, workID)
-			continue
-		}
 		delete(p.pending, workID)
 		p.inFlight = true
 		if p.lastRun == nil {
 			p.lastRun = map[string]time.Time{}
 		}
 		p.lastRun[workID] = now
-		p.runs = append(p.runs, now)
-		p.perWork[workID] = append(p.perWork[workID], now)
 		return workID
 	}
 	return ""
 }
 
-func withinDay(times []time.Time, now time.Time) []time.Time {
-	kept := times[:0]
-	for _, at := range times {
-		if now.Sub(at) < 24*time.Hour {
-			kept = append(kept, at)
+func runsWithinDay(runs []ProgressRun, now time.Time) []ProgressRun {
+	kept := runs[:0]
+	for _, run := range runs {
+		if now.Sub(run.At) < 24*time.Hour {
+			kept = append(kept, run)
 		}
 	}
 	return kept
+}
+
+// ProgressJudgeDay is what the progress judge did in the last 24 hours, from
+// the runs kept on each Work: how many judgments, and what they cost in
+// dollars where the executor reports it.
+type ProgressJudgeDay struct {
+	Judgments int     `json:"judgments"`
+	USD       float64 `json:"usd"`
+	Works     int     `json:"works"`
+}
+
+func progressJudgeDay(items []Work, now time.Time) ProgressJudgeDay {
+	var day ProgressJudgeDay
+	for _, item := range items {
+		if item.Progress == nil {
+			continue
+		}
+		counted := false
+		for _, run := range item.Progress.Runs {
+			if now.Sub(run.At) >= 24*time.Hour {
+				continue
+			}
+			day.Judgments++
+			day.USD += run.USD
+			if !counted {
+				day.Works++
+				counted = true
+			}
+		}
+	}
+	day.USD = math.Round(day.USD*10000) / 10000
+	return day
 }
 
 // judgeProgress asks the model about one Work and stores the answer.
@@ -386,7 +391,7 @@ func (s *Service) judgeProgress(ctx context.Context, workID string) {
 	if err == nil {
 		var verdict progressVerdict
 		if verdict, err = parseProgressVerdict(raw); err == nil {
-			err = s.store.applyWorkProgress(workID, verdict, scopeAdded, seen, s.nowUTC())
+			err = s.store.applyWorkProgress(workID, verdict, scopeAdded, seen, cost, s.nowUTC())
 		}
 		if err == nil {
 			shown := verdict.shown()
@@ -654,7 +659,7 @@ func progressDuration(d time.Duration) string {
 
 // applyWorkProgress folds a judgment into the Work, records an event when what
 // a person sees changed, and tells the clients.
-func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeAdded bool, seen *ProgressEvidence, now time.Time) error {
+func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeAdded bool, seen *ProgressEvidence, usd float64, now time.Time) error {
 	return s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
 		if item.Status == WorkCancelled {
 			return nil, false
@@ -664,16 +669,16 @@ func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeA
 			if item.Progress != nil {
 				kept = *cloneWorkProgress(item.Progress)
 			}
-			markProgressJudged(&kept, seen, now)
+			markProgressJudged(&kept, seen, now, usd)
 			item.Progress = &kept
 			return nil, false
 		}
 		next, changed := applyProgressVerdict(item.Progress, verdict, scopeAdded, now)
 		if item.Progress != nil {
 			kept := cloneWorkProgress(item.Progress)
-			next.Reports, next.Seen, next.Judged, next.Recent = kept.Reports, kept.Seen, kept.Judged, kept.Recent
+			next.Reports, next.Seen, next.Judged, next.Runs = kept.Reports, kept.Seen, kept.Judged, kept.Runs
 		}
-		markProgressJudged(&next, seen, now)
+		markProgressJudged(&next, seen, now, usd)
 		item.Progress = &next
 		if !changed {
 			return nil, false

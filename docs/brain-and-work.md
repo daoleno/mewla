@@ -100,7 +100,10 @@ within seconds. A report that repeats the last one is not evidence, and the evid
 last judged is kept on the Work, so a restart of the computer's Mewla judges
 nothing again. The same call writes the row's title, line and project, in the
 language you write to Brain in; a new Work is named once when it appears, and a
-closed one is read once more so its row says how it ended. The
+closed one is read once more so its row says how it ended. The judge has no daily
+cap: what it costs follows from judging only new evidence, one call per Work
+and the model you route, and `mewla brain context --json` shows the last 24
+hours (`progress_judge`: judgments, Works, dollars). The
 `Work progress` row of `routing.md` picks its model (see
 [Worker routing](#worker-routing)). Each judgment is recorded on the Work as a
 `progress.judged` or `progress.back` event (`mewla brain work list -id`).

@@ -932,22 +932,27 @@ func (s *Service) Context() (BrainContext, error) {
 	if err != nil {
 		return BrainContext{}, err
 	}
+	items, err := s.store.ListWork()
+	if err != nil {
+		return BrainContext{}, err
+	}
 	return BrainContext{
-		ThreadID:     snapshot.ChatThreadID,
-		Workspace:    snapshot.Workspace,
-		WorklogPath:  snapshot.WorklogPath,
-		Notes:        notes,
-		Personality:  snapshot.Personality,
-		CurrentWork:  snapshot.CurrentWork,
-		WorkBacklog:  snapshot.WorkBacklog,
-		Objective:    objective,
-		Playbooks:    playbooks.Playbooks,
-		HostWorker:   snapshot.HostWorker,
-		HostExecutor: snapshot.HostExecutor,
-		Executors:    snapshot.Executors,
-		Workers:      snapshot.Workers,
-		Stale:        s.staleList(snapshot.Workers),
-		GeneratedAt:  s.nowUTC(),
+		ThreadID:      snapshot.ChatThreadID,
+		Workspace:     snapshot.Workspace,
+		WorklogPath:   snapshot.WorklogPath,
+		Notes:         notes,
+		Personality:   snapshot.Personality,
+		CurrentWork:   snapshot.CurrentWork,
+		WorkBacklog:   snapshot.WorkBacklog,
+		Objective:     objective,
+		Playbooks:     playbooks.Playbooks,
+		HostWorker:    snapshot.HostWorker,
+		HostExecutor:  snapshot.HostExecutor,
+		Executors:     snapshot.Executors,
+		Workers:       snapshot.Workers,
+		Stale:         s.staleList(snapshot.Workers),
+		ProgressJudge: progressJudgeDay(items, s.nowUTC()),
+		GeneratedAt:   s.nowUTC(),
 	}, nil
 }
 
