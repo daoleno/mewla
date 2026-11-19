@@ -211,6 +211,13 @@ func TestStopTellsTheAgentOnceAndLocksNothing(t *testing.T) {
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 }
 
+// A Stop for a Worker that is not using the screen says nothing to it later: its next action runs.
+func TestStopForAWorkerWithNoSessionTellsItNothing(t *testing.T) {
+	s, _, _ := newAgentService(t)
+	s.StopAgentFor("%9")
+	act(t, s, "%9", AgentAction{Action: "screenshot"})
+}
+
 // However the agent's control ends, a button it left down comes up.
 func TestAnEndedAgentLeavesNoButtonDown(t *testing.T) {
 	for name, end := range map[string]func(*Service){
