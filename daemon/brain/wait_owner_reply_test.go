@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,9 @@ func TestReplyOnAWorkThatAsksNothingLeavesItsWait(t *testing.T) {
 	result := ownerReplies(t, service, item.ID, "看不懂这个，你需要我干啥？", "r1")
 	if len(fw.sentCalls) != 1 {
 		t.Fatalf("Brain inputs = %+v, want the reply", fw.sentCalls)
+	}
+	if body := fw.sentCalls[0].text; !strings.Contains(body, "Its wait still stands: "+tomorrowsRun) || !strings.HasSuffix(body, "\n看不懂这个，你需要我干啥？") {
+		t.Fatalf("Brain must hear the wait still stands: %q", body)
 	}
 	wakeIs(t, store, item.ID, WorkWakeNamed, tomorrowsRun)
 	if current, found := currentWorkByID(t, store, item.ID); !found || current.UserAction == nil || current.UserAction.EventID != result.Event.ID {

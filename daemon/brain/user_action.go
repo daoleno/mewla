@@ -127,6 +127,10 @@ func WorkReplyBody(item Work, text string, files []attachment.File) string {
 	header := "Re: " + firstNonEmpty(strings.TrimSpace(item.Title), item.ID) + " (work " + item.ID + ")"
 	if question := strings.TrimSpace(item.Question); question != "" {
 		header += "\n> " + question
+	} else if item.Wake != nil {
+		// Nothing was asked, so the reply ends no wait: say so, or Brain
+		// takes the Work for woken.
+		header += "\n(Its wait still stands: " + firstNonEmpty(strings.TrimSpace(item.WaitFor), item.Wake.Ref) + ". Change or end it if this reply settles it.)"
 	}
 	return header + "\n" + text
 }
@@ -146,7 +150,8 @@ func workReplySummary(request WorkUserActionRequest) string {
 
 // RecordWorkUserAction appends the user's decision for a non-closing action
 // (reply or snooze) and applies its effect in one replacement: a reply clears
-// Brain's question and releases a user_input wait; a snooze records its time.
+// Brain's question and, when the Work asked, releases its user_input wait; a
+// snooze records its time.
 func (s *Store) RecordWorkUserAction(request WorkUserActionRequest, admission ExternalInputDisposition, receipt string) (Work, WorkEvent, error) {
 	request.WorkID = strings.TrimSpace(request.WorkID)
 	request.Text = strings.TrimSpace(request.Text)
