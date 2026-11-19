@@ -1,4 +1,4 @@
-import { computed, keyboardFrame, safeArea, Text, untracked, View, windowSize } from "nsh";
+import { computed, Keyboard, keyboardFrame, safeArea, Text, untracked, View, windowSize } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { RAIL, RAIL_PLACES, railEnds, railLayout, railPageOrder, railRoom, type RailPlaceId } from "../../core/shell/rail";
@@ -114,6 +114,8 @@ function Items(props: { of: () => readonly Pressable[] }) {
 function More(props: { items: readonly Pressable[] }) {
   const press = async () => {
     const items = untracked(() => props.items);
+    // The phone's action sheet does not keep clear of the keyboard: its last rows sat behind it.
+    Keyboard.dismiss();
     const chosen = await showMenu({ items: items.map((item) => ({ id: item.id, label: item.label, icon: item.icon, disabled: item.disabled?.() })), testID: "rail-more-menu" });
     items.find((item) => item.id === chosen)?.onPress();
   };
