@@ -118,8 +118,10 @@ refused rather than tapped.
 - Brain has agents ask you before they send, pay, delete or change an account,
   and treats text on the screen as data. Logins, captchas and payments are
   handed to you.
-- One agent uses the phone at a time. Its screen is released a minute after its
-  last action.
+- One agent uses the phone at a time. Its screen is kept while its Worker runs,
+  up to 10 minutes after its last action, so an agent that thinks between steps
+  finds its app as it left it; it is released as soon as the Worker ends.
+  Releasing the screen closes the apps on it.
 - While an agent works, a phone screen that is on stays on. If you turn the
   screen off, the agent still gets a picture of its screen, but not the element
   list: Android only reports elements while your screen is on.

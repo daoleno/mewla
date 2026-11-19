@@ -30,8 +30,13 @@ const (
 	aliveMisses = 2
 	// DefaultAliveEvery is how often a Worker that holds the phone is checked to still be running.
 	DefaultAliveEvery = 3 * time.Second
-	// DefaultIdle is how long the phone's display stays with an agent that does nothing.
+	// DefaultIdle is how long the phone's display stays with an agent that does nothing, when the
+	// manager cannot ask whether its Worker still runs.
 	DefaultIdle = 60 * time.Second
+	// DefaultIdleRunning is how long it stays with a quiet agent whose Worker still runs: an agent
+	// thinks for minutes between actions, and giving the display back closes what is open on it. A
+	// Worker that ends gives it back at once (AliveEvery).
+	DefaultIdleRunning = 10 * time.Minute
 	// DefaultReconnect is how long an agent's action waits for a phone that dropped to come back
 	// (the App reconnects by itself) before it is told the phone is not connected.
 	DefaultReconnect = 30 * time.Second
@@ -105,6 +110,8 @@ type Options struct {
 	Clock   Clock
 	Timeout time.Duration // an ordinary op; DefaultTimeout
 	Idle    time.Duration // DefaultIdle
+	// IdleRunning replaces Idle while SetAlive can tell that the agent's Worker still runs; DefaultIdleRunning.
+	IdleRunning time.Duration
 	// Reconnect is how long an action waits for a missing connection; DefaultReconnect, or a
 	// negative value to refuse at once.
 	Reconnect time.Duration
@@ -148,7 +155,7 @@ type Reply struct {
 
 // Manager owns the one current phone connection. It sends the phone one request at a time on
 // behalf of the agents, refuses actions the phone's state does not allow, remembers who is using
-// the phone and gives the phone's display back when the agent goes quiet.
+// the phone and gives the phone's display back when the agent's Worker ends or the agent goes quiet.
 type Manager struct {
 	opts Options
 	// sem holds the one request in flight.
@@ -192,6 +199,9 @@ func NewManager(opts Options) *Manager {
 	}
 	if opts.Idle <= 0 {
 		opts.Idle = DefaultIdle
+	}
+	if opts.IdleRunning <= 0 {
+		opts.IdleRunning = DefaultIdleRunning
 	}
 	if opts.Reconnect == 0 {
 		opts.Reconnect = DefaultReconnect
@@ -775,9 +785,17 @@ func (m *Manager) gateLocked(worker string) error {
 		if name == "" {
 			name = m.active.Worker
 		}
-		return &Error{CodeBusy, "Another agent (" + name + ") is using the phone. Stop and report; it is free a minute after that agent goes quiet."}
+		return &Error{CodeBusy, "Another agent (" + name + ") is using the phone. Stop and report; it is free once that agent finishes, or " + quietFor(m.idleLocked()) + " after its last action."}
 	}
 	return nil
+}
+
+// quietFor says a quiet spell in words: "a minute", "10 minutes".
+func quietFor(d time.Duration) string {
+	if n := int(d.Round(time.Minute) / time.Minute); n > 1 {
+		return strconv.Itoa(n) + " minutes"
+	}
+	return "a minute"
 }
 
 func (m *Manager) timeoutFor(op string, raw json.RawMessage) time.Duration {
@@ -813,7 +831,16 @@ func (m *Manager) armIdleLocked() {
 	if m.active == nil || m.inflight > 0 {
 		return
 	}
-	m.idle = m.opts.Clock.AfterFunc(m.opts.Idle, m.idleFired)
+	m.idle = m.opts.Clock.AfterFunc(m.idleLocked(), m.idleFired)
+}
+
+// idleLocked is how long a quiet agent keeps the display: longer while its Worker can be watched,
+// since that Worker gives it back the moment it ends.
+func (m *Manager) idleLocked() time.Duration {
+	if m.alive != nil {
+		return m.opts.IdleRunning
+	}
+	return m.opts.Idle
 }
 
 // armAliveLocked starts the periodic check that the agent using the phone still runs.
@@ -871,7 +898,7 @@ func (m *Manager) aliveFired() {
 
 func (m *Manager) idleFired() {
 	m.mu.Lock()
-	if m.active == nil || m.inflight > 0 || m.opts.Clock.Now().Sub(m.lastAct) < m.opts.Idle {
+	if m.active == nil || m.inflight > 0 || m.opts.Clock.Now().Sub(m.lastAct) < m.idleLocked() {
 		m.mu.Unlock()
 		return
 	}
