@@ -94,9 +94,9 @@ passing run, a file written, a posted review.
 
 The judge runs only on new evidence (a progress report with new words, a turn
 ending, Brain's next message to the Worker, Brain parking or closing the Work or
-changing what it waits on or asks you), at most once every two minutes per
-Work and never on a timer alone; after a turn ends or a send-back, within
-seconds. A report that repeats the last one is not evidence, and the evidence it
+changing what it waits on or asks you), never on a timer alone. Reports alone
+move it at most every ten minutes per Work; after a turn ends or a send-back,
+within seconds. A report that repeats the last one is not evidence, and the evidence it
 last judged is kept on the Work, so a restart of the computer's Mewla judges
 nothing again. The same call writes the row's title, line and project, in the
 language you write to Brain in; a new Work is named once when it appears, and a
