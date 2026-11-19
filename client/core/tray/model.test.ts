@@ -4,7 +4,7 @@ import type { BrainCurrentWork } from "../work/types";
 import { listTime } from "../sessions/listRow";
 import { catState } from "../pets/cat";
 import { workWorkerLines } from "../work/workers";
-import { backMark, requestsOf, stateShortWords, trayModel, type TrayInput } from "./model";
+import { backMark, filterTray, projectsOf, requestsOf, stateShortWords, trayModel, type TrayInput } from "./model";
 import { workDetailWorkerRow } from "../work/workers";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
@@ -122,8 +122,9 @@ describe("tray model", () => {
     expect(m.running.map((r) => r.key)).toEqual(["session:a", "work:w1"]);
     expect(m.state.words).toBe("2 running");
     expect(m.title).toBe(m.state.words);
-    // The Work its one Worker runs opens that Session, with its logo.
-    expect(m.running[1]!.target).toEqual({ open: "session", workerId: "b" });
+    // The row opens the Work; the logo of the one Worker that runs it opens that Session (owner 11-19 16:10).
+    expect(m.running[1]!.target).toEqual({ open: "work", workId: "w1" });
+    expect(m.running[1]!.tileTarget).toEqual({ open: "session", workerId: "b" });
     expect(m.done.map((r) => r.key)).toEqual(["session:c"]);
   });
 
@@ -167,11 +168,40 @@ describe("tray model", () => {
     expect(m.state.words).toBe("1 running");
     // A result ends in when it came back, then its check.
     const back = trayModel(input({ currentWork: [work("w2", { status: "done", unread_result: true, updated_at: "2026-11-12T09:30:00Z" })] }));
-    expect(back.done.find((r) => r.key === "work:w2")).toMatchObject({ end: listTime(Date.parse("2026-11-12T09:30:00Z"), new Date(NOW)), done: true, unread: true });
+    expect(back.fresh.find((r) => r.key === "work:w2")).toMatchObject({ end: listTime(Date.parse("2026-11-12T09:30:00Z"), new Date(NOW)), done: true, unread: true });
     // One Worker: the row is that Session's.
     const one = trayModel(input({ workers: [worker("b")], currentWork: [work("w1", { worker_sessions: [joined("b", true)] })] }));
     expect(one.running).toHaveLength(1);
-    expect(one.running[0]).toMatchObject({ key: "work:w1", tile: { kind: "agent", agent: "claude" }, target: { open: "session", workerId: "b" } });
+    expect(one.running[0]).toMatchObject({ key: "work:w1", tile: { kind: "agent", agent: "claude" }, target: { open: "work", workId: "w1" }, tileTarget: { open: "session", workerId: "b" } });
+  });
+
+  test("a Work reads as the judge wrote it, newest change first, and its project filters the tray", () => {
+    const shown = (title: string, line: string, project: string, changed: string) => ({ title, line, project, changed_at: changed });
+    const joined = (id: string, live: boolean) => ({ session_id: id, name: id, provider: "claude", state: live ? "running" as const : "done" as const, live, joined_at: "2026-11-12T09:00:00Z", updated_at: "2026-11-12T09:00:00Z" });
+    const m = trayModel(input({
+      workers: [worker("b"), worker("c")],
+      currentWork: [
+        work("old", { title: "ZeroGSlack67", worker_sessions: [joined("b", true)], shown: shown("0G MetaMask 预览报错", "第 7 项已修，MetaMask 根因还在查", "0G", "2026-11-12T09:10:00Z") }),
+        work("new", { title: "MewlaWorkReclaim", worker_sessions: [joined("c", true)], shown: shown("任务做完自动回收", "原因已查清，修复中", "Mewla", "2026-11-12T09:58:00Z") }),
+        work("bare", { title: "DpFocusMag7" }),
+        work("done", { status: "done", unread_result: true, shown: shown("0G 许可证改回私有", "已推到 main", "0G", "2026-11-12T09:00:00Z") }),
+      ],
+    }));
+    expect(m.running.map((r) => r.key)).toEqual(["work:new", "work:old", "work:bare"]);
+    expect(m.running[0]).toMatchObject({ title: "任务做完自动回收", line: "原因已查清，修复中", end: "2m", project: "Mewla" });
+    // Before its first judgment a Work keeps Brain's title: never a blank row.
+    expect(m.running[2]!.title).toBe("DpFocusMag7");
+    expect(m.fresh.map((r) => r.title)).toEqual(["0G 许可证改回私有"]);
+    expect(m.projects).toEqual([{ name: "0G", count: 2 }, { name: "Mewla", count: 1 }]);
+    const only0G = filterTray(m, { project: "0G" });
+    expect([...only0G.fresh, ...only0G.running].map((r) => r.key)).toEqual(["work:done", "work:old"]);
+    const runningOnly = filterTray(m, { kind: "running" });
+    expect(runningOnly.fresh).toEqual([]);
+    expect(runningOnly.running).toHaveLength(3);
+  });
+
+  test("one project is no filter", () => {
+    expect(projectsOf([{ project: "Mewla" }, { project: "Mewla" }, {}])).toEqual([]);
   });
 
   test("a Work's row carries its judged progress while it runs or waits on Brain; never while a person has a part", () => {
@@ -305,7 +335,7 @@ describe("tray model", () => {
       workers: [{ ...asking, needs_attention: false }],
       currentWork: [work("w1", { title: "Fixer", status: "done", unread_result: true, summary: "Ready", attempt_session_id: "f", updated_at: new Date(NOW - 1000).toISOString() })],
     }));
-    expect(answered.done.map((r) => r.key)).toEqual(["work:w1"]);
+    expect(answered.fresh.map((r) => r.key)).toEqual(["work:w1"]);
   });
 
   test("Done shows the unread result; a Work waiting on a decision is a request", () => {
@@ -318,8 +348,8 @@ describe("tray model", () => {
     }));
     expect(m.needs.map((r) => r.key)).toContain("work:ask");
     expect(m.needs.find((r) => r.key === "work:ask")).toMatchObject({ where: "work", title: "Ship it?" });
-    // A read result has left current Work; the unread one is Done's first row, with its dot.
-    expect(m.done[0]).toMatchObject({ key: "work:new", unread: true, done: true, line: "fresh result" });
+    // A read result has left current Work; the unread one is New's row, with its dot.
+    expect(m.fresh[0]).toMatchObject({ key: "work:new", unread: true, done: true, line: "fresh result" });
   });
 
   test("a request answered here leaves the tray and the count at once", () => {

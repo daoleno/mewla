@@ -1,7 +1,7 @@
 import { workProgressMark, type BrainWorkProgress, type ProgressMark } from "./judgedProgress";
 import type { CalendarClock, CalendarItem } from "../calendar/model";
 import { readableSummary } from "../sessions/activity";
-import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, WorkWorkerSession } from "./types";
+import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef, BrainWorkShown, WorkWorkerSession } from "./types";
 
 /** How a Work's state reads: a ring, a seal, a check (DESIGN.md's Work states). */
 export type WorkStatus = "ready" | "running" | "needs" | "warning" | "failed" | "blocked";
@@ -168,6 +168,12 @@ export type BrainWorkSlip = {
   calendarLink?: string;
   /** Every Worker Session that joined it, oldest first (core/work/workers `workWorkerLines`). */
   workerSessions?: readonly WorkWorkerSession[];
+  /** Where it stands, as the judge wrote it in the person's language (`shown.line`); absent before a judgment. */
+  shownLine?: string;
+  /** The project the judge or the person put it under (`shown.project`); the tray's chips filter by it. */
+  shownProject?: string;
+  /** When what the person sees of it last changed (`shown.changed_at`, else its last update): the tray's order. */
+  changedAt?: string;
 };
 
 export type BrainWorkSurface = {
@@ -274,7 +280,7 @@ export function brainWorkSurface(
       group,
       status,
       statusLabel,
-      title: brainWorkTitle(work.title),
+      title: shownTitle(work.shown) || brainWorkTitle(work.title),
       who: worker ? workerWho(worker) : undefined,
       project: projectName(worker?.cwd) || undefined,
       summary: work.question
@@ -303,6 +309,7 @@ export function brainWorkSurface(
       workerSessions: work.worker_sessions,
       progress: terminal ? undefined : work.progress,
       mark: workProgressMark(work),
+      ...shownParts(work.shown, work.updated_at),
     });
   }
   const listed = new Set(slips.map((slip) => slip.workId));
@@ -317,18 +324,34 @@ export function brainWorkSurface(
       // The dashed ring: nothing is working on it yet.
       status: "blocked",
       statusLabel: BRAIN_WORK_GROUP_LABELS[group],
-      title: brainWorkTitle(work.title),
+      title: shownTitle(work.shown) || brainWorkTitle(work.title),
       summary: waiting && !work.calendar ? readableLine(work.wait_for) : undefined,
       updatedAt: work.updated_at,
       unread: false,
       calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
       workerSessions: work.worker_sessions,
+      progress: work.progress,
+      mark: workProgressMark({ status: work.status, progress: work.progress, wake: work.wake, wait_for: work.wait_for }),
+      ...shownParts(work.shown, work.updated_at),
     });
   }
   const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);
   // Stable: within a group the daemon's order (review queue, then newest) holds.
   slips.sort((left, right) => rank(left.group) - rank(right.group));
   return { slips, counts };
+}
+
+function shownTitle(shown: BrainWorkShown | undefined): string {
+  return shown?.title?.trim() ?? "";
+}
+
+/** What the judge wrote for the row, beside the slip's own fields. */
+function shownParts(shown: BrainWorkShown | undefined, updatedAt: string | undefined): Pick<BrainWorkSlip, "shownLine" | "shownProject" | "changedAt"> {
+  return {
+    shownLine: shown?.line?.trim() || undefined,
+    shownProject: shown?.project?.trim() || undefined,
+    changedAt: shown?.changed_at ?? updatedAt,
+  };
 }
 
 function isSurfacedOpenWork(work: BrainOpenWork): boolean {

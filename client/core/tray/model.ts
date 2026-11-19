@@ -53,6 +53,8 @@ export interface TrayRequest {
   flavor?: TerminalFlavor;
   /** Approve on the row; absent sends the tap to the card ("Answer"). */
   oneTap?: OneTap;
+  /** A Work's project (`shown.project`), for the tray's project filter. */
+  project?: string;
   /** A failed Session or a Trigger: nothing to answer, its tag is "Open" and opens it (Brain 11-14). */
   opens?: true;
 }
@@ -93,6 +95,19 @@ export interface TrayRow {
   past?: boolean;
   /** A Work's judged progress (§11 Progress, `workProgressMark`): Running's and Waiting's Work rows only; absent: none. */
   mark?: ProgressMark;
+  /**
+   * What a tap on the tile opens when it is not what the row opens: a Work its one Worker runs opens Work detail
+   * from the row and that Worker's Session from its logo (owner 11-19 16:10).
+   */
+  tileTarget?: TrayTarget;
+  /** A Work's project (`shown.project`), for the tray's project filter. */
+  project?: string;
+}
+
+/** A project the open Work is under, with how many of the tray's open rows are (the tray's chips). */
+export interface TrayProject {
+  name: string;
+  count: number;
 }
 
 /** A Calendar item of today, as the caller reads it with the phone's clock. */
@@ -193,21 +208,21 @@ export interface TrayModel {
   /** The lists are last known: dimmed under the notice (offline, connecting, pair again). */
   dimmed: boolean;
   needs: TrayRequest[];
+  /** New: a Work's result is back and nobody has opened it yet (ink dot), newest first. */
+  fresh: TrayRow[];
   running: TrayRow[];
+  /** The projects of the open Work, most rows first; empty unless two or more have open Work. */
+  projects: TrayProject[];
   today: TrayRow[];
   /** More of today than the three shown: the "Calendar ›" link says so. */
   todayCount: number;
   idle: TrayRow[];
-  /** Done, unread results first (the tray shows three, "All ›" opens the rest). */
+  /** Done: results read and ended Sessions, newest first; one collapsed row that opens in place. */
   done: TrayRow[];
 }
 
-/** Running rows shown before "N more". */
-export const RUNNING_SHOWN = 5;
 /** Today's rows shown before "Calendar ›". */
 export const TODAY_SHOWN = 3;
-/** Done rows shown before "All ›". */
-export const DONE_SHOWN = 3;
 
 const NEGATIVE = /^(?:no|deny|reject|cancel|don'?t)\b/i;
 const ALWAYS = /\b(?:always|don'?t ask|for this session|for all|remember)\b/i;
@@ -271,7 +286,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
   for (const slip of brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now).slips) {
     // Only Brain's question puts a Work here (owner 2026-11-19): never a row with nothing to answer.
     if (slip.group !== "needs" || !slip.question) continue;
-    out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question, ask: slip.question, source: slip.title, workId: slip.workId });
+    out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question, ask: slip.question, source: slip.title, workId: slip.workId, project: slip.shownProject });
   }
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
   for (const trigger of input.triggers ?? []) out.push({ key: `trigger:${trigger.id}:${trigger.ask}`, kind: "trigger", where: "trigger", title: trigger.title, ask: trigger.ask, source: trigger.title, triggerId: trigger.id, opens: true });
@@ -347,6 +362,8 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
   const lead = joined.find((row) => row.live) ?? (several ? undefined : joined[0]);
   // What its Worker does (the first live one of several), as the Session's own row says it.
   const doing = several ? workerLine(lead) : model ? model.line : workerLine(lead);
+  // What the judge wrote in the person's language says where the thing stands; until it has, the Worker's words.
+  const judged = slip.shownLine ?? "";
   const since = lead ? Date.parse(lead.joined_at) : session?.started_at;
   // The line never repeats the section (§11 Tray row): a running Work says what its Worker does; a result,
   // what came back; a queued or waiting one, what it waits for, else what its Worker is (the live case: a
@@ -357,24 +374,28 @@ function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now
     || doing || slip.summary || slip.who
     || (slip.group === "queued" ? "Not started yet" : "Waiting to go on");
   const line = several
-    ? [`${joined.length} Workers`, running || !done ? doing : ""].filter(Boolean).join(" · ")
-    : done ? slip.summary || doing || slip.who || ""
+    ? [`${joined.length} Workers`, judged || (running || !done ? doing : "")].filter(Boolean).join(" · ")
+    : judged || (done ? slip.summary || doing || slip.who || ""
     : running ? doing || telling(slip.statusLabel) || slip.summary || slip.who || ""
-    : quietLine();
+    : quietLine());
+  const changed = slip.changedAt ? Date.parse(slip.changedAt) : NaN;
   return {
     key: `work:${slip.workId}`,
     title: slip.title,
     line,
     // Running: how long; queued or waiting: that word, never a date (§1.2, §11 Tray row end); a result: when it
     // came back ("11:20", as a Session's row).
-    end: running ? elapsedShort(since, now)
+    // Running: how long since it last changed once the judge says where it stands, else how long it has run.
+    end: running ? elapsedShort(judged && Number.isFinite(changed) ? changed : since, now)
       : slip.group === "queued" ? "Queued"
       : slip.group === "waiting" ? "Waiting"
       : slip.updatedAt ? listTime(Date.parse(slip.updatedAt), new Date(now)) : "",
     live: running || undefined,
-    // A Work its one Worker runs opens that Session (its logo); with none, Work detail (Brain's mark).
+    // The row opens the Work; the logo of the one Worker that runs it opens its Session (owner 11-19 16:10).
     tile: model ? { kind: "agent", agent: model.kind, flavor: model.flavor } : { kind: "brain" },
-    target: session ? { open: "session", workerId: session.id } : { open: "work", workId: slip.workId },
+    target: { open: "work", workId: slip.workId },
+    tileTarget: session ? { open: "session", workerId: session.id } : undefined,
+    project: slip.shownProject,
     unread: done && slip.unread ? true : undefined,
     done: done || undefined,
     quiet: slip.group === "waiting" || slip.group === "queued" || undefined,
@@ -454,14 +475,16 @@ export function trayModel(input: TrayInput): TrayModel {
   const row = (worker: Worker) => sessionRow(worker, input.now);
   const work = (slip: BrainWorkSlip) => workRow(slip, sessions, input.now);
   const runningSessions = live.filter((worker) => worker.status === "running").sort(order).map(row);
-  const runningWork = slips.filter((slip) => slip.group === "running").map(work);
-  const quietWork = slips.filter((slip) => slip.group === "waiting" || slip.group === "queued").map(work);
+  // Running Work moves to the top as it changes, so where things stand reads top down; quiet rows keep the end.
+  const runningWork = slips.filter((slip) => slip.group === "running").sort(byChange).map(work);
+  const quietWork = slips.filter((slip) => slip.group === "waiting" || slip.group === "queued").sort(byChange).map(work);
   const running = [...runningSessions, ...runningWork, ...quietWork];
 
   const idle = live.filter((worker) => worker.status === "blocked" || worker.status === "unknown").sort(order).map(row);
-  const doneWork = slips.filter((slip) => slip.group === "back").map(work);
+  const doneWork = slips.filter((slip) => slip.group === "back").sort(byChange).map(work);
   const ended = live.filter((worker) => worker.status === "done" || worker.status === "failed").sort((a, b) => activity(b) - activity(a)).map(row);
-  const done = [...doneWork.filter((row) => row.unread), ...doneWork.filter((row) => !row.unread), ...ended];
+  const fresh = doneWork.filter((row) => row.unread);
+  const done = [...doneWork.filter((row) => !row.unread), ...ended];
 
   const todayRows: TrayRow[] = [...input.today]
     .sort((a, b) => a.at - b.at)
@@ -494,11 +517,51 @@ export function trayModel(input: TrayInput): TrayModel {
     runningCount,
     dimmed: input.hasServer && (input.pairAgain || input.connection !== "connected"),
     needs,
+    fresh,
     running,
+    projects: projectsOf([...needs, ...fresh, ...running]),
     today,
     todayCount: todayRows.length,
     idle,
     done,
+  };
+}
+
+/** Newest change first; a Work with no time keeps its place after those with one. */
+function byChange(a: BrainWorkSlip, b: BrainWorkSlip): number {
+  const at = (slip: BrainWorkSlip) => {
+    const value = slip.changedAt ? Date.parse(slip.changedAt) : NaN;
+    return Number.isFinite(value) ? value : 0;
+  };
+  return at(b) - at(a);
+}
+
+/** The projects of the open rows, most rows first, only when there are two or more (one project is no filter). */
+export function projectsOf(rows: readonly { project?: string }[]): TrayProject[] {
+  const count = new Map<string, number>();
+  for (const row of rows) if (row.project) count.set(row.project, (count.get(row.project) ?? 0) + 1);
+  if (count.size < 2) return [];
+  return [...count].map(([name, n]) => ({ name, count: n })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/** What the tray lists under its filters: one of its counts (Needs you, New, Running), a project, or both. */
+export type TrayFilter = { kind?: "needs" | "fresh" | "running"; project?: string };
+
+/**
+ * The tray's lists under a filter. A count keeps only its own section; a project keeps only its Work, so Sessions,
+ * Today and Idle (which belong to no project) step aside while one is picked.
+ */
+export function filterTray(m: TrayModel, filter: TrayFilter): Pick<TrayModel, "needs" | "fresh" | "running" | "today" | "idle" | "done"> {
+  const inProject = <T extends { project?: string }>(rows: readonly T[]) => (filter.project ? rows.filter((row) => row.project === filter.project) : [...rows]);
+  const only = (kind: NonNullable<TrayFilter["kind"]>) => !filter.kind || filter.kind === kind;
+  const other = !filter.kind && !filter.project;
+  return {
+    needs: only("needs") ? inProject(m.needs) : [],
+    fresh: only("fresh") ? inProject(m.fresh) : [],
+    running: only("running") ? inProject(m.running) : [],
+    today: other ? m.today : [],
+    idle: other ? m.idle : [],
+    done: !filter.kind ? inProject(m.done) : [],
   };
 }
 

@@ -8,7 +8,7 @@ import { BusyLabel, delayed, Rows } from "../kit/wait";
 import { haptic } from "../shell/haptics";
 import { decideApproval, answerPrompt } from "../../core/conversation/turn";
 import { isPromptGoneError, PROMPT_GONE_NOTICE } from "../../core/timeline/claudeChoiceModel";
-import { DONE_SHOWN, RUNNING_SHOWN, TODAY_SHOWN, type TrayNoticeAction, type TrayRequest, type TrayRow as Row, type TrayTile } from "../../core/tray/model";
+import { filterTray, TODAY_SHOWN, type TrayFilter, type TrayNoticeAction, type TrayRequest, type TrayRow as Row, type TrayTarget, type TrayTile } from "../../core/tray/model";
 import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
 import { homeShown, openCalendarItem, openPage, openSession, openTrigger, openWorkDetail, trayOpen } from "../shell/nav";
@@ -91,14 +91,21 @@ export function SelectedWell() {
   return <View testID="selected-well" class="absolute inset-0 bg-accent" />;
 }
 
-/** A tray row (SPEC §11 Tray row): 68 pt, a 28 pt tile, a title and a line, the end. */
-function TrayRow(props: { row: () => Row; onPress: () => void; selected?: boolean; last?: boolean }) {
+/**
+ * A tray row (SPEC §11 Tray row): 68 pt, a 28 pt tile, a title and a line, the end. A Work its one Worker runs has
+ * two targets: the row opens the Work, the Worker's logo (with its ring) opens its Session (owner 11-19 16:10).
+ */
+function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: TrayTarget) => void; selected?: boolean; last?: boolean }) {
   const row = props.row;
   return (
     <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end, row().mark ? progressMarkLabel(row().mark!) : ""].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       <If when={props.selected}><SelectedWell /></If>
-      <RowTile tile={() => row().tile} mark={() => row().mark} />
+      <If when={row().tileTarget} else={<RowTile tile={() => row().tile} mark={() => row().mark} />}>
+        {(target) => <Button testID="tray-row-session" accessibilityLabel="Open its Session" onPress={() => props.onTile(target())} class="-m-2 rounded-full p-2 active:opacity-60">
+          <RowTile tile={() => row().tile} mark={() => row().mark} />
+        </Button>}
+      </If>
       <RowText row={row} />
       <RowEnd row={row} />
       <If when={!(props.selected || props.last)}><RowHair /></If>
@@ -175,12 +182,13 @@ export type TrayBodyProps = TrayProps & {
  * Idle, Done and All Sessions. The phone's overlay and the wide layout's left pane both show it.
  */
 export function TrayBody(props: TrayBodyProps) {
-  const runningOpen = signal(false);
+  const doneOpen = signal(false);
+  const filter = signal<TrayFilter>({});
   const busy = signal("");
   const said = signal("");
   const menuAnchor = createMenuAnchor();
-  const openRow = (row: Row) => {
-    const target = row.target;
+  const openRow = (row: Row) => openTarget(row.target);
+  const openTarget = (target: TrayTarget) => {
     if (target.open === "session") return props.open.session(target.workerId);
     if (target.open === "work") return props.open.work(target.workId);
     return props.open.item(target.itemId);
@@ -242,26 +250,32 @@ export function TrayBody(props: TrayBodyProps) {
     if (picked === "opened" || picked === "activity") setTraySort(picked);
   };
   const m = () => tray();
-  const listed = () => m().needs.length + m().running.length + m().today.length + m().idle.length + m().done.length > 0;
+  // What the counts and the project chips leave in view (core/tray/model `filterTray`).
+  const f = () => filterTray(m(), filter());
+  const pick = (next: TrayFilter) => filter.set(next);
+  const counted = () => !m().notice && (m().state.kind === "needs" || m().state.kind === "running" || m().fresh.length > 0) && m().needs.length + m().fresh.length + m().runningCount > 0;
+  const listed = () => m().needs.length + m().fresh.length + m().running.length + m().today.length + m().idle.length + m().done.length > 0;
   const firstRead = delayed(() => !workersHydrated() && !m().notice && !listed());
   const selected = (key: string) => props.selected?.() === key;
-  const running = () => (runningOpen() ? m().running : m().running.slice(0, RUNNING_SHOWN));
-  // The last row of its group has no hair under it ("N more" follows Running's fifth). Rows are kept by their key:
+  // The last row of its group has no hair under it. Rows are kept by their key:
   // the model is made again every second (elapsed times tick), and a row made anew re-makes its glyphs and logo,
   // which flashes on the web (a new canvas is blank until drawn).
   const rows = (list: () => readonly Row[], more = () => false) => (
     <Each of={list()} key={rowKey}>
-      {(item, index) => <TrayRow row={item} selected={selected(rowKey(item()))} last={!more() && index() === list().length - 1} onPress={() => openRow(item())} />}
+      {(item, index) => <TrayRow row={item} selected={selected(rowKey(item()))} last={!more() && index() === list().length - 1} onPress={() => openRow(item())} onTile={openTarget} />}
     </Each>
   );
   return (
     <>
       <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
-        <Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>
+        <If when={counted()} else={<Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>}>
+          <TrayCounts pane={props.pane} filter={filter} onPick={pick} />
+        </If>
         {/* The mock's order: the options glyph (Sort, Services), then + (New Session). */}
         <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Options" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="options" size={24} tone="ink" /></Button>
         <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="add" size={24} tone="ink" /></Button>
       </View>
+      <If when={m().projects.length}><ProjectChips filter={filter} onPick={pick} /></If>
       <Scroll testID="tray-scroll" class="flex-1" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
         <If when={m().notice}><Notice onAction={noticeAction} /></If>
         {/* The first read (SPEC §16.4 Tray): three placeholder rows from `wait.quiet` until the Workers are in. */}
@@ -270,32 +284,40 @@ export function TrayBody(props: TrayBodyProps) {
         </If>
         <If when={said()}><View testID="tray-said" onPress={() => said.set("")} class="mt-2 px-4"><Text class="text-sub text-muted-foreground">{said()}</Text></View></If>
         <View class={m().dimmed ? "opacity-45" : ""}>
-          <If when={m().needs.length}><View testID="tray-needs">
+          <If when={f().needs.length}><View testID="tray-needs">
               <Label title="Needs you" />
-              <Group><Each of={m().needs} key={(request) => request.key}>
-                {(request, index) => <RequestRow request={request} selected={selected(requestPaneKey(request()) ?? "")} last={index() === m().needs.length - 1} busy={busy() === request().key} onApprove={() => void approve(request())} onOpen={() => openRequest(request())} />}
+              <Group><Each of={f().needs} key={(request) => request.key}>
+                {(request, index) => <RequestRow request={request} selected={selected(requestPaneKey(request()) ?? "")} last={index() === f().needs.length - 1} busy={busy() === request().key} onApprove={() => void approve(request())} onOpen={() => openRequest(request())} />}
               </Each></Group>
             </View></If>
-          <If when={m().running.length}><View testID="tray-running">
+          <If when={f().fresh.length}><View testID="tray-new">
+              <Label title="New" />
+              <Group>{rows(() => f().fresh)}</Group>
+            </View></If>
+          <If when={f().running.length}><View testID="tray-running">
               <Label title="Running" />
-              <Group>
-                {rows(running, () => m().running.length > RUNNING_SHOWN && !runningOpen())}
-                <If when={m().running.length > RUNNING_SHOWN && !runningOpen()}><Button testID="tray-running-more" onPress={() => runningOpen.set(true)} class="min-h-[52px] justify-center px-4 hover:bg-accent active:bg-accent">
-                    <Text class="text-sub text-muted-foreground">{`${m().running.length - RUNNING_SHOWN} more`}</Text>
-                  </Button></If>
-              </Group>
+              <Group>{rows(() => f().running)}</Group>
             </View></If>
-          <If when={m().today.length}><View testID="tray-today">
+          <If when={f().today.length}><View testID="tray-today">
               <Label title="Today" link="Calendar" testID="tray-calendar" onLink={props.open.calendar} />
-              <Group>{rows(() => m().today.slice(0, TODAY_SHOWN))}</Group>
+              <Group>{rows(() => f().today.slice(0, TODAY_SHOWN))}</Group>
             </View></If>
-          <If when={m().idle.length}><View testID="tray-idle">
+          <If when={f().idle.length}><View testID="tray-idle">
               <Label title="Idle" />
-              <Group>{rows(() => m().idle)}</Group>
+              <Group>{rows(() => f().idle)}</Group>
             </View></If>
-          <If when={m().done.length}><View testID="tray-done">
-              <Label title="Done" link="All" testID="tray-all" onLink={props.open.allSessions} />
-              <Group>{rows(() => m().done.slice(0, DONE_SHOWN))}</Group>
+          <If when={f().done.length}><View testID="tray-done" class="mt-6">
+              <Group>
+                {/* One quiet row that opens in place: what is done stays findable without filling the list. */}
+                <Button testID="tray-done-toggle" accessibilityLabel={`Done, ${f().done.length}`} onPress={() => doneOpen.set(!doneOpen())}
+                  class="min-h-[52px] flex-row items-center gap-2 px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                  <Text class="flex-1 text-body">Done</Text>
+                  <Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(f().done.length)}</Text>
+                  <Icon name={doneOpen() ? "chevron-up" : "chevron-down"} size={18} tone="faint" />
+                  <If when={doneOpen()}><RowHair left={() => 16} /></If>
+                </Button>
+                <If when={doneOpen()}>{rows(() => f().done)}</If>
+              </Group>
             </View></If>
           <Button testID="tray-all-sessions" selected={selected("all")} onPress={props.open.allSessions}
             class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
@@ -306,6 +328,57 @@ export function TrayBody(props: TrayBodyProps) {
         </View>
       </Scroll>
     </>
+  );
+}
+
+/**
+ * The tray's title as its counts ("2 need you · 3 new · 17 running"): each count is a filter that keeps only its own
+ * rows, and a second tap clears it. The same words the state control says, so header and tray still agree.
+ */
+function TrayCounts(props: { pane?: boolean; filter: () => TrayFilter; onPick: (next: TrayFilter) => void }) {
+  const m = () => tray();
+  const parts = () => [
+    { kind: "needs" as const, n: m().needs.length, words: m().needs.length === 1 ? "1 needs you" : `${m().needs.length} need you` },
+    { kind: "fresh" as const, n: m().fresh.length, words: `${m().fresh.length} new` },
+    { kind: "running" as const, n: m().runningCount, words: `${m().runningCount} running` },
+  ].filter((part) => part.n > 0);
+  return (
+    <View testID="tray-title" role="header" class="min-w-0 flex-1 flex-row flex-wrap items-center gap-1">
+      <Each of={parts()} key={(part) => part.kind}>{(part) => {
+        const on = () => props.filter().kind === part().kind;
+        return (
+          <Button testID={`tray-count-${part().kind}`} accessibilityLabel={part().words} selected={on()}
+            onPress={() => props.onPick({ ...props.filter(), kind: on() ? undefined : part().kind })}
+            class={`-ml-1.5 flex-row items-center gap-1.5 rounded-full px-1.5 py-0.5 active:opacity-70 ${on() ? "bg-foreground" : ""}`}>
+            <If when={part().kind === "needs"}><View class="size-2 rounded-full bg-seal" /></If>
+            <Text class={`${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"} ${on() ? "text-background" : ""}`}>{part().words}</Text>
+          </Button>
+        );
+      }}</Each>
+    </View>
+  );
+}
+
+/** The projects the open Work is under, as chips that filter (shown only with two or more): never a level. */
+function ProjectChips(props: { filter: () => TrayFilter; onPick: (next: TrayFilter) => void }) {
+  const m = () => tray();
+  const chip = (name: string | undefined, label: string, count: number) => {
+    const on = () => props.filter().project === name;
+    return (
+      <Button testID={name ? "tray-project" : "tray-project-all"} accessibilityLabel={`${label}, ${count}`} selected={on()}
+        onPress={() => props.onPick({ ...props.filter(), project: name })}
+        class={`h-8 flex-row items-center gap-1.5 rounded-full px-3 active:opacity-70 ${on() ? "bg-foreground" : "bg-sheet-surface"}`}>
+        <Text class={`text-sub font-semibold ${on() ? "text-background" : ""}`}>{label}</Text>
+        <Text class={`text-caption ${on() ? "text-background opacity-70" : "text-muted-foreground"}`}>{String(count)}</Text>
+      </Button>
+    );
+  };
+  const all = () => m().projects.reduce((sum, project) => sum + project.count, 0);
+  return (
+    <Scroll testID="tray-projects" horizontal keyboardShouldPersistTaps="handled" class="max-h-[44px] grow-0" contentClass="flex-row items-center gap-1.5 px-4 pb-1.5">
+      {chip(undefined, "All", all())}
+      <Each of={m().projects} key={(project) => project.name}>{(project) => chip(project().name, project().name, project().count)}</Each>
+    </Scroll>
   );
 }
 

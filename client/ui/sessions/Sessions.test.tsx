@@ -76,6 +76,9 @@ describe("Sessions", () => {
   test("New session (the tray's +): a tile chooses the agent, the last folder is chosen, Start starts it and opens it", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
+    // An ended Session sits in Done, one row that opens in place.
+    await app.waitFor("id:tray-done-toggle");
+    await app.press("id:tray-done-toggle");
     await app.waitFor("text:first");
     await app.press("id:tray-new");
     await app.waitFor("id:preset-codex");
@@ -96,6 +99,9 @@ describe("Sessions", () => {
   test("the held first message shows as sending in the Session; a second message queues behind it and goes once the first went (SPEC §16.4 Sending)", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
+    // An ended Session sits in Done, one row that opens in place.
+    await app.waitFor("id:tray-done-toggle");
+    await app.press("id:tray-done-toggle");
     await app.waitFor("text:first");
     await app.press("id:tray-new");
     await app.waitFor("id:preset-claude");
@@ -133,6 +139,9 @@ describe("Sessions", () => {
   test("a held first message that did not go leaves the thread and is the draft again; what queued behind it goes", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
+    // An ended Session sits in Done, one row that opens in place.
+    await app.waitFor("id:tray-done-toggle");
+    await app.press("id:tray-done-toggle");
     await app.waitFor("text:first");
     await app.press("id:tray-new");
     await app.waitFor("id:preset-claude");
@@ -161,6 +170,9 @@ describe("Sessions", () => {
   test("New session's custom command: a Soft group, no uppercase labels; Start launches the typed command", async () => {
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "first" })] }), storage: paired, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
+    // An ended Session sits in Done, one row that opens in place.
+    await app.waitFor("id:tray-done-toggle");
+    await app.press("id:tray-done-toggle");
     await app.waitFor("text:first");
     await app.press("id:tray-new");
     await app.waitFor("id:preset-codex");
@@ -210,6 +222,9 @@ describe("Sessions", () => {
     const storage = { ...paired, "mewla:v3:servers": JSON.stringify([...servers, { ...servers[0], id: "s2", name: "Lab", daemonId: "c".repeat(64) }]) };
     const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "dev server" })] }), storage, platform: "android" });
     await app.host.send("links.open", { url: "mewla://sessions" });
+    // An ended Session sits in Done, one row that opens in place.
+    await app.waitFor("id:tray-done-toggle");
+    await app.press("id:tray-done-toggle");
     await app.waitFor("text:dev server");
     app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Cancel") ? "Cancel" : null));
     // The menu offers Services once the computer is connected; a slow runner may get there after the list shows.

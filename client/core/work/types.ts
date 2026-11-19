@@ -61,6 +61,22 @@ export type ResultAction =
   | { kind: "brain_file"; path: string }
   | { kind: "brain_folder"; path: string };
 
+/**
+ * How a Work reads in the person's list, written by the progress judge in the person's language (daemon
+ * brain/shown.go): a short name for the outcome, where it stands, what comes next, its project. A field the person
+ * set (`by_person`) is theirs: the judge never writes it again. Absent before the first judgment.
+ */
+export type BrainWorkShown = {
+  title?: string;
+  line?: string;
+  next?: string;
+  project?: string;
+  judged_at?: string;
+  /** When what a person sees (title, line or project) last changed. */
+  changed_at?: string;
+  by_person?: ("title" | "project")[];
+};
+
 /** `brain_work_detail`'s Work: one Work's page, current or closed. */
 export type BrainWorkDetail = {
   work_id: string;
@@ -76,6 +92,7 @@ export type BrainWorkDetail = {
   result_actions?: ResultAction[];
   /** The judged progress and its outcomes while it is open (`judgedProgress.ts`); none before a judgment. */
   progress?: BrainWorkProgress;
+  shown?: BrainWorkShown;
 };
 
 export type BrainCurrentWork = {
@@ -113,6 +130,7 @@ export type BrainCurrentWork = {
   worker_sessions?: WorkWorkerSession[];
   /** The judged progress while it is open (`judgedProgress.ts`); none before a judgment. */
   progress?: BrainWorkProgress;
+  shown?: BrainWorkShown;
 };
 
 export type BrainWorkCalendarRef = { item_id: string; run_id: string };
@@ -131,6 +149,8 @@ export type BrainOpenWork = {
   updated_at?: string;
   calendar?: BrainWorkCalendarRef;
   worker_sessions?: WorkWorkerSession[];
+  progress?: BrainWorkProgress;
+  shown?: BrainWorkShown;
 };
 
 export type BrainWorkUserActionKind = "reply" | "close" | "dismiss" | "stop" | "snooze";
