@@ -55,6 +55,8 @@ const (
 	progressMaxGrown    = 24
 	progressDoingCredit = 0.35
 	progressCeiling     = 99
+	// progressPastTurns is how many turns a Work remembers moving on from.
+	progressPastTurns = 32
 )
 
 // ProgressOutcome is one thing that will be true when the Work is done.
@@ -86,6 +88,9 @@ type WorkProgress struct {
 	Seen   *ProgressEvidence `json:"seen,omitempty"`
 	Judged *ProgressEvidence `json:"judged,omitempty"`
 	Runs   []ProgressRun     `json:"runs,omitempty"`
+	// Past are the turns the evidence has moved on from, newest last: a fact
+	// of one of them is a replay (a restart replays every turn), not news.
+	Past []string `json:"past_turns,omitempty"`
 }
 
 // ProgressRun is one judgment: when, and what the model run cost in dollars
@@ -102,7 +107,7 @@ func (p *WorkProgress) view() *WorkProgress {
 	}
 	out := *p
 	out.Outcomes = append([]ProgressOutcome(nil), p.Outcomes...)
-	out.Reports, out.Seen, out.Judged, out.Runs = nil, nil, nil, nil
+	out.Reports, out.Seen, out.Judged, out.Runs, out.Past = nil, nil, nil, nil, nil
 	return &out
 }
 
@@ -114,6 +119,7 @@ func cloneWorkProgress(p *WorkProgress) *WorkProgress {
 	out.Outcomes = append([]ProgressOutcome(nil), p.Outcomes...)
 	out.Reports = append([]ProgressReport(nil), p.Reports...)
 	out.Runs = append([]ProgressRun(nil), p.Runs...)
+	out.Past = append([]string(nil), p.Past...)
 	if p.Seen != nil {
 		seen := *p.Seen
 		out.Seen = &seen

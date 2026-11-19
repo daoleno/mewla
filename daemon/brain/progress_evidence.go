@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"slices"
 	"strings"
 	"time"
 )
@@ -45,6 +46,15 @@ func (s *Store) noteProgressEvidence(workID, turnID string, turnEnd bool, report
 			seen = *progress.Seen
 		}
 		if turnID != "" && turnID != seen.Turn {
+			if slices.Contains(progress.Past, turnID) {
+				return nil, false // a turn it moved on from, replayed: nothing new (11-20 00:50)
+			}
+			if seen.Turn != "" {
+				progress.Past = append(progress.Past, seen.Turn)
+				if len(progress.Past) > progressPastTurns {
+					progress.Past = progress.Past[len(progress.Past)-progressPastTurns:]
+				}
+			}
 			seen = ProgressEvidence{Turn: turnID, Report: seen.Report, Brain: seen.Brain}
 		}
 		if turnEnd {
