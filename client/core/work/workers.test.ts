@@ -44,8 +44,20 @@ describe("the Workers of a Work", () => {
   });
 
   test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {
-    const states = (["running", "blocked", "done", "failed", "ended"] as const).map((state) => workWorkerLines([{ ...rows[0]!, state }], new Map(), NOW)[0]!.stateLabel);
-    expect(states).toEqual([undefined, "Needs you", undefined, "Failed", "Ended"]);
+    const states = (["running", "done", "failed", "ended"] as const).map((state) => workWorkerLines([{ ...rows[0]!, state }], new Map(), NOW)[0]!.stateLabel);
+    expect(states).toEqual([undefined, undefined, "Failed", "Ended"]);
+    // Needs you only on a request the person answers: a prompt on its terminal.
+    const asking = session("worker:@c", { status: "blocked", delegated: true, prompt: { id: "p1", kind: "signin", text: "Sign in", link: "https://example.com" } as Worker["prompt"] });
+    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", asking]]), NOW)[0]).toMatchObject({ state: "blocked", stateLabel: "Needs you" });
+  });
+
+  test("blocked with nothing the person can answer waits on Brain: never Needs you (owner 2026-11-19)", () => {
+    // Its own report to Brain (--attention user_input), read live.
+    const reported = session("worker:@c", { status: "blocked", delegated: true, attention: "user_input" } as Partial<Worker>);
+    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", reported]]), NOW)[0]!.state).toBe("running");
+    // The list does not have its Session: live it still works for the Work; finished it has ended.
+    expect(workWorkerLines([{ ...rows[2]!, state: "blocked" }], new Map(), NOW)[0]!.state).toBe("running");
+    expect(workWorkerLines([{ ...rows[0]!, state: "blocked" }], new Map(), NOW)[0]!).toMatchObject({ state: "ended", stateLabel: "Ended" });
   });
 
   test("a live Session that settled reads its settled state; a Worker without a recorded name shows its executor, else Worker", () => {

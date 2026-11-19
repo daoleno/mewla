@@ -105,7 +105,9 @@ func groupOf(work brain.CurrentWork, now time.Time) workGroup {
 		return groupNone
 	}
 	snoozed := work.SnoozedUntil != nil && work.SnoozedUntil.After(now)
-	if strings.TrimSpace(work.Question) != "" || work.Wake != nil && work.Wake.Kind == brain.WorkWakeUserInput {
+	// Only Brain's question asks the person (owner 2026-11-19): a user_input
+	// wake with nothing asked is Brain's own wait, quiet like any other.
+	if strings.TrimSpace(work.Question) != "" {
 		if snoozed {
 			return groupWaiting
 		}
@@ -196,11 +198,7 @@ func project(in Input, now time.Time) surface {
 			item.Needs = NeedsAnswer
 			item.Ring = nil
 			item.StartedAt = 0
-			if question := strings.TrimSpace(work.Question); question != "" {
-				item.Line = clip(oneLine(question), maxQuestionText)
-			} else if wait := oneLine(work.WaitFor); strings.Contains(wait, " ") {
-				item.Line = clip(wait, maxTextRunes)
-			}
+			item.Line = clip(oneLine(work.Question), maxQuestionText)
 			item.since = work.UpdatedAt
 			if work.AttentionSince != nil {
 				item.since = *work.AttentionSince

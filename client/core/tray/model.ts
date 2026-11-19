@@ -167,7 +167,7 @@ export interface TrayInput {
   alerts: readonly { id: string; title: string }[];
   /** New devices asking the current computer to let them in (ui/enrollment `deviceRequests`). */
   devices?: readonly { id: string; name: string }[];
-  /** Triggers that need the person (core/triggers `triggersNeedingYou`): failing, paused themselves, not handled. */
+  /** Triggers that need the person (core/triggers `triggersNeedingYou`): failing, or paused themselves. */
   triggers?: readonly { id: string; title: string; ask: string }[];
   /** The Works the computer's Triggers fire into: their Trigger row is where they live, so the tray lists one only
    *  while Brain is handling a firing (or it asks you something). */
@@ -269,8 +269,9 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     }
   }
   for (const slip of brainWorkSurface(input.currentWork, workerRefs(input.workers), input.now).slips) {
-    if (slip.group !== "needs") continue;
-    out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question || slip.title, ask: slip.question || "Needs you", source: slip.title, workId: slip.workId });
+    // Only Brain's question puts a Work here (owner 2026-11-19): never a row with nothing to answer.
+    if (slip.group !== "needs" || !slip.question) continue;
+    out.push({ key: `work:${slip.workId}`, kind: "work", where: "work", title: slip.question, ask: slip.question, source: slip.title, workId: slip.workId });
   }
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
   for (const trigger of input.triggers ?? []) out.push({ key: `trigger:${trigger.id}:${trigger.ask}`, kind: "trigger", where: "trigger", title: trigger.title, ask: trigger.ask, source: trigger.title, triggerId: trigger.id, opens: true });

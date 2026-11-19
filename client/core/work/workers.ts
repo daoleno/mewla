@@ -53,6 +53,15 @@ function liveState(session: Worker): WorkWorkerState | undefined {
 }
 
 /**
+ * A Worker's state with no Session in the list to read: blocked needs you only on a request the list shows, so
+ * without one it waits on Brain while it is live, and has ended once it is not.
+ */
+function unfollowedState(row: WorkWorkerSession): WorkWorkerState {
+  if (row.state !== "blocked") return row.state;
+  return row.live ? "running" : "ended";
+}
+
+/**
  * A Worker's name without the Session id the daemon appends ("Hello writer (mh-17b3…)" → "Hello writer"):
  * the id is no name to show. Only that exact suffix goes; "Fix (macOS)" stays as it is.
  */
@@ -65,7 +74,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     const session = sessions.get(row.session_id);
     const model = session ? sessionRowModel(session) : null;
     const following = row.live && session;
-    const state = following ? liveState(session) ?? row.state : row.state;
+    const state = following ? liveState(session) ?? row.state : unfollowedState(row);
     const working = state === "running";
     // What it reported (a live Session's summary only once it reported progress: before, it is the daemon
     // reading the screen); the terminal's footer ("⏵⏵ bypass permissions on…") is never a summary.

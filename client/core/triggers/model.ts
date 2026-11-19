@@ -157,11 +157,19 @@ export function attentionAsk(attention: TriggerAttention): string {
   }
 }
 
+/**
+ * Whether only the person can move it on: a check that keeps failing, or a Trigger that paused itself. A firing Brain
+ * has not handled is Brain's to handle, never the person's (owner 2026-11-19); its page still says so.
+ */
+export function triggerNeedsPerson(attention: TriggerAttention): boolean {
+  return attention === "failing" || attention === "runaway";
+}
+
 /** The Triggers that need the person, as the tray lists them. */
 export function triggersNeedingYou(triggers: readonly Trigger[], now: number): { id: string; title: string; ask: string }[] {
   return triggers.flatMap((trigger) => {
     const attention = triggerAttention(trigger, now);
-    return attention ? [{ id: trigger.id, title: trigger.title, ask: attentionAsk(attention) }] : [];
+    return triggerNeedsPerson(attention) ? [{ id: trigger.id, title: trigger.title, ask: attentionAsk(attention) }] : [];
   });
 }
 

@@ -14,6 +14,7 @@ import type { BrainWorkSlip } from "../../core/work/surface";
 import { progressBackLine, progressOutcomes, type BrainWorkProgress, type JudgedOutcomeState } from "../../core/work/judgedProgress";
 import { OutcomeMark, ProgressHalo } from "../kit/ProgressHalo";
 import { AgentIcon } from "../icons/AgentIcon";
+import { WorkerScreenButton } from "../chat/TimelineRows";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport, workers } from "../session";
@@ -231,10 +232,31 @@ function TopBlock(props: { project: () => string | undefined; title: () => strin
   );
 }
 
-/** The brief (SPEC §11 Work detail): a paragraph at 15/22, soft, shown whole; the page scrolls instead. */
+/** The brief (SPEC §11 Work detail): a paragraph at 15/22, soft, four lines until tapped, then whole. */
 function Brief(props: { text: () => string }) {
+  const whole = signal(false);
   // Read in the JSX: a component runs once, and the brief arrives after the page opens.
-  return <><If when={props.text()}><View selectable class="px-1 pt-3"><Text testID="work-brief" class="text-sub leading-[22px] text-muted-foreground">{props.text()}</Text></View></If></>;
+  return <><If when={props.text()}><View selectable testID="work-brief-toggle" onPress={() => whole.set(!whole())} class="px-1 pt-3">
+      <Text testID="work-brief" class={`text-sub leading-[22px] text-muted-foreground ${whole() ? "" : "line-clamp-4"}`}>{props.text()}</Text>
+    </View></If></>;
+}
+
+/**
+ * What Brain asks (SPEC §11 Work detail, owner 2026-11-19): first on the page, the question and its answers, Brain's
+ * pick tagged; the screen a Worker left for the person (a sign-in) is one tap from it. The dock below is the
+ * free-text reply.
+ */
+function Ask(props: { slip: () => BrainWorkSlip; answers: () => BrainWorkAction[]; worker: () => string | undefined; onAnswer: (action: BrainWorkAction) => void }) {
+  return (
+    <View testID="work-ask" class="mt-4 overflow-hidden rounded-(--radius-group) bg-card">
+      <View class="flex-row items-center gap-3 p-4">
+        <View class="size-2 rounded-full bg-seal" />
+        <View selectable class="min-w-0 flex-1"><Text testID="work-question" class="text-body font-semibold">{props.slip().question!}</Text></View>
+        <WorkerScreenButton worker={props.worker} />
+      </View>
+      {props.answers().map((action) => <AnswerRow action={action} slip={props.slip} onPress={() => props.onAnswer(action)} />)}
+    </View>
+  );
 }
 
 /** A row of Work detail's own groups: an icon, the label, a value, a chevron when it opens something. */
@@ -338,6 +360,10 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   };
   // Since it began waiting, else since its first Worker joined; never updated_at, which moves on every sync.
   const startedAt = () => slip()!.attentionSince ?? (slip()!.workerSessions ?? []).map((w) => w.joined_at).filter(Boolean).sort()[0];
+  // Asked something, the rest of the page is folded until opened.
+  const detailsOpen = signal(false);
+  // The Worker whose screen the ask may need (a sign-in it left open): its live one, else its only one.
+  const askWorker = () => slip()?.sessionId ?? (workerLines().length === 1 ? workerLines()[0]!.sessionId : undefined);
   // The dock is made once while the Work is open: snapshots and the clock rebuild the slip, never the field under a reply.
   const docked = computed(() => Boolean(slip() && !slip()!.closed));
 
@@ -348,29 +374,24 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
           <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
               <TopBlock project={project} title={title} dot={dot} done={() => Boolean(slip()!.closed)} state={stateWord} since={() => since(startedAt())} />
-              {/* Its progress (§11 Progress): the ring around its Worker's logo (Brain's mark with several or none), no number. */}
-              <If when={slip()!.mark}>{(mark) => <View class="px-1 pt-3"><View class="size-[56px] items-center justify-center">
-                  <View class="absolute" style={{ left: 0, top: 0 }}><ProgressHalo mark={() => mark()!} size={56} testID="work-progress-ring" /></View>
-                  <If when={workerLines().length === 1} else={<Icon name="brain" size={26} tone="ink" />}><AgentIcon kind={workerLines()[0]?.agent ?? "terminal"} flavor={workerLines()[0]?.flavor} size={28} /></If>
-                </View></View>}</If>
-              <Brief text={brief} />
-              <If when={slip()!.summary && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-question" class="text-sub leading-[22px] text-muted-foreground">{slip()!.summary!}</Text></View></If>
-              <If when={brainWorkWaitForLine(slip()!)}><View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View></If>
-              <If when={slip()!.question}><>
-                  <Caption role="header" class="mb-2 mt-6 px-4" text="Waits on you" />
-                  <View class="overflow-hidden rounded-(--radius-group) bg-card">
-                    <View class="gap-2 p-4">
-                      <View class="flex-row items-center gap-2">
-                        <View class="size-2 rounded-full bg-seal" />
-                        <Text class="text-caption font-semibold">Brain asks</Text>
-                      </View>
-                      <View selectable><Text testID="work-question" class="text-body font-semibold">{slip()!.question!}</Text></View>
-                    </View>
-                    {answers().map((action) => <AnswerRow action={action} slip={() => slip()!} onPress={() => void runWorkAction(action, slip()!, context())} />)}
-                  </View>
-                </></If>
-              <Progress progress={() => slip()!.progress} />
-              <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+              {/* What Brain asks comes first; what the Work is and who works on it waits below, folded (owner 2026-11-19). */}
+              <If when={slip()!.question}><Ask slip={() => slip()!} answers={answers} worker={askWorker} onAnswer={(action) => void runWorkAction(action, slip()!, context())} /></If>
+              <If when={!slip()!.question || detailsOpen()} else={
+                <Button testID="work-details" accessibilityLabel="Details" onPress={() => detailsOpen.set(true)} class="mt-3 min-h-[44px] flex-row items-center gap-1 px-1 active:opacity-70">
+                  <Text class="text-sub text-muted-foreground">Details</Text>
+                  <Icon name="chevron-down" size={16} tone="soft" />
+                </Button>}><View>
+                {/* Its progress (§11 Progress): the ring around its Worker's logo (Brain's mark with several or none), no number. */}
+                <If when={slip()!.mark}>{(mark) => <View class="px-1 pt-3"><View class="size-[56px] items-center justify-center">
+                    <View class="absolute" style={{ left: 0, top: 0 }}><ProgressHalo mark={() => mark()!} size={56} testID="work-progress-ring" /></View>
+                    <If when={workerLines().length === 1} else={<Icon name="brain" size={26} tone="ink" />}><AgentIcon kind={workerLines()[0]?.agent ?? "terminal"} flavor={workerLines()[0]?.flavor} size={28} /></If>
+                  </View></View>}</If>
+                <If when={slip()!.summary && !slip()!.question}><View selectable class="px-1 pt-3"><Text testID="work-summary" class="text-body">{slip()!.summary!}</Text></View></If>
+                <If when={brainWorkWaitForLine(slip()!)}><View selectable class="px-1 pt-2"><Text testID="work-wait-for" class="text-sub leading-[22px] text-muted-foreground">{brainWorkWaitForLine(slip()!)!}</Text></View></If>
+                <Brief text={brief} />
+                <Progress progress={() => slip()!.progress} />
+                <Workers lines={workerLines} project={project} onOpen={props.links.openSession} />
+              </View></If>
               <View testID="work-links" class="mt-6 overflow-hidden rounded-(--radius-group) bg-card">
                 <If when={file()}><GroupRow testID="work-file" icon="document-text" label="Work file" value={file()!.path.split("/").pop()} chevron first
                     onPress={() => props.nav.push({ name: "workFile", id: file()!.id })} /></If>

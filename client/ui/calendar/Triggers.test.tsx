@@ -89,20 +89,18 @@ describe("Triggers in Calendar", () => {
     expect(app.shows("id:trigger-section")).toBe(false);
   }, 30_000);
 
-  test("a failing Trigger, or a firing not handled for three hours, is under Needs you; its row opens the Trigger", async () => {
+  test("a failing Trigger is under Needs you and its row opens the Trigger; a firing Brain has not handled is Brain's, not yours (owner 2026-11-19)", async () => {
     const late = trigger("t-late", "Release notes", { firings: [{ seq: 1, at: ago(3 * HOUR + MIN), outputs: 1, payload: "/p/1.txt", event_id: "e1" }] });
     const app = await open(APP, { host: phoneHost({ triggers: [failing(), late, watching()] }), storage: paired, platform: "android", network: expoTokenService });
     await app.waitFor("id:composer");
     await app.waitUntil(() => app.texts().some((text) => /needs? you/.test(text)), SLOW);
     await app.press("id:state-control");
     await app.waitFor("id:tray-needs");
-    expect(app.count("id:tray-needs >> id:tray-request")).toBe(2);
+    expect(app.count("id:tray-needs >> id:tray-request")).toBe(1);
     expect(app.texts()).toContain("Check keeps failing");
-    expect(app.texts()).toContain("Not handled");
-    expect(app.texts()).toContain("Release notes");
-    expect(app.count("id:tray-needs >> id:tray-open")).toBe(2);
-    await app.press("label:Release notes, Not handled");
+    expect(app.texts()).not.toContain("Not handled");
+    expect(app.count("id:tray-needs >> id:tray-open")).toBe(1);
+    await app.press("id:tray-needs >> id:tray-open");
     await app.waitFor("id:trigger-page", SLOW);
-    expect(app.texts()).toContain("It fired 3 h ago and Brain has not handled it.");
   }, 30_000);
 });

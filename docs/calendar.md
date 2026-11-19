@@ -188,8 +188,9 @@ recent firings (newest first, each handled, with Brain or not handled) and
 **Check now**, **Pause** or **Resume**, and **Delete**.
 
 A Trigger that needs you is also under **Needs you** in the tray, with Open:
-its check keeps failing, it paused itself, or a firing has not been handled for
-3 hours. This takes no model call. A Trigger you paused yourself stops asking
+its check keeps failing, or it paused itself. A firing Brain has not handled
+for 3 hours says so on the Trigger's page; it is Brain's, not a Needs you row.
+This takes no model call. A Trigger you paused yourself stops asking
 about a failing check. A Trigger's Work is listed in the tray only while Brain
 is handling one of its firings; otherwise its Trigger row is where it lives.
 
