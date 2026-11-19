@@ -122,3 +122,57 @@ func TestBadOutcomesAreDroppedAndBounded(t *testing.T) {
 		t.Fatalf("bounds = %#v", got.Outcomes)
 	}
 }
+
+// An outcome the first checklist wrote in English is said once in the
+// person's language, and then kept: a reworded answer does not churn it.
+func TestAnOutcomeIsSaidOnceInThePersonsLanguage(t *testing.T) {
+	prev, _ := applyProgressVerdict(nil, verdictOf(true, ProgressOutcome{ID: "a", Text: "Gallery delivered", Weight: 2, State: OutcomeDoing}, oc("b", OutcomeTodo, 1)), false, progressNow)
+	verdict := verdictOf(true, ProgressOutcome{ID: "a", Text: "画廊已交付", Weight: 3, State: OutcomeDoing}, oc("b", OutcomeTodo, 1))
+	verdict.language = "Chinese"
+	next, changed := applyProgressVerdict(&prev, verdict, false, progressNow)
+	if !changed || next.Outcomes[0].Text != "画廊已交付" || next.Outcomes[0].Weight != 2 {
+		t.Fatalf("not said in the person's language: %#v", next.Outcomes)
+	}
+	reworded := verdictOf(true, ProgressOutcome{ID: "a", Text: "画廊交付完毕", Weight: 2, State: OutcomeDoing}, oc("b", OutcomeTodo, 1))
+	reworded.language = "Chinese"
+	again, changed := applyProgressVerdict(&next, reworded, false, progressNow)
+	if changed || again.Outcomes[0].Text != "画廊已交付" {
+		t.Fatalf("a reworded outcome churned: %#v", again.Outcomes)
+	}
+	// Without a known language nothing is rewritten.
+	english := verdictOf(true, ProgressOutcome{ID: "a", Text: "Gallery shipped", Weight: 2, State: OutcomeDoing})
+	if kept, _ := applyProgressVerdict(&prev, english, false, progressNow); kept.Outcomes[0].Text != "Gallery delivered" {
+		t.Fatalf("rewritten without a language: %#v", kept.Outcomes)
+	}
+}
+
+// An outcome a later message from Brain replaced leaves the checklist, but
+// only then, never a done one, and never the last one.
+func TestASupersededOutcomeLeavesTheChecklist(t *testing.T) {
+	prev, _ := applyProgressVerdict(nil, verdictOf(true, oc("a", OutcomeDone, 1), oc("b", OutcomeTodo, 2), oc("c", OutcomeDoing, 1)), false, progressNow)
+	verdict := verdictOf(true, oc("a", OutcomeDone, 1), oc("b", OutcomeTodo, 2), oc("c", OutcomeDoing, 1))
+	verdict.Dropped = append(verdict.Dropped, struct {
+		ID  string `json:"id"`
+		Why string `json:"why"`
+	}{"b", "replaced by the flat list"}, struct {
+		ID  string `json:"id"`
+		Why string `json:"why"`
+	}{"a", "no"})
+	if same, _ := applyProgressVerdict(&prev, verdict, false, progressNow); len(same.Outcomes) != 3 {
+		t.Fatalf("dropped without Brain changing the Work: %#v", same.Outcomes)
+	}
+	next, changed := applyProgressVerdict(&prev, verdict, true, progressNow)
+	if !changed || len(next.Outcomes) != 2 || next.Outcomes[0].ID != "a" || next.Outcomes[1].ID != "c" {
+		t.Fatalf("checklist after the drop = %#v", next.Outcomes)
+	}
+	if next.Percent < prev.Percent || next.Stage != ProgressMoving {
+		t.Fatalf("a drop read as going back: prev=%d next=%#v", prev.Percent, next)
+	}
+	only, _ := applyProgressVerdict(nil, verdictOf(true, oc("x", OutcomeTodo, 1)), false, progressNow)
+	last := verdictOf(true, oc("x", OutcomeTodo, 1))
+	last.Dropped = verdict.Dropped[:1]
+	last.Dropped[0].ID = "x"
+	if kept, _ := applyProgressVerdict(&only, last, true, progressNow); len(kept.Outcomes) != 1 {
+		t.Fatalf("the last outcome was dropped: %#v", kept.Outcomes)
+	}
+}
