@@ -5,6 +5,7 @@ import { motion } from "../../core/motion/tokens";
 import { brain, currentTransport } from "../session";
 import type { CapsuleReading } from "../shell/Capsule";
 import { noteScroll } from "../pets/hold";
+import { rail } from "../shell/layout";
 import { elapsedShort } from "../../core/sessions/activity";
 import { elapsedNow } from "../kit/elapsedClock";
 import { Button, TextView } from "nsh/base";
@@ -511,10 +512,14 @@ export function ChatTimeline(props: {
   }
   let dragging = false;
   let lastTraced = Number.NaN;
+  // With the side rail up (iPhone Duo) the window has no status bar at its top, yet UIKit keeps a tap region there
+  // (`_addWindowTopTapRegion` → `UIStatusBarManager handleTapAction:` → scroll to top): a press on the capsule's cat
+  // scrolled Brain to its top as it pushed the computer page, so Back showed older messages (0/10 kept, round 4 on
+  // the Duo simulator, 11-19). The bar's status items open Control Center there anyway: scroll-to-top is off.
   return (
     <View class="flex-1">
       <PictureViewer pictures={pictures} open={viewing} load={handlers.loadImage} />
-      <If when={ready()} else={<View testID={props.testID} class="flex-1">{props.empty() as never}</View>}><List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
+      <If when={ready()} else={<View testID={props.testID} class="flex-1">{props.empty() as never}</View>}><List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" scrollsToTop={!rail()} each={rows()} keyExtractor={(item) => item.id} ref={(node) => {
           list = node;
           trace("ref", { set: Boolean(node) });
           mounted.set(true);
