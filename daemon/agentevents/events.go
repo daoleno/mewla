@@ -25,7 +25,21 @@ const (
 	// LevelStructured: the agent has a typed interface Mewla calls or
 	// subscribes to (an app-server, an HTTP API).
 	LevelStructured Level = "structured"
+	// LevelProcess: Mewla does it to the agent's own child processes, which
+	// the adapter tells apart from the agent's other children
+	// (TurnCommandMatcher).
+	LevelProcess Level = "process"
 )
+
+// TurnCommandMatcher is implemented by an adapter whose agent runs each
+// command as a direct child in a process group of its own, so that a Stop can
+// end the ones the turn started by their process group.
+type TurnCommandMatcher interface {
+	// TurnCommand reads a direct child's command line. ok is true only for a
+	// command the agent ran for the conversation (not a hook or a server it
+	// keeps), and command is what the agent was asked to run.
+	TurnCommand(args string) (command string, ok bool)
+}
 
 // Capability is one thing an adapter can do for a Worker.
 type Capability string
@@ -36,6 +50,9 @@ const (
 	CapSend      Capability = "send"      // submits a user turn and returns a receipt
 	CapApprove   Capability = "approve"   // receives and answers approval requests
 	CapInterrupt Capability = "interrupt" // stops the running turn
+	// CapStopCommands: a Stop also ends the commands the interrupted turn
+	// started, including ones it left running in the background.
+	CapStopCommands Capability = "stop_commands"
 )
 
 // Descriptor is what an adapter declares about itself.
@@ -82,6 +99,10 @@ const (
 	KindApprovalResolved EventKind = "approval_resolved"
 	// KindExit: the agent's session ended.
 	KindExit EventKind = "exit"
+	// KindCommandsStopped: a person's Stop ended the commands the interrupted
+	// turn (TurnID) had started, or found some it could not end (Stopped).
+	// It changes no state: the turn's own end arrives as KindTurnFinished.
+	KindCommandsStopped EventKind = "commands_stopped"
 )
 
 // TurnStatus is how a turn stands.
@@ -163,6 +184,18 @@ type ApprovalOption struct {
 	Scope string
 }
 
+// StoppedCommand is one command a stopped turn had started in the agent's
+// background terminal.
+type StoppedCommand struct {
+	// Command is what the agent ran, as it named it.
+	Command string
+	// Ended is true once the command's processes are gone. False means Mewla
+	// had no way to end it, or tried and it was still running; Reason says
+	// which.
+	Ended  bool
+	Reason string
+}
+
 // Event is one normalized fact about one Worker.
 type Event struct {
 	WorkerID string
@@ -202,4 +235,8 @@ type Event struct {
 
 	// ExitCode is set on KindExit when the agent reports one.
 	ExitCode *int
+
+	// Stopped is what a KindCommandsStopped event says the Stop did to each
+	// command the turn had started.
+	Stopped []StoppedCommand
 }

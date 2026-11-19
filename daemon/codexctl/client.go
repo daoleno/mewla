@@ -39,7 +39,13 @@ const (
 	methodThreadSettingsUpd = "thread/settings/update"
 	methodTurnStart         = "turn/start"
 	methodTurnInterrupt     = "turn/interrupt"
-	notifThreadSettingsUpd  = "thread/settings/updated"
+	// The background-terminal calls are experimental in codex-cli 0.170.0
+	// (generate-json-schema --experimental: ThreadBackgroundTerminals*). Mewla
+	// never calls thread/backgroundTerminals/clean: it ends every turn's
+	// terminals, and a Stop ends only its own turn's.
+	methodBackgroundTerminalsList      = "thread/backgroundTerminals/list"
+	methodBackgroundTerminalsTerminate = "thread/backgroundTerminals/terminate"
+	notifThreadSettingsUpd             = "thread/settings/updated"
 )
 
 // Errors surfaced to callers (wrapped with detail).
@@ -749,6 +755,64 @@ func (c *Client) StartTurn(ctx context.Context, threadID, clientMessageID, text 
 func (c *Client) InterruptTurn(ctx context.Context, threadID, turnID string) error {
 	_, err := c.call(ctx, methodTurnInterrupt, map[string]any{"threadId": threadID, "turnId": turnID})
 	return err
+}
+
+// BackgroundTerminal is one command the thread still runs after the tool call
+// that started it returned (a unified-exec process). ItemID is the
+// commandExecution item that started it.
+type BackgroundTerminal struct {
+	ItemID    string `json:"itemId"`
+	ProcessID string `json:"processId"`
+	Command   string `json:"command"`
+}
+
+// backgroundTerminalsPages bounds the pages one list reads.
+const backgroundTerminalsPages = 50
+
+// ListBackgroundTerminals returns every background terminal of the thread,
+// reading all pages.
+func (c *Client) ListBackgroundTerminals(ctx context.Context, threadID string) ([]BackgroundTerminal, error) {
+	var out []BackgroundTerminal
+	cursor := ""
+	for page := 0; page < backgroundTerminalsPages; page++ {
+		params := map[string]any{"threadId": threadID}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		result, err := c.call(ctx, methodBackgroundTerminalsList, params)
+		if err != nil {
+			return nil, err
+		}
+		var parsed struct {
+			Data       []BackgroundTerminal `json:"data"`
+			NextCursor *string              `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(result, &parsed); err != nil {
+			return nil, fmt.Errorf("%w: %s: %v", ErrProtocol, methodBackgroundTerminalsList, err)
+		}
+		out = append(out, parsed.Data...)
+		if parsed.NextCursor == nil || *parsed.NextCursor == "" || *parsed.NextCursor == cursor {
+			return out, nil
+		}
+		cursor = *parsed.NextCursor
+	}
+	return out, nil
+}
+
+// TerminateBackgroundTerminal ends one background terminal of the thread.
+// terminated is the server's answer: false when it had no such process.
+func (c *Client) TerminateBackgroundTerminal(ctx context.Context, threadID, processID string) (terminated bool, err error) {
+	result, err := c.call(ctx, methodBackgroundTerminalsTerminate, map[string]any{"threadId": threadID, "processId": processID})
+	if err != nil {
+		return false, err
+	}
+	var parsed struct {
+		Terminated bool `json:"terminated"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		return false, fmt.Errorf("%w: %s: %v", ErrProtocol, methodBackgroundTerminalsTerminate, err)
+	}
+	return parsed.Terminated, nil
 }
 
 // Attach subscribes this connection to the thread's messages and returns the

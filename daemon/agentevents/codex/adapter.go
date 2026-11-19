@@ -36,6 +36,8 @@ func (Adapter) Descriptor() agentevents.Descriptor {
 			agentevents.CapSend:      agentevents.LevelStructured,
 			agentevents.CapApprove:   agentevents.LevelStructured,
 			agentevents.CapInterrupt: agentevents.LevelStructured,
+			// thread/backgroundTerminals/terminate, for the turn's own items.
+			agentevents.CapStopCommands: agentevents.LevelStructured,
 		},
 	}
 }

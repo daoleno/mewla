@@ -525,6 +525,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	w.SetStructuredInput(firstHandled(senders...))
 	w.SetStructuredInterrupt(firstHandledStop(stops...))
+	w.SetTurnCommandStop(turnCommandScope(w, execs, adapters, eventHub))
 	w.SetPromptEnricher(choicePromptEnricher(w, execs))
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,
@@ -689,6 +690,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		})
 	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
+	eventHub.OnCommandsStopped(func(e agentevents.Event) { srv.RecordStoppedCommands(stoppedCommandsRecord(e)) })
 	agentEvents.gate = permissionGateHooks(w, brainStore, brainService, srv.WorkerApprovalsChanged)
 	w.SetApprovalHold(agentEvents.holdsApproval)
 	book, err := addressbook.New(authManager.StorageDir())
