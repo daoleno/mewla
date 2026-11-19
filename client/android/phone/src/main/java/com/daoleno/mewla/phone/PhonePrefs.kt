@@ -31,12 +31,15 @@ internal class PhonePrefs(context: Context) {
             val serverId = prefs.getString("link_server_id", null) ?: return null
             val url = prefs.getString("link_url", null) ?: return null
             val daemonId = prefs.getString("link_daemon_id", null) ?: return null
-            return LinkTarget(serverId, url, daemonId)
+            val pin = prefs.getString("link_pin", null)
+            val endpoints = prefs.getString("link_endpoints", null)?.split('\n')?.filter { it.isNotBlank() }.orEmpty()
+            return LinkTarget(serverId, url, daemonId, pin, endpoints)
         }
         set(value) {
             val edit = prefs.edit()
-            if (value == null) edit.remove("link_server_id").remove("link_url").remove("link_daemon_id")
+            if (value == null) edit.remove("link_server_id").remove("link_url").remove("link_daemon_id").remove("link_pin").remove("link_endpoints")
             else edit.putString("link_server_id", value.serverId).putString("link_url", value.url).putString("link_daemon_id", value.daemonId)
+                .putString("link_pin", value.pin).putString("link_endpoints", value.endpoints.joinToString("\n"))
             edit.apply()
         }
 }

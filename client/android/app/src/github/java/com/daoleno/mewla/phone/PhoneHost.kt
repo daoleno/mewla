@@ -86,7 +86,10 @@ class PhoneHost(private val activity: MainActivity, private val nsh: NshView) {
     val serverId = (m["serverId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
     val url = (m["url"] as? String)?.takeIf { it.isNotBlank() } ?: return null
     val daemonId = (m["daemonId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
-    return LinkTarget(serverId, url, daemonId)
+    // Mewla Relay: the link's own pinned addresses (an app before 11-19 sends neither, and the link rides `url`).
+    val pin = (m["pin"] as? String)?.takeIf { it.isNotBlank() }
+    val endpoints = (m["endpoints"] as? List<*>)?.mapNotNull { (it as? String)?.takeIf { url -> url.isNotBlank() } }.orEmpty()
+    return LinkTarget(serverId, url, daemonId, pin, endpoints)
   }
 
   private fun int(data: Any?, name: String): Int = ((data as? Map<*, *>)?.get(name) as? Number)?.toInt() ?: 0

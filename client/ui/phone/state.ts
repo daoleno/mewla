@@ -112,10 +112,11 @@ export function startPhoneUse(): void {
   let told: PhoneLinkTarget | null | undefined;
   effect(() => {
     if (!phoneAvailable() || !ready()) return;
-    // On Mewla Relay the link rides the tunnel the app chose; a new path tells it again.
+    // On Mewla Relay the host's link has its own pinned connection to the computer's addresses (`endpoints`) and
+    // keeps it through the app's moves; only a host from before that rides the app's tunnel, told again on a new path.
     transportPath();
     const server = current();
-    const target = phoneLinkTarget(server ? { ...server, url: serverURLNow(server) } : null);
+    const target = server ? phoneLinkTarget(server, serverURLNow(server)) : null;
     untracked(() => {
       if (told !== undefined && sameTarget(told, target)) return;
       told = target;

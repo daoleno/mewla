@@ -38,6 +38,36 @@ describe("the link's computer", () => {
   });
 });
 
+describe("the link on Mewla Relay", () => {
+  const PIN = "cd".repeat(32);
+  const relayed = {
+    id: "server_r",
+    url: "wss://route.relay.example/ws",
+    daemonId: DAEMON,
+    transportKind: "link",
+    transportPin: PIN.toUpperCase(),
+    linkRouteId: "ef".repeat(16),
+    transportCandidates: [
+      { name: "Mewla Relay", kind: "link", url: "wss://route.relay.example/ws" },
+      { name: "LAN", kind: "direct", url: "wss://192.168.1.20:9876/ws" },
+    ],
+  } as unknown as StoredServer;
+
+  test("the link connects to the computer's own addresses with the pin, never through the app's tunnel", () => {
+    const target = phoneLinkTarget(relayed, "ws://127.0.0.1:40001/ws");
+    // The app's loopback tunnel stays as `url` for a host from before; the link itself uses `endpoints`.
+    expect(target?.url).toBe("ws://127.0.0.1:40001/phone/device");
+    expect(target?.pin).toBe(PIN);
+    expect(target?.endpoints).toEqual(["wss://192.168.1.20:9876/phone/device", "wss://route.relay.example/phone/device"]);
+    expect(target?.endpoints?.some((url) => url.includes("127.0.0.1"))).toBe(false);
+  });
+
+  test("a computer paired by address has no pin: the link uses its url as before", () => {
+    const target = phoneLinkTarget({ id: "a", url: "http://desk.local:9877", daemonId: DAEMON });
+    expect(target).toEqual({ serverId: "a", url: "ws://desk.local:9877/phone/device", daemonId: DAEMON });
+  });
+});
+
 describe("mewla://phone", () => {
   test("the notification link opens the Phone page", () => {
     expect(isPhoneLink("mewla://phone")).toBe(true);

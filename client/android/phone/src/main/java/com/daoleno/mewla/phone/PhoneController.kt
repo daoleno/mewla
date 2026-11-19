@@ -124,12 +124,13 @@ object PhoneController {
     /**
      * The computer the link follows: the app's one current computer, or null when there is none.
      * A switch closes the old computer's link and opens one to the next; the same computer keeps its
-     * link (a "replaced" close stays until the computer or the switch changes).
+     * link (a "replaced" close stays until the computer or the switch changes). A pinned link is kept
+     * when only the app's own path moved ([LinkTarget.sameLink]).
      */
     fun follow(target: LinkTarget?) {
         prefs.target = target
         synchronized(linkLock) {
-            if (link?.linkTarget == target && target != null) return
+            if (target != null && link?.linkTarget?.sameLink(target) == true) return
             stopLink()
         }
         ensureLink()

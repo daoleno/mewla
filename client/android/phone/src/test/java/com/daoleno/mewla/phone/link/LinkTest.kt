@@ -132,3 +132,162 @@ class DeviceAuthTest {
         assertTrue(failure is IllegalArgumentException)
     }
 }
+
+class LinkTargetTest {
+    private val pin = "ab".repeat(32)
+    private val endpoints = listOf("wss://192.168.1.20:9876/phone/device", "wss://route.relay.example/phone/device")
+    private fun relayed(url: String, pin: String? = this.pin, endpoints: List<String> = this.endpoints) =
+        LinkTarget("s1", url, "d".repeat(64), pin, endpoints)
+
+    @Test
+    fun aMoveOrReconnectOfTheAppsOwnConnectionKeepsAPinnedLink() {
+        // 11-19: the app's tunnel port changed on every reconnect and relay→LAN move, and Phone use was closed each time.
+        val before = relayed("ws://127.0.0.1:40001/phone/device")
+        assertTrue(before.sameLink(relayed("ws://127.0.0.1:40777/phone/device")))
+    }
+
+    @Test
+    fun aPinnedLinkNeverConnectsToTheAppsLoopbackTunnel() {
+        val target = relayed("ws://127.0.0.1:40001/phone/device")
+        assertEquals(endpoints, target.connectUrls)
+        assertFalse(target.connectUrls.any { it.contains("127.0.0.1") })
+    }
+
+    @Test
+    fun anotherComputerPinOrAddressListStartsANewLink() {
+        val target = relayed("ws://127.0.0.1:1/phone/device")
+        assertFalse(target.sameLink(target.copy(serverId = "s2")))
+        assertFalse(target.sameLink(relayed("ws://127.0.0.1:1/phone/device", pin = "cd".repeat(32))))
+        assertFalse(target.sameLink(relayed("ws://127.0.0.1:1/phone/device", endpoints = endpoints.drop(1))))
+        assertFalse(target.sameLink(null))
+    }
+
+    @Test
+    fun aComputerPairedByAddressFollowsItsUrlAsBefore() {
+        val plain = LinkTarget("s1", "ws://desk.local:9877/phone/device", "d".repeat(64))
+        assertFalse(plain.pinned)
+        assertEquals(listOf(plain.url), plain.connectUrls)
+        assertTrue(plain.sameLink(plain.copy()))
+        assertFalse(plain.sameLink(plain.copy(url = "ws://desk2.local:9877/phone/device")))
+        // An app from before 11-19 sends no addresses: the link rides its url.
+        assertFalse(relayed("ws://127.0.0.1:1/phone/device", endpoints = emptyList()).pinned)
+    }
+}
+
+class PinnedTlsTest {
+    private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
+
+    @Test
+    fun onlyTheKeyWhosePublicKeyInfoHashesToThePinIsTrusted() {
+        val generator = java.security.KeyPairGenerator.getInstance("EC").apply { initialize(256) }
+        val key = generator.generateKeyPair().public
+        val other = generator.generateKeyPair().public
+        val pin = hex(java.security.MessageDigest.getInstance("SHA-256").digest(key.encoded))
+        assertTrue(PinnedTls.matches(key, pin))
+        assertTrue(PinnedTls.matches(key, pin.uppercase()))
+        assertFalse(PinnedTls.matches(other, pin))
+        assertFalse(PinnedTls.matches(key, "not a pin"))
+    }
+
+    @Test
+    fun anIpAddressIsNamedAsTheAppsTunnelsNameIt() {
+        assertEquals("mewla-desktop.invalid", PinnedTls.serverName("192.168.1.20"))
+        assertEquals("mewla-desktop.invalid", PinnedTls.serverName("[fd7a:115c::1]"))
+        assertEquals("route.relay.example", PinnedTls.serverName("route.relay.example"))
+    }
+}
+
+class LinkEndpointsTest {
+    @Test
+    fun eachFailureTriesTheNextAddressAndOnlyAWholeFailedRoundWaits() {
+        val endpoints = LinkEndpoints(listOf("lan", "relay"))
+        assertEquals("lan", endpoints.current)
+        assertEquals(0L, endpoints.failed())
+        assertEquals("relay", endpoints.current)
+        assertEquals(1_000L, endpoints.failed())
+        assertEquals("lan", endpoints.current)
+        assertEquals(0L, endpoints.failed())
+        assertEquals(2_000L, endpoints.failed())
+    }
+
+    @Test
+    fun aLinkThatOpenedStartsFromTheFirstAddressAgainWithNoBackoffBuiltUp() {
+        val endpoints = LinkEndpoints(listOf("lan", "relay"))
+        endpoints.failed(); endpoints.failed(); endpoints.failed()
+        endpoints.opened()
+        assertEquals("lan", endpoints.current)
+        assertEquals(0L, endpoints.failed())
+        assertEquals(1_000L, endpoints.failed())
+    }
+
+    @Test
+    fun oneAddressBacksOffAsTheLinkAlwaysDid() {
+        val endpoints = LinkEndpoints(listOf("ws://desk/phone/device"))
+        assertEquals(listOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 15_000L), (0..5).map { endpoints.failed() })
+    }
+}
+
+/** The link's own pinned TLS against a real TLS 1.3 server with a self-made certificate, as the computer has. */
+class PinnedTlsServerTest {
+    private fun keystore(dir: java.io.File): java.io.File {
+        val store = java.io.File(dir, "computer.p12")
+        val keytool = java.io.File(System.getProperty("java.home"), "bin/keytool").path
+        val process = ProcessBuilder(
+            keytool, "-genkeypair", "-alias", "computer", "-keyalg", "EC", "-groupname", "secp256r1", "-dname", "CN=mewla-desktop.invalid",
+            "-validity", "2", "-storetype", "PKCS12", "-keystore", store.path, "-storepass", "secret", "-keypass", "secret",
+        ).redirectErrorStream(true).start()
+        check(process.waitFor() == 0) { process.inputStream.bufferedReader().readText() }
+        return store
+    }
+
+    private fun get(pin: String, port: Int): String {
+        val trust = PinnedTls.trustManager(pin)
+        val client = okhttp3.OkHttpClient.Builder()
+            .sslSocketFactory(PinnedTls.socketFactory(trust), trust)
+            .hostnameVerifier { _, _ -> true }
+            .build()
+        client.newCall(okhttp3.Request.Builder().url("https://127.0.0.1:$port/health").build()).execute().use { return it.body!!.string() }
+    }
+
+    @Test
+    fun theRightPinConnectsAndAnyOtherIsRefused() {
+        val dir = java.nio.file.Files.createTempDirectory("pinned-tls").toFile()
+        try {
+            val store = loadKeystore(dir)
+            val certificate = store.getCertificate("computer")
+            val pin = java.security.MessageDigest.getInstance("SHA-256").digest(certificate.publicKey.encoded).joinToString("") { "%02x".format(it) }
+            val keys = javax.net.ssl.KeyManagerFactory.getInstance("PKIX").apply { init(store, "secret".toCharArray()) }
+            val context = javax.net.ssl.SSLContext.getInstance("TLSv1.3").apply { init(keys.keyManagers, null, null) }
+            val server = context.serverSocketFactory.createServerSocket(0, 4, java.net.InetAddress.getLoopbackAddress()) as javax.net.ssl.SSLServerSocket
+            server.enabledProtocols = arrayOf("TLSv1.3")
+            val names = java.util.concurrent.CopyOnWriteArrayList<String>()
+            Thread {
+                while (!server.isClosed) {
+                    val socket = runCatching { server.accept() as javax.net.ssl.SSLSocket }.getOrNull() ?: break
+                    runCatching {
+                        socket.startHandshake()
+                        (socket.session as? javax.net.ssl.ExtendedSSLSession)?.requestedServerNames?.forEach { names += (it as javax.net.ssl.SNIHostName).asciiName }
+                        socket.inputStream.bufferedReader().let { reader -> while (reader.readLine()?.isNotEmpty() == true) Unit }
+                        socket.outputStream.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok".toByteArray())
+                        socket.outputStream.flush()
+                    }
+                    runCatching { socket.close() }
+                }
+            }.apply { isDaemon = true }.start()
+            try {
+                assertEquals("ok", get(pin, server.localPort))
+                // An IP address is named as the app's tunnels name it.
+                assertEquals("mewla-desktop.invalid", names.firstOrNull())
+                val refused = runCatching { get("00".repeat(32), server.localPort) }
+                assertTrue(refused.isFailure)
+            } finally {
+                server.close()
+            }
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    private fun loadKeystore(dir: java.io.File): java.security.KeyStore =
+        java.security.KeyStore.getInstance("PKCS12").apply { keystore(dir).inputStream().use { load(it, "secret".toCharArray()) } }
+}
