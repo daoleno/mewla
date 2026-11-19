@@ -85,6 +85,8 @@ type Hello struct {
 	SDK        int    `json:"sdk"`
 	AppVersion string `json:"app_version"`
 	State      string `json:"state"`
+	// Chosen: the person just opened this app; of two Mewla apps on one phone it is the one to use.
+	Chosen bool `json:"chosen,omitempty"`
 	// Device is the paired device the connection authenticated as; the server sets it, the phone does not send it.
 	Device string `json:"-"`
 }

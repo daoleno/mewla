@@ -48,6 +48,8 @@ object PhoneController {
     // The agent display has the phone's real pixels; what the agent sees and sends is the picture space, at most this wide.
     private const val MODEL_IMAGE_WIDTH = 720
     private const val REPLACE_EVERY_MS = 60_000L
+    private const val CHOSEN_FOR_MS = 60_000L
+    private const val REPLACED_RECHECK_MS = 120_000L
     private const val LAUNCH_WINDOW_POLLS = 4
     private const val LAUNCH_WINDOW_POLL_MS = 1_500L
     private const val ANNOUNCE_WAIT_MS = 150_000L
@@ -156,6 +158,17 @@ object PhoneController {
         }
     }
 
+    /** Until when (elapsed ms) this app's next connection says the person chose it by opening it. */
+    @Volatile private var chosenUntil = 0L
+
+    /** The person opened the app: its link tries now, and with two Mewla apps on the phone this one takes Phone use. */
+    fun chosenByPerson() {
+        chosenUntil = android.os.SystemClock.elapsedRealtime() + CHOSEN_FOR_MS
+        retryLinkNow()
+    }
+
+    private var replacedCheckedAt = 0L
+
     /** The app came to the front: a link waiting out its backoff tries now; one another connection replaced starts again. */
     fun retryLinkNow() {
         synchronized(linkLock) {
@@ -184,7 +197,8 @@ object PhoneController {
         override fun identity(): DeviceIdentity? = deviceKeys?.identity()
         override fun hello(): JSONObject {
             val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull().orEmpty()
-            return PhoneFrames.hello(Build.MODEL, Build.VERSION.SDK_INT, version, state())
+            return PhoneFrames.hello(Build.MODEL, Build.VERSION.SDK_INT, version, state(),
+                chosen = android.os.SystemClock.elapsedRealtime() < chosenUntil)
         }
         override fun status(): JSONObject = this@PhoneController.status()
         override fun execute(request: JSONObject): JSONObject = this@PhoneController.execute(request)
@@ -233,9 +247,13 @@ object PhoneController {
                 if (state() != shown) {
                     shown = state()
                     publish()
-                    // A computer keeps another install's ready link over this one while this one is not ready
-                    // (it is told it was replaced): now that this one is ready too, it asks again.
-                    if (shown == "ready" && linkState == "replaced") retryLinkNow()
+                }
+                // Another Mewla on this phone has Phone use: ask now and then, in case it went away. The computer keeps
+                // the other while it is ready unless the person opened this one, so two ready apps never trade places.
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (linkState == "replaced" && shown == "ready" && now - replacedCheckedAt >= REPLACED_RECHECK_MS) {
+                    replacedCheckedAt = now
+                    retryLinkNow()
                 }
                 if (client?.isClosed == false && staleHelper) replaceStaleHelper()
                 val wait = helperKeeper.step()

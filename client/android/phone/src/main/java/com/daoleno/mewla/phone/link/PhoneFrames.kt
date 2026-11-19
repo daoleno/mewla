@@ -15,9 +15,10 @@ object PhoneFrames {
     const val CLOSE_PROTOCOL = 4003
 
     /** The first frame, within 10 s of connecting. */
-    fun hello(model: String, sdk: Int, appVersion: String, state: String): JSONObject =
+    /** [chosen]: the person just opened this app, so with two Mewla apps on the phone this one is theirs to use. */
+    fun hello(model: String, sdk: Int, appVersion: String, state: String, chosen: Boolean = false): JSONObject =
         JSONObject().put("type", "hello").put("version", VERSION).put("model", model).put("sdk", sdk)
-            .put("app_version", appVersion).put("state", state)
+            .put("app_version", appVersion).put("state", state).apply { if (chosen) put("chosen", true) }
 
     /** The state frame a status is sent as: `w`/`h` only once the display exists, `problem` only while in setup. */
     fun state(status: JSONObject): JSONObject {

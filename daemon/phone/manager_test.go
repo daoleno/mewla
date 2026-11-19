@@ -227,8 +227,13 @@ func TestAnotherDeviceInSetupDoesNotTakeAReadyPhonesPlace(t *testing.T) {
 	if _, err := tap(m, "w1"); err != nil {
 		t.Fatalf("the ready phone could not be used: %v", err)
 	}
-	// Once it is ready itself it takes over, as any newer connection does.
+	// Ready itself but reconnecting on its own, it still waits: two ready installs never trade places.
 	other.State = StateReady
+	if _, err := m.Attach(other, b); !errors.Is(err, ErrStandby) {
+		t.Fatalf("a ready install that nobody opened took the place of another ready one: %v", err)
+	}
+	// The person opening it chooses it.
+	other.Chosen = true
 	lb, err := m.Attach(other, b)
 	if err != nil {
 		t.Fatal(err)
@@ -242,6 +247,28 @@ func TestAnotherDeviceInSetupDoesNotTakeAReadyPhonesPlace(t *testing.T) {
 	again.Device = "dev-b"
 	if _, err := m.Attach(again, &fakeConn{handle: okResult(nil)}); err != nil {
 		t.Fatalf("the same device was refused: %v", err)
+	}
+}
+
+// Once the install that had Phone use goes away, the waiting one takes it on its next try.
+func TestAWaitingInstallTakesOverWhenTheOtherGoes(t *testing.T) {
+	m := NewManager(Options{})
+	ready := hello(StateReady)
+	ready.Device = "dev-a"
+	a := &fakeConn{handle: okResult(nil)}
+	la, err := m.Attach(ready, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.link = la
+	other := hello(StateReady)
+	other.Device = "dev-b"
+	if _, err := m.Attach(other, &fakeConn{handle: okResult(nil)}); !errors.Is(err, ErrStandby) {
+		t.Fatalf("let in: %v", err)
+	}
+	la.Detach()
+	if _, err := m.Attach(other, &fakeConn{handle: okResult(nil)}); err != nil {
+		t.Fatalf("the waiting install was refused after the other went: %v", err)
 	}
 }
 
