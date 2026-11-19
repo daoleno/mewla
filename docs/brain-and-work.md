@@ -147,8 +147,10 @@ question. Until then the Work reads Reviewing, and nothing for that report
 reaches you: no card, no tray row, no count, no notification. A result Brain
 has not decided, a reply Brain has not acted on and a Trigger firing Brain has
 not handled are Brain's too; after a day Mewla wakes Brain for an undecided
-result, and after two hours it hands Brain back a Work left waiting on you with
-nothing asked. A prompt on a Worker's terminal that Brain cannot answer (a sign-in,
+result, and after two hours it hands Brain back a Work it parked with nothing
+asked and nothing named to wait on. A wait Brain names (`-wait-for` a computer,
+a pull request, a Worker's next commit), a Trigger's Work and a Work with a
+live Worker are Brain's own and stay quiet. A prompt on a Worker's terminal that Brain cannot answer (a sign-in,
 an approval outside the brief) still comes to you, and a Session you started
 yourself asks you directly.
 
@@ -163,7 +165,9 @@ mewla brain work update -id <work-id> -status waiting \
 `-recommend` names the choice Brain recommends, word for word; the app tags
 that answer "Brain's pick". It must be one of the choices, and a new question
 starts without one. `-status waiting` without `-question` asks you nothing: the
-Work shows as Waiting, and the command's answer tells Brain so.
+Work shows as Waiting, and, unless `-wait-for` names what it waits on, the
+command's answer tells Brain so. During a review, `-wait-for` keeps the wait on
+the thing it names rather than on Brain's thread.
 
 ## Work detail
 

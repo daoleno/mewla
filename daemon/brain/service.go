@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/calendar"
@@ -72,6 +73,8 @@ type Service struct {
 	now     func() time.Time
 	// resultGit probes Worker projects for a result's git_review action.
 	resultGit resultGitProbes
+	// triggerWork says whether a Trigger owns a Work (SetTriggerWork).
+	triggerWork atomic.Value
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once
@@ -283,7 +286,11 @@ func (s *Service) BrainUpdateWork(id string, update WorkUpdate) (Work, error) {
 			_, _, resolveErr := s.store.ResolveWorkReview(request)
 			switch {
 			case resolveErr == nil:
-				if statusIsDisposition {
+				// A review's wait parks on Brain's thread; a wait Brain names
+				// (-wait-for "<a Mac, a PR head>") parks on that named thing
+				// instead, so it stays the wait Brain owns (owner 2026-11-19).
+				named := statusIsDisposition && *update.Status == WorkWaiting && update.WaitFor != nil && strings.TrimSpace(*update.WaitFor) != ""
+				if statusIsDisposition && !named {
 					update.Status = nil
 				}
 			case request.Disposition == WorkDispositionWait &&

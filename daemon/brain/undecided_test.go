@@ -29,6 +29,31 @@ func TestUndecidedIsADecisionNobodyTakes(t *testing.T) {
 		{"back an hour", CurrentWork{ID: "w", Status: WorkWaiting, UnreadResult: true, AttentionSince: &hourAgo}, false, false},
 		{"parked on the person two hours, nothing asked", parked, true, true},
 		{"parked an hour", func() CurrentWork { w := parked; w.AttentionSince = &hourAgo; return w }(), true, false},
+		{"parked with no -wait-for (operator ref)", func() CurrentWork {
+			w := parked
+			w.Wake = &WorkWake{Kind: WorkWakeUserInput, Ref: "operator:w"}
+			return w
+		}(), true, true},
+		{"a named wait: a Mac", func() CurrentWork {
+			w := parked
+			w.Wake = &WorkWake{Kind: WorkWakeUserInput, Ref: "the Mac mini comes back online"}
+			return w
+		}(), false, false},
+		{"a named wait: a PR head", func() CurrentWork {
+			w := parked
+			w.Wake = &WorkWake{Kind: WorkWakeUserInput, Ref: "new heads of freeride-aws#108 to re-check"}
+			return w
+		}(), false, false},
+		{"parked with a live delegated Worker", func() CurrentWork {
+			w := parked
+			w.WorkerSessions = []WorkWorkerSession{{SessionID: "mh-9", Live: true}}
+			return w
+		}(), false, false},
+		{"parked, its Worker finished", func() CurrentWork {
+			w := parked
+			w.WorkerSessions = []WorkWorkerSession{{SessionID: "mh-9", Live: false}}
+			return w
+		}(), true, true},
 		{"asked the person", func() CurrentWork { w := back; w.Question = "Delete the package?"; return w }(), false, false},
 		{"parked and asked", func() CurrentWork { w := parked; w.Question = "Ship it?"; return w }(), false, false},
 		{"a Worker on it", func() CurrentWork { w := back; w.AttemptSessionID = "mh-1"; return w }(), false, false},
@@ -122,5 +147,53 @@ func TestPersonBriefDropsTheWorkerProtocol(t *testing.T) {
 	}
 	if got := PersonBrief("Ship the beta"); got != "Ship the beta" {
 		t.Fatalf("plain brief = %q", got)
+	}
+}
+
+// A wait Brain names (-wait-for a Mac, a PR head, a Worker's next commit) and
+// a Work a Trigger owns (PRLoopWatcher waits on firings indefinitely) are
+// Brain's own long waits: the nudge never wakes Brain for them (Brain
+// 2026-11-19).
+func TestNudgeLeavesNamedAndTriggerWaitsAlone(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetHostSession("host", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
+		"host": {ID: "host", Hidden: true, State: classifier.StateRunning},
+	}}
+	service := NewService(store, fw, nil)
+	waiting := WorkWaiting
+	named, err := store.CreateWork(Work{Title: "CiSessionStoreReview", Objective: "re-check the PR heads"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor := "new heads of freeride-aws#108 and looper-exec#37 to re-check"
+	if _, err := service.BrainUpdateWork(named.ID, WorkUpdate{Status: &waiting, WaitFor: &waitFor}); err != nil {
+		t.Fatal(err)
+	}
+	watcherWork, err := store.CreateWork(Work{Title: "PRLoopWatcher", Objective: "standing PR loop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.BrainUpdateWork(watcherWork.ID, WorkUpdate{Status: &waiting}); err != nil {
+		t.Fatal(err)
+	}
+	service.SetTriggerWork(func(workID string) bool { return workID == watcherWork.ID })
+	if got := service.nudgeUndecided(time.Now().Add(48 * time.Hour)); got != 0 {
+		t.Fatalf("a named wait and a Trigger's Work stay quiet: delivered %d", got)
+	}
+	for _, id := range []string{named.ID, watcherWork.ID} {
+		if item, _ := store.Work(id); item.Wake == nil || item.Status != WorkWaiting {
+			t.Fatalf("%s: its wait is left as Brain set it: %+v", id, item.Wake)
+		}
+	}
+	// Without the Trigger, the same bare park goes back to Brain.
+	service.SetTriggerWork(nil)
+	if got := service.nudgeUndecided(time.Now().Add(48 * time.Hour)); got != 1 {
+		t.Fatalf("the bare park is handed back: delivered %d", got)
 	}
 }
