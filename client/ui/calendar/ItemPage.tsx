@@ -9,6 +9,10 @@ import {
 import { codexAsset } from "../../core/session/sessionRequests";
 import { ROW_PICTURE_EDGE } from "../../core/timeline/pictureRetry";
 import { ChatImage } from "../chat/ChatImage";
+import { PictureViewer } from "../chat/PictureViewer";
+import { PictureNote } from "../chat/pictureActions";
+import { derived } from "../kit/derived";
+import { markdownPictures, pictureKey, samePictures } from "../../core/timeline/threadPictures";
 import { brain, currentTransport, workers } from "../session";
 import { clock } from "./clock";
 import { openEditor } from "./Editor";
@@ -151,8 +155,12 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
   const resultWidth = signal(0);
   const item = useFullItem(props.itemId);
   const run = (): CalendarRun | undefined => item()?.runs?.find((r) => r.id === props.runId);
+  // The result's pictures open the chat's viewer, stepping through them in order (Save and Share there too).
+  const viewing = signal<string | null>(null);
+  const pictures = derived(() => markdownPictures(run()?.result ?? "").map((image) => ({ key: pictureKey(props.runId, image.src), src: image.src, alt: image.alt })), { equals: samePictures });
   return (
     <NavPage title="Run" testID="calendar-run-page">
+      <PictureViewer pictures={pictures} open={viewing} load={loadResultImage} />
       <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         <If when={!run()} else={<View class="gap-3 px-4 pb-10 pt-4">
             <View class="flex-row items-center gap-1.5">
@@ -160,7 +168,7 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
               <Text class="text-sm text-muted-foreground">{`${runWhen(run()!, item()!, clock())} · ${statusLabel[run()!.status]}${run()!.manual ? " · Run by you" : ""}`}</Text>
             </View>
             <If when={run()!.status === "failed"} else={<If when={run()!.result} else={<Text class="text-base text-muted-foreground">{run()!.result_preview ? `${run()!.result_preview}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}><View onLayout={({ bounds }) => resultWidth.set(bounds.size.width)}>
-                    <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} width={resultWidth} />} />
+                    <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} width={resultWidth} onOpen={() => viewing.set(pictureKey(props.runId, image.src))} />} />
                   </View></If>}><View selectable><Text class="text-base text-warning">{run()!.failure_reason || "It failed without saying why."}</Text></View></If>
             {/* Its Session while the computer lists it, as the Expo app's run sheet did (parity #45). */}
             <If when={run()!.worker_session && workers().some((worker) => worker.id === run()!.worker_session)}><Button testID="open-session" onPress={() => props.openSession(run()!.worker_session!)} class="self-start rounded-full border border-border px-4 py-2 active:bg-accent">
@@ -171,6 +179,7 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
               </Button></If>
           </View>}><View class="items-center px-6 py-16"><Text class="text-base text-muted-foreground">This run is no longer listed.</Text></View></If>
       </Scroll>
+      <PictureNote class="absolute bottom-8 left-4 right-4" />
     </NavPage>
   );
 }

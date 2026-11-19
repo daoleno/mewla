@@ -14,6 +14,8 @@
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission android:name="android.permission.VIBRATE" />
+  <!-- Saving a chat's picture into Pictures/Mewla: only Android 9 needs a permission for it (asked when saving). -->
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
   <!-- Daemons on a home network are plain http; pairing pins them by key. -->
   <application
     android:name=".MewlaApplication"
@@ -28,6 +30,8 @@
     <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="mewla-agents" />
     <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/notification_icon" />
     <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notification_icon_color" />
+    <!-- NSH's own provider: a chat's picture, staged in the cache, goes to the share sheet as a content:// URI (files/PictureSave.kt). -->
+    <provider android:name="com.longbridge.nsh.FilesProvider" android:authorities="${applicationId}.files" android:exported="false" android:grantUriPermissions="true" />
     <service android:name=".push.MewlaFirebaseMessagingService" android:exported="false">
       <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
     </service>

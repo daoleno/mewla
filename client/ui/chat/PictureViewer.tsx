@@ -1,4 +1,4 @@
-import { computed, effect, keymap, safeArea, Text, untracked, View, type Signal } from "nsh";
+import { cleanup, computed, effect, keymap, safeArea, signal, Text, untracked, View, type Signal } from "nsh";
 import { Button, Carousel, CarouselContent, CarouselItem } from "nsh/base";
 import type { ThreadPicture } from "../../core/timeline/threadPictures";
 import { ZoomImage } from "../more/files/FilePreview";
@@ -6,6 +6,11 @@ import { GuardedDialog } from "../shell/AppSheet";
 import { Icon } from "../icons/Icon";
 import { Spinner } from "../kit/kit";
 import { createPicture, type PictureLoader } from "./ChatImage";
+import { askPictureSupport, pictureCan, PictureNote, picturesSupported, runPictureAction, saveLabel } from "./pictureActions";
+import type { PictureAction } from "../../core/files/pictureSave";
+
+// The close side matches the actions' side, so "2 of 3" stays in the middle.
+const actionsWidth = 44 * (1 + Number(pictureCan.share) + Number(pictureCan.copy));
 
 /** One picture of the viewer, read once it is the one shown or beside it; pinch and double tap zoom it. */
 function Slide(props: { picture: ThreadPicture; near: () => boolean; load?: PictureLoader }) {
@@ -30,6 +35,8 @@ function Slide(props: { picture: ThreadPicture; near: () => boolean; load?: Pict
  * The picture viewer (SPEC §1.7, §11): black in both themes, × and "2 of 3" on top, previous and next
  * at the sides (also the arrow keys and a swipe), double tap and pinch to zoom. It steps through every
  * picture of the thread in order; `open` names the one shown (its key), null while closed. Back closes it.
+ * Save and Share (Copy where the clipboard holds pictures) on the right of the top bar act on the original
+ * of the picture shown (pictureActions.ts); what they end with shows at the foot for a moment.
  */
 export function PictureViewer(props: { pictures: () => ThreadPicture[]; open: Signal<string | null>; load?: PictureLoader }) {
   const index = computed(() => Math.max(0, props.pictures().findIndex((picture) => picture.key === props.open())));
@@ -49,6 +56,38 @@ export function PictureViewer(props: { pictures: () => ThreadPicture[]; open: Si
     keymap.bind("left", () => go(-1), { when: "always" });
     keymap.bind("right", () => go(1), { when: "always" });
   });
+  // Whether this app build can save and share (an older one shows the viewer as it was).
+  effect(() => {
+    if (props.open() !== null) void askPictureSupport();
+  });
+  // The action running and the one that just worked (its icon a check for a moment).
+  const busy = signal<PictureAction | null>(null);
+  const done = signal<PictureAction | null>(null);
+  let doneTimer: ReturnType<typeof setTimeout> | undefined;
+  cleanup(() => clearTimeout(doneTimer));
+  const act = async (action: PictureAction) => {
+    const shown = untracked(props.pictures)[untracked(index)];
+    if (!shown || untracked(busy)) return;
+    busy.set(action);
+    const worked = await runPictureAction(action, shown, props.load);
+    busy.set(null);
+    // Share's sheet is its own answer; Save and Copy show a check.
+    if (!worked || action === "share") return;
+    done.set(action);
+    clearTimeout(doneTimer);
+    doneTimer = setTimeout(() => done.set(null), 1500);
+  };
+  const ACT = {
+    save: { icon: "download", label: saveLabel },
+    share: { icon: "share", label: "Share" },
+    copy: { icon: "copy", label: "Copy" },
+  } as const;
+  const Act = (a: { action: PictureAction }) => (
+    <Button testID={`picture-viewer-${a.action}`} accessibilityLabel={ACT[a.action].label} disabled={count() === 0 || busy() !== null} onPress={() => void act(a.action)}
+      class="size-11 items-center justify-center rounded-full disabled:opacity-50 active:opacity-70">
+      <If when={busy() === a.action} else={<Icon name={done() === a.action ? "check" : ACT[a.action].icon} size={22} color="seal-foreground" />}><Spinner size={18} tone="onBlack" /></If>
+    </Button>
+  );
   const Side = (side: { step: -1 | 1 }) => (
     <Button testID={side.step < 0 ? "picture-viewer-previous" : "picture-viewer-next"} accessibilityLabel={side.step < 0 ? "Previous picture" : "Next picture"}
       disabled={!props.pictures()[index() + side.step]} onPress={() => go(side.step)}
@@ -62,11 +101,15 @@ export function PictureViewer(props: { pictures: () => ThreadPicture[]; open: Si
       presentation="fullScreen" animation="fade" accessibilityLabel="Picture" class="flex-1 bg-black" statusBar={{ foreground: "light" }}>
       <View class="flex-1 bg-black" style={{ paddingTop: safeArea().top, paddingBottom: safeArea().bottom + 48 }}>
         <View class="h-[52px] flex-row items-center px-2">
-          <Button testID="picture-viewer-close" accessibilityLabel="Close" onPress={() => props.open.set(null)} class="size-11 items-center justify-center rounded-full active:opacity-70">
-            <Icon name="close" size={22} color="seal-foreground" />
-          </Button>
+          <View class="flex-row items-center" style={{ width: actionsWidth }}>
+            <Button testID="picture-viewer-close" accessibilityLabel="Close" onPress={() => props.open.set(null)} class="size-11 items-center justify-center rounded-full active:opacity-70">
+              <Icon name="close" size={22} color="seal-foreground" />
+            </Button>
+          </View>
           <Text testID="picture-viewer-count" class="flex-1 text-center text-sub font-semibold text-white">{count() > 0 ? `${index() + 1} of ${count()}` : ""}</Text>
-          <View class="size-11" />
+          <View class="flex-row items-center" style={{ width: actionsWidth }}>
+            <If when={picturesSupported()}><Act action="save" /><If when={pictureCan.share}><Act action="share" /></If><If when={pictureCan.copy}><Act action="copy" /></If></If>
+          </View>
         </View>
         <View class="flex-1">
           <Carousel class="flex-1" index={index()} onChange={({ index: shown }) => { const picture = untracked(props.pictures)[shown]; if (picture) props.open.set(picture.key); }}
@@ -81,6 +124,7 @@ export function PictureViewer(props: { pictures: () => ThreadPicture[]; open: Si
           </Carousel>
           <Side step={-1} />
           <Side step={1} />
+          <PictureNote testID="picture-viewer-note" class="absolute bottom-4 left-4 right-4" />
         </View>
       </View>
     </GuardedDialog>
