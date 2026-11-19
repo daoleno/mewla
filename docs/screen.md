@@ -510,10 +510,17 @@ all three. On a page that belongs to no Session or Work
 it shows whichever agent uses a screen. It disappears when the agent is done
 with the screen, and on that screen's own page.
 
+- **Hide it** with the close button in its title bar. It stays hidden for that
+  agent, also after the app restarts, while another agent's screen still
+  floats by itself. Opening Screen (Phone use for the phone) brings it back.
+- **When the picture drops** it reconnects by itself, with a spinner in place.
+  A picture that cannot come back (the video cannot reach the phone, or the
+  agent is gone) closes the window; it floats again when the app comes back to
+  the front or the agent uses a screen anew.
 - **Move it** by dragging: it snaps to a corner and remembers its corner and
-  size. It starts at the top right, under the header, on pages with a composer
-  or key bar; on a wide window, in the right pane's bottom-right corner. It
-  stays above the composer and the keyboard.
+  size. It starts at the bottom right, above the composer; on a wide window,
+  in the right pane's bottom-right corner. It stays above the composer and the
+  keyboard.
 - **Tap the title** to go to the next screen when several agents use one.
   **Double-tap** to go between the default and a large size. The handle in the
   inner corner resizes it, the shape locked. **Open** opens that screen's own

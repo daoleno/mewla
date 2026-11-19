@@ -188,6 +188,87 @@ describe("the floating screen: agents' displays and the Mac", () => {
     expect(shown.texts().find((text) => /\/2$/.test(text))).not.toBe(before);
   }, 25_000);
 
+  test("Hide closes one Worker's window and it stays closed while that Worker keeps using its screen; the other's still floats; Screen brings it back", async () => {
+    const shown = await app({ worker_sessions: [session("%2", { name: "Coder" }), session("%1", { name: "Writer" })] }, {
+      [`GET ${BASE}/display`]: json({ displays: [display("%1"), display("%2")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
+    });
+    await shown.waitUntil(() => shown.texts().some((text) => /^Writer {2}1\/2$/.test(text)), { timeout: 10_000 });
+    await shown.press("id:screen-float-hide");
+    await shown.waitUntil(() => shown.texts().includes("Coder"));
+    // Through a few reads of the computer, with the Worker still on its display, it stays closed.
+    const reads = shown.requests().filter((r) => r.url === `${BASE}/display`).length;
+    await shown.waitUntil(() => shown.requests().filter((r) => r.url === `${BASE}/display`).length >= reads + 2, { timeout: 10_000 });
+    expect(shown.texts().some((text) => text.startsWith("Writer"))).toBe(false);
+    expect(Object.entries(shown.storage()).find(([key]) => key.startsWith("mewla:screen_float_hidden:"))?.[1]).toBe(JSON.stringify(["display:%1"]));
+    // Screen, its own page, brings it back.
+    await shown.press("id:screen-float-open");
+    await shown.waitFor("id:screen-page", { timeout: 10_000 });
+    await shown.back();
+    await shown.waitUntil(() => shown.texts().some((text) => /^Writer {2}1\/2$/.test(text)), { timeout: 10_000 });
+    expect(Object.entries(shown.storage()).find(([key]) => key.startsWith("mewla:screen_float_hidden:"))?.[1]).toBe("[]");
+  }, 25_000);
+
+  test("hidden stays hidden after the app starts again", async () => {
+    const network = {
+      [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }),
+      [`GET ${BASE}/screen?video=webrtc`]: json(linux),
+    };
+    const first = await app({ worker_sessions: [session("%1", { name: "Writer" })] }, network);
+    await first.waitFor("id:screen-float", { timeout: 10_000 });
+    await first.press("id:screen-float-hide");
+    await first.waitUntil(() => !first.shows("id:screen-float"));
+    const kept = Object.entries(first.storage()).filter(([key]) => key.startsWith("mewla:screen_float_hidden:"));
+    expect(kept).toHaveLength(1);
+    const again = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("%1", { name: "Writer" })] }), storage: { ...paired, ...Object.fromEntries(kept) }, platform: "android", network: { ...expoTokenService, ...network } });
+    await again.waitFor("id:composer");
+    await again.waitUntil(() => again.requests().filter((r) => r.url === `${BASE}/display`).length >= 2, { timeout: 10_000 });
+    expect(again.shows("id:screen-float")).toBe(false);
+  }, 25_000);
+
+  describe("its live view", () => {
+    const VIEWER = "ws://127.0.0.1:1/display/viewer";
+    const sockets = { "app.socketOpened": () => null, "app.socketClosed": () => null, "app.socketSent": () => null };
+    const viewed = () => open("./testing/FloatViewerApp.tsx", {
+      host: phoneHost({ brain: {}, worker_sessions: [session("%1", { name: "Writer" })] }, sockets),
+      storage: paired,
+      platform: "android",
+      network: { ...expoTokenService, [`GET ${BASE}/display`]: json({ displays: [display("%1")], available: true, video: "webrtc" }), [`GET ${BASE}/screen?video=webrtc`]: json(linux) },
+    });
+    type App = Awaited<ReturnType<typeof viewed>>;
+    const opened = (shown: App) => shown.host.posts().filter((p) => p.name === "app.socketOpened" && (p.data as { url: string }).url.startsWith(VIEWER)).length;
+
+    test("a dropped link comes back by itself: no button to tap", async () => {
+      const shown = await viewed();
+      await shown.waitFor("id:screen-float", { timeout: 10_000 });
+      await shown.waitUntil(() => opened(shown) === 1, { timeout: 10_000 });
+      await shown.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
+      await shown.waitUntil(() => !shown.shows("id:screen-float-cover"));
+      await shown.host.send("app.socketEnd", { reason: "" });
+      await shown.waitFor("id:screen-float-cover");
+      expect(shown.shows("id:screen-float-reconnect")).toBe(false);
+      await shown.waitUntil(() => opened(shown) === 2, { timeout: 5_000 });
+      await shown.host.send("app.viewer", { type: "connected", width: 1280, height: 800 });
+      await shown.waitUntil(() => !shown.shows("id:screen-float-cover"));
+      expect(shown.shows("id:screen-float")).toBe(true);
+    }, 25_000);
+
+    test("a view that cannot come up closes the window instead of leaving it dark", async () => {
+      const shown = await viewed();
+      await shown.waitFor("id:screen-float", { timeout: 10_000 });
+      await shown.waitUntil(() => opened(shown) === 1, { timeout: 10_000 });
+      await shown.host.send("app.socketEnd", { reason: "" });
+      await shown.waitUntil(() => opened(shown) === 2, { timeout: 5_000 });
+      await shown.host.send("app.socketEnd", { reason: "" });
+      await shown.waitUntil(() => !shown.shows("id:screen-float"), { timeout: 5_000 });
+      // The Worker is still on its display: the window stays closed through the next reads.
+      const reads = shown.requests().filter((r) => r.url === `${BASE}/display`).length;
+      await shown.waitUntil(() => shown.requests().filter((r) => r.url === `${BASE}/display`).length >= reads + 1, { timeout: 10_000 });
+      expect(shown.shows("id:screen-float")).toBe(false);
+      expect(opened(shown)).toBe(2);
+    }, 25_000);
+  });
+
   /** Two agents' displays on a manual clock: taps and drags land at the times the test says. */
   const two = () => app({ worker_sessions: [session("%2", { name: "Coder" }), session("%1", { name: "Writer" })] }, {
     [`GET ${BASE}/display`]: json({ displays: [display("%1"), display("%2")], available: true, video: "webrtc" }),
