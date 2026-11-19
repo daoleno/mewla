@@ -41,8 +41,8 @@ describe("every Work state has a way forward", () => {
     expect(kinds(work({ question: "Which account?" }))).toEqual(["reply", "snooze", "dismiss"]);
   });
 
-  test("needs you without a question: reply, snooze, not needed anymore", () => {
-    expect(kinds(work({ wake: { kind: "user_input", ref: "Apple account holder resolves the agreement" } }))).toEqual(["reply", "snooze", "dismiss"]);
+  test("parked on you with nothing asked is a quiet wait, not Needs you: ask Brain, snooze, not needed anymore (owner 2026-11-19)", () => {
+    expect(kinds(work({ wake: { kind: "user_input", ref: "Apple account holder resolves the agreement" } }))).toEqual(["ask", "snooze", "dismiss"]);
   });
 
   test("back: accept closes it, or ask Brain", () => {
@@ -82,16 +82,15 @@ test("failed: retry through Brain, or dismiss", () => {
 });
 
 describe("nothing stays stuck", () => {
-  test("a Needs-you Work waiting for days says how long", () => {
+  test("a Work parked for days with nothing asked stays a quiet wait that says what it waits on, never Needs you", () => {
     const slip = slipOf(work({ status: "waiting", wake: { kind: "user_input", ref: "operator:1" }, wait_for: "Apple account holder resolves the agreement", attention_since: hoursAgo(24 * 6) }));
-    expect(slip.summary).toBe("Waiting 6 days · Apple account holder resolves the agreement");
-    expect(slip.group).toBe("needs");
+    expect(slip.summary).toBe("Apple account holder resolves the agreement");
+    expect(slip.group).toBe("waiting");
   });
 
-  test("an answer nothing came back from for a day is a decision again", () => {
+  test("an answer nothing came back from for a day is Brain's to settle: still With Brain, never Needs you", () => {
     const slip = slipOf(work({ status: "open", progress_mode: "ready", user_action: { kind: "reply", text: "Keep both", at: hoursAgo(30), admission: "accepted" }, attention_since: hoursAgo(30) }));
-    expect(slip).toMatchObject({ group: "needs", stuck: "no_decision" });
-    expect(slip.summary).toContain("You answered a day ago");
+    expect(slip).toMatchObject({ group: "running", statusLabel: "With Brain", stuck: "no_decision", summary: "You said “Keep both”" });
   });
 
   test("a Worker that vanished without a result is Brain's to check (owner 11-13 19:4x), with the person's moves on Work detail", () => {
@@ -100,17 +99,18 @@ describe("nothing stays stuck", () => {
     expect(brainWorkActions(slip).map((action) => action.kind)).toEqual(["ask", "close", "dismiss"]);
   });
 
-  test("a result back for over a day with no decision moves to Needs you", () => {
-    const item = work({ progress_mode: "ready", attention_state: "queued", attention_since: new Date(NOW - BRAIN_WORK_STUCK_AFTER_MS - 1).toISOString() });
+  test("a result back for over a day with no decision stays under Back: Brain is woken for it, the person is not (FreerideOpsBatch, 11-19)", () => {
+    const item = work({ progress_mode: "ready", attention_state: "queued", summary: "GHCR: 35/36 deleted", attention_since: new Date(NOW - BRAIN_WORK_STUCK_AFTER_MS - 1).toISOString() });
     const slip = slipOf(item);
-    expect(slip).toMatchObject({ group: "needs", stuck: "no_decision", statusLabel: "No decision" });
-    expect(slip.summary).toBe("Back for a day with no decision. Close it, or ask Brain.");
+    expect(slip).toMatchObject({ group: "back", stuck: "no_decision", summary: "GHCR: 35/36 deleted" });
+    expect(slip.status).not.toBe("needs");
+    expect(kinds(item)).toEqual(["close", "ask", "dismiss"]);
     const fresh = slipOf({ ...item, attention_since: hoursAgo(2) });
     expect(fresh.group).toBe("back");
   });
 
   test("a snoozed Work waits until its time, then needs you again", () => {
-    const item = work({ wake: { kind: "user_input", ref: "x y" }, snoozed_until: new Date(NOW + 3_600_000).toISOString() });
+    const item = work({ question: "Ship it?", wake: { kind: "user_input", ref: "x y" }, snoozed_until: new Date(NOW + 3_600_000).toISOString() });
     expect(slipOf(item)).toMatchObject({ group: "waiting", statusLabel: "Snoozed" });
     expect(slipOf({ ...item, snoozed_until: hoursAgo(1) }).group).toBe("needs");
   });

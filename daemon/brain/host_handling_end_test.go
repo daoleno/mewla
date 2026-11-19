@@ -191,6 +191,21 @@ func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
 		})
 	}
 
+	t.Run("a named wait stays named: -wait-for parks on it, not on Brain's thread", func(t *testing.T) {
+		store, service, item, _ := hostHandlingFixture(t)
+		waitFor := "the Mac mini comes back online"
+		if _, err := service.BrainUpdateWork(item.ID, WorkUpdate{Status: status(WorkWaiting), WaitFor: &waitFor}); err != nil {
+			t.Fatal(err)
+		}
+		after, _ := store.Work(item.ID)
+		if after.Review != nil || after.Status != WorkWaiting || after.Wake == nil || after.Wake.Kind != WorkWakeUserInput || after.Wake.Ref != waitFor {
+			t.Fatalf("after a named wait in a review: status %s wake %+v review %+v", after.Status, after.Wake, after.Review)
+		}
+		if got := dispositionOf(t, store, item.ID); got != WorkDispositionWait {
+			t.Fatalf("disposition = %q, want wait", got)
+		}
+	})
+
 	t.Run("done accepts", func(t *testing.T) {
 		store, service, item, claimed := hostHandlingFixture(t)
 		if _, err := service.BrainUpdateWork(item.ID, WorkUpdate{Status: status(WorkDone)}); err != nil {

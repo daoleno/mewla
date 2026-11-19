@@ -80,13 +80,6 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
       { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
     ];
   }
-  if (slip.group === "needs") {
-    return [
-      { kind: "reply", label: "Reply", primary: true },
-      { kind: "snooze", label: "Snooze 1 hour" },
-      { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
-    ];
-  }
   if (slip.group === "running") {
     const open: BrainWorkAction[] = slip.sessionId ? [{ kind: "open", label: "Open Worker", primary: true }] : [];
     // The daemon stops only a Work whose Attempt runs in a delegated Worker. Calendar, not Brain, runs a

@@ -132,17 +132,27 @@ gets **Approve** right on the tray row; anything else takes you to the card.
 Several open requests in a row stack, oldest first. A request that passed
 without an answer reads **Not answered**.
 
-A Work that came back failed, with no result, or needing a decision is a
-request too. Its tray row opens Work detail, where the card sits under
-**Waits on you**.
+A Work is a request only when Brain asks you something on it. Its tray row
+opens Work detail, where the question and its answers come first, Brain's pick
+tagged, and the reply box sits at the bottom; the brief, outcomes and Workers
+fold under **Details**. A Work Brain left waiting with nothing asked is a quiet
+**Waiting** row, never under Needs you.
 
-**Who a request is for.** A Worker that Brain started reports to Brain, not to
-you: when it stops on a decision of its own, Brain decides, and asks you only
-through its Work's question, which shows under Needs you with its choices.
-Until then the Work reads Reviewing, and nothing for that report reaches you:
-no card, no tray row, no count, no notification. A prompt on that Worker's
-terminal that Brain cannot answer (a sign-in, an approval outside the brief)
-still comes to you, and a Session you started yourself asks you directly.
+**Who a request is for.** Needs you holds only what you can act on: a question
+Brain asked you, a prompt Brain handed to you, a sign-in or approval only you
+can give, and a Trigger whose check keeps failing or that paused itself. A
+Worker that Brain started reports to Brain, not to you: when it stops on a
+decision of its own, Brain decides, and asks you only through its Work's
+question. Until then the Work reads Reviewing, and nothing for that report
+reaches you: no card, no tray row, no count, no notification. A result Brain
+has not decided, a reply Brain has not acted on and a Trigger firing Brain has
+not handled are Brain's too; after a day Mewla wakes Brain for an undecided
+result, and after two hours it hands Brain back a Work it parked with nothing
+asked and nothing named to wait on. A wait Brain names (`-wait-for` a computer,
+a pull request, a Worker's next commit), a Trigger's Work and a Work with a
+live Worker are Brain's own and stay quiet. A prompt on a Worker's terminal that Brain cannot answer (a sign-in,
+an approval outside the brief) still comes to you, and a Session you started
+yourself asks you directly.
 
 Brain asks with buttons by setting a question on the Work:
 
@@ -154,17 +164,21 @@ mewla brain work update -id <work-id> -status waiting \
 
 `-recommend` names the choice Brain recommends, word for word; the app tags
 that answer "Brain's pick". It must be one of the choices, and a new question
-starts without one.
+starts without one. `-status waiting` without `-question` asks you nothing: the
+Work shows as Waiting, and, unless `-wait-for` names what it waits on, the
+command's answer tells Brain so. During a review, `-wait-for` keeps the wait on
+the thing it names rather than on Brain's thread.
 
 ## Work detail
 
 Tap a Work card's title, a tray row with Brain's mark, or a Session's **⋯ ›
 Open its Work**. Work detail shows the state ("Needs you", "N running" or
-"Done", and since when), Brain's brief, and:
+"Done", and since when), what Brain asks first when it asks something, and:
 
 | Part | Does |
 | --- | --- |
-| **Waits on you** | The open request itself; answering here answers it everywhere |
+| **Question** | What Brain asks, with its answers; answering here answers it everywhere |
+| **Details** | Folded while Brain asks: what it is doing, the brief (four lines until tapped), outcomes |
 | **Workers** | Each Worker; tap one for its Session |
 | **Work file** | The Work's notes, to read or edit |
 | **Ask Brain about this** | Back to Brain with the Work quoted in the composer, below anything you had typed there |
@@ -177,9 +191,9 @@ A Work started by a Calendar item also links that item.
 Your reply goes to Brain as a message about that Work. You never have to close
 finished Work: once Brain has read a result and nothing is pending, Mewla asks a
 small model whether the Work is over and closes it if so. Brain reopens a Work
-closed that way as soon as it acts on it again. A result no Brain has received,
-or one Mewla could not judge, moves to Needs you after a day, so nothing sits
-there forever.
+closed that way as soon as it acts on it again. A result that waits a day with
+no decision wakes Brain once to settle it, so nothing sits there forever; it
+never becomes a Needs you row on its own.
 
 ## Who decides that Work is done
 
