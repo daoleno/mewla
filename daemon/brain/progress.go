@@ -78,6 +78,12 @@ type WorkProgress struct {
 	// Reports are the Worker's last progress reports, kept for the judge.
 	// They stay in the daemon: view drops them.
 	Reports []ProgressReport `json:"reports,omitempty"`
+	// Seen and Judged are the evidence observed and the evidence last judged
+	// (progress_evidence.go); Recent the judgments of the last day. They keep
+	// the judge's gate and limits across restarts, and stay in the daemon.
+	Seen   *ProgressEvidence `json:"seen,omitempty"`
+	Judged *ProgressEvidence `json:"judged,omitempty"`
+	Recent []time.Time       `json:"recent,omitempty"`
 }
 
 // view is the progress as clients read it, or nil before the first judgment.
@@ -87,7 +93,7 @@ func (p *WorkProgress) view() *WorkProgress {
 	}
 	out := *p
 	out.Outcomes = append([]ProgressOutcome(nil), p.Outcomes...)
-	out.Reports = nil
+	out.Reports, out.Seen, out.Judged, out.Recent = nil, nil, nil, nil
 	return &out
 }
 
@@ -98,6 +104,15 @@ func cloneWorkProgress(p *WorkProgress) *WorkProgress {
 	out := *p
 	out.Outcomes = append([]ProgressOutcome(nil), p.Outcomes...)
 	out.Reports = append([]ProgressReport(nil), p.Reports...)
+	out.Recent = append([]time.Time(nil), p.Recent...)
+	if p.Seen != nil {
+		seen := *p.Seen
+		out.Seen = &seen
+	}
+	if p.Judged != nil {
+		judged := *p.Judged
+		out.Judged = &judged
+	}
 	return &out
 }
 
@@ -115,6 +130,15 @@ type progressVerdict struct {
 		Why string `json:"why"`
 	} `json:"reopened"`
 	Reason string `json:"reason"`
+	// How the Work reads in the person's list (shown.go).
+	Title   string `json:"title"`
+	Line    string `json:"line"`
+	Next    string `json:"next"`
+	Project string `json:"project"`
+}
+
+func (v progressVerdict) shown() shownVerdict {
+	return shownVerdict{Title: v.Title, Line: v.Line, Next: v.Next, Project: v.Project}
 }
 
 func parseProgressVerdict(raw []byte) (progressVerdict, error) {

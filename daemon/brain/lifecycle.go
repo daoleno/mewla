@@ -164,9 +164,12 @@ type Work struct {
 	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
 	// Progress is the judged progress (progress.go). It is presentation
 	// state: setting it never moves Revision.
-	Progress  *WorkProgress `json:"progress,omitempty"`
-	CreatedAt time.Time     `json:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at"`
+	Progress *WorkProgress `json:"progress,omitempty"`
+	// Shown is how the Work reads in the person's list (shown.go). It is
+	// presentation state: setting it never moves Revision.
+	Shown     *WorkShown `json:"shown,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 // WorkEvent is an append-only fact and at most a one-shot wake/delivery
@@ -303,6 +306,8 @@ type CurrentWork struct {
 	UserAction *WorkUserAction `json:"user_action,omitempty"`
 	// Progress is the judged progress while the Work is open (progress.go).
 	Progress *WorkProgress `json:"progress,omitempty"`
+	// Shown is how the Work reads in the person's list (shown.go).
+	Shown *WorkShown `json:"shown,omitempty"`
 	// Calendar names the schedule and run a Calendar occurrence's Work came
 	// from, so the app can say which schedule it belongs to.
 	Calendar *WorkCalendarRef `json:"calendar,omitempty"`
@@ -356,6 +361,9 @@ type OpenWork struct {
 	Calendar     *WorkCalendarRef `json:"calendar,omitempty"`
 	// WorkerSessions are as on CurrentWork.
 	WorkerSessions []WorkWorkerSession `json:"worker_sessions,omitempty"`
+	// Progress and Shown are as on CurrentWork.
+	Progress *WorkProgress `json:"progress,omitempty"`
+	Shown    *WorkShown    `json:"shown,omitempty"`
 }
 
 type WorkInventory struct {
@@ -434,6 +442,7 @@ type workRecord struct {
 	// preference only: nothing is scheduled and elapsed time writes nothing.
 	SnoozedUntil *time.Time    `json:"snoozed_until,omitempty"`
 	Progress     *WorkProgress `json:"progress,omitempty"`
+	Shown        *WorkShown    `json:"shown,omitempty"`
 	CreatedAt    time.Time     `json:"created_at"`
 	UpdatedAt    time.Time     `json:"updated_at"`
 }
@@ -475,6 +484,7 @@ func worksFromRecords(records []workRecord) []Work {
 			Recommended:      strings.TrimSpace(record.Recommended),
 			SnoozedUntil:     cloneTimePointer(record.SnoozedUntil),
 			Progress:         cloneWorkProgress(record.Progress),
+			Shown:            cloneWorkShown(record.Shown),
 			CreatedAt:        record.CreatedAt,
 			UpdatedAt:        record.UpdatedAt,
 		})
@@ -1151,6 +1161,7 @@ func cloneWorks(items []Work) []Work {
 		out[index].QuestionAt = cloneTimePointer(items[index].QuestionAt)
 		out[index].SnoozedUntil = cloneTimePointer(items[index].SnoozedUntil)
 		out[index].Progress = cloneWorkProgress(items[index].Progress)
+		out[index].Shown = cloneWorkShown(items[index].Shown)
 	}
 	return out
 }
@@ -3468,6 +3479,7 @@ func (s *Store) ProjectWorkInventory(workers []WorkerRef) (WorkInventory, error)
 			Calendar:         workCalendarRef(item),
 			WorkerSessions:   workerSessions(item.ID),
 			Progress:         item.Progress.view(),
+			Shown:            item.Shown.view(),
 		})
 		s.projectWorkAttention(&current[len(current)-1], item)
 	}
@@ -3508,6 +3520,8 @@ func (s *Store) ProjectWorkInventory(workers []WorkerRef) (WorkInventory, error)
 			UpdatedAt:      item.UpdatedAt.UTC(),
 			Calendar:       workCalendarRef(item),
 			WorkerSessions: workerSessions(item.ID),
+			Progress:       item.Progress.view(),
+			Shown:          item.Shown.view(),
 		})
 	}
 	sort.SliceStable(open, func(left, right int) bool {

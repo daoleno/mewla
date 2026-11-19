@@ -43,6 +43,10 @@ const (
 	progressPerWorkDay = 80
 	progressPerDay     = 600
 	progressReportsMax = 12
+	// A Work with no name in the person's list is asked for one on every
+	// progressUnnamedEvery-th tick, and again after progressUnnamedRetry.
+	progressUnnamedEvery = 6
+	progressUnnamedRetry = 30 * time.Minute
 )
 
 // ProgressAskFunc asks a model one structured question: the system prompt,
@@ -105,13 +109,20 @@ func (s *Service) noteProgressFact(fact watcher.TurnFact, reported bool) {
 	if !reported && !turnEnd {
 		return // what the pane shows while a turn runs is not evidence
 	}
+	turnID := strings.TrimSpace(fact.TurnID)
 	go func() {
+		var kept *ProgressReport
 		if reported && (report.Summary != "" || report.Phase != "") {
-			if err := s.store.appendProgressReport(item.ID, report); err != nil {
-				log.Printf("brain progress report %s: %v", item.ID, err)
-			}
+			kept = &report
 		}
-		s.requestProgress(item.ID, strings.TrimSpace(fact.TurnID), turnEnd)
+		due, err := s.store.noteProgressEvidence(item.ID, turnID, turnEnd, kept)
+		if err != nil {
+			log.Printf("brain progress evidence %s: %v", item.ID, err)
+			return
+		}
+		if due {
+			s.requestProgress(item.ID, turnID, turnEnd)
+		}
 	}()
 }
 
@@ -161,13 +172,19 @@ func (s *Service) RunProgressJudge(ctx context.Context) {
 	}
 	wake := p.wake
 	p.mu.Unlock()
+	s.seedProgressLimits()
 	ticker := time.NewTicker(progressTick)
 	defer ticker.Stop()
+	ticks := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if ticks%progressUnnamedEvery == 0 {
+				s.requestUnnamed()
+			}
+			ticks++
 		case <-wake:
 		}
 		for {
@@ -177,6 +194,71 @@ func (s *Service) RunProgressJudge(ctx context.Context) {
 			}
 			s.judgeProgress(ctx, workID)
 		}
+	}
+}
+
+// seedProgressLimits reads the last day's judgments kept on each Work, so a
+// restart starts with the day's limits where they were.
+func (s *Service) seedProgressLimits() {
+	if s.store == nil {
+		return
+	}
+	items, err := s.store.ListWork()
+	if err != nil {
+		return
+	}
+	p := &s.progress
+	now := s.nowUTC()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.perWork == nil {
+		p.perWork = map[string][]time.Time{}
+	}
+	if p.lastRun == nil {
+		p.lastRun = map[string]time.Time{}
+	}
+	for _, item := range items {
+		if item.Progress == nil || len(item.Progress.Recent) == 0 {
+			continue
+		}
+		recent := withinDay(append([]time.Time(nil), item.Progress.Recent...), now)
+		if len(recent) == 0 {
+			continue
+		}
+		p.perWork[item.ID] = recent
+		p.runs = append(p.runs, recent...)
+		p.lastRun[item.ID] = recent[len(recent)-1]
+	}
+	sort.Slice(p.runs, func(i, j int) bool { return p.runs[i].Before(p.runs[j]) })
+}
+
+// requestUnnamed asks for a first judgment of every open Work the person's
+// list has no name for yet, so a new Work reads as itself before its first
+// report. A Work judged a while ago that still has none waits
+// progressUnnamedRetry before it is asked again.
+func (s *Service) requestUnnamed() {
+	if s.store == nil {
+		return
+	}
+	items, err := s.store.ListWork()
+	if err != nil {
+		return
+	}
+	p := &s.progress
+	now := s.nowUTC()
+	for _, item := range items {
+		// Once per Work: a Work the judge has named, or tried to, waits for evidence like any other.
+		if item.Status == WorkDone || item.Status == WorkCancelled || (item.Shown != nil && !item.Shown.JudgedAt.IsZero()) {
+			continue
+		}
+		p.mu.Lock()
+		last, ran := p.lastRun[item.ID]
+		_, pending := p.pending[item.ID]
+		p.mu.Unlock()
+		if pending || (ran && now.Sub(last) < progressUnnamedRetry) {
+			continue
+		}
+		s.requestProgress(item.ID, "", true)
 	}
 }
 
@@ -255,13 +337,25 @@ func (s *Service) judgeProgress(ctx context.Context, workID string) {
 		return
 	}
 	brief, scopeAdded := s.progressBrief(item)
+	var seen *ProgressEvidence
+	if item.Progress != nil && item.Progress.Seen != nil {
+		evidence := *item.Progress.Seen
+		seen = &evidence
+	}
 	ctx, cancel := context.WithTimeout(ctx, progressTimeout)
 	defer cancel()
 	raw, cost, err := ask(ctx, progressInstructions, brief, progressSchema)
 	if err == nil {
 		var verdict progressVerdict
 		if verdict, err = parseProgressVerdict(raw); err == nil {
-			err = s.store.applyWorkProgress(workID, verdict, scopeAdded, s.nowUTC())
+			err = s.store.applyWorkProgress(workID, verdict, scopeAdded, seen, s.nowUTC())
+		}
+		if err == nil {
+			shown := verdict.shown()
+			if all, listErr := s.store.ListWork(); listErr == nil {
+				shown.Project = sameProject(shown.Project, projectsInUse(all, workID))
+			}
+			err = s.store.applyWorkShown(workID, shown, s.nowUTC())
 		}
 	}
 	if err != nil {
@@ -303,9 +397,14 @@ Keep a checklist of the Work's outcomes and mark it.
 - The first time (no checklist given), write 3-8 outcomes from the brief's acceptance criteria and deliverables: things that will be true when the Work is done (a fix merged and released, a review posted, a result file written, a proof recorded). Never activity steps like reading, planning or investigating. Weight each 1-3 by its share of the effort.
 - Later, keep every outcome's id, text and weight as given. Add an outcome only when a later message adds to the Work. Remove none.
 - state: done needs concrete evidence in the context; doing means visibly started; todo otherwise.
-- An outcome given as done goes back to doing or todo only when the context shows it was reopened (Brain or a person sent it back, a later check failed). List each such outcome in reopened with the reason in a few words.`
+- An outcome given as done goes back to doing or todo only when the context shows it was reopened (Brain or a person sent it back, a later check failed). List each such outcome in reopened with the reason in a few words.
+Also say how the Work reads in the person's list of everything they asked for. Write it in the language of the person's own messages (given below); when there are none, in the brief's language.
+- title: a short name for the outcome the person wants, which they recognise at once, at most 6 words in English or 14 characters in Chinese or Japanese. Name the thing, not the activity, and never a code name, file name or id. Lead with the product when it helps.
+- line: where it stands now, in plain words, at most 14 words (28 CJK characters): what is done or found, and what it waits on and on whom when it waits. Never a status word alone ("Running", "In progress"), a percentage, or how long it has run.
+- next: the next step, one short sentence.
+- project: the product or repository it belongs to, in one or two words as the person calls it. Reuse a name from the projects already in use when it fits. Empty when it belongs to no project (a one-off question).`
 
-const progressSchema = `{"type":"object","additionalProperties":false,"properties":{"measurable":{"type":"boolean"},"outcomes":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"text":{"type":"string"},"weight":{"type":"integer","minimum":1,"maximum":3},"state":{"type":"string","enum":["todo","doing","done"]}},"required":["id","text","weight","state"]}},"reopened":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"why":{"type":"string"}},"required":["id","why"]}},"reason":{"type":"string"}},"required":["measurable","outcomes","reopened","reason"]}`
+const progressSchema = `{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string"},"line":{"type":"string"},"next":{"type":"string"},"project":{"type":"string"},"measurable":{"type":"boolean"},"outcomes":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"text":{"type":"string"},"weight":{"type":"integer","minimum":1,"maximum":3},"state":{"type":"string","enum":["todo","doing","done"]}},"required":["id","text","weight","state"]}},"reopened":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"why":{"type":"string"}},"required":["id","why"]}},"reason":{"type":"string"}},"required":["title","line","next","project","measurable","outcomes","reopened","reason"]}`
 
 var (
 	lifecycleSuffix = regexp.MustCompile(`(?s)\n*Mewla (lifecycle protocol|delegated turn contract):.*$`)
@@ -325,7 +424,9 @@ func (s *Service) progressBrief(item Work) (string, bool) {
 		}
 	}
 	events, _ := s.store.ListWorkEvents(item.ID)
-	return buildProgressBrief(item, s.progressConversation(item), events, files, s.nowUTC())
+	brief, scopeAdded := buildProgressBrief(item, s.progressConversation(item), events, files, s.nowUTC())
+	all, _ := s.store.ListWork()
+	return brief + buildShownContext(item, s.store.personMessagesFor(item, s.nowUTC()), projectsInUse(all, item.ID)), scopeAdded
 }
 
 // buildProgressBrief renders the judge's context. Only a message that carries
@@ -507,34 +608,19 @@ func progressDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
-// appendProgressReport keeps a Worker's report on its Work for the judge. It
-// is presentation state: the Work's revision does not move.
-func (s *Store) appendProgressReport(workID string, report ProgressReport) error {
-	return s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
-		progress := WorkProgress{}
-		if item.Progress != nil {
-			progress = *item.Progress
-		}
-		progress.Reports = append(append([]ProgressReport(nil), progress.Reports...), report)
-		if len(progress.Reports) > progressReportsMax {
-			progress.Reports = progress.Reports[len(progress.Reports)-progressReportsMax:]
-		}
-		item.Progress = &progress
-		return nil, false
-	})
-}
-
 // applyWorkProgress folds a judgment into the Work, records an event when what
 // a person sees changed, and tells the clients.
-func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeAdded bool, now time.Time) error {
+func (s *Store) applyWorkProgress(workID string, verdict progressVerdict, scopeAdded bool, seen *ProgressEvidence, now time.Time) error {
 	return s.updateWorkProgressLocked(workID, func(item *Work) (*WorkEvent, bool) {
 		if item.Status == WorkDone || item.Status == WorkCancelled {
 			return nil, false
 		}
 		next, changed := applyProgressVerdict(item.Progress, verdict, scopeAdded, now)
 		if item.Progress != nil {
-			next.Reports = item.Progress.Reports
+			kept := cloneWorkProgress(item.Progress)
+			next.Reports, next.Seen, next.Judged, next.Recent = kept.Reports, kept.Seen, kept.Judged, kept.Recent
 		}
+		markProgressJudged(&next, seen, now)
 		item.Progress = &next
 		if !changed {
 			return nil, false
