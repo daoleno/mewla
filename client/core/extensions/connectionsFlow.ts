@@ -1,4 +1,4 @@
-import { accountSignInInput, connectsWithForm, enabledRequest, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "./pluginConnectionsModel";
+import { accountSignInInput, connectsWithForm, enabledRequest, reconnectInput, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "./pluginConnectionsModel";
 import type { ConnectionRequest, ConnectionResponse, PluginAccount, PluginIntegration } from "./connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginReturnError, type ConnectPhase, type PendingConnection } from "./pluginOnboarding";
 
@@ -87,6 +87,11 @@ const POLL_MS = 3_000;
 
 export function initialFlowState(): FlowState {
   return { catalog: [], accounts: [], details: {}, loaded: false, running: null, error: "", phase: "idle", service: null, connectError: "", connectedId: null, flow: null, blocked: false };
+}
+
+/** Reconnect from a card: a service with its own form asks for it again; others renew the card in place. */
+function reconnectOptions(account: PluginAccount): ConnectOptions {
+  return connectsWithForm(account.integration) ? { writes: reconnectsWithWrites(account) } : { input: reconnectInput(account) };
 }
 
 export class ConnectionsFlow {
@@ -405,8 +410,7 @@ export class ConnectionsFlow {
     const account = this.state.accounts.find((item) => item.id === accountId);
     if (!account || !this.alive) return false;
     const signIn = accountSignInInput(account);
-    if (signIn) await this.connect(account.integration, { input: signIn });
-    else await this.connect(account.integration, { writes: reconnectsWithWrites(account) });
+    await this.connect(account.integration, signIn ? { input: signIn } : reconnectOptions(account));
     return true;
   }
 
@@ -489,7 +493,7 @@ export class ConnectionsFlow {
     if (signIn) void this.connect(account.integration, { input: signIn });
     else if (action === "refresh") void this.send({ action: "refresh", id: account.id }, `recover:${account.id}`);
     else if (action === "disconnect") void this.disconnect(account);
-    else void this.connect(account.integration, { writes: reconnectsWithWrites(account) });
+    else void this.connect(account.integration, reconnectOptions(account));
   }
 
   /** Hyperliquid: deletes the saved API wallet key and leaves the account read only. */

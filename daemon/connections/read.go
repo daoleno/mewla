@@ -78,6 +78,7 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 		return ReadResult{}, errors.New("tool arguments must be a JSON object")
 	}
 	m.mu.Lock()
+	accountID = m.canonicalID(accountID)
 	r := m.records[accountID]
 	if r != nil && !m.isPending(accountID) && usesMCP(r) && !offersTool(r, tool) {
 		// The service may offer it by now (a moved account has not listed its

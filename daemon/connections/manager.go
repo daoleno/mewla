@@ -36,6 +36,10 @@ type record struct {
 	// ReadsOn then allows the read tools, as the person had them on before.
 	Moved   bool `json:"moved,omitempty"`
 	ReadsOn bool `json:"reads_on,omitempty"`
+	// Aliases are IDs this account had before: a card left behind by an
+	// earlier sign-in, folded into this one. A request naming one reaches
+	// this account.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 type Manager struct {
@@ -153,6 +157,11 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 	}
 	if err := m.moveGitHubToMCP(); err != nil {
 		return nil, err
+	}
+	if m.foldAllTwins() {
+		if err := m.save(); err != nil {
+			return nil, err
+		}
 	}
 	m.cacheListLocked()
 	return m, nil
@@ -323,6 +332,17 @@ func (m *Manager) Handle(parent context.Context, q Request) (response Response, 
 	raw, _ := json.Marshal(q)
 	if len(raw) > MaxRequestBytes {
 		return Response{}, errors.New("plugin request is too large")
+	}
+	// An ID folded into another account (see twins.go) names that account.
+	if q.ID != "" || q.Input != nil && q.Input.AccountID != "" {
+		m.mu.Lock()
+		q.ID = m.canonicalID(q.ID)
+		if q.Input != nil && q.Input.AccountID != "" {
+			in := *q.Input
+			in.AccountID = m.canonicalID(in.AccountID)
+			q.Input = &in
+		}
+		m.mu.Unlock()
 	}
 	if q.Action == "list" {
 		m.refreshCloudProfiles()

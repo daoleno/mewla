@@ -342,6 +342,9 @@ func buildCatalog() []*entry {
 				},
 				Static:           &staticOAuth{Issuer: "https://slack.com", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access", AuthMethods: []string{"client_secret_post"}, ScopeParam: "user_scope"},
 				PublicViaAccount: true,
+				// Reconnect (for newer permissions, or an ended sign-in) keeps the
+				// account's name, switch and per-tool choices.
+				KeepGrants: true,
 				Scopes: func(writes bool) []string {
 					scopes := append([]string(nil), slackReadScopes...)
 					if writes {

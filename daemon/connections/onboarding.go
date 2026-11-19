@@ -350,9 +350,14 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 	for id := range m.records {
 		ids = append(ids, id)
 	}
-	// Prefer a current card over a disconnected duplicate of the same
-	// identity. An explicit renewal still selects only its original card.
+	// The card Reconnect was pressed on comes first, then a current card over
+	// a disconnected duplicate of the same identity. Identity decides: signing
+	// in to another workspace from a card's Reconnect adds that account
+	// instead of overwriting the card.
 	sort.Slice(ids, func(i, j int) bool {
+		if (ids[i] == renew) != (ids[j] == renew) {
+			return ids[i] == renew
+		}
 		iDisconnected := m.records[ids[i]].Account.Status == "disconnected"
 		jDisconnected := m.records[ids[j]].Account.Status == "disconnected"
 		if iDisconnected != jDisconnected {
@@ -362,15 +367,13 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 	})
 	for _, id := range ids {
 		existing := m.records[id]
-		if existing == r || existing.Account.Integration != r.Account.Integration || existing.Account.Status == "disconnected" {
+		// A disconnected card is renewed when it is the one named, or the
+		// same identity with no live card: it keeps its ID (the sort tries
+		// live cards first).
+		if existing == r || existing.Account.Integration != r.Account.Integration || existing.Account.Status == "disconnected" && existing.Account.CredentialRemovalPending {
 			continue
 		}
-		// An explicit renewal selects its original card.
-		if renew != "" {
-			if id != renew {
-				continue
-			}
-		} else if existing.Account.Identity != r.Account.Identity {
+		if existing.Account.Identity != r.Account.Identity {
 			continue
 		}
 		// Identity has been reverified by the provider. Keep stable account IDs,
@@ -385,16 +388,17 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 		oldID := r.Account.ID
 		_ = m.vault.Delete("integration:" + oldID)
 		if e := lookup(r.Account.Integration); e != nil && e.OAuth != nil && e.OAuth.KeepGrants {
-			keepAccount(r, existing)
 			// A disconnected card has no active grants to preserve and must
 			// become usable after a new, verified consent.
-			if existing.Account.Status == "disconnected" {
-				r.Account.Enabled = true
+			if existing.Account.Status != "disconnected" {
+				keepAccount(r, existing)
 			}
 		}
 		r.Account.ID = id
+		r.Aliases = existing.Aliases
 		m.records[id] = r
 		delete(m.records, oldID)
+		m.foldTwins(r)
 		for _, f := range m.connectFlows {
 			if f.AccountID == oldID {
 				f.AccountID = id
@@ -656,9 +660,21 @@ func keepAccount(r, old *record) {
 		r.Account.Name = old.Account.Name
 	}
 	r.Account.Enabled = old.Account.Enabled
+	had := map[string]bool{}
+	for _, t := range old.Account.Tools {
+		had[t.Name] = true
+	}
 	for _, t := range r.Account.Tools {
-		if fp, ok := old.Grants[t.Name]; ok && fp == fingerprint(t) {
-			r.Grants[t.Name] = fp
+		if !had[t.Name] {
+			// New since the last sign-in: as its group's switch was set.
+			continue
+		}
+		// A tool the account had keeps the person's choice: allowed stays
+		// allowed, blocked stays blocked.
+		if _, allowed := old.Grants[t.Name]; allowed {
+			r.Grants[t.Name] = fingerprint(t)
+		} else {
+			delete(r.Grants, t.Name)
 		}
 	}
 }
