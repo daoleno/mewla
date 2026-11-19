@@ -1153,8 +1153,8 @@ func (a *controlApp) handleBrainWorkUpdate(req control.Request) control.Response
 	return response
 }
 
-// waitNothingAskedNotice tells Brain, as it parks a Work on the person with
-// nothing asked, that the person is not asked: only a question reaches Needs
+// waitNothingAskedNotice tells Brain, as it parks a Work with nothing asked
+// and nothing named to wait on, that the person is not asked: only a question reaches Needs
 // you (owner 2026-11-19), so the Work shows as a quiet wait.
 func waitNothingAskedNotice(item brain.Work, update brain.WorkUpdate) string {
 	if update.Status == nil && update.WaitFor == nil {
@@ -1164,6 +1164,10 @@ func waitNothingAskedNotice(item brain.Work, update brain.WorkUpdate) string {
 		return ""
 	}
 	if item.Wake == nil || item.Wake.Kind != brain.WorkWakeUserInput {
+		return ""
+	}
+	// A wait Brain names (-wait-for a Mac, a PR head) is its own: nothing to say.
+	if ref := strings.TrimSpace(item.Wake.Ref); ref != "" && ref != "operator:"+item.ID && !strings.HasPrefix(ref, "brain-thread:") {
 		return ""
 	}
 	return fmt.Sprintf("The person is not asked anything: this Work shows as Waiting, never Needs you. To ask them, run mewla brain work update -id %s -question \"<one line>\" -choice \"<a>\" -choice \"<b>\" -recommend \"<your pick>\".", item.ID)

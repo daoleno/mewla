@@ -55,6 +55,13 @@ func TestBrainWorkWaitingWithNothingAskedTellsBrain(t *testing.T) {
 		t.Fatalf("a wait with nothing asked tells Brain how to ask: %+v", response)
 	}
 	response = app.HandleControlRequest(control.Request{
+		Type: "brain_work_update", WorkID: item.ID, WorkFields: []string{"status", "wait_for"},
+		BrainWork: &brain.Work{Status: brain.WorkWaiting, WaitFor: "the Mac mini comes back online"},
+	})
+	if !response.OK || response.Context != nil {
+		t.Fatalf("a wait Brain names needs no notice: %+v", response)
+	}
+	response = app.HandleControlRequest(control.Request{
 		Type: "brain_work_update", WorkID: item.ID, WorkFields: []string{"status", "question", "choices", "recommended"},
 		BrainWork: &brain.Work{Status: brain.WorkWaiting, Question: "Ship it now?", Choices: []string{"Ship", "Wait"}, Recommended: "Ship"},
 	})
