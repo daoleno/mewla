@@ -1,12 +1,11 @@
 import { cleanup, effect, Image, signal, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { motion } from "../../core/motion/tokens";
+import { isDirectPicture } from "../../core/files/pictureSave";
 import { pictureRetry } from "../../core/timeline/pictureRetry";
 import { Icon } from "../icons/Icon";
 import { delayed, linkState, SlowLine } from "../kit/wait";
-
-/** A web or data URL, which shows as it is; anything else is a path on the computer. */
-export const isDirectPicture = (src: string) => /^(https?:|data:image\/)/i.test(src);
+import { pictureMenu } from "./pictureActions";
 
 /**
  * Reads a path on the computer as a data URL (`codex_asset` through the chat's Session). It resolves null
@@ -77,7 +76,7 @@ export type PictureFrame = "sent" | "tool";
 /**
  * A picture in a chat (SPEC §1.7): a reply's (the default: the text's width, 4:3), a sent one (168 × 126), or a
  * tool call's thumbnail (96 × 170 tall, 200 × 125 wide, by the picture). A tap opens the viewer
- * (`onOpen`). While it reads, its frame is a placeholder block (`ph`, SPEC §16.2 pattern 3); one that failed
+ * (`onOpen`); a hold offers Save and Share of the original (pictureMenu). While it reads, its frame is a placeholder block (`ph`, SPEC §16.2 pattern 3); one that failed
  * to load (see createPicture) keeps its frame with a refresh glyph, and a tap loads it again.
  */
 export function ChatImage(props: { src: string; alt?: string; load?: PictureLoader; frame?: PictureFrame; width?: () => number; onOpen?: () => void }) {
@@ -97,11 +96,12 @@ export function ChatImage(props: { src: string; alt?: string; load?: PictureLoad
     // A sent or tool picture is a radius-16 thumbnail on the canvas (FIDELITY-AUDIT item 18): no fill behind
     // it and no padding round it; only a picture still loading or failed shows a quiet tint in its frame.
     <View testID="chat-image" class={`overflow-hidden ${props.frame ? "rounded-[16px]" : "my-1 rounded-xl"}`} style={box()}>
-      <If when={picture.failed()} else={<If when={picture.url()} else={<View testID="chat-image-loading" class="h-full w-full bg-ph"><SlowLine on={slow()} testID="chat-image-slow" /></View>}><Button testID="chat-image-open" accessibilityLabel={label()} disabled={!props.onOpen} onPress={() => props.onOpen?.()} class="h-full w-full p-0 active:opacity-80">
+      <If when={picture.failed()} else={<If when={picture.url()} else={<View testID="chat-image-loading" class="h-full w-full bg-ph"><SlowLine on={slow()} testID="chat-image-slow" /></View>}><View testID="chat-image-open" role="button" accessible accessibilityLabel={label()} onPress={() => props.onOpen?.()}
+          onLongPress={() => void pictureMenu({ src: props.src, alt: props.alt }, props.load)} class="h-full w-full p-0 active:opacity-80">
           <Image src={picture.url()!} accessibilityLabel={label()} onError={picture.fail}
             onLoad={({ size }) => tall.set(size.height > size.width)}
             style={{ width: "100%", height: "100%", objectFit: props.frame ? "cover" : "contain" }} />
-        </Button></If>}><Button testID="chat-image-retry" accessibilityLabel={`Load ${label()} again`} onPress={picture.retry} class="h-full w-full items-center justify-center bg-accent p-0 active:opacity-70">
+        </View></If>}><Button testID="chat-image-retry" accessibilityLabel={`Load ${label()} again`} onPress={picture.retry} class="h-full w-full items-center justify-center bg-accent p-0 active:opacity-70">
           <Icon name="refresh" size={22} />
         </Button></If>
     </View>

@@ -295,6 +295,27 @@ function cancelDownload(args) {
   return null;
 }
 
+/**
+ * `files.saveImage {source, name, mimeType}` → `{name}`: a picture a chat shows, downloaded as the
+ * browser downloads (client/ui/chat/pictureActions.tsx). `source` is its original: a data URL the computer
+ * read whole, or a web address (a site that refuses other pages its bytes fails, and says so).
+ */
+async function saveImage(args) {
+  const url = String(args.source || "");
+  if (!/^(data:image\/|https?:)/i.test(url)) throw new Error("No picture to save.");
+  let response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch {
+    throw new Error("The browser could not read the picture (the site may not allow it).");
+  }
+  if (!response.ok) throw new Error(`The picture did not download (HTTP ${response.status}).`);
+  const blob = await response.blob();
+  const name = String(args.name || "") || "picture";
+  deliver(args.mimeType && blob.type !== args.mimeType ? new Blob([blob], { type: String(args.mimeType) }) : blob, name);
+  return { name };
+}
+
 // --- Plugins sign-in return -------------------------------------------------------------------
 
 const PLUGIN_RETURN_KEYS = ["connected", "plugin_error", "service"];
@@ -379,6 +400,8 @@ export function createHost(player) {
     "files.pickDirectory": () => pickDirectory(),
     "files.download": (args) => download(args),
     "files.cancelDownload": (args) => cancelDownload(args),
+    "files.canSaveImage": () => true,
+    "files.saveImage": (args) => saveImage(args),
     "files.thumbnail": (args) => thumbnail(args),
     "links.pluginReturn": () => pluginReturn(),
     "links.openHere": (args) => openHere(args),

@@ -230,6 +230,31 @@ describe("the Calendar tab", () => {
     // (What a TextView draws through renderImage is not in `nsh test`'s tree; the picture itself is for the device.)
   }, 20_000);
 
+  test("a run result's picture opens the picture viewer, which saves its original", async () => {
+    const run = { id: "r1", status: "completed", scheduled_for: "2026-07-17T03:00:00Z", started_at: "2026-07-17T03:00:00Z", result_preview: "Chart", result: "Here is the chart.\n\n![Weekly chart](out/chart.png)\n" };
+    const daemon = {
+      calendar_items: [item("Digest", 20, { kind: "scheduled_action", action_instruction: "Draw the chart.", runs: [run] })],
+      brain: { host_worker: { id: "%1", name: "brain", status: "running", cwd: "/home/me/brain" } },
+      replies: { codex_asset: { type: "codex_asset", content_type: "image/png", data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" } },
+    };
+    const saved: any[] = [];
+    const app = await open(APP, {
+      host: phoneHost(daemon, { "files.canSaveImage": () => true, "files.saveImage": (data: any) => (saved.push(data), { name: data.name, where: "Pictures/Mewla" }) }),
+      storage: paired, platform: "android", network: expoTokenService,
+    });
+    await app.host.send("links.open", { url: "mewla://calendar?id=Digest&run=r1" });
+    await app.waitFor("id:run-result >> id:chat-image-open", SLOW);
+    await app.wait(300);
+    await app.press("id:run-result >> id:chat-image-open");
+    await app.waitFor("text:1 of 1", SLOW);
+    await app.waitFor("id:picture-viewer-image", SLOW);
+    await app.press("id:picture-viewer-save");
+    await app.waitFor("text:Saved to Pictures/Mewla", SLOW);
+    expect(saved).toEqual([{ source: daemon.replies.codex_asset.data_url, name: "chart.png", mimeType: "image/png" }]);
+    // The viewer read the original (no max_edge), in Brain's host folder.
+    expect(framesOf(app.host.posts(), "codex_asset").some((frame) => frame.path === "out/chart.png" && frame.max_edge === undefined && frame.cwd === "/home/me/brain")).toBe(true);
+  }, 20_000);
+
   test("a running item opens its Session while the computer lists it, and its page once the Session has gone (parity #45)", async () => {
     const run = { id: "r1", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w1" };
     const gone = { id: "r2", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w-gone" };

@@ -1,7 +1,9 @@
 package com.daoleno.mewla.files
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -14,7 +16,8 @@ import java.util.concurrent.Executors
 
 /**
  * `files.*` (client/ui/more/files/host.ts): the system picker for attachments, a folder
- * for downloads, the streaming upload and download, and the `mewla.pdf` component.
+ * for downloads, the streaming upload and download, a chat's picture saved to the gallery or
+ * shared (`files.saveImage`, `files.shareImage`, PictureSave), and the `mewla.pdf` component.
  * Transfers run on their own threads; replies may come from any thread, events are
  * sent from the main one.
  */
@@ -51,7 +54,48 @@ class FilesHost(private val activity: ComponentActivity, private val nsh: NshVie
     reply.resolve(mapOf("token" to token, "name" to Folders.name(activity.contentResolver, tree)))
   }
 
+  // Android 9's storage prompt, asked when a picture is saved; the save waiting on it.
+  private var savingPicture: Pair<NshHostReply, PictureSave.Request>? = null
+  private val storagePermission = activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    val (reply, request) = savingPicture ?: return@registerForActivityResult
+    savingPicture = null
+    if (granted) savePicture(reply, request) else reply.reject("Storage permission denied.")
+  }
+
+  private fun savePicture(reply: NshHostReply, request: PictureSave.Request) =
+    run(reply) { mapOf("name" to PictureSave.save(activity, PictureSave.read(request)), "where" to PictureSave.WHERE) }
+
   init {
+    // This build saves and shares pictures (NSH's FilesProvider is declared): the UI shows Save and Share.
+    nsh.handle("files.canSaveImage") { _, reply -> reply.resolve(true) }
+    nsh.handle("files.saveImage") { data, reply ->
+      val request = try { PictureSave.request(data) } catch (error: Exception) { return@handle reply.reject(error.message ?: "No picture to save.") }
+      if (!PictureSave.needsPermission || activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+        return@handle savePicture(reply, request)
+      }
+      savingPicture?.first?.reject("Another picture is being saved.")
+      savingPicture = reply to request
+      storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+    }
+    nsh.handle("files.shareImage") { data, reply ->
+      val request = try { PictureSave.request(data) } catch (error: Exception) { return@handle reply.reject(error.message ?: "No picture to share.") }
+      work.execute {
+        try {
+          val chooser = PictureSave.shareIntent(activity, PictureSave.read(request))
+          main.post {
+            try {
+              activity.startActivity(chooser)
+              reply.resolve(true)
+            } catch (error: Exception) {
+              reply.reject("Could not open the share sheet.")
+            }
+          }
+        } catch (error: Exception) {
+          Log.w(TAG, "picture share failed: ${error.javaClass.simpleName}")
+          reply.reject(error.message ?: "Could not share the picture.")
+        }
+      }
+    }
     nsh.handle("files.pick") { data, reply ->
       val maxCount = (field(data, "maxCount") as? Number)?.toInt() ?: 0
       if (maxCount !in 1..8) return@handle reply.reject("Choose between one and eight files.")

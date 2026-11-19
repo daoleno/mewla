@@ -255,6 +255,15 @@ connection up, an unanswered load tries again after 1, 2, 4 and 8 seconds. Only
 then, or when the computer says the file is no picture it can show, does the
 frame show a refresh mark; tap it to load it again.
 
+Every picture can be kept. The viewer's top bar has Save and Share on the
+phone (and Copy on iOS); a long press on a picture in the chat offers the same.
+Save puts the original file, at full size and in its own format, in the phone's
+gallery: Pictures/Mewla on Android (Android 9 asks for storage the first time),
+Photos on iOS (which asks once for permission to add). Share opens the system
+share sheet with that file. On the web the same buttons are Download and Copy.
+A picture in a Calendar run's result opens the same viewer. If saving fails, a
+line at the bottom says why.
+
 On the web, paste a screenshot or a copied picture into the composer and it
 becomes a chip above the field, the same as one you attached; pasted text goes
 in as typed. The phone's keyboard can paste a picture the same way.

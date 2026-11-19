@@ -25,6 +25,7 @@ import { keyedSplice, scrollTraceOn, traceScroll } from "../../core/timeline/scr
 import { Icon } from "../icons/Icon";
 import { ChatImage } from "./ChatImage";
 import { PictureViewer } from "./PictureViewer";
+import { PictureNote } from "./pictureActions";
 import { pictureKey, samePictures, sentPictures, threadPictures } from "../../core/timeline/threadPictures";
 import { INLINE_CODE, SELECTION } from "./TimelineRows";
 import { Caption } from "../kit/kit";
@@ -591,6 +592,7 @@ export function ChatTimeline(props: {
             <Text class="text-sub font-semibold">{String(props.requests!())}</Text>
             <Icon name="arrow-down" size={16} color="foreground" />
           </Button></If></If>
+      <PictureNote class="absolute bottom-16 left-4 right-4" />
       <If when={notice()}><View class="absolute bottom-16 left-4 right-4 items-center">
           <View testID="chat-notice" onPress={() => notice.set("")} class="rounded-full bg-foreground px-4 py-2.5"><Text class="text-sub font-semibold text-background">{notice()}</Text></View>
         </View></If>
