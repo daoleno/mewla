@@ -164,7 +164,21 @@ export class Transport {
   private openedAt = 0;
   private openedPath = "";
   /** The last live socket's end, until the next one opens and reports it; with what happened in between. */
-  private lost: { why: string; path: string; ageMs: number; away: boolean; at: number; attempts: number; network: number } | null = null;
+  private lost: {
+    why: string;
+    /** The socket's own error text (NSH's `error` event message), when it ended in one. */
+    error: string;
+    path: string;
+    ageMs: number;
+    away: boolean;
+    /** How long the app had been out of sight when it ended; 0 in front. */
+    awayMs: number;
+    at: number;
+    attempts: number;
+    network: number;
+    /** The error text of the last attempt that failed after it, if one did. */
+    lastError: string;
+  } | null = null;
   /** Until when an announced message may keep the socket quiet (`frame_coming`); 0 with none on its way. */
   private comingUntil = 0;
   private nextId = 0;
@@ -173,6 +187,7 @@ export class Transport {
   private inboxTimer: ReturnType<typeof setTimeout> | null = null;
   /** The app is out of sight: frames wait in the inbox (`setAway`). */
   private away = false;
+  private awaySince = 0;
   /** What the frames waiting while away weigh. */
   private heldBytes = 0;
   /** Away, the frames outgrew [AWAY_HOLD_BYTES] and were let go: back in front, the app connects again. */
@@ -318,6 +333,7 @@ export class Transport {
   setAway(away: boolean): void {
     if (this.away === away) return;
     this.away = away;
+    this.awaySince = away ? Date.now() : 0;
     if (away) return this.abandonMove("away");
     this.scheduleMoveCheck();
     this.heldBytes = 0;
@@ -486,7 +502,7 @@ export class Transport {
       this.comingUntil = 0;
       this.receive(frame, bytes, received);
     };
-    const end = (why: string) => {
+    const end = (why: string, error = "") => {
       if (ended) return;
       ended = true;
       if (this.socket === socket) this.socket = null;
@@ -494,14 +510,18 @@ export class Transport {
       const wasConnected = this.state === "connected";
       if (wasConnected) {
         const now = Date.now();
-        this.lost = { why, path: this.openedPath, ageMs: now - this.openedAt, away: this.away, at: now, attempts: 0, network: 0 };
+        const awayMs = this.away && this.awaySince ? now - this.awaySince : 0;
+        this.lost = { why, error, path: this.openedPath, ageMs: now - this.openedAt, away: this.away, awayMs, at: now, attempts: 0, network: 0, lastError: "" };
         // A direct path that did not hold for long after a move is not moved onto again soon, and less often each
         // time (no ping-pong); one that held earns moves at the first backoff again.
         if (this.openedByMove) {
           if (now - this.openedAt < transportTiming.moveTrustMs) this.backOffMoves();
           else this.moveBackoffMs = transportTiming.moveBackoffMs;
         }
-      } else if (this.lost) this.lost.attempts++;
+      } else if (this.lost) {
+        this.lost.attempts++;
+        if (error) this.lost.lastError = error;
+      }
       this.clearTimers();
       this.queue = [];
       this.armRetry(why);
@@ -512,7 +532,9 @@ export class Transport {
       // was what took that call past 2 s on the owner's phone.
       if (wasConnected) this.receive({ type: "disconnected", intentional: false }, BIG_FRAME_BYTES);
     };
-    socket.onerror = () => end("error");
+    // NSH's error event says what ended the socket (a reset, an end without a close frame, a write that timed out):
+    // kept for the drop report, the one place it is told.
+    socket.onerror = (event) => end("error", errorText(event));
     socket.onclose = (event) => end(event.reason || `closed (${event.code})`);
   }
 
@@ -612,7 +634,7 @@ export class Transport {
     this.lost = null;
     if (!lost) return;
     const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
-    const word = (text: string) => text.replace(/\s+/g, "_").slice(0, 60) || "-";
+    const word = (text: string, max = 60) => text.replace(/\s+/g, "_").slice(0, max) || "-";
     try {
       this.sendQuietly({
         type: "client_diagnostic",
@@ -627,6 +649,9 @@ export class Transport {
           `last=${word(lastProblem)}`,
           `away=${lost.away}`,
           `network_changes=${lost.network}`,
+          ...(lost.away ? [`away_for=${seconds(lost.awayMs)}`] : []),
+          ...(lost.error ? [`error=${word(lost.error, 120)}`] : []),
+          ...(lost.lastError ? [`last_error=${word(lost.lastError, 120)}`] : []),
         ].join(" "),
       });
     } catch {
@@ -1011,4 +1036,10 @@ export function requestError(frame: Frame, fallback: string): Error & { code?: s
   const error: Error & { code?: string } = new Error(String(frame.message || fallback));
   if (typeof frame.code === "string") error.code = frame.code;
   return error;
+}
+
+/** The text an `error` event carries (NSH sets `message`); empty when it carries none. */
+function errorText(event: unknown): string {
+  const message = (event as { message?: unknown } | null)?.message;
+  return typeof message === "string" ? message.trim() : "";
 }
