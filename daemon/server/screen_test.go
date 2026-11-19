@@ -24,8 +24,7 @@ func TestScreenNeedsApprovalThenBridgesTheBackend(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	wsURL := "ws" + strings.TrimPrefix(h.URL, "http") + "/screen/viewer?video=webrtc"
 	dial := func(purpose string) (*websocket.Conn, *http.Response, error) {
 		header := http.Header{}
@@ -170,8 +169,7 @@ func TestRevokingADeviceForgetsItsScreenApproval(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	req, _ := http.NewRequest(http.MethodPost, h.URL+"/screen", strings.NewReader(`{"action":"enable"}`))
 	req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
 	req.Header.Set("Accept", "application/json")
@@ -220,8 +218,7 @@ func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	req, _ := http.NewRequest(http.MethodPost, h.URL+"/screen", strings.NewReader(`{"action":"enable"}`))
 	req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
 	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 200 {
@@ -283,8 +280,7 @@ func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetScreen(service)
 	s.SetScreenLoopbackOnly(true)
-	h := httptest.NewServer(s.Handler())
-	defer h.Close()
+	h := serveViewers(t, s.Handler())
 	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
 		t.Fatal(err)
 	}

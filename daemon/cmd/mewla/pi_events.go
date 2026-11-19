@@ -12,12 +12,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/agentevents/pi"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
-	"github.com/google/uuid"
 )
 
 // piAckWait bounds how long a sent message waits for the extension to say it
@@ -57,6 +59,9 @@ func newPiEvents(ctx context.Context, hub *agentevents.Hub, workers func() []*cl
 
 // Listen accepts extension connections on a socket only this user can open.
 func (p *piEvents) Listen(path string) error {
+	if err := platform.EnsureSocketDir(path); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}

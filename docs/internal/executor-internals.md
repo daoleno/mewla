@@ -219,6 +219,16 @@ and `worker approve` answers without keys. Delegated Codex runs with
 `--dangerously-bypass-approvals-and-sandbox`, so it does not stop at those dialogs
 at all; MCP elicitation is not carried and stays pane-only.
 
+That socket, like every unix socket Mewla binds under its state directory (the
+control socket, Pi's events, DSH Sessions, the agent displays' sockets), keeps
+its path there only while the path fits a unix socket's address (under 108
+bytes, 104 on a Mac). A longer state directory gets a short name derived from
+the full path in a private per-user directory, `/tmp/mewla-<uid>` (0700, owned
+by the user, refused otherwise) or `%LOCALAPPDATA%\Mewla\run` on Windows
+(`platform.SocketPath`). A Codex socket that moves there takes its `.pid` and
+`.log` files with it. Lifecycle locks always stay in the state directory's `run`
+folder.
+
 One dialog is reported once. A permission dialog on the screen while its hook
 holds the decision is the hook's to report (`Watcher.SetApprovalHold`: the pane
 gate files nothing); if the pane gate filed first, the hook skips its own event

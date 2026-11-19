@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/keeper"
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // KeepLinger is how long the agent screen outlives a daemon that does not come
@@ -65,10 +66,12 @@ func (d *Display) XPid() int { return d.keep.Pid }
 func (d *Display) Cookie() string { return d.cookie }
 
 // keeperSocket is where the display's keeper listens.
-func (d *Display) keeperSocket() string { return filepath.Join(d.Dir, "keeper.sock") }
+func (d *Display) keeperSocket() string {
+	return platform.SocketPath(filepath.Join(d.Dir, "keeper.sock"))
+}
 
 // SocketPath is the private RFB socket.
-func (d *Display) SocketPath() string { return filepath.Join(d.Dir, "rfb.sock") }
+func (d *Display) SocketPath() string { return platform.SocketPath(filepath.Join(d.Dir, "rfb.sock")) }
 
 // AuthPath is the display's X authority file.
 func (d *Display) AuthPath() string { return filepath.Join(d.Dir, "xauth") }
@@ -128,6 +131,9 @@ func freeNumbers() []int {
 
 func startOn(ctx context.Context, dir string, number, width, height int) (*Display, error) {
 	d := &Display{Dir: dir, Number: number, Width: width, Height: height, done: make(chan struct{})}
+	if err := platform.EnsureSocketDir(d.SocketPath()); err != nil {
+		return nil, err
+	}
 	_ = os.Remove(d.SocketPath())
 	_ = os.Remove(d.AuthPath())
 	cookie, err := writeCookieFor(d.AuthPath(), number)

@@ -13,8 +13,10 @@ import (
 func snapshotProcessTable() (map[int]processInfo, error) {
 	// ucomm is the executable's accounting name on every platform. macOS
 	// comm is argv[0] cut to the 16-column field ("/Users/me/.local/"), so
-	// provider checks on the process name would never match there.
-	command := procspawn.Command("ps scan", procspawn.SystemTool("ps"), "-eo", "pid=,ppid=,pgid=,tpgid=,lstart=,ucomm=,args=")
+	// provider checks on the process name would never match there. -ww
+	// keeps args whole: a Stop reads a Claude Bash shell's command hundreds of
+	// characters into its argv.
+	command := procspawn.Command("ps scan", procspawn.SystemTool("ps"), "-ww", "-eo", "pid=,ppid=,pgid=,tpgid=,lstart=,ucomm=,args=")
 	command.Env = append(command.Environ(), "LC_ALL=C")
 	out, err := command.Output()
 	if err != nil {

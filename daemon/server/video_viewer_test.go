@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -272,4 +273,33 @@ func viewerIdentity(priv ed25519.PrivateKey, a *auth.Manager, device string) vid
 		sign:      func(purpose string) string { return calendarAuthHeader(priv, a.DaemonID(), device, purpose) },
 		daemonKey: a.PublicKeyHex(),
 	}
+}
+
+// serveViewers serves handler and, when the test ends, waits for every
+// handler to return. A viewer's socket is hijacked, so closing the server does
+// not wait for it, and a handler still finishing (recording the device as
+// seen when it verifies the viewer's answer) would write into the test's
+// directories while they are removed.
+func serveViewers(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	var running sync.WaitGroup
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		running.Add(1)
+		defer running.Done()
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(func() {
+		h.Close()
+		done := make(chan struct{})
+		go func() {
+			running.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("a viewer's handler was still running 10s after the test")
+		}
+	})
+	return h
 }

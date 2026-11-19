@@ -26,11 +26,10 @@ type LifecycleLock struct {
 func TryAcquireLifecycleLock(
 	stateDir string,
 ) (*LifecycleLock, bool, error) {
-	socketPath, err := DefaultSocketPath(stateDir)
+	runDir, err := RunDir(stateDir)
 	if err != nil {
 		return nil, false, err
 	}
-	runDir := filepath.Dir(socketPath)
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		return nil, false, fmt.Errorf("create daemon runtime directory: %w", err)
 	}
