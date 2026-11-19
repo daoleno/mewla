@@ -1533,6 +1533,20 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 		var noWake *WorkWake
 		update.Wake = &noWake
 	}
+	// Asking the person is always allowed (Brain, 11-19 23:58): while a Worker's
+	// Attempt still holds the Work (a Worker blocked on the person), the
+	// question goes on the card and the Attempt stays; the Work is not parked
+	// under it, since only the Attempt's end can hand it back.
+	if update.Status != nil && *update.Status == WorkWaiting && update.Wake == nil &&
+		update.Question != nil && strings.TrimSpace(*update.Question) != "" {
+		st, err := s.fsmState(item.ID)
+		if err != nil {
+			return Work{}, err
+		}
+		if st.Attempt != nil {
+			update.Status = nil
+		}
+	}
 	// Status transitions.
 	if update.Status != nil && !terminalUpdate {
 		switch *update.Status {
