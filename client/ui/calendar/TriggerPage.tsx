@@ -2,7 +2,7 @@ import { Scroll, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import type { NavStackState } from "nsh/base";
 import {
-  attentionWords, everyWords, firingState, gapLine, triggerAttention, triggerLine,
+  attentionWords, everyWords, firingState, gapLine, triggerAttention, triggerLine, triggerNeedsPerson,
   type Trigger, type TriggerFiring,
 } from "../../core/triggers/model";
 import { Icon } from "../kit/Icon";
@@ -19,7 +19,7 @@ const TRIGGER_LEAD = tile("eye");
 
 /** Its mark on a row: the seal while it needs you, else none. */
 function NeedsDot(props: { trigger: () => Trigger }) {
-  return <If when={triggerAttention(props.trigger(), clock().now)}><View testID="trigger-needs" class="size-2 rounded-full bg-seal" /></If>;
+  return <If when={triggerNeedsPerson(triggerAttention(props.trigger(), clock().now))}><View testID="trigger-needs" class="size-2 rounded-full bg-seal" /></If>;
 }
 
 /** One Trigger in Calendar's Triggers section: what it watches and what it did last. */

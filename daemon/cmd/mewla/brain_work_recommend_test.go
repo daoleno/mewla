@@ -33,3 +33,32 @@ func TestBrainWorkUpdateCarriesTheRecommendedChoice(t *testing.T) {
 		t.Fatalf("a pick outside the choices = %v", err)
 	}
 }
+
+// `work update -status waiting` with nothing asked parks the Work on a
+// user_input wake: Brain is told the person is not asked, and how to ask
+// (owner 2026-11-19). With a question, or a terminal status, nothing is said.
+func TestBrainWorkWaitingWithNothingAskedTellsBrain(t *testing.T) {
+	store, err := brain.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.CreateWork(brain.Work{Title: "video", Objective: "ship the H.264 path"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &controlApp{watcher: newFakeControlWatcher(), brainStore: store, brainService: brain.NewService(store, newFakeControlWatcher(), nil)}
+	response := app.HandleControlRequest(control.Request{
+		Type: "brain_work_update", WorkID: item.ID, WorkFields: []string{"status"}, BrainWork: &brain.Work{Status: brain.WorkWaiting},
+	})
+	notice, _ := response.Context.(map[string]string)
+	if !response.OK || !strings.Contains(notice["notice"], "-question") || !strings.Contains(notice["notice"], item.ID) {
+		t.Fatalf("a wait with nothing asked tells Brain how to ask: %+v", response)
+	}
+	response = app.HandleControlRequest(control.Request{
+		Type: "brain_work_update", WorkID: item.ID, WorkFields: []string{"status", "question", "choices", "recommended"},
+		BrainWork: &brain.Work{Status: brain.WorkWaiting, Question: "Ship it now?", Choices: []string{"Ship", "Wait"}, Recommended: "Ship"},
+	})
+	if !response.OK || response.Context != nil {
+		t.Fatalf("a question needs no notice: %+v", response)
+	}
+}

@@ -1119,6 +1119,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 			},
 		},
 		{
+			name: "Brain undecided results",
+			run: func(ctx context.Context) error {
+				if err := w.WaitForSnapshot(ctx); err != nil {
+					return err
+				}
+				brainService.RunUndecidedNudge(ctx)
+				return nil
+			},
+		},
+		{
 			name: "Brain host self-heal",
 			run: func(ctx context.Context) error {
 				if err := w.WaitForSnapshot(ctx); err != nil {
