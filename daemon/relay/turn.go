@@ -169,6 +169,9 @@ type TURNConfig struct {
 type TURNServer struct {
 	server *turn.Server
 	limits TURNLimits
+	// The addresses it listens on, as bound (a port 0 in the config is the
+	// one the system picked).
+	udpAddr, tcpAddr, tlsAddr string
 
 	mu      sync.Mutex
 	total   int
@@ -240,6 +243,7 @@ func StartTURN(config TURNConfig) (*TURNServer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("TURN UDP: %w", err)
 		}
+		t.udpAddr = conn.LocalAddr().String()
 		packetConns = append(packetConns, turn.PacketConnConfig{PacketConn: conn, RelayAddressGenerator: relayAddress(), PermissionHandler: permit})
 	}
 	if config.TCPAddr != "" {
@@ -248,6 +252,7 @@ func StartTURN(config TURNConfig) (*TURNServer, error) {
 			closeAll()
 			return nil, fmt.Errorf("TURN TCP: %w", err)
 		}
+		t.tcpAddr = l.Addr().String()
 		listeners = append(listeners, turn.ListenerConfig{Listener: &guardedListener{Listener: l, limit: conns, idle: limits.Idle}, RelayAddressGenerator: relayAddress(), PermissionHandler: permit})
 	}
 	if config.TLSAddr != "" {
@@ -260,6 +265,7 @@ func StartTURN(config TURNConfig) (*TURNServer, error) {
 			closeAll()
 			return nil, fmt.Errorf("TURN TLS: %w", err)
 		}
+		t.tlsAddr = l.Addr().String()
 		if config.ProxyProtocol {
 			l = &proxyproto.Listener{Listener: l}
 		}
@@ -302,6 +308,12 @@ func StartTURN(config TURNConfig) (*TURNServer, error) {
 }
 
 // Allocations is how many allocations there are, in all and of a route.
+// Addrs returns the UDP, TCP and TLS addresses it listens on ("" for one it
+// does not serve).
+func (t *TURNServer) Addrs() (udp, tcp, tls string) {
+	return t.udpAddr, t.tcpAddr, t.tlsAddr
+}
+
 func (t *TURNServer) Allocations(route string) (total, ofRoute int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
