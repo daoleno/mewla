@@ -18,13 +18,14 @@ import { brainSurface, isBrainThreadCacheKey, newBrainChat } from "../../core/br
 import { createChatTimeline } from "../../core/conversation/timeline";
 import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
 import type { BrainCurrentWork } from "../../core/timeline/types";
+import { workForCards } from "../../core/timeline/model";
 import { markWorkRead } from "../../core/work/brainWork";
 import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, workers } from "../session";
 import { ResultActions, type WorkCardHandlers } from "../chat/TimelineRows";
-import type { ResultAction } from "../../core/work/types";
+import type { BrainOpenWork, ResultAction } from "../../core/work/types";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workWorkerLines } from "../../core/work/workers";
@@ -127,7 +128,7 @@ const prepared = preparedRows(() => brainThread().conversation?.events ?? [], ()
       onPendingAction: routedBrainThread() ? undefined : (id, action) => untracked(brainChat)?.actOnFailed(id, action),
       onWorkEvent: routedBrainThread() ? undefined : openWorkEvent,
       openSessionIds: new Set(workers().map((w) => w.id)),
-      currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
+      currentWork: workForCards(brain()?.current_work as readonly BrainCurrentWork[] | undefined, brain()?.open_work as readonly BrainOpenWork[] | undefined),
     }),
   };
 }, { cacheKey: "", rows: [] });

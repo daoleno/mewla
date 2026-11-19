@@ -392,6 +392,29 @@ describe("a parked Work in Brain's thread (owner 2026-11-19: \"看不懂这个�
   }, 20_000);
 });
 
+describe("a Work with several Workers in Brain's thread (owner's phone 11-19 22:45)", () => {
+  test("once judged, its card is the Work's line and how many Workers, never each Session's code name and last words", async () => {
+    const [a, b] = ["mh-aaaa", "mh-bbbb"];
+    const current_work = [{ work_id: "w-aws", revision: 1, title: "FreerideCiToAws", status: "waiting", progress_mode: "waiting", unread_result: false,
+      shown: { title: "CI 与 Looper 迁至 AWS", line: "无需你操作：CI 与 Looper 已在 AWS，等待 Mac Studio 清理。", status: "waiting" },
+      worker_sessions: [
+        { session_id: a, name: "FreerideCiToAws", provider: "claude", state: "ended", summary: "Delegated Session ended; outcome is unknown", live: false, joined_at: "2026-11-19T02:00:00Z", updated_at: "2026-11-19T04:22:00Z" },
+        { session_id: b, name: "FreerideCiToAws2", provider: "claude", state: "ended", summary: "Session store LIVE at infra level, variable NOT set", live: false, joined_at: "2026-11-19T05:00:00Z", updated_at: "2026-11-19T14:39:00Z" },
+      ] }];
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({
+      brain: { ...brain, current_work },
+      conversations: { "brain-host": [{ id: "wa", seq: 1, timestamp: new Date().toISOString(), kind: "status", source: "work_result", status: "session.uncertain",
+        title: "FreerideCiToAws", body: "Delegated Session ended; outcome is unknown", work_id: "w-aws", unread: false,
+        work_review_state: "resolved", work_session_state: "open", work_result_current: true }] },
+    }) });
+    await app.waitFor("id:work-card-workers", { timeout: 10_000 });
+    expect(app.texts()).toContain("CI 与 Looper 迁至 AWS");
+    expect(app.texts()).toContain("无需你操作：CI 与 Looper 已在 AWS，等待 Mac Studio 清理。");
+    expect(app.texts()).toContain("2 Workers");
+    for (const raw of ["FreerideCiToAws", "outcome is unknown", "variable NOT set"]) expect(app.texts().some((t) => t.includes(raw))).toBe(false);
+  }, 20_000);
+});
+
 describe("a real question, as the owner meets it (owner 2026-11-13, shot 11)", () => {
   const QUESTION = "The plaza fix is live on test. Prod has zero channels, so the plaza stays empty there until a channel is added: do I add the Gemini channel to prod now, with the same group and mappings as test, or wait for your review of the test setup first?";
 

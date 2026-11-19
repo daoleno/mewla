@@ -532,7 +532,15 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <Text testID="work-card-state" class="text-sub text-muted-foreground">{state().words}</Text>
             <KitIcon name="chevron-right" size={16} tone="faint" />
           </Button>
-          <If when={lines().length} else={<If when={model().summary}><View class="border-t border-border px-4 py-3"><Text class="text-sub text-muted-foreground line-clamp-2">{model().summary}</Text></View></If>}><>
+          {/* Several Workers: the judge's line for the Work, then how many Workers, which Work detail lists (owner's
+              phone 11-19 22:45: each Session's code name and last words read as nothing). Before the judge, the Workers. */}
+          <If when={lines().length && !model().shownLine} else={<>
+              <If when={model().summary}><View class="border-t border-border px-4 py-3"><Text testID="work-card-line" class="text-sub text-muted-foreground line-clamp-2">{model().summary}</Text></View></If>
+              <If when={lines().length}><Button testID="work-card-workers" onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[44px] flex-row items-center border-t border-border px-4 active:opacity-70">
+                  <Text class="min-w-0 flex-1 text-sub text-muted-foreground">{`${lines().length} Workers`}</Text>
+                  <KitIcon name="chevron-right" size={16} tone="faint" />
+                </Button></If>
+            </>}><>
               {lines().slice(0, WORK_CARD_WORKERS).map((line) => <WorkerLine line={line} onPress={() => props.handlers?.onSession(line.sessionId)} />)}
               <If when={lines().length > WORK_CARD_WORKERS}><Button testID="work-card-more" onPress={() => props.handlers?.onTitle(model().workId)} class="min-h-[44px] flex-row items-center border-t border-border px-4 active:opacity-70">
                   <Text class="min-w-0 flex-1 text-sub text-muted-foreground">{`${lines().length - WORK_CARD_WORKERS} more`}</Text>
