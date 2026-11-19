@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -33,6 +34,27 @@ func freeTURNPort(t *testing.T, network string) string {
 	}
 	defer l.Close()
 	return l.Addr().String()
+}
+
+// hostSocketInRange listens on the first port of the test relays' range
+// (61000-61200) that no allocation holds: the relay host's own socket where
+// its allocations could be.
+func hostSocketInRange(t *testing.T, allocations ...net.PacketConn) net.PacketConn {
+	t.Helper()
+	held := map[int]bool{}
+	for _, allocation := range allocations {
+		held[allocation.LocalAddr().(*net.UDPAddr).Port] = true
+	}
+	for port := 61000; port <= 61200; port++ {
+		if held[port] {
+			continue
+		}
+		if c, err := net.ListenPacket("udp4", fmt.Sprintf("127.0.0.1:%d", port)); err == nil {
+			return c
+		}
+	}
+	t.Fatal("no free port in 61000-61200")
+	return nil
 }
 
 func credential(t *testing.T, route string) (string, string) {
@@ -83,7 +105,7 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 	udpAddr, tcpAddr := freeTURNPort(t, "udp"), freeTURNPort(t, "tcp")
 	srv, err := StartTURN(TURNConfig{
 		PublicIP: net.IPv4(127, 0, 0, 1), UDPAddr: udpAddr, TCPAddr: tcpAddr, Secret: testTURNSecret,
-		MinPort: 61000, MaxPort: 61200, // above Linux's ephemeral ports, where the host's own socket is
+		MinPort: 61000, MaxPort: 61200,
 		Limits: TURNLimits{AllocationsPerCredential: 2, AllocationsPerRoute: 3, ConnsPerIP: 4, Idle: time.Second},
 	})
 	if err != nil {
@@ -129,10 +151,9 @@ func TestTURNOneCredentialReachesLittle(t *testing.T) {
 		t.Fatalf("allocation to allocation: %q %v", buf[:n], err)
 	}
 
-	hostService, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// A host socket inside the relayed port range that is no allocation (a
+	// Mac's ephemeral ports are 49152-65535, and so is the default range).
+	hostService := hostSocketInRange(t, relayedA, relayedB)
 	defer hostService.Close()
 	_, _ = relayedB.WriteTo([]byte("to-a-host-port"), hostService.LocalAddr())
 	_ = hostService.SetReadDeadline(time.Now().Add(time.Second))

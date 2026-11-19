@@ -215,10 +215,11 @@ func StartTURN(config TURNConfig) (*TURNServer, error) {
 	}
 	t := &TURNServer{limits: limits, byRoute: map[string]int{}, byCred: map[string]int{}}
 	total := [2]*bucket{newBucket(limits.TotalKbps), newBucket(limits.TotalKbps)}
+	allocated := &allocatedPorts{ports: map[int]int{}}
 	relayAddress := func() turn.RelayAddressGenerator {
 		return &udpOnlyRelay{
 			RelayAddressGeneratorPortRange: &turn.RelayAddressGeneratorPortRange{RelayAddress: public, Address: "0.0.0.0", MinPort: minPort, MaxPort: maxPort},
-			own:                            public, minPort: int(minPort), maxPort: int(maxPort), kbps: limits.Kbps, total: total,
+			own:                            public, allocated: allocated, kbps: limits.Kbps, total: total,
 		}
 	}
 	permit := func(_ net.Addr, peer net.IP) bool { return peer.Equal(public) || publicPeer(peer) }
@@ -428,10 +429,39 @@ func publicPeer(ip net.IP) bool {
 // allocation's port.
 type udpOnlyRelay struct {
 	*turn.RelayAddressGeneratorPortRange
-	own              net.IP
-	minPort, maxPort int
-	kbps             int
-	total            [2]*bucket
+	own       net.IP
+	allocated *allocatedPorts
+	kbps      int
+	total     [2]*bucket
+}
+
+// allocatedPorts holds the ports of the live allocations, shared by every
+// listener's generator. The relayed range is no proof by itself: the host's
+// own sockets can sit in it (Linux's ephemeral ports reach 60999, a Mac's are
+// 49152-65535, as is the default range).
+type allocatedPorts struct {
+	mu    sync.Mutex
+	ports map[int]int
+}
+
+func (a *allocatedPorts) add(port int) {
+	a.mu.Lock()
+	a.ports[port]++
+	a.mu.Unlock()
+}
+
+func (a *allocatedPorts) remove(port int) {
+	a.mu.Lock()
+	if a.ports[port]--; a.ports[port] <= 0 {
+		delete(a.ports, port)
+	}
+	a.mu.Unlock()
+}
+
+func (a *allocatedPorts) holds(port int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.ports[port] > 0
 }
 
 var errNoTCPAllocations = errors.New("TCP allocations are not served")
@@ -441,7 +471,9 @@ func (g *udpOnlyRelay) AllocatePacketConn(config turn.AllocateListenerConfig) (n
 	if err != nil {
 		return nil, nil, err
 	}
-	return &policedConn{PacketConn: conn, relay: g, in: newBucket(g.kbps), out: newBucket(g.kbps)}, addr, nil
+	port := conn.LocalAddr().(*net.UDPAddr).Port
+	g.allocated.add(port)
+	return &policedConn{PacketConn: conn, relay: g, port: port, in: newBucket(g.kbps), out: newBucket(g.kbps)}, addr, nil
 }
 
 func (g *udpOnlyRelay) AllocateListener(turn.AllocateListenerConfig) (net.Listener, net.Addr, error) {
@@ -453,14 +485,14 @@ func (g *udpOnlyRelay) AllocateConn(turn.AllocateConnConfig) (net.Conn, error) {
 }
 
 // reaches reports whether an allocation may exchange packets with addr: the
-// relay's own address only at the allocations' ports.
+// relay's own address only at a live allocation's port.
 func (g *udpOnlyRelay) reaches(addr net.Addr) bool {
 	u, ok := addr.(*net.UDPAddr)
 	if !ok {
 		return false
 	}
 	if u.IP.Equal(g.own) {
-		return u.Port >= g.minPort && u.Port <= g.maxPort
+		return g.allocated.holds(u.Port)
 	}
 	return publicPeer(u.IP)
 }
@@ -470,8 +502,16 @@ func (g *udpOnlyRelay) reaches(addr net.Addr) bool {
 // peer, out: to it) or the shared total.
 type policedConn struct {
 	net.PacketConn
-	relay   *udpOnlyRelay
-	in, out *bucket
+	relay     *udpOnlyRelay
+	port      int
+	in, out   *bucket
+	closeOnce sync.Once
+}
+
+// Close ends the allocation; its port is no longer one the others reach.
+func (c *policedConn) Close() error {
+	c.closeOnce.Do(func() { c.relay.allocated.remove(c.port) })
+	return c.PacketConn.Close()
 }
 
 func (c *policedConn) ReadFrom(p []byte) (int, net.Addr, error) {
