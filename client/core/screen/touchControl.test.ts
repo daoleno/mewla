@@ -217,6 +217,30 @@ describe("one finger acts on the computer", () => {
     expect(notches(d.out)).toBeGreaterThan(0);
   });
 
+  test("finger down, read, then scroll stays a scroll: a hold rested on lapses, visibly, and a move after it scrolls", () => {
+    const c = desk();
+    const d = driver(c);
+    d.down(200, 470);
+    d.wait(TOUCH.HOLD_MS + 20);
+    expect(c.pointer.pressed).toBe(true);
+    d.wait(TOUCH.HOLD_LAPSE_MS + 20);
+    expect(c.pointer.pressed).toBe(false);
+    d.wait(1000);
+    for (let i = 1; i <= 20; i++) {
+      d.wait(16);
+      d.move(200, 470 - i * 5);
+    }
+    d.up(200, 370);
+    expect(d.out.some((a) => a.type === "button" || a.type === "click")).toBe(false);
+    expect(notches(d.out)).toBeGreaterThan(0);
+    // A hold rested on and lifted is nothing at all.
+    const e = driver(desk());
+    e.down(100, 300);
+    e.wait(2000);
+    e.up(100, 300);
+    expect(sent(e.out).filter((a) => a.type !== "move")).toEqual([]);
+  });
+
   test("a touch beside the picture does nothing on the computer", () => {
     const c = desk();
     const d = driver(c);
@@ -422,6 +446,18 @@ describe("the pointer's handle (whole desktops)", () => {
     expect(c.pointer.pressed).toBe(true);
     d.up(h.x, h.y);
     expect(sent(d.out)).toEqual([{ type: "click", ...tip2, button: "right" }]);
+  });
+
+  test("a handle held and then rested on lapses: a move after it moves the pointer, never presses", () => {
+    const c = desk();
+    const d = driver(c);
+    d.tap(100, 300);
+    d.wait(600);
+    const h = knob(c);
+    d.take();
+    d.stroke([h.x, h.y], [h.x + 60, h.y], 300, { rest: TOUCH.HANDLE_HOLD_MS + TOUCH.HOLD_LAPSE_MS + 100 });
+    expect(d.out.some((a) => a.type === "button" || a.type === "click")).toBe(false);
+    expect(c.pointer.aimed).toBe(true);
   });
 
   test("T2: moving right after a tap scrolls or moves the pointer: never a drag", () => {

@@ -9,7 +9,7 @@ export type ScreenSignal =
       ice_servers?: { urls: string[]; username?: string; credential?: string }[];
       /** On the offer: the computer takes scrolls by picture pixels (client message 250), not only wheel notches. */
       fine_scroll?: boolean;
-      /** On the offer: the video carries the computer's own cursor, so the viewer draws no arrow of its own (missing: an older computer, which may). */
+      /** On the offer: the video carries the computer's own cursor, so the viewer draws no arrow of its own (missing: an older computer; a Mac's does). */
       cursor?: boolean;
       /** On the offer: the computer's signature over its DTLS fingerprints (screenIdentity). */
       assertion?: { timestamp?: unknown; nonce_hex?: unknown; signature_hex?: unknown };
@@ -27,6 +27,8 @@ export type ScreenHostMessage =
   | { type: "key"; key: ScreenKey; mods: ScreenModifier[] }
   /** The picture is a window laid out for this view (a reflowed agent browser): used like a phone's page, no pointer drawn. */
   | { type: "layout"; reflowed: boolean }
+  /** The computer is a Mac: when its offer does not say (an older one), its video carries the cursor. */
+  | { type: "computer"; mac: boolean }
   /** Fit the picture to the view (the view's own zoom; the computer doesn't change). */
   | { type: "fit" }
   /** Web: the view goes full size, and the browser's own shortcuts go to the remote. */

@@ -65,6 +65,8 @@ export const TOUCH = {
   HOLD_MS: 450,
   /** Holding the handle takes longer: a careful start (the finger resting before it moves the pointer) must not press. */
   HANDLE_HOLD_MS: 700,
+  /** A hold the finger then rests on this much longer lapses (the pointer lets go): the person was reading, and a move after it scrolls. */
+  HOLD_LAPSE_MS: 600,
   /** A second tap this soon and this near lands on the first one's point, so the computer counts a double click. */
   DOUBLE_MS: 400,
   DOUBLE_SNAP: 12,
@@ -90,7 +92,8 @@ export const TOUCH = {
   KNOB_R: 16,
   KNOB_DX: 22,
   KNOB_DY: 38,
-  EDGE: 12,
+  /** Room kept from the view's sides: the phone's back gesture starts there, and the handle is dragged. */
+  EDGE: 28,
   /** Room kept above the bottom edge: the phone's system gesture area. */
   EDGE_BOTTOM: 28,
   /** Handle gain: picture travel per finger travel, slow to fast (velocity in local px/ms). */
@@ -106,10 +109,10 @@ type Point = { x: number; y: number };
 type Sample = Point & { t: number };
 
 type One =
-  | { kind: "pending"; start: Sample; last: Sample; remote: Point; held: boolean; beside: boolean; caught: boolean }
+  | { kind: "pending"; start: Sample; last: Sample; remote: Point; held: boolean; lapsed: boolean; beside: boolean; caught: boolean }
   | { kind: "scroll"; last: Sample; remote: Point; samples: Sample[] }
   | { kind: "drag"; last: Sample }
-  | { kind: "handle"; start: Sample; last: Sample; origin: Point; aimed: boolean; held: boolean; moved: boolean; speed: number }
+  | { kind: "handle"; start: Sample; last: Sample; origin: Point; aimed: boolean; held: boolean; lapsed: boolean; moved: boolean; speed: number }
   | { kind: "handle-drag"; last: Sample; speed: number };
 
 type Gesture =
@@ -141,6 +144,13 @@ export class TouchControl {
   private lastTap: { at: number; x: number; y: number; remote: Point } | null = null;
   private carry = { x: 0, y: 0, at: 0, fine: { x: 0, y: 0 } };
   private fling: { vx: number; vy: number; at: number; start: number; notches: number; remote: Point } | null = null;
+  /** The latest time seen: event stamps from different sources never run backwards here. */
+  private now = 0;
+
+  private clock(t: number): number {
+    this.now = Math.max(this.now, t);
+    return this.now;
+  }
 
   constructor(options: TouchOptions = {}) {
     this.fineScroll = !!options.fineScroll;
@@ -289,8 +299,16 @@ export class TouchControl {
     if (this.holdAt && t >= this.holdAt) {
       this.holdAt = 0;
       const g = this.gesture;
-      if (g?.kind === "one" && ((g.g.kind === "pending" && !g.g.caught) || g.g.kind === "handle") && !g.g.held) {
+      if (g?.kind === "one" && (g.g.kind === "pending" || g.g.kind === "handle") && g.g.held) {
+        // Held still past the hold too: the person is reading, not pressing. The pointer lets go where all can see.
+        g.g.held = false;
+        g.g.lapsed = true;
+        this.unpress(out);
+        return out;
+      }
+      if (g?.kind === "one" && ((g.g.kind === "pending" && !g.g.caught) || g.g.kind === "handle") && !g.g.held && !g.g.lapsed) {
         g.g.held = true;
+        this.holdAt = t + TOUCH.HOLD_LAPSE_MS;
         out.push({ type: "haptic" });
         if (g.g.kind === "pending" && !g.g.beside) {
           // Held still: the pointer goes there, pressed (a hover on the way to the right click or drag).
@@ -306,7 +324,8 @@ export class TouchControl {
     return out;
   }
 
-  down(id: number, x: number, y: number, t: number): TouchAction[] {
+  down(id: number, x: number, y: number, at: number): TouchAction[] {
+    const t = this.clock(at);
     const out: TouchAction[] = [];
     if (!this.fbW) return out;
     const caught = this.fling !== null;
@@ -316,10 +335,10 @@ export class TouchControl {
     if (count === 1) {
       const p = { x, y, t };
       if (this.onHandle(p)) {
-        this.gesture = { kind: "one", id, at: t, g: { kind: "handle", start: p, last: p, origin: { x: this.pointer.x, y: this.pointer.y }, aimed: this.pointer.aimed, held: false, moved: false, speed: 0 } };
+        this.gesture = { kind: "one", id, at: t, g: { kind: "handle", start: p, last: p, origin: { x: this.pointer.x, y: this.pointer.y }, aimed: this.pointer.aimed, held: false, lapsed: false, moved: false, speed: 0 } };
       } else {
         const remote = this.toRemote(p);
-        this.gesture = { kind: "one", id, at: t, g: { kind: "pending", start: p, last: p, remote, held: false, beside: this.beside(remote), caught } };
+        this.gesture = { kind: "one", id, at: t, g: { kind: "pending", start: p, last: p, remote, held: false, lapsed: false, beside: this.beside(remote), caught } };
       }
       this.holdAt = t + (this.gesture.g.kind === "handle" ? TOUCH.HANDLE_HOLD_MS : TOUCH.HOLD_MS);
       return out;
@@ -337,7 +356,8 @@ export class TouchControl {
     return out;
   }
 
-  move(id: number, x: number, y: number, t: number): TouchAction[] {
+  move(id: number, x: number, y: number, at: number): TouchAction[] {
+    const t = this.clock(at);
     const out: TouchAction[] = [];
     if (!this.touches.has(id)) return out;
     this.touches.set(id, { x, y });
@@ -395,6 +415,7 @@ export class TouchControl {
         }
         if (g.held && g.moved) {
           // Held, then moved: drag from the tip where the hold began.
+          this.holdAt = 0;
           out.push({ type: "button", ...this.clampRemote(g.origin), down: true });
           gesture.g = { kind: "handle-drag", last: p, speed: g.speed };
           this.pointer.pressed = true;
@@ -420,7 +441,8 @@ export class TouchControl {
     return this.lift(id, last.x, last.y, t, true);
   }
 
-  private lift(id: number, x: number, y: number, t: number, cancelled: boolean): TouchAction[] {
+  private lift(id: number, x: number, y: number, at: number, cancelled: boolean): TouchAction[] {
+    const t = this.clock(at);
     const out: TouchAction[] = [];
     if (!this.touches.has(id)) return out;
     const count = this.touches.size;
@@ -456,7 +478,7 @@ export class TouchControl {
     const g = gesture.g;
     switch (g.kind) {
       case "pending": {
-        if (cancelled || g.beside || g.caught) {
+        if (cancelled || g.beside || g.caught || g.lapsed) {
           if (g.held) this.unpress(out);
           return;
         }
@@ -488,6 +510,7 @@ export class TouchControl {
           this.place(g.origin, g.aimed, out);
           return;
         }
+        if (g.lapsed && !g.moved) return;
         if (g.moved) {
           this.pointer.aimed = true;
           out.push({ type: "pointer" });
