@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -69,7 +70,7 @@ func updateGCPSDK(ctx context.Context, dir string, pkg gcpArchive, client *http.
 		source := filepath.Dir(filepath.Dir(binary))
 		out, err := run(ctx, "cp", []string{"-R", source, sdk}, env)
 		if err != nil || out.ExitCode != 0 {
-			return errors.New("Could not stage the gcloud update")
+			return cloudStepFailure("Could not stage the gcloud update", out, err)
 		}
 	} else {
 		// Bootstrap installer also receives an isolated configuration directory.
@@ -84,7 +85,7 @@ func updateGCPSDK(ctx context.Context, dir string, pkg gcpArchive, client *http.
 	// Google verifies component archives against its HTTPS manifest checksums.
 	out, err := run(ctx, binary, []string{"components", "update", "--quiet"}, env)
 	if err != nil || out.ExitCode != 0 {
-		return errors.New("Could not update the staged gcloud SDK")
+		return cloudStepFailure("Could not update the staged gcloud SDK", out, err)
 	}
 	probe, cancel = context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -95,7 +96,7 @@ func updateGCPSDK(ctx context.Context, dir string, pkg gcpArchive, client *http.
 	out, err = run(probe, binary, []string{"info", "--format=json"}, env)
 	var info map[string]json.RawMessage
 	if err != nil || out.ExitCode != 0 || json.Unmarshal([]byte(out.Stdout), &info) != nil || len(info) == 0 {
-		return errors.New("Updated gcloud failed its smoke test")
+		return cloudStepFailure("Updated gcloud failed its smoke test", out, err)
 	}
 	if err = ctx.Err(); err != nil {
 		return err
@@ -106,6 +107,26 @@ func updateGCPSDK(ctx context.Context, dir string, pkg gcpArchive, client *http.
 	published = true
 	pruneCloudGenerations(dir, "gcloud")
 	return nil
+}
+
+// cloudStepFailure names a failed install step with the last line the tool said.
+func cloudStepFailure(step string, out cloudOutput, err error) error {
+	reason := ""
+	if err != nil {
+		reason = installFailure(err)
+	} else {
+		lines := strings.Split(strings.TrimSpace(out.Stderr+"\n"+out.Stdout), "\n")
+		for i := len(lines) - 1; i >= 0 && reason == ""; i-- {
+			reason = strings.TrimSpace(lines[i])
+		}
+		if len(reason) > 200 {
+			reason = reason[:200]
+		}
+		if reason == "" {
+			reason = "exit status " + strconv.Itoa(out.ExitCode)
+		}
+	}
+	return errors.New(step + ": " + reason)
 }
 func cloudInstallEnvironment(env []string, config string) []string {
 	out := []string{}

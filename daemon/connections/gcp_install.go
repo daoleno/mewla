@@ -56,7 +56,7 @@ func (gcloudCLI) install(ctx context.Context, dir string) error {
 		message, _ := gcpInstallSupport(runtime.GOOS + "/" + runtime.GOARCH)
 		return errors.New(message)
 	}
-	return updateGCPSDK(ctx, dir, pkg, &http.Client{Timeout: 90 * time.Second}, runCloudProcess)
+	return updateGCPSDK(ctx, dir, pkg, &http.Client{Timeout: 90 * time.Second}, runCloudInstallProcess)
 }
 
 // Network and process boundaries are injectable for fault tests; the real

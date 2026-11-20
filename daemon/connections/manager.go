@@ -303,6 +303,10 @@ func (m *Manager) projection(r *record) Account {
 		_, a.Tools[i].Updated = r.Updates[a.Tools[i].Name]
 	}
 	a.Updates = updatedNames(r)
+	if r.CLI != nil && r.Account.ProfileStatus == "unavailable" && m.cloud != nil {
+		// The cloud's CLI could not be set up: the card says why.
+		a.Unavailable = m.cloud.installError(r.Account.Integration)
+	}
 	if usesMCP(r) && r.Account.Enabled && r.Account.Status != "disconnected" {
 		if reason, since := m.outages.problem(r); reason != "" {
 			a.Unavailable, a.UnavailableSince = reason, &since
@@ -376,8 +380,57 @@ func (m *Manager) Handle(parent context.Context, q Request) (response Response, 
 	case "get", "describe":
 		_ = m.syncRemoteTools(parent, q.ID, false, 4*time.Second)
 	}
+	// Checking again an account whose CLI could not be installed tries the
+	// install again; the daily budget is for background attempts.
+	if q.Action == "refresh" && m.cloud != nil {
+		m.mu.Lock()
+		cloudID := ""
+		if r := m.records[q.ID]; r != nil && r.CLI != nil {
+			cloudID = r.Account.Integration
+		}
+		m.mu.Unlock()
+		if cloudID != "" && m.cloud.installError(cloudID) != "" {
+			if done := m.cloud.refresh(cloudID, true); done != nil {
+				select {
+				case <-done:
+				case <-parent.Done():
+				}
+			}
+			// The cards of this cloud are checked again now, not in a minute.
+			m.snapshots.mu.Lock()
+			delete(m.snapshots.checked, cloudID)
+			m.snapshots.mu.Unlock()
+			m.mu.Lock()
+			for key := range m.cloud.checked {
+				delete(m.cloud.checked, key)
+			}
+			m.mu.Unlock()
+			m.refreshCloudProfiles()
+		}
+	}
 	// Installation waits outside the account lock and command deadline.
 	if q.Action == "cloud_run" && m.cloud != nil {
+		// A command that will be refused (no account on, a write without
+		// authorization) must not download anything.
+		if len(q.CLIArgs) != 1 || q.CLIArgs[0] != "--version" {
+			m.mu.Lock()
+			known := m.cloud.providers[q.Integration] != nil
+			var refused error
+			if known {
+				_, _, refused = m.cloudRunPlan(q)
+			}
+			if refused != nil && q.Integration == "aws" {
+				// A profile added in a terminal still gets its card, from the
+				// local files alone.
+				m.cloudLocal = true
+				_ = m.syncAWSProfiles(parent, false)
+				m.cloudLocal = false
+			}
+			m.mu.Unlock()
+			if refused != nil {
+				return Response{}, refused
+			}
+		}
 		if err := m.cloud.prepare(parent, q.Integration); err != nil {
 			return Response{}, err
 		}
