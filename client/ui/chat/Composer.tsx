@@ -7,6 +7,7 @@ import { composerKeyIntent } from "../../core/web/shortcuts";
 import { registerComposer } from "../shell/desktop/keys";
 import { belowSections, bottomBarInset } from "../shell/below";
 import { keyboardLift } from "../../core/shell/belowStack";
+import { composerSize } from "../kit/density";
 
 /** The composers that show a chat's draft now, by its cache key: text written from elsewhere goes into them. */
 const writers = new Map<string, Set<(text: string) => void>>();
@@ -190,10 +191,11 @@ export function Composer(props: {
   const empty = () => !value().trim() && !props.attached?.();
   // While a turn runs, an empty composer's button is Stop (SPEC §1.4); with text or chips it sends.
   const stops = () => props.running() && !value().trim() && !props.attached?.();
+  const size = composerSize();
   const placeholder = () => (disabled() && props.disabledReason ? props.disabledReason() : typeof props.placeholder === "function" ? props.placeholder() : props.placeholder);
   return (
     // The dock (soft-final SPEC §11 Composer): on the canvas, 8 above and 12 at the sides, no rule above it.
-    <View testID="composer-dock" class="bg-background px-3 pt-2"
+    <View testID="composer-dock" class={`bg-background ${size.dock}`}
       // Above the keyboard when it is up; else clear of the gesture bar (Android draws edge to edge), which lies under the stack.
       style={{
         marginBottom: props.active && !props.active() ? 0 : keyboardLift(keyboardFrame().height, belowSections()),
@@ -201,12 +203,12 @@ export function Composer(props: {
       }}>
       {props.children as never}
       {/* One surface pill, 52 high and growing to 128: attach inside at the left, Send inside at the right. */}
-      <View testID="composer-field" class={`min-h-[52px] flex-row items-end rounded-[26px] bg-card pl-1 pr-1 ${disabled() ? "opacity-40" : ""}`}>
+      <View testID="composer-field" class={`flex-row items-end bg-card ${size.field} ${disabled() ? "opacity-40" : ""}`}>
         {props.leading as never}
         <Input testID="composer" multiline value={value()} autoFocus={props.autoFocus} ref={(ref) => (input = ref)}
           placeholder={placeholder()}
           disabled={disabled()}
-          class="max-h-[128px] min-h-[52px] min-w-0 flex-1 bg-transparent px-1 py-3.5 text-body text-foreground placeholder:text-faint"
+          class={`min-w-0 flex-1 bg-transparent ${size.input} text-foreground placeholder:text-faint`}
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
           onPaste={props.onFiles ? ({ files }) => void (files.length && !disabled() && props.onFiles?.(files)) : undefined}
@@ -215,7 +217,7 @@ export function Composer(props: {
             props.text.set(value);
           }} />
         <If when={stops()} else={<SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
-            <Icon name="arrow-up" size={20} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
+            <Icon name="arrow-up" size={size.arrow} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
           </SendButton>}><SendButton testID="stop" label={props.stopping() ? "Stopping…" : "Stop"} onPress={props.onStop} disabled={props.stopping() || !props.canStop()} ready={false}>
             <View class="size-3 rounded-[3.5px] bg-foreground" />
           </SendButton></If>
@@ -226,10 +228,11 @@ export function Composer(props: {
 
 /** Send (or Stop): a 36 pt circle in a 48 pt hit, canvas when there is nothing to send, ink when ready. */
 function SendButton(props: { testID: string; label: string; ready: boolean; disabled: boolean; onPress: () => void; children: unknown }) {
+  const size = composerSize();
   return (
     <Button testID={props.testID} accessibilityLabel={props.label} onPress={props.onPress} disabled={props.disabled}
-      class="mb-0.5 size-12 items-center justify-center active:opacity-70">
-      <View class={`size-9 items-center justify-center rounded-full ${props.ready ? "bg-primary" : "bg-background"}`}>{props.children as never}</View>
+      class={`${size.hit} items-center justify-center active:opacity-70`}>
+      <View class={`${size.circle} items-center justify-center rounded-full ${props.ready ? "bg-primary" : "bg-background"}`}>{props.children as never}</View>
     </Button>
   );
 }

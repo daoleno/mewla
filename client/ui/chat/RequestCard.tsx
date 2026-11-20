@@ -22,6 +22,7 @@ import { brainChoice, brainHost, sealedRequests, sealRequest, tray } from "../tr
 import { connection, current, currentTransport, workers } from "../session";
 import { BusyLabel, delayed, RING, Spinner } from "../kit/wait";
 import { haptic } from "../shell/haptics";
+import { threadType } from "../kit/density";
 
 /**
  * A thread's request cards (soft-final SPEC §1.1, §1.2, §11 Request card): the open requests of
@@ -261,13 +262,14 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
   const allow = prompt.options.find((option) => option.primary);
   const deny = prompt.options.find((option) => option.destructive);
   const yesNo = prompt.options.length === 2 && allow && deny && allow !== deny;
+  const type = threadType();
   return (
     <View class="gap-3">
       {/* The question at 17/600, the command in mono, what else the agent said in soft (SPEC §11 Request card). */}
       {/* A hook approval asks nothing but its command: then the command stands alone, not said twice. */}
-      <If when={question()}><Text testID="request-question" class="text-body font-semibold">{question()}</Text></If>
-      <If when={asked().command}><View selectable><Text testID="request-command" class="font-mono text-code">{asked().command}</Text></View></If>
-      <If when={asked().notes}><Text class="text-sub text-muted-foreground line-clamp-3">{asked().notes}</Text></If>
+      <If when={question()}><Text testID="request-question" class={`${type.question} font-semibold`}>{question()}</Text></If>
+      <If when={asked().command}><View selectable><Text testID="request-command" class={`font-mono ${type.mono}`}>{asked().command}</Text></View></If>
+      <If when={asked().notes}><Text class={`${type.line} text-muted-foreground line-clamp-3`}>{asked().notes}</Text></If>
       <If when={yesNo} else={<View class="-mx-4">
           {prompt.options.map((option) => (
             <Button testID={`prompt-option-${option.id}`} disabled={Boolean(sending()) || !props.connected()} onPress={() => void choose(option)}
@@ -433,6 +435,7 @@ export function sealedIcon(verb: string): "check-circle-fill" | "close-circle-fi
 /** An answered request's quiet line: a check, what was done, the answer. Tap shows the question again. */
 function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; onToggle: () => void }) {
   const s = props.sealed;
+  const type = threadType();
   return (
     <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1.5 active:opacity-70">
       {/* The mock's answered line: a 20 pt check, then the caption over the answer (a command in mono). */}
@@ -440,11 +443,11 @@ function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; o
         {/* The check means yes: "Denied" takes an x-circle, and "Not answered", which nobody did, a dash-circle (SPEC §1.1). */}
         <View class="pt-0.5"><Icon name={sealedIcon(s().verb)} size={20} tone="soft" /></View>
         <View class="min-w-0 flex-1">
-          <Text class="text-caption text-muted-foreground">{s().verb}</Text>
-          <Text class={s().mono ? "font-mono text-code text-foreground" : "text-sub font-semibold text-foreground"}>{s().answer}</Text>
+          <Text class={`${type.time} text-muted-foreground`}>{s().verb}</Text>
+          <Text class={s().mono ? `font-mono ${type.mono} text-foreground` : `${type.line} font-semibold text-foreground`}>{s().answer}</Text>
         </View>
       </View>
-      <If when={props.open()}><Text class="pl-[30px] text-sub text-muted-foreground">{`${s().title} · ${s().source}`}</Text></If>
+      <If when={props.open()}><Text class={`pl-[30px] ${type.line} text-muted-foreground`}>{`${s().title} · ${s().source}`}</Text></If>
     </Button>
   );
 }

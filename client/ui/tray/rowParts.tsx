@@ -1,9 +1,15 @@
-import { Text, View, untracked } from "nsh";
+import { context, Text, View, untracked } from "nsh";
 import type { TrayRow, TrayTile } from "../../core/tray/model";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
 import { ProgressHalo } from "../kit/ProgressHalo";
 import type { ProgressMark } from "../../core/work/judgedProgress";
+
+/**
+ * The tray in Mewla for Mac's left pane (RESULT-DESIGN-PAIRS #6): rows 40 tall on the material, no card, title 13/17
+ * and line 11.5/15. TrayBody provides it for its pane on the Mac; everywhere else the phone's rows.
+ */
+export const MacPane = context(false);
 
 /**
  * The parts of a tray row (SPEC §11 Tray row), shared by the tray, its left pane and All Sessions.
@@ -38,10 +44,11 @@ export function RowTile(props: { tile: () => TrayTile; mark?: () => ProgressMark
 /** The title 17/600 (400 when done) and the line 15/20 soft, each one line with an ellipsis. */
 export function RowText(props: { row: () => TrayRow }) {
   const row = props.row;
+  const mac = MacPane();
   return (
     <View class="min-w-0 flex-1">
-      <Text testID="row-title" class={`text-body line-clamp-1 ${row().done ? "" : "font-semibold"}`}>{row().title}</Text>
-      <If when={row().line}><Text testID="row-line" class="text-sub text-muted-foreground line-clamp-1">{row().line}</Text></If>
+      <Text testID="row-title" class={`${mac ? "text-[13px] leading-[17px]" : "text-body"} line-clamp-1 ${row().done ? "" : "font-semibold"}`}>{row().title}</Text>
+      <If when={row().line}><Text testID="row-line" class={`${mac ? "text-[11.5px] leading-[15px]" : "text-sub"} text-muted-foreground line-clamp-1`}>{row().line}</Text></If>
     </View>
   );
 }
@@ -56,10 +63,11 @@ function Dot(props: { tone: "ink" | "seal"; testID: string }) {
  */
 export function RowEnd(props: { row: () => TrayRow }) {
   const row = props.row;
+  const mac = MacPane();
   return (
     <View testID="row-end" class="flex-row items-center gap-2">
       <If when={row().needs} else={<If when={row().live} else={<If when={row().unread}><Dot tone="ink" testID="tray-unread" /></If>}><Dot tone="ink" testID="row-live" /></If>}><Dot tone="seal" testID="row-needs" /></If>
-      <If when={row().end}><Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{row().end}</Text></If>
+      <If when={row().end}><Text class={`${mac ? "text-[11.5px]" : "text-sub"} text-muted-foreground`} style={{ fontVariant: ["tabular-nums"] }}>{row().end}</Text></If>
       <If when={row().done}><Icon name="check" size={18} tone="faint" /></If>
     </View>
   );

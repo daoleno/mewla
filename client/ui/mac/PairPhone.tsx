@@ -95,19 +95,19 @@ function PairPhone() {
         <If when={code()} else={<View class="items-center justify-center" style={{ height: CARD }}><Text class="text-sub text-muted-foreground">{problem() || (pairing() ? "Phones can't reach this Mac yet." : "…")}</Text></View>}>
           <Each of={code() ? [`${pairing()!.expires_at}:${way()}`] : []} key={(key) => key}>{() => <QrCode qr={untracked(code)!} />}</Each>
         </If>
-        <Text testID="pair-phone-left" class="text-sub text-muted-foreground">{pairing() ? `Scan with the Mewla app · ${left(pairing()!.expires_at, now())}` : " "}</Text>
+        <Text testID="pair-phone-left" class="text-[13px] text-muted-foreground">{pairing() ? `Scan with the Mewla app · ${left(pairing()!.expires_at, now())}` : " "}</Text>
       </View>
       <If when={ways().length > 1}>
         <Segmented testID="pair-phone-way" options={ways()} value={way()} onChange={(next) => way.set(next)} accessibilityLabel="How the phone reaches this Mac" />
       </If>
       <View class="flex-row gap-2">
-        <Button testID="pair-phone-copy" onPress={copy} disabled={!link()} class="flex-1 flex-row items-center justify-center gap-2 rounded-lg border border-border py-2 hover:bg-accent">
-          <Icon name="copy" size={15} />
-          <Text class="text-sub font-semibold">{copied() ? "Copied" : "Copy link"}</Text>
+        <Button testID="pair-phone-copy" onPress={copy} disabled={!link()} class="h-[30px] flex-1 flex-row items-center justify-center gap-1.5 rounded-[9px] bg-accent hover:opacity-80 active:opacity-70 disabled:opacity-40">
+          <Icon name="copy" size={14} />
+          <Text class="text-[13px] font-semibold text-foreground">{copied() ? "Copied" : "Copy link"}</Text>
         </Button>
-        <Button testID="pair-phone-send" onPress={send} disabled={!link()} class="flex-1 flex-row items-center justify-center gap-2 rounded-lg border border-border py-2 hover:bg-accent">
-          <Icon name="share" size={15} />
-          <Text class="text-sub font-semibold">Send to phone</Text>
+        <Button testID="pair-phone-send" onPress={send} disabled={!link()} class="h-[30px] flex-1 flex-row items-center justify-center gap-1.5 rounded-[9px] bg-accent hover:opacity-80 active:opacity-70 disabled:opacity-40">
+          <Icon name="share" size={14} />
+          <Text class="text-[13px] font-semibold text-foreground">Send to phone</Text>
         </Button>
       </View>
     </View>

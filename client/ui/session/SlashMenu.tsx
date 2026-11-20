@@ -7,6 +7,7 @@ import type { AgentKind } from "../../core/sessions/workerPresentation";
 import { ICON_ASSETS } from "../icons/assets";
 import { Icon, type IconName } from "../icons/Icon";
 import { showAlert } from "../shell/alert";
+import { composerSize } from "../kit/density";
 
 export {
   insertSkillMention,
@@ -86,10 +87,11 @@ export function SlashMenu(props: {
 
 /** The composer's "+" button: toggles the menu; off while disconnected. */
 export function ComposerPlusButton(props: { pinned: () => boolean; connected: () => boolean; onPress: () => void }) {
+  const plus = composerSize().plus;
   return (
     <Button testID="composer-plus" accessibilityLabel={props.pinned() ? "Close actions" : "Open actions"} disabled={!props.connected()} onPress={props.onPress}
-      class="h-[52px] w-11 items-center justify-center active:opacity-60">
-      <Icon name={props.pinned() ? "close" : "add"} size={22} color="muted-foreground" />
+      class={`${plus.box} items-center justify-center active:opacity-60`}>
+      <Icon name={props.pinned() ? "close" : "add"} size={plus.icon} color="muted-foreground" />
     </Button>
   );
 }

@@ -12,6 +12,7 @@ import { animateSwitch, Capsule, CapsulePage } from "./Capsule";
 import { rail, stackWidth, wide } from "./layout";
 import { bottomBarInset } from "./below";
 import { joinRail, type RailAction } from "./railPages";
+import { density, headerSize } from "../kit/density";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
@@ -86,7 +87,8 @@ function Column(props: { width: () => number | null; children: JSX.Element }) {
  */
 export function NavPage(props: AppNavPageProps) {
   joinRail(() => props.rail);
-  const width = () => (props.frame === false ? null : pageColumnWidth(props.column ?? "page"));
+  const mac = density() !== "phone";
+  const width = () => (props.frame === false ? null : pageColumnWidth(props.column ?? "page", mac));
   const stack = PageStack();
   /** Back's connection mark on a pushed page (SPEC §1.3); null when connected or on the stack's first page. */
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
@@ -166,7 +168,8 @@ export function NavPage(props: AppNavPageProps) {
   }
   // Read once each, into the one header: forwarded too, they would be made twice.
   const [own, rest] = split(props, ["rail", "header", "capsuleUnder", "capsuleControls", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
-  const headerWidth = () => pageColumnWidth(own.column ?? "page");
+  const macColumn = density() !== "phone";
+  const headerWidth = () => pageColumnWidth(own.column ?? "page", macColumn);
   return (
     <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
       header={own.header ?? <PageHeader title={props.title} titleView={own.headerTitle} left={own.headerLeft} right={own.headerRight} width={headerWidth} canGoBack={stack.canGoBack} back={stack.back} mark={mark} />}>
@@ -185,16 +188,17 @@ function PageHeader(props: {
   back: () => void;
   mark: () => ReturnType<typeof backMark>;
 }) {
+  const size = headerSize();
   return (
-    <View testID="page-header" class="h-[52px] justify-center border-b border-border bg-background px-4">
+    <View testID="page-header" class={`justify-center border-b border-border bg-background ${size.bar}`}>
       <View class="w-full flex-row items-center gap-2 self-center" style={{ maxWidth: wide() ? props.width() ?? undefined : undefined }}>
-        <If when={props.canGoBack()}><Button testID="page-back" accessibilityLabel={props.mark()?.label ?? "Back"} onPress={props.back} class="size-10 items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-            <Icon name="chevron-left" size={20} tone="ink" />
+        <If when={props.canGoBack()}><Button testID="page-back" accessibilityLabel={props.mark()?.label ?? "Back"} onPress={props.back} class={`${size.back} items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
+            <Icon name="chevron-left" size={size.backIcon} tone="ink" />
             <If when={props.mark()}><MarkDot tone={props.mark()!.tone} /></If>
           </Button></If>
         {props.left ?? null}
         <View class="min-w-0 flex-1">
-          {props.titleView ?? <Text role="header" class="text-xl font-semibold line-clamp-1">{props.title ?? ""}</Text>}
+          {props.titleView ?? <Text role="header" class={`${size.title} line-clamp-1`}>{props.title ?? ""}</Text>}
         </View>
         <If when={"right" in props}><View class="flex-row items-center gap-3">{props.right}</View></If>
       </View>

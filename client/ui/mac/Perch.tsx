@@ -4,7 +4,9 @@ import { createNavStack, NavStack } from "nsh/base";
 import { currentWindow, displays, Window } from "nsh/desktop";
 import { PERCH as FRAME, perchOrigin } from "../../core/mac/menuBar";
 import { HomeCat } from "../home/Cat";
+import { DensityContext } from "../kit/density";
 import { Icon } from "../kit/Icon";
+import { MaterialTint } from "./materials";
 import { StateControl } from "../tray/StateControl";
 import { Home } from "../home/Home";
 import { brainChat, current } from "../session";
@@ -46,6 +48,8 @@ function PerchHeader() {
   return (
     <View testID="perch-header" class="flex-row items-center border-b-[0.5px] border-border" style={{ height: FRAME.header, paddingLeft: 60, paddingRight: 10, gap: 8 }}
       macos={{ backdrop: { material: "popover", blending: "behindWindow" } }} desktop={{ windowDrag: true }}>
+      {/* The material blurs; this tint gives it the popover's colour (bare, it read as a grey bar). */}
+      <MaterialTint material="popover" />
       <View class="min-w-0 shrink flex-row items-baseline">
         <Text role="header" class="text-foreground" style={{ fontSize: 14, fontWeight: "600" }}>Brain</Text>
         <If when={current()?.name}><Text testID="perch-computer" class="shrink text-muted-foreground line-clamp-1" style={{ fontSize: 12, marginLeft: 6 }}>{current()!.name}</Text></If>
@@ -90,7 +94,9 @@ function Perch() {
     <View testID="perch" class="flex-1">
       <View testID="perch-panel" class="flex-1 overflow-hidden bg-background"
         style={{ marginTop: FRAME.overhang, borderRadius: FRAME.radius, borderWidth: 0.5, borderColor: dark() ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.12)" }}>
-        <NavStack state={stack} style={{ flex: 1 }}>{() => <Home perch={{ header: () => <PerchHeader /> }} />}</NavStack>
+        <DensityContext.Provider value="perch">
+          <NavStack state={stack} style={{ flex: 1 }}>{() => <Home perch={{ header: () => <PerchHeader /> }} />}</NavStack>
+        </DensityContext.Provider>
         <View class="absolute inset-0"
           style={{ pointerEvents: "none", borderRadius: FRAME.radius - 0.5, borderWidth: 1, borderColor: dark() ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.7)" }} />
       </View>

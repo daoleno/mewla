@@ -12,10 +12,11 @@ import { StateDotMark } from "../tray/StateControl";
 import { refreshOpened, tray } from "../tray/state";
 import { homeHeaderInset, SelectedWell, TrayBody, type TrayOpeners } from "../tray/Tray";
 import { currentBrain } from "../brain";
-import { isMacApp, macLightsRow } from "../mac/local";
+import { isMacApp, isThisMac, macLightsRow } from "../mac/local";
 import { paletteOpen } from "./desktop/Overlays";
 import { paneRange, paneWidth, setPaneWidth } from "./layout";
 import { goHome, nav, openPage } from "./nav";
+import { MaterialTint } from "../mac/materials";
 
 /** A left-pane row replaces the right pane's page above Brain (SPEC §14.1): Brain › that page › what it pushed. */
 const REPLACE: TrayOpeners = {
@@ -46,8 +47,9 @@ function PaneHeader() {
       <View class="min-w-0 flex-1">
         <Text testID="pane-computer" role="header" class={MAC ? "text-[15px] leading-[19px] font-bold line-clamp-1" : "text-title font-bold tracking-title line-clamp-1"}>{current()?.name || "Mewla"}</Text>
         <If when={line().words}><View class="flex-row items-center gap-1.5">
-            <StateDotMark dot={line().dot} />
-            <Text testID="pane-state" class={`text-sub line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{line().words}</Text>
+            <StateDotMark dot={line().dot} small={MAC} />
+            {/* On the Mac it is this Mac: "This Mac · Online", 12 (RESULT-DESIGN-PAIRS #6). */}
+            <Text testID="pane-state" class={`${MAC ? "text-[12px] leading-[16px]" : "text-sub"} line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{MAC && isThisMac(current()) ? `This Mac · ${line().words}` : line().words}</Text>
           </View></If>
       </View>
     </View>
@@ -159,6 +161,7 @@ export function LeftPane() {
     <View testID="left-pane" accessibilityLabel="Tray" role="navigation" class={isMacApp() ? "border-r-[0.5px] border-border" : "bg-background"}
       macos={isMacApp() ? { backdrop: { material: "sidebar", blending: "behindWindow" } } : undefined}
       style={{ width: paneWidth(), paddingTop: homeHeaderInset() + macLightsRow() }}>
+      <If when={isMacApp()}><MaterialTint material="sidebar" /></If>
       <PaneHeader />
       <SearchOrRun />
       <BrainRow />

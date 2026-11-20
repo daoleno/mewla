@@ -284,6 +284,9 @@ export type PageColumn = "page" | "reading" | "full";
 
 export const PAGE_COLUMN_WIDTH: Record<Exclude<PageColumn, "full">, number> = { page: 680, reading: 760 };
 
+/** Mewla for Mac's window, its type tighter (DESIGN-MAC.md; RESULT-DESIGN-PAIRS #7): 640 for pages and lists, 700 for a thread. */
+export const MAC_COLUMN_WIDTH: Record<Exclude<PageColumn, "full">, number> = { page: 640, reading: 700 };
+
 /**
  * The width a page's own title view gets in a native header (iOS, Android). NSH lays a header item out at
  * its content's width, and the bar takes that size as it is: a long title made the row wider than the
@@ -297,7 +300,7 @@ export function nativeHeaderTitleWidth(options: { stackWidth: number; os: string
   return Math.max(0, Math.floor(options.stackWidth - sides));
 }
 
-/** The header row's width for a column; null for the whole pane. */
-export function pageColumnWidth(column: PageColumn): number | null {
-  return column === "full" ? null : PAGE_COLUMN_WIDTH[column];
+/** The header row's width for a column; null for the whole pane. `mac`: Mewla for Mac's window. */
+export function pageColumnWidth(column: PageColumn, mac = false): number | null {
+  return column === "full" ? null : (mac ? MAC_COLUMN_WIDTH : PAGE_COLUMN_WIDTH)[column];
 }

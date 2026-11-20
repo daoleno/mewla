@@ -52,6 +52,7 @@ import { rail, wide } from "../shell/layout";
 import { createMenuAnchor } from "../kit/Menu";
 import type { UpdateLineItem } from "../../core/timeline/updateLines";
 import { brainComposing, brainNeedsPerson, lines as updateLines } from "../whatsnew/state";
+import { density, headerSize } from "../kit/density";
 
 const startingChat = signal(false);
 const notice = signal("");
@@ -276,10 +277,13 @@ export type PerchHome = { header: () => JSX.Element };
  * the wide gate (a resize, a turn, a fold) makes nothing else again.
  */
 function HomeHeader() {
+  // Mewla for Mac's window: the right pane's 46 bar, "Brain" 13.5 and a 28 ⋯ (RESULT-DESIGN-PAIRS #4).
+  const mac = density() !== "phone";
+  const head = headerSize();
   return (
-    <View testID="home-header" class={`bg-background ${wide() ? "px-4" : "px-2"}`} style={{ paddingTop: homeHeaderInset() }}>
+    <View testID="home-header" class={`bg-background ${mac ? "pl-[18px] pr-3" : wide() ? "px-4" : "px-2"}`} style={{ paddingTop: homeHeaderInset() }}>
       {/* The tray hangs from this row's bottom (HOME_HEADER_HEIGHT). */}
-      <View class="flex-row items-center gap-1" style={{ height: HOME_HEADER_HEIGHT }}>
+      <View class="flex-row items-center gap-1" style={{ height: mac ? 46 : HOME_HEADER_HEIGHT }}>
         <If when={wide()} else={<Button testID="home-cat" accessibilityLabel={`Computer, ${current()?.name ?? ""}`}
             onPress={() => openPage({ name: "computer" })} class="min-h-[48px] min-w-0 shrink flex-row items-center pr-2 active:opacity-70">
             <HomeCat />
@@ -291,13 +295,13 @@ function HomeHeader() {
                 </View></If>
             </View>
           </Button>}><View class="min-w-0 shrink-0 justify-center pr-1">
-            <Text role="header" class="text-title font-bold tracking-title">Brain</Text>
+            <Text role="header" class={mac ? head.title : "text-title font-bold tracking-title"}>Brain</Text>
           </View></If>
         <If when={!wide()}><View class="min-w-0 shrink"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} /></View></If>
         <View class="flex-1" />
         <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
-          class="size-11 items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-          <Icon name="more-horizontal" size={22} tone="ink" />
+          class={`${mac ? "size-7" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
+          <Icon name="more-horizontal" size={mac ? 16 : 22} tone="ink" />
         </Button>
       </View>
     </View>
