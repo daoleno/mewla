@@ -147,7 +147,31 @@ func TestNonClaudeHostLeavesClaudeConfigAlone(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".claude.json")); !os.IsNotExist(err) {
 		t.Fatalf("Codex host touched Claude config: %v", err)
 	}
-	if strings.Contains(fw.created[0].opts.Command, "check_for_update_on_startup") {
-		t.Fatalf("Codex host command rewritten: %q", fw.created[0].opts.Command)
+	// Codex's startup self-update takes the first Enter and exits: the host starts with it off, as delegated Workers do.
+	if got := fw.created[0].opts.Command; strings.Count(got, "-c check_for_update_on_startup=false") != 1 {
+		t.Fatalf("Codex host command = %q, want the update check off once", got)
+	}
+}
+
+func TestCodexHostLaunchesTurnTheUpdateCheckOff(t *testing.T) {
+	service := newTestService(t, nil, &fakeWatcher{}, work.NewExecutorConfig(nil))
+	for _, tc := range []struct{ name, command, resume string }{
+		{"new", "codex", ""},
+		{"resumed", "codex", "019a0000-0000-7000-8000-000000000001"},
+		{"already off", "codex -c check_for_update_on_startup=false", ""},
+		{"executors.toml model", "codex --model gpt-6", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := service.hostLaunchCommand(work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: tc.command, Kind: "codex"}), tc.resume)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Count(got, "check_for_update_on_startup") != 1 || !strings.Contains(got, "-c check_for_update_on_startup=false") {
+				t.Fatalf("command = %q, want the update check off once", got)
+			}
+			if tc.resume != "" && !strings.Contains(got, "resume "+tc.resume) {
+				t.Fatalf("command = %q, want it to resume %s", got, tc.resume)
+			}
+		})
 	}
 }
