@@ -178,7 +178,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       for (const file of ready) {
         session.input(`${shellQuote(file.path)} `);
         // Mewla for Mac's proof run reads it (macos-app.yml, the attach scenario).
-        if (MAC) console.log(`terminal: typed an attachment's path (${session.attached ? "attached" : "not attached"})`);
+        if (MAC) console.log("terminal: typed an attachment's path");
       }
       uploads.clear();
     });

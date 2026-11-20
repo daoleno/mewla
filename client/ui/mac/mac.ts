@@ -5,7 +5,7 @@ import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWor
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready } from "../session";
-import { nav, openBrainTerminal } from "../shell/nav";
+import { nav, openBrainTerminal, openPage } from "../shell/nav";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
@@ -27,7 +27,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; size?: [number, number]; fullScreen?: boolean; minimize?: number } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -67,8 +67,10 @@ export function startMac(): void {
   effect(() => {
     const visible = Window.get("main")?.state()?.visible;
     if (visible === undefined) return;
-    // The Dock icon shows while a window does (§2.4): the window or Settings.
-    void host.call("app.dock", { shown: visible || Window.get(MAC_SETTINGS)?.state()?.visible === true }).catch(() => {});
+    // The Dock icon shows while a window is open (§2.4): the window or Settings, minimized ones too (they live in the
+    // Dock; without its icon a minimized window had no way back: the Mac run saw Accessory after a minimize, 11-21).
+    const open = (state: { visible: boolean; minimized: boolean } | null | undefined) => Boolean(state && (state.visible || state.minimized));
+    void host.call("app.dock", { shown: open(Window.get("main")?.state()) || open(Window.get(MAC_SETTINGS)?.state()) }).catch(() => {});
     if (visible !== wasVisible) console.log(`window: main ${visible ? "shown" : "hidden"}`);
     wasVisible = visible;
   });
@@ -209,6 +211,12 @@ export function startMac(): void {
           if (script.settings) openMacSettings(script.settings);
           if (script.shortcutOffer) openShortcutOffer();
           if (script.perch && !script.quickSend) togglePerch();
+          // A page and the window's size for the captures beside w-cal, w-screen, w-mac, w-small and w-full.
+          if (script.open) openPage(({ calendar: { name: "calendar" }, screen: { name: "screen" }, computer: { name: "computer" } } as const)[script.open]);
+          if (script.size) Window.get("main")?.setBounds({ size: { width: script.size[0], height: script.size[1] } });
+          if (script.fullScreen) Window.get("main")?.setMode("fullScreen");
+          // `minimize` seconds later the window goes to the Dock, which keeps the app's icon (the run reads the policy).
+          if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }
         // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
         if (!terminal && script.terminal && hostId) {
@@ -238,7 +246,8 @@ export function startMac(): void {
 /**
  * Mewla Dev's terminal attach proof (macos-app.yml, `attach`): through the terminal's own Attach, one file that goes up
  * (its path typed at the prompt), one that can't (a name over the 1024 bytes uploads allow: a failed chip), then a large one
- * still uploading when the run captures the window.
+ * still uploading when the run captures the window; then Cancel on the large one and Retry on the failed one, as their
+ * buttons call them.
  */
 async function attachProof(): Promise<void> {
   const until = async (ok: () => boolean, ms = 60_000) => {
@@ -257,10 +266,22 @@ async function attachProof(): Promise<void> {
     uploads.add([new File(["refused"], `${"n".repeat(1100)}.txt`, { type: "text/plain" })]);
     await until(() => uploads.items().some((item) => item.status === "failed"));
     console.log(`dev script: attach failed ${uploads.items().find((item) => item.status === "failed")?.error ?? ""}`);
-    uploads.add([new File([new Uint8Array(384 << 20)], "screen recording.mov", { type: "video/quicktime" })]);
+    // 1 GB: still going when the run has captured the window (384 MB went up in 6 s on the runner).
+    uploads.add([new File([new Uint8Array(1 << 30)], "screen recording.mov", { type: "video/quicktime" })]);
     await until(() => uploads.items().some((item) => item.status === "uploading"));
     console.log("dev script: attach uploading");
-    await until(settled, 120_000);
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    const large = uploads.items().find((item) => item.status === "uploading");
+    if (large) {
+      uploads.remove(large.id);
+      console.log(`dev script: attach cancelled (${uploads.items().some((item) => item.id === large.id) ? "still listed" : "gone"})`);
+    } else console.log("dev script: attach cancel missed (the large one was up already)");
+    const failed = uploads.items().find((item) => item.status === "failed");
+    if (failed) {
+      uploads.retry(failed.id);
+      await until(() => uploads.items().find((item) => item.id === failed.id)?.status === "failed");
+      console.log(`dev script: attach retried, failed again: ${uploads.items().find((item) => item.id === failed.id)?.error ?? ""}`);
+    }
     console.log("dev script: attach done");
   } catch (error) {
     console.log(`dev script: attach stopped ${error instanceof Error ? error.message : String(error)}`);
