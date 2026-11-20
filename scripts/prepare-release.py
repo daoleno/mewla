@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Prepare a Mewla release as one deterministic tracked change: the version, nothing else.
 
-The release notes are written at release time from the commits (scripts/release-body.py).
+The release notes are written at release time from the commits (scripts/release-body.py). The version's
+What's New (release-notes/<version>.json) must already be on main: a version without it is refused.
 """
 
 from __future__ import annotations
@@ -255,13 +256,13 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
 
     commits = commit_range(root, current_tag)
 
-    # What's New (release-notes/<version>.json) is optional: a release without one shows no sheet,
-    # only its line in Brain's chat. The copies the app and the daemon bundle must be current.
-    whats_new = ["--repo", str(root), "--check"]
-    if (root / "release-notes" / f"{next_version}.json").is_file():
-        whats_new += ["--require", next_version]
-    if release_notes.main(whats_new) != 0:
-        raise PrepareError(f"What's New notes for {next_version} are not current; see the error above")
+    # What's New (release-notes/<version>.json) is required: it is written with the feature when it
+    # lands, and this is the backstop, so no version reaches people showing an older release's notes.
+    # The copies the app and the daemon bundle must be current.
+    if not (root / release_notes.SOURCE_DIR / f"{next_version}.json").is_file():
+        raise PrepareError(release_notes.missing(next_version))
+    if release_notes.main(["--repo", str(root), "--check", "--require", next_version]) != 0:
+        raise PrepareError(f"What's New notes for {next_version} are not valid or not current; see the error above")
 
     sources = {
         relative: read_text(root, relative)

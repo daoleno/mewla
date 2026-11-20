@@ -382,6 +382,110 @@ function ScreenReflow() {
   );
 }
 
+/** A picture in a chat: hold it, Save, and it is in the gallery. */
+function PictureSave() {
+  const menu = loop([{ offset: 0, opacity: 0, translateY: 6 }, { offset: 0.24, opacity: 0, translateY: 6 }, { offset: 0.32, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  const chosen = loop([{ offset: 0, opacity: 0 }, { offset: 0.5, opacity: 0 }, { offset: 0.55, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const saved = loop([{ offset: 0, opacity: 0, translateY: 4 }, { offset: 0.6, opacity: 0, translateY: 4 }, { offset: 0.68, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  const Row = (props: { icon: IconName; label: string; chosen?: Record<string, unknown> }) => (
+    <View class="relative flex-row items-center gap-2 rounded-[10px] px-2.5 py-1.5">
+      <If when={props.chosen}><View class="absolute inset-0 rounded-[10px] bg-accent" style={props.chosen} /></If>
+      <Icon name={props.icon} size={13} tone="ink" />
+      <Text class="text-[12px] text-foreground">{props.label}</Text>
+    </View>
+  );
+  return (
+    <View class="w-[250px] flex-row items-start gap-2">
+      <View class="relative">
+        {/* The picture: a sun over two hills. */}
+        <View class="h-[118px] w-[132px] overflow-hidden rounded-[14px] bg-muted">
+          <View class="absolute right-[22px] top-[18px] size-[18px] rounded-full bg-seal" />
+          <View class="absolute left-[-30px] top-[66px] size-[100px] rounded-[12px] bg-track" style={{ transform: [{ rotate: "45deg" }] }} />
+          <View class="absolute left-[50px] top-[80px] size-[110px] rounded-[12px] bg-add" style={{ transform: [{ rotate: "45deg" }] }} />
+        </View>
+        <Press at={0.12} style={{ left: 52, top: 46 }} />
+        <View class="absolute bottom-2 left-0 right-0 items-center" style={saved}>
+          <View class="flex-row items-center gap-1 rounded-full bg-primary px-2.5 py-1">
+            <Icon name="check" size={11} tone="canvas" />
+            <Text class="text-[11px] font-semibold text-primary-foreground">Saved</Text>
+          </View>
+        </View>
+      </View>
+      <Card class="relative mt-5 w-[104px] gap-0.5 border border-border p-1" style={menu}>
+        <Row icon="download" label="Save" chosen={chosen} />
+        <Row icon="share" label="Share" />
+        <Press at={0.46} style={{ left: 30, top: 2 }} />
+      </Card>
+    </View>
+  );
+}
+
+/** A Work's ⋯: Rename, Move to project, Merge with. */
+function WorkMenu() {
+  const menu = loop([{ offset: 0, opacity: 0, translateY: -6 }, { offset: 0.2, opacity: 0, translateY: -6 }, { offset: 0.28, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  const chosen = loop([{ offset: 0, opacity: 0 }, { offset: 0.5, opacity: 0 }, { offset: 0.55, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const oldProject = loop([{ offset: 0, opacity: 1 }, { offset: 0.6, opacity: 1 }, { offset: 0.64, opacity: 0 }, { offset: 0.96, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  const newProject = loop([{ offset: 0, opacity: 0 }, { offset: 0.62, opacity: 0 }, { offset: 0.68, opacity: 1 }, { offset: 0.96, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const Row = (props: { label: string; chosen?: Record<string, unknown> }) => (
+    <View class="relative rounded-[10px] px-2.5 py-1.5">
+      <If when={props.chosen}><View class="absolute inset-0 rounded-[10px] bg-accent" style={props.chosen} /></If>
+      <Text class="text-[12px] text-foreground">{props.label}</Text>
+    </View>
+  );
+  return (
+    <View class="w-[250px] gap-1.5">
+      <Card class="flex-row items-center gap-2 border border-border px-3 py-2.5">
+        <Dot tone="ok" />
+        <View class="flex-1 gap-0.5">
+          <Text class="text-[13px] font-semibold text-foreground">Fix the sign-in page</Text>
+          <View class="relative h-[14px]">
+            <Text class="absolute text-[11px] text-muted-foreground" style={oldProject}>notes</Text>
+            <Text class="absolute text-[11px] font-semibold text-foreground" style={newProject}>website</Text>
+          </View>
+        </View>
+        <View class="relative size-[24px] items-center justify-center rounded-full bg-muted">
+          <Icon name="more-horizontal" size={14} tone="ink" />
+          <Press at={0.1} style={{ left: -1, top: -1 }} />
+        </View>
+      </Card>
+      <Card class="relative w-[150px] self-end gap-0.5 border border-border p-1" style={menu}>
+        <Row label="Rename" />
+        <Row label="Move to project" chosen={chosen} />
+        <Row label="Merge with…" />
+        <Press at={0.46} style={{ left: 60, top: 30 }} />
+      </Card>
+    </View>
+  );
+}
+
+/** Brain is asked to watch a build; its check runs quietly until the build goes red, then Brain acts. */
+function TriggerWatch() {
+  const checks = [0.14, 0.26, 0.38].map((at) => loop(appear(at, 0)));
+  const red = loop(appear(0.5, 0));
+  const reply = loop(appear(0.62));
+  return (
+    <View class="w-[256px] gap-2">
+      <View class="self-end rounded-[14px] bg-accent px-3 py-1.5"><Text class="text-[12px] text-foreground">Tell me if the nightly build fails</Text></View>
+      <Card class="gap-2 border border-border px-3 py-2.5">
+        <View class="flex-row items-center gap-1.5">
+          <Icon name="time" size={13} tone="ink" />
+          <Text class="flex-1 text-[12px] font-semibold text-foreground">Nightly build</Text>
+          <Text class="text-[11px] text-muted-foreground">every 10 min</Text>
+        </View>
+        <View class="flex-row items-center gap-1.5">
+          <View style={checks[0]}><Dot tone="ok" /></View>
+          <View style={checks[1]}><Dot tone="ok" /></View>
+          <View style={checks[2]}><Dot tone="ok" /></View>
+          <View style={red}><Dot tone="seal" /></View>
+          <View class="flex-1" />
+          <Text class="text-[11px] text-foreground" style={red}>Failed</Text>
+        </View>
+      </Card>
+      <View class="self-start" style={reply}><Text class="text-[12px] text-foreground">It failed on a test. Fixing it now.</Text></View>
+    </View>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -393,6 +497,9 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "update-line": UpdateLine,
   "chat-diagram": ChatDiagram,
   "screen-reflow": ScreenReflow,
+  "picture-save": PictureSave,
+  "work-menu": WorkMenu,
+  "trigger-watch": TriggerWatch,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */

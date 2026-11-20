@@ -3,6 +3,12 @@
 One file per release, `<version>.json`: what the app shows once after Mewla changed to that version (owner and
 Brain, 2026-11-16). A gift, not a changelog: the two or three things a person will feel, each with something to try.
 
+Every release has its file (owner, 2026-11-20): otherwise a person on the new version is shown the old version's
+notes. Whoever lands a feature a person will feel adds it to the next version's file in the same commit, and a fix
+the person will notice to its `fixes`. The release preparation is the backstop: `scripts/prepare-release.py` refuses a
+version without its file, and `scripts/verify-release-identity.sh` (CI, and the release at its tag) refuses a tracked
+version without one, so a manual tag cannot ship one either.
+
 ```json
 {
   "version": "0.4.9",
@@ -28,13 +34,15 @@ Brain, 2026-11-16). A gift, not a changelog: the two or three things a person wi
   no ellipsis. English, in the person's words: what they can now do, never how it was built. A fix the person felt
   or asked for can be a highlight ("Fixed: …").
 - **media.scene**: the loop drawn in `client/ui/whatsnew/scenes.tsx` (`chat-card`, `update-restart`,
-  `agent-windows`, `browser-survives`, `network-hop`, `update-line`, `chat-diagram`, `screen-reflow`). A new feature usually gets a new scene there;
+  `agent-windows`, `browser-survives`, `network-hop`, `update-line`, `chat-diagram`, `screen-reflow`, `picture-save`,
+  `work-menu`, `trigger-watch`). A new feature usually gets a new scene there;
   `WhatsNew.test.tsx` fails on a name the app does not draw.
 - **try**: `{"kind": "open", "target": …}` with brain, sessions, new-session, screen, calendar, computer or
   settings; or `{"kind": "prompt", "target": "<text>"}`, written into Brain's composer.
 
 After editing, run `python3 scripts/release-notes.py`: it checks every file and writes the copies the app and the
-daemon ship. `--check` (CI) fails on a stale copy; `--require <version>` (release preparation) on a missing file.
+daemon ship. `--check` (CI) fails on a stale copy; `--require <version>` (release preparation, the release identity
+check) on a missing file.
 
 To see the sheet again on a computer: `mewla dev whats-new`. The next quiet Brain home, on the phone or the web,
 shows it as after an update from before any of these releases.

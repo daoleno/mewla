@@ -1,6 +1,63 @@
 {
   "releases": [
     {
+      "version": "0.4.18",
+      "date": "2026-11-20",
+      "highlights": [],
+      "fixes": [
+        "Phone use pastes far less: a long post goes in as one paste, with fewer notices on the phone.",
+        "When the phone turns off Phone use's hidden screen, the apps on it come back as they were.",
+        "Two Mewla apps on one phone no longer take Phone use from each other on their own."
+      ]
+    },
+    {
+      "version": "0.4.17",
+      "date": "2026-11-19",
+      "highlights": [
+        {
+          "id": "0.4.17-save-pictures",
+          "title": "Save and share pictures",
+          "line": "Hold a picture in a chat, or open it: Save puts it in your photos, Share sends it on.",
+          "media": {
+            "scene": "picture-save"
+          },
+          "try": {
+            "kind": "open",
+            "target": "brain"
+          }
+        },
+        {
+          "id": "0.4.17-triggers",
+          "title": "Brain keeps watch for you",
+          "line": "Ask Brain to watch a build or a page: it checks quietly and acts when it changes.",
+          "media": {
+            "scene": "trigger-watch"
+          },
+          "try": {
+            "kind": "prompt",
+            "target": "Tell me when the nightly build on main goes red"
+          }
+        },
+        {
+          "id": "0.4.17-work-menu",
+          "title": "Rename, move or merge Work",
+          "line": "Open a Work and tap ⋯ to rename it, move it to a project or merge it with another.",
+          "media": {
+            "scene": "work-menu"
+          }
+        }
+      ],
+      "fixes": [
+        "Screen shows the agent's window as live video, and the picture keeps moving on a weak link.",
+        "Stop also ends the commands the agent's turn started.",
+        "Finished Work closes itself, and the tray is one list of your Work.",
+        "Brain can ask you something while a Worker still holds the Work.",
+        "A long press on a hostname, link or path in a reply selects it whole.",
+        "Phone use types at the cursor like a keyboard, so an app's # and @ pickers open.",
+        "A Chinese input method types what you meant on Screen and in the web terminal."
+      ]
+    },
+    {
       "version": "0.4.16",
       "date": "2026-11-18",
       "highlights": [

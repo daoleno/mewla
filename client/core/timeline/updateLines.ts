@@ -9,6 +9,8 @@ export type UpdateLineItem = {
   version: string;
   /** Whether its release has pages; else the line opens its fixes. */
   highlights: boolean;
+  /** Whether its release has notes; else the line is only "Updated to 0.4.9", nothing to open. */
+  notes: boolean;
 };
 
 const timeOf = (row: { timestamp?: string }): number | null => {

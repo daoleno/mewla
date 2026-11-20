@@ -151,8 +151,8 @@ const updateLineRows = derived((): readonly UpdateLineItem[] => {
   return updateLines().map((line) => {
     const id = `update:${line.version}`;
     const kept = lineItems.get(id);
-    if (kept && kept.highlights === line.highlights) return kept;
-    const item: UpdateLineItem = { type: "update-line", id, timestamp: new Date(line.at).toISOString(), version: line.version, highlights: line.highlights };
+    if (kept && kept.highlights === line.highlights && kept.notes === line.notes) return kept;
+    const item: UpdateLineItem = { type: "update-line", id, timestamp: new Date(line.at).toISOString(), version: line.version, highlights: line.highlights, notes: line.notes };
     lineItems.set(id, item);
     return item;
   });

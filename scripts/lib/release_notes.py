@@ -5,8 +5,11 @@ One file per release at release-notes/<version>.json is the source. The app (cli
 (daemon/whatsnew) cannot read outside their own directories, so this script writes one bundle of every
 release into each: client/ui/whatsnew/notes.json (the app and the web UI) and daemon/whatsnew/notes.json
 (the daemon, for an app older than its computer). `--check` fails when a file is malformed or a bundle
-is not what this script would write; `--require VERSION` also fails when that version has no file
-(scripts/prepare-release.py runs it for the version it releases).
+is not what this script would write; `--require VERSION` also fails when that version has no file.
+
+Every release has its file: it is written with the feature when it lands, and the release preparation
+(scripts/prepare-release.py) and the release identity check (scripts/verify-release-identity.sh) refuse a
+version without one, so an app never shows an older release's notes as this version's news.
 """
 
 from __future__ import annotations
@@ -51,6 +54,14 @@ SHAPE = """{
 
 class NotesError(RuntimeError):
     pass
+
+
+def missing(version: str) -> str:
+    """The refusal for a version with no notes: what to write and where."""
+    return (
+        f"Mewla {version} has no What's New: write {SOURCE_DIR}/{version}.json as {SOURCE_DIR}/README.md says "
+        f"(for a release of fixes only, empty \"highlights\" and its \"fixes\"), then run python3 scripts/release-notes.py."
+    )
 
 
 def version_key(version: str) -> tuple[int, int, int, int]:
@@ -165,10 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.require is not None:
             version_key(args.require)
             if not any(r["version"] == args.require for r in releases):
-                raise NotesError(
-                    f"missing {SOURCE_DIR}/{args.require}.json: write the What's New notes for "
-                    f"{args.require} before releasing it (highlights may be empty):\n{SHAPE}"
-                )
+                raise NotesError(missing(args.require))
         text = bundle_text(releases)
         stale = []
         for relative in BUNDLES:

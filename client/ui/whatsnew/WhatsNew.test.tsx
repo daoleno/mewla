@@ -110,6 +110,18 @@ describe("What's New: when it shows", () => {
     expect(app.shows("text:Sessions open faster.")).toBe(true);
   }, 40_000);
 
+  test("a version released without notes leaves only \"Updated to\": no What's new that opens nothing, or older notes", async () => {
+    const record: Kept = { baseline: APP_VERSION, updates: [{ version: TOP, at: at(3) }], releases: { releases: [] } };
+    const app = await open(APP, setup({ record, computer: TOP }));
+    await app.waitFor("id:update-line", { timeout: 15_000 });
+    expect(app.shows(`text:Updated to ${TOP}`)).toBe(true);
+    expect(app.shows("text:What's new")).toBe(false);
+    // Nothing to open: the line is not a button.
+    const pressed = await app.press("id:update-line").then(() => true, () => false);
+    expect(pressed).toBe(false);
+    expect(app.shows("id:whats-new")).toBe(false);
+  }, 40_000);
+
   test("opened from a link, it waits: the person came for that; back on Brain on their own, it shows", async () => {
     const app = await open(APP, setup({ record: news(NEWEST_ONLY), computer: TOP }));
     await app.waitFor("id:composer", { timeout: 15_000 });

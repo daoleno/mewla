@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -50,6 +52,15 @@ class ReleaseNotesTests(unittest.TestCase):
             bundle = json.loads((self.root / relative).read_text(encoding="utf-8"))
             self.assertEqual([r["version"] for r in bundle["releases"]], ["0.4.10", "0.4.10-beta.1", "0.4.8"])
         self.assertEqual(self.run_main("--check", "--require", "0.4.11"), 1)
+
+    def test_a_missing_version_is_refused_in_one_sentence(self):
+        self.write("0.4.10")
+        self.assertEqual(self.run_main(), 0)
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            self.assertEqual(self.run_main("--check", "--require", "0.4.11"), 1)
+        self.assertEqual(stderr.getvalue(), f"error: {release_notes.missing('0.4.11')}\n")
+        self.assertIn("release-notes/0.4.11.json", release_notes.missing("0.4.11"))
 
     def test_rejects_what_the_sheet_cannot_show(self):
         cases = {

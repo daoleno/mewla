@@ -309,12 +309,33 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             (root / "docs/install-daemon.md").read_text(encoding="utf-8"),
         )
 
-    def test_whats_new_is_optional_but_its_copies_must_be_current(self):
+    def test_refuses_a_version_without_its_whats_new(self):
         # Notes for earlier releases only: this one has none of its own.
         root = self.create_repo(root=self.fixture / "none", whats_new=[CURRENT_VERSION])
+        original_base = (root / VERSION_SOURCE).read_bytes()
+        result = self.run_script(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(
+            result.stderr.strip(),
+            f"error: Mewla {NEXT_VERSION} has no What's New: write release-notes/{NEXT_VERSION}.json as "
+            'release-notes/README.md says (for a release of fixes only, empty "highlights" and its "fixes"), '
+            "then run python3 scripts/release-notes.py.",
+        )
+        self.assertEqual((root / VERSION_SOURCE).read_bytes(), original_base)
+        self.assertEqual(git(root, "status", "--porcelain"), "")
+
+        # No notes at all: the same refusal.
+        root = self.create_repo(root=self.fixture / "empty", whats_new=[])
+        result = self.run_script(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"Mewla {NEXT_VERSION} has no What's New", result.stderr)
+
+        # With its file (fixes only), the same tree passes this step.
+        root = self.create_repo(root=self.fixture / "fixes-only", whats_new=[CURRENT_VERSION, NEXT_VERSION])
         result = self.run_script(root)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_whats_new_copies_must_be_current(self):
         root = self.create_repo(root=self.fixture / "stale")
         (root / "client/ui/whatsnew/notes.json").write_text("{}\n", encoding="utf-8")
         git(root, "commit", "-am", "Stale bundle")
