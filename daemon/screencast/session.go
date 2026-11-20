@@ -120,8 +120,10 @@ type Signal struct {
 	Authorization string `json:"authorization,omitempty"`
 	// FineScroll and Cursor, on the offer: the computer takes pixel scrolls
 	// (Config.Scroll), and its video carries its own cursor (Config.Cursor).
-	FineScroll bool `json:"fine_scroll,omitempty"`
-	Cursor     bool `json:"cursor,omitempty"`
+	// Cursor is always said on an offer (an older computer's offer has no
+	// cursor, and its video may carry one); nil elsewhere.
+	FineScroll bool  `json:"fine_scroll,omitempty"`
+	Cursor     *bool `json:"cursor,omitempty"`
 }
 
 const (
@@ -358,7 +360,7 @@ func (s *Session) setup() error {
 	if viewerServers == nil {
 		viewerServers = s.cfg.ICEServers
 	}
-	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: viewerServers, Assertion: assertion, FineScroll: s.cfg.Scroll != nil && s.cfg.Input != nil, Cursor: s.cfg.Cursor})
+	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: viewerServers, Assertion: assertion, FineScroll: s.cfg.Scroll != nil && s.cfg.Input != nil, Cursor: &s.cfg.Cursor})
 	return nil
 }
 
