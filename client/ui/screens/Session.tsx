@@ -58,6 +58,7 @@ import { derived, preparedRows } from "../kit/derived";
 import { brain, connection, current, currentTransport, outbox, problem as connectionProblem, resumeConnection, workers, workersHydrated } from "../session";
 import type { Route } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
+import { createTerminalAttach } from "../terminal/attach";
 import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
@@ -605,10 +606,23 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const head = headerSize();
   // On the Mac's bar the actions are 28 with 16 icons (RESULT-DESIGN-PAIRS #4); the phone's capsule keeps its own.
   const barStyle = head.action ? { width: head.action, height: head.action } : actionStyle;
+  // Mewla for Mac's terminal Attach is the header's first action (DESIGN-MAC.md §2.3.1): its own uploads, the pane's
+  // chips and paths; the phone's stays on its key bar.
+  const terminalAttach = platform.os === "macos" ? createTerminalAttach() : undefined;
+  const attachHover = signal(false);
   const actions = (bar: boolean) => {
     const look = `items-center justify-center rounded-full active:bg-accent${bar ? " hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : ""}`;
     return (
       <View testID="session-actions" class={`shrink-0 flex-row items-center${bar ? " ml-1.5" : ""}`} style={{ gap: ACTION.gap, marginRight: bar ? 0 : ACTION.end }}>
+        {/* 28, radius 8, the paperclip 16: soft at rest, ink on the well on hover, held on the well while the picker is open,
+            40 % when it can't attach. Only while the page shows the terminal. */}
+        <If when={bar && terminalAttach && mode() === "terminal"}>
+          <Button testID="session-attach" accessibilityLabel="Attach" onPress={terminalAttach!.attach} disabled={!terminalAttach!.uploads.canAttach()}
+            onMouseEnter={() => attachHover.set(true)} onMouseLeave={() => attachHover.set(false)}
+            class={`items-center justify-center rounded-lg disabled:opacity-40 ${terminalAttach!.uploads.picking() ? "bg-accent" : "hover:bg-accent active:bg-accent"}`} style={barStyle}>
+            <Icon name="attach" size={head.actionIcon} color={terminalAttach!.uploads.picking() || (attachHover() && terminalAttach!.uploads.canAttach()) ? "foreground" : "muted-foreground"} />
+          </Button>
+        </If>
         <If when={isRepo()}>
           <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
             <Icon name="diff" size={bar ? head.actionIcon : 22} color="foreground" />
@@ -689,7 +703,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
           <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
             onTouchStartCapture={capsuled ? () => capsule.collapse() : undefined}>
-            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)}
+            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} attach={terminalAttach}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
             <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
             <If when={fallback()}><View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">

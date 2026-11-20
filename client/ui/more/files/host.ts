@@ -1,7 +1,7 @@
-import { host, nativeComponent, platform } from "nsh";
+import { host, nativeComponent, Picker, platform } from "nsh";
 import type { SessionFileDownloadHost } from "../../../core/files/sessionFilePreviewDownload";
 import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../../../core/files/uploads";
-import { appFileImageUrl, appFileUploadHost, isAppFileUri } from "./appFiles";
+import { appFileImageUrl, appFileUploadHost, isAppFileUri, keepAppFiles } from "./appFiles";
 
 /**
  * `files.*`, what only the host can do with files: Android (client/android/…/files/),
@@ -34,12 +34,33 @@ import { appFileImageUrl, appFileUploadHost, isAppFileUri } from "./appFiles";
 
 const WAIT = { timeout: 0 };
 
+/**
+ * Mewla for Mac's host answers no `files.*` (an unanswered `host.call` rejects): it picks with NSH's own picker
+ * (the open panel, the files' bytes read), and the files upload as the app's own (`appFiles.ts`), as pasted ones do.
+ */
+const APP_PICKER = platform.os === "macos";
+
+/** NSH's picker reads at most this much of a file; a larger one comes back unread. */
+const APP_PICK_MAX = 512 * 1024 * 1024;
+
+async function pickAppFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
+  const picked = await Picker.pickFiles({ multiple: maxCount > 1, limit: Math.max(1, maxCount), maxSize: APP_PICK_MAX });
+  const kept = keepAppFiles(picked.flatMap((pick) => (pick.file ? [pick.file] : [])));
+  // One unread (larger than the picker reads) is a failed chip that says so, never a retry.
+  // A picked file keeps its own name (a paste's generic "image.png" gets its time; a picked one is named).
+  return picked.map((pick) => (pick.file ? { ...kept.shift()!, name: pick.name } : {
+    uri: `app-file:unread:${pick.name}`, name: pick.name, mimeType: pick.type, size: pick.size,
+    selectionError: "This file is larger than 512 MB.", selectionRetryable: false,
+  }));
+}
+
 function cancel(name: string, data: Record<string, string>): void {
   if (platform.os === "web") void host.call(name, data).catch(() => {});
   else host.post(name, data);
 }
 
 export function pickFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
+  if (APP_PICKER) return pickAppFiles(maxCount);
   return host.call<UploadDocumentAsset[]>("files.pick", { maxCount }, WAIT).then((assets) => (Array.isArray(assets) ? assets : []));
 }
 

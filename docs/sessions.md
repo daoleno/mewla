@@ -268,6 +268,12 @@ On the web, paste a screenshot or a copied picture into the composer and it
 becomes a chip above the field, the same as one you attached; pasted text goes
 in as typed. The phone's keyboard can paste a picture the same way.
 
+In a terminal, **Attach** sends a file to the computer and types its path at the
+prompt, quoted for the shell. On the phone it is the first key of the key bar;
+on Mewla for Mac it is the paperclip, first in the header's actions while the
+page shows the terminal. While a file goes up its chip shows the progress and
+Cancel. A file that fails stays as a chip with the reason, Retry and ×.
+
 ## The Session's menu
 
 **⋯** in a Session's header holds:
