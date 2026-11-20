@@ -69,9 +69,11 @@ export function startApp(): void {
 
   // Coming back to the app skips the reconnect backoff.
   // Leaving it keeps where chats were read to: the system may make the app anew before it comes back.
+  // A Mac never freezes the app, and its menu bar cat, perch and windows stay in sight while another app is in front
+  // (NSH's `inactive`) or none of its windows shows: the computer's news never waits there.
   effect(() => {
     const active = lifecycle() === "active";
-    setConnectionAway(!active);
+    setConnectionAway(!active && platform.os !== "macos");
     if (active) resumeConnection();
     else keepReadingPlaces();
   });

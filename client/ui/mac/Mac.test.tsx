@@ -142,6 +142,18 @@ describe("Mewla for Mac", () => {
     expect(app.shows("text:What should Brain do?")).toBe(false);
   }, 30_000);
 
+  test("another app in front, or no window shown, holds none of the computer's news: Brain's reply shows at once", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    const reply = (i: number, body: string) => ({ id: `m${i}`, seq: i, kind: "assistant_message", role: "assistant", timestamp: new Date(Date.UTC(2026, 10, 20, 7, 0, i)).toISOString(), body });
+    await app.setLifecycle("inactive");
+    await app.host.send("app.conversation", { worker: "brain-host", upserts: [reply(1, "Said while another app was in front.")] });
+    await app.waitFor("text:Said while another app was in front.", { timeout: 5_000 });
+    await app.setLifecycle("background");
+    await app.host.send("app.conversation", { worker: "brain-host", upserts: [reply(2, "Said with no window shown.")] });
+    await app.waitFor("text:Said with no window shown.", { timeout: 5_000 });
+  }, 60_000);
+
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host });
