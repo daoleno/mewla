@@ -53,6 +53,20 @@ type Store struct {
 	// generation; see results.go.
 	resultsMu   sync.Mutex
 	resultIndex *scheduledResultIndex
+	// checkAction refuses a scheduled_action whose own executor, model or
+	// reasoning cannot launch; nil accepts any.
+	checkAction func(Item) error
+}
+
+// RefuseActionChoice makes Create and Update refuse a scheduled_action whose
+// own executor, model or reasoning check cannot launch. Set it once at start.
+func (s *Store) RefuseActionChoice(check func(Item) error) { s.checkAction = check }
+
+func (s *Store) refuseAction(item Item) error {
+	if s.checkAction == nil || item.Kind != KindScheduledAction || !item.HasActionChoice() {
+		return nil
+	}
+	return s.checkAction(item)
 }
 
 func DefaultRoot() (string, error) {
@@ -266,6 +280,9 @@ func (s *Store) Get(id string) (Item, error) {
 // cannot claim it.
 func (s *Store) Create(item Item) (Item, error) {
 	item.Owner = ""
+	if err := s.refuseAction(item); err != nil {
+		return Item{}, err
+	}
 	return s.create(item)
 }
 
@@ -306,6 +323,7 @@ func (s *Store) create(item Item) (Item, error) {
 		item.Recurrence = RecurrenceNone
 	}
 	item.Summary = strings.TrimSpace(item.Summary)
+	item.ActionExecutor, item.ActionModel, item.ActionReasoning = strings.TrimSpace(item.ActionExecutor), strings.TrimSpace(item.ActionModel), strings.TrimSpace(item.ActionReasoning)
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}
@@ -324,6 +342,9 @@ func (s *Store) create(item Item) (Item, error) {
 }
 
 func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
+	if err := s.refuseAction(item); err != nil {
+		return Item{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.items[item.ID]
@@ -347,6 +368,7 @@ func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
 		item.Recurrence = RecurrenceNone
 	}
 	item.Summary = strings.TrimSpace(item.Summary)
+	item.ActionExecutor, item.ActionModel, item.ActionReasoning = strings.TrimSpace(item.ActionExecutor), strings.TrimSpace(item.ActionModel), strings.TrimSpace(item.ActionReasoning)
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}

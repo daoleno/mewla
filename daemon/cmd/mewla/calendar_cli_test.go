@@ -16,6 +16,9 @@ func TestCalendarCreateHelpAndValidationRequireSourceThread(t *testing.T) {
 		"scheduled_action (requires -source-thread)",
 		"required for scheduled_action: source_thread_id",
 		"canonical Calendar result projection",
+		"scheduled action: configured executor name",
+		"scheduled action: model for each run",
+		"scheduled action: reasoning level for each run",
 	} {
 		if !strings.Contains(help.String(), want) {
 			t.Fatalf("help missing %q:\n%s", want, help.String())

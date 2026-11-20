@@ -336,14 +336,18 @@ Brain picks the agent, model and reasoning level for every Worker. Before each
 launch it reads `routing.md` in its workspace, a few lines of Markdown such as
 "use Codex with high reasoning for refactors". It rewrites a line when you
 state a preference, when a new model appears or when a choice went badly.
-Upgrades never overwrite it. Mewla reads two rows itself: `Watch judgment`,
-which picks the agent that reads [Watch](watch.md) signals, and
-`Work progress`, which picks the agent that judges how far a running Work has
-come. Without a valid row, Mewla uses Brain's own agent (Claude Code: Sonnet at
-low reasoning).
+Upgrades never overwrite it. Mewla reads three rows itself: `Watch judgment`,
+which picks the agent that reads [Watch](watch.md) signals, `Work progress`,
+which picks the agent that judges how far a running Work has come, and
+`Scheduled action`, which picks the executor, model and reasoning of a
+[Mewla action](calendar.md#mewla-actions) that names none of its own. Without
+a valid judgment row, Mewla uses Brain's own agent (Claude Code: Sonnet at low
+reasoning); without a `Scheduled action` row, an action runs on Brain's own
+executor and model.
 
 ```markdown
 | Work progress | claude | sonnet | low |
+| Scheduled action | claude | sonnet | low |
 ```
 
 A Worker launch looks like this:

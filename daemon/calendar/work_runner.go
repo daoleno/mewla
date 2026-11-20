@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/logonce"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -24,10 +25,14 @@ type WorkRunner struct {
 	}
 	Brain interface {
 		HasChatThread(string) (bool, error)
-		// HostExecutorID runs scheduled_action Work: the action fires without
-		// Brain choosing an executor, so it uses the one the user runs Brain on.
+		// HostExecutorID runs a scheduled_action that names no executor and
+		// finds none in routing.md: the one the user runs Brain on.
 		HostExecutorID() string
 	}
+	// RoutingPath is the Brain workspace's routing.md, whose "Scheduled
+	// action" row is the choice of an item that names none. Empty reads none.
+	RoutingPath  string
+	routingNotes logonce.Log
 }
 
 const (
@@ -193,13 +198,19 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 			return ActionResult{}, err
 		}
 	}
+	// The choice is resolved before the Work file exists: one that cannot
+	// launch fails the run with its cause and leaves nothing behind.
+	executor, model, reasoning := r.actionChoice(item)
+	if _, err := r.Launcher.ScheduledCommand(executor, model, reasoning); err != nil {
+		return ActionResult{}, fmt.Errorf("scheduled action cannot launch (%s): %w", describeActionChoice(executor, model, reasoning), err)
+	}
 	path := filepath.Join(r.Store.Root, "calendar", item.ID+"-"+run.ID+".md")
 	body := scheduledWorkBody(item, run)
 	created, err := r.Store.Write(&work.Item{Path: path, Project: "calendar", Body: body, Frontmatter: work.Frontmatter{ID: run.ID, Kind: "calendar_action", Created: time.Now().UTC(), Title: run.Title, Extra: map[string]interface{}{"calendar_item_id": item.ID, "calendar_run_id": run.ID}}}, time.Time{})
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("create visible Work item: %w", err)
 	}
-	started, err := r.Launcher.StartDedicated(created, cwd, r.Brain.HostExecutorID())
+	started, err := r.Launcher.StartDedicatedWith(created, cwd, executor, model, reasoning)
 	if err != nil {
 		return ActionResult{WorkID: created.ID}, fmt.Errorf("start visible Work item: %w", err)
 	}
@@ -208,6 +219,49 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 		return ActionResult{WorkID: created.ID, WorkerSession: started.Frontmatter.WorkerSession, Launched: true}, fmt.Errorf("persist started Work item: %w", err)
 	}
 	return ActionResult{WorkID: written.ID, WorkerSession: written.Frontmatter.WorkerSession, Launched: true}, nil
+}
+
+// actionChoice is the executor, model and reasoning a scheduled action starts
+// with: the item's own; else the "Scheduled action" row of routing.md; else the
+// executor Brain runs on with its own model. An item that names anything is
+// never completed from the row, and an executor left out is Brain's, as for a
+// spawn.
+func (r *WorkRunner) actionChoice(item Item) (executor, model, reasoning string) {
+	if item.HasActionChoice() {
+		executor, model, reasoning = item.ActionExecutor, item.ActionModel, item.ActionReasoning
+	} else {
+		row, err := ReadScheduledActionRoute(r.RoutingPath)
+		r.routingNotes.Note("calendar routing", err)
+		executor, model, reasoning = row.Executor, row.Model, row.Reasoning
+	}
+	executor, model, reasoning = strings.TrimSpace(executor), strings.TrimSpace(model), strings.TrimSpace(reasoning)
+	if executor == "" {
+		executor = strings.TrimSpace(r.Brain.HostExecutorID())
+	}
+	return executor, model, reasoning
+}
+
+// CheckActionChoice refuses an item whose own executor, model or reasoning
+// cannot launch, with the error a Worker spawn gives for the same choice. An
+// item that names none is fine: its choice comes from routing.md at run time.
+func (r *WorkRunner) CheckActionChoice(item Item) error {
+	if r == nil || r.Launcher == nil || r.Brain == nil || !item.HasActionChoice() {
+		return nil
+	}
+	executor, model, reasoning := r.actionChoice(item)
+	_, err := r.Launcher.ScheduledCommand(executor, model, reasoning)
+	return err
+}
+
+func describeActionChoice(executor, model, reasoning string) string {
+	parts := []string{"executor " + executor}
+	if model != "" {
+		parts = append(parts, "model "+model)
+	}
+	if reasoning != "" {
+		parts = append(parts, "reasoning "+reasoning)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func scheduledWorkBody(item Item, run Run) string {

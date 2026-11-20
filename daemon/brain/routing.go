@@ -4,7 +4,7 @@ import "path/filepath"
 
 // routing.md is Brain's Worker routing guide. It is seeded once and then owned
 // by Brain and the user: product upgrades never rewrite it, and nothing parses
-// it. Brain reads it before each spawn and judges the route itself.
+// it except those rows. Brain reads it before each spawn and judges the route itself.
 const routingGuideName = "routing.md"
 
 func (s *Store) routingGuidePath() string {
@@ -12,8 +12,9 @@ func (s *Store) routingGuidePath() string {
 }
 
 // RoutingGuidePath is routing.md. Watch reads its "Watch judgment" row and the
-// progress judge its "Work progress" row to pick who judges; nothing else
-// parses the file.
+// progress judge its "Work progress" row to pick who judges, and Calendar its
+// "Scheduled action" row to run a scheduled_action that names no choice of its
+// own; nothing else parses the file.
 func (s *Store) RoutingGuidePath() string { return s.routingGuidePath() }
 
 const defaultRoutingGuide = `# Worker Routing
