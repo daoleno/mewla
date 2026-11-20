@@ -208,6 +208,7 @@ func TestFirstUseInstallsOnceAndLaterUseIsFree(t *testing.T) {
 		t.Fatal("the first check ran before the CLI existed")
 	}
 	// A restart: same state directory, a new runtime, the account still on.
+	f.m.cloud.updates.cancel()
 	restarted := newCloudRuntime(f.m.cloud.dir)
 	restarted.providers, restarted.profileFiles, restarted.run = f.m.cloud.providers, f.m.cloud.profileFiles, f.m.cloud.run
 	restarted.enableUpdates()
