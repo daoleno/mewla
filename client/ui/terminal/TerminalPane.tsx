@@ -20,8 +20,12 @@ import { motion } from "../../core/motion/tokens";
 import { SlowLine, StateView, states, useWait } from "../kit/wait";
 import { current, resumeConnection } from "../session";
 
-/** The phones' native view; the web's is libghostty-vt (WebAssembly) on a canvas in a web view, with the same contract. */
-const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
+/**
+ * The phones' native view; the web's and the Mac's is libghostty-vt (WebAssembly) on a canvas in a web view, with the
+ * same contract (on the Mac its page comes from this Mac's daemon, WebTerminalSurface).
+ */
+const webSurface = platform.os === "web" || platform.os === "macos";
+const Surface: typeof TerminalSurface = webSurface ? WebTerminalSurface : TerminalSurface;
 // The text size is the device's (fontSize.ts): mono 10/14 on the phones until a pinch sets 8–14; 13 on the web.
 loadTerminalTextSize();
 
@@ -119,6 +123,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   wait.start();
   const session: TerminalSession = new TerminalSession(props.transport, props.targetId, {
     reset: () => {
+      if (platform.os === "macos") console.log(`terminal: opened ${props.targetId}`);
       wait.resolve();
       for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] === "write") pending.splice(i, 1);
       problem.set("");
@@ -132,7 +137,10 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     },
     historyNotice: (text) => historyNotice.set(text),
     exit: (code) => exited.set(code),
-    error: (message) => (session.attached ? problem.set(message) : wait.fail()),
+    error: (message) => {
+      if (platform.os === "macos") console.log(`terminal: error ${message}`);
+      return session.attached ? problem.set(message) : wait.fail();
+    },
   }, { program: () => props.program?.() });
   cleanup(() => session.close());
 
@@ -255,6 +263,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   const takeGrid = (cols: number, rows: number) => {
     grids++;
     nav.setGridRows(rows);
+    if (platform.os === "macos" && grids === 1) console.log(`terminal: grid taken ${cols}x${rows} (shown ${untracked(props.active)}, link ${props.transport.state})`);
     session.resize(cols, rows);
   };
   effect(() => {
@@ -295,7 +304,10 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           onSize={({ cols, rows, keys }) => {
             viewKeys = keys === true;
             rendererFailure.set(null);
-            if (terminalTextSize() === undefined) heldGrid = { cols, rows };
+            if (terminalTextSize() === undefined) {
+              if (platform.os === "macos" && !heldGrid) console.log("terminal: grid held (no text size yet)");
+              heldGrid = { cols, rows };
+            }
             else takeGrid(cols, rows);
           }}
           onFontSize={({ size }) => setTerminalTextSize(size)}
@@ -367,7 +379,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
               keyboard.set(false);
             }
           }} />
-          {KEYS.filter((key) => key.id !== "paste" || platform.os !== "web").map((key) => (
+          {KEYS.filter((key) => key.id !== "paste" || !webSurface).map((key) => (
             <KeyTile testID={`key-${key.id}`} label={key.label ?? key.id} icon={key.icon} text={!key.icon}
               on={() => (key.id === "ctrl" && ctrl()) || down() === key.id}
               onPress={() => press(key)}
@@ -397,6 +409,6 @@ function KeyTile(props: { testID: string; label: string; icon?: IconName; text?:
 
 /** Android's Back while the pane lives; a browser has its own back (NSH's web runtime has no `BackHandler.on`). */
 function onBackPress(listener: () => boolean): void {
-  if (platform.os === "web") return;
+  if (platform.os === "web" || platform.os === "macos") return;
   cleanup(BackHandler.on("press", listener));
 }
