@@ -527,6 +527,27 @@ describe("Slack sign-ins made before Mewla read files and DMs (11-19)", () => {
   });
 });
 
+describe("a cloud card whose tool could not be installed says why (11-21)", () => {
+  const awsCatalog = [{ id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud accounts" }];
+  const card = { id: "aws:work", integration: "aws", name: "work", profile: "work", profile_kind: "SSO", profile_status: "unavailable", unavailable: "Could not install the CLI: dial tcp: no route to host", identity: "", enabled: true, status: "authorization_required", history: [] };
+  test("the card shows the reason itself, and Check now asks the computer again", async () => {
+    const c = computer({ name: "extensions-service", id: "aws" }, (request) => (request.action === "list" ? { catalog: awsCatalog, accounts: [card] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:unavailable-aws:work");
+    expect(app.texts()).toContain("Unavailable");
+    expect(app.texts()).toContain("Could not install the CLI: dial tcp: no route to host");
+    await app.press("text:Check now");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "refresh"));
+    expect(c.asked.find((r) => r.action === "refresh")).toEqual({ action: "refresh", id: "aws:work" });
+  });
+  test("a profile that is merely unchecked has no such row", async () => {
+    const c = computer({ name: "extensions-service", id: "aws" }, (request) => (request.action === "list" ? { catalog: awsCatalog, accounts: [{ ...card, profile_status: "unchecked", unavailable: undefined }] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:enabled-aws:work");
+    expect(app.texts()).not.toContain("Unavailable");
+  });
+});
+
 describe("AWS accounts last as long as the organization allows (owner 11-17: AWS expiring daily)", () => {
   const awsCatalog = [{ id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud accounts" }];
   test("adding an account asks for the organization's access portal and shows the code to approve; aws login is the fallback", async () => {
