@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -206,6 +207,46 @@ func TestHostProblemListsTheOtherInstalledAgents(t *testing.T) {
 	problem = project(t, map[string]bool{"claude": true, "codex": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated}, "claude")
 	if problem == nil || problem.Code != "not_started" || strings.Join(problem.InstalledExecutors, ",") != "codex" {
 		t.Fatalf("host signed out: %+v", problem)
+	}
+}
+
+// No agent on the computer: the snapshot offers the installs, each the command
+// the daemon gave (its own mewla deps -agent), and only then.
+func TestSnapshotOffersAgentInstallsOnlyWhenNoAgentIsInstalled(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Mewla offers no agent install on Windows")
+	}
+	processStartedAt = processStartedAt.Add(-time.Hour)
+	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
+	snapshot := func(t *testing.T, installed map[string]bool, command bool) Snapshot {
+		t.Helper()
+		service := hostFixture(t, installed, nil)
+		if err := service.store.SetHostSession("brain-host:@1", "claude"); err != nil {
+			t.Fatal(err)
+		}
+		service.watcher = &fakeWatcher{sessions: map[string]*classifier.Worker{}}
+		if command {
+			service.SetAgentInstallCommand(func(id string) string { return "'/Apps/Mewla.app/mewla' deps -agent " + id })
+		}
+		snapshot, err := service.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return snapshot
+	}
+	got := snapshot(t, map[string]bool{}, true)
+	if got.HostProblem == nil || got.HostProblem.Code != "not_installed" || len(got.AgentInstalls) != 2 ||
+		got.AgentInstalls[0] != (AgentInstall{ID: "claude", Name: "Claude Code", Command: "'/Apps/Mewla.app/mewla' deps -agent claude"}) ||
+		got.AgentInstalls[1] != (AgentInstall{ID: "codex", Name: "Codex", Command: "'/Apps/Mewla.app/mewla' deps -agent codex"}) {
+		t.Fatalf("nothing installed: problem %+v installs %+v", got.HostProblem, got.AgentInstalls)
+	}
+	// An agent installed but not the host's is a switch, not an install.
+	if got := snapshot(t, map[string]bool{"codex": true}, true); got.HostProblem == nil || len(got.AgentInstalls) != 0 {
+		t.Fatalf("codex installed: problem %+v installs %+v", got.HostProblem, got.AgentInstalls)
+	}
+	// A daemon that gave no command offers none.
+	if got := snapshot(t, map[string]bool{}, false); len(got.AgentInstalls) != 0 {
+		t.Fatalf("no command: %+v", got.AgentInstalls)
 	}
 }
 

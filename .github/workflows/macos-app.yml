@@ -113,11 +113,13 @@ jobs:
           # Three runs per appearance, one surface group each (a window that takes the focus closes the perch):
           # the perch and Pair a phone; Settings › General and the shortcut offer; Settings › Privacy & access; Brain's
           # host's terminal (the web terminal in a web view, its page from the app's own daemon).
-          scripts=('main={"perch":true,"pairPhone":true}' 'general={"settings":"general","shortcutOffer":true}' 'access={"settings":"access"}' 'terminal={"terminal":true}')
+          # No agent on this Mac (m-noagent): the stub claude moved aside for that run, so Brain has no agent.
+          scripts=('main={"perch":true,"pairPhone":true}' 'general={"settings":"general","shortcutOffer":true}' 'access={"settings":"access"}' 'terminal={"terminal":true}' 'noagent={}')
           for theme in light dark; do for entry in "${scripts[@]}"; do
             name="${entry%%=*}"; script="${entry#*=}"
             python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["mewla:theme_preference"]="classic-"+sys.argv[2]; json.dump(d,open(p,"w"))' "$D/data/storage.json" "$theme"
             seen=$(cat "$D"/data/logs/* 2>/dev/null | grep -c "dev script: connected" || true)
+            if [ "$name" = noagent ]; then sudo mv /usr/local/bin/claude /usr/local/bin/claude.aside; fi
             start "$theme-$name" "$script"
             ok=""
             for i in $(seq 1 120); do
@@ -135,6 +137,8 @@ jobs:
             # The menu bar here (a runner's, nobody's screen): who owns the status item windows, and the strip itself.
             swift -e 'import CoreGraphics; let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]; for w in l where (w[kCGWindowLayer as String] as? Int) == 25 { print("layer25", w[kCGWindowOwnerName as String] ?? "", "|", w[kCGWindowName as String] ?? "", "|", w[kCGWindowBounds as String] ?? "") }' || true
             screencapture -x -R 0,0,1024,32 "$D/captures/$theme-$name-menubar.png" || true
+            # Back before stop, which fails the step when anything outlives the app.
+            if [ "$name" = noagent ]; then sudo mv /usr/local/bin/claude.aside /usr/local/bin/claude; fi
             stop
             test -n "$ok" || { echo "Mewla Dev did not join its daemon ($theme $name)"; cat "$D"/data/logs/* || true; exit 1; }
           done; done

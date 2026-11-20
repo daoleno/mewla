@@ -40,6 +40,10 @@ func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Plat
 				h.agentState["claude"] = doctor.AuthUnauthenticated
 			case command == "claude auth login":
 				h.agentState["claude"] = doctor.AuthAuthenticated
+			case strings.Contains(command, "chatgpt.com/codex/install.sh"):
+				h.agentState["codex"] = doctor.AuthUnauthenticated
+			case command == "codex login":
+				h.agentState["codex"] = doctor.AuthAuthenticated
 			}
 			return nil
 		},
@@ -90,6 +94,49 @@ func TestEnsureAgentInstallsThenSignsIn(t *testing.T) {
 		if !strings.Contains(out.String(), line) {
 			t.Fatalf("output missing %q:\n%s", line, out)
 		}
+	}
+}
+
+// Mewla for Mac's Install Codex (no agent on this Mac): Codex's official
+// install, its sign-in, then Brain moves to Codex, which Brain was not set to.
+func TestInstallAgentInstallsSignsInAndMovesBrain(t *testing.T) {
+	t.Setenv("PATH", os.Getenv("PATH"))
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	d, out := host.prompt("\n", true, macHost)
+	var moved []string
+	if !d.installAgent("codex", func(id string) error { moved = append(moved, id); return nil }) {
+		t.Fatalf("not installed:\n%s", out)
+	}
+	want := []string{"curl -fsSL https://chatgpt.com/codex/install.sh | sh", "codex login"}
+	if strings.Join(host.ran, "|") != strings.Join(want, "|") {
+		t.Fatalf("ran %q, want %q", host.ran, want)
+	}
+	if strings.Join(moved, "|") != "codex" || !strings.Contains(out.String(), "Brain runs on Codex.") {
+		t.Fatalf("Brain moved to %q:\n%s", moved, out)
+	}
+}
+
+func TestInstallAgentOnlyMovesBrainToAnAgentAlreadyReady(t *testing.T) {
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"claude": doctor.AuthAuthenticated}}
+	d, out := host.prompt("", true, macHost)
+	var moved []string
+	if !d.installAgent("claude", func(id string) error { moved = append(moved, id); return nil }) || len(host.ran) != 0 || strings.Join(moved, "|") != "claude" {
+		t.Fatalf("ran %q moved %q:\n%s", host.ran, moved, out)
+	}
+}
+
+func TestInstallAgentThatFailsLeavesBrainWhereItIs(t *testing.T) {
+	host := &fakeHost{agentState: map[string]doctor.AuthState{}, failRun: true}
+	d, out := host.prompt("", true, macHost)
+	moved := false
+	if d.installAgent("claude", func(string) error { moved = true; return nil }) || moved {
+		t.Fatalf("a failed install moved Brain:\n%s", out)
+	}
+	if !strings.Contains(out.String(), "Claude Code is not installed. Try again later: curl -fsSL https://claude.ai/install.sh | bash") {
+		t.Fatalf("output:\n%s", out)
+	}
+	if d.installAgent("grok", func(string) error { moved = true; return nil }) || moved || !strings.Contains(out.String(), "Mewla can't install grok on this computer.") {
+		t.Fatalf("an agent without an install:\n%s", out)
 	}
 }
 

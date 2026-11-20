@@ -441,7 +441,9 @@ became ready (a sign-in or first-run prompt waiting in its terminal; when its
 own sign-in check also says signed out, the tray says to sign in). It offers **Use** and an agent's name (**Use Codex**) for an installed agent
 that is signed in,
 and **Switch executor** when the computer has another agent installed; with
-none installed, `mewla deps` is the next step. Nothing needs a restart: Mewla
+none installed, `mewla deps` is the next step (Mewla for Mac says "No agent on this Mac" in Brain's
+thread with Install Claude Code and Install Codex, each its own `mewla deps -agent` in a terminal
+Session that installs, signs in and moves Brain to that agent). Nothing needs a restart: Mewla
 checks again every few seconds, starts Brain's host as soon as the agent is
 installed, and opens it again once the agent is signed in (an agent's own
 sign-in screen does not notice a sign-in made in another terminal). Mewla never

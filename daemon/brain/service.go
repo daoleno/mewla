@@ -78,6 +78,9 @@ type Service struct {
 	resultGit resultGitProbes
 	// triggerWork says whether a Trigger owns a Work (SetTriggerWork).
 	triggerWork atomic.Value
+	// agentInstallCommand builds the command that installs an agent for Brain
+	// (SetAgentInstallCommand); nil offers no install.
+	agentInstallCommand atomic.Pointer[func(id string) string]
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once
@@ -819,6 +822,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	snapshot.HostProblem = s.projectHostProblem(host, hostExecutor)
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
+	snapshot.AgentInstalls = s.agentInstalls(snapshot.HostProblem, snapshot.ExecutorStates)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(snapshot.Workers)
@@ -868,6 +872,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	snapshot.HostProblem = s.projectHostProblem(host, hostExecutor)
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
+	snapshot.AgentInstalls = s.agentInstalls(snapshot.HostProblem, snapshot.ExecutorStates)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(snapshot.Workers)
@@ -4433,6 +4438,26 @@ func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
 
 // executorStates says which of the executors are installed on this computer
 // and which of those Mewla verified signed in.
+// SetAgentInstallCommand gives Brain the command that installs an agent for it
+// and moves it there (the daemon's own mewla deps -agent <id>, on its state).
+func (s *Service) SetAgentInstallCommand(command func(id string) string) {
+	s.agentInstallCommand.Store(&command)
+}
+
+// agentInstalls are offered only while Brain can't start because no agent is
+// installed: one installed but signed out is a sign-in, not an install.
+func (s *Service) agentInstalls(problem *HostProblem, states map[string]ExecutorState) []AgentInstall {
+	command := s.agentInstallCommand.Load()
+	if command == nil || problem == nil || problem.Code != "not_installed" || len(states) > 0 {
+		return nil
+	}
+	var installs []AgentInstall
+	for _, agent := range hostdeps.Agents(hostdeps.Detect()) {
+		installs = append(installs, AgentInstall{ID: agent.ID, Name: agent.Name, Command: (*command)(agent.ID)})
+	}
+	return installs
+}
+
 func (s *Service) executorStates(executors []work.WorkerExecutor) map[string]ExecutorState {
 	states := make(map[string]ExecutorState, len(executors))
 	for _, executor := range executors {

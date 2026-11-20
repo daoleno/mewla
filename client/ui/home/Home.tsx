@@ -14,7 +14,7 @@ import { ThreadWait } from "../chat/ThreadWait";
 import { brainHostIdentity } from "../chat/links";
 import { chatImage } from "../chat/assets";
 import { stopTurn } from "../../core/conversation/turn";
-import { brainSurface, isBrainThreadCacheKey, newBrainChat } from "../../core/brain";
+import { brainAgentInstalls, brainSurface, isBrainThreadCacheKey, newBrainChat } from "../../core/brain";
 import { createChatTimeline } from "../../core/conversation/timeline";
 import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
 import type { BrainCurrentWork } from "../../core/timeline/types";
@@ -36,6 +36,7 @@ import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
 import { isMacApp } from "../mac/app";
+import { MacNoAgent } from "../mac/NoAgent";
 import { MacReady } from "../mac/Ready";
 import { StateControl } from "../tray/StateControl";
 import { ChatUpdateRow, chatUpdate } from "../update/ChatUpdateRow";
@@ -345,6 +346,8 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
   // the person had read it back to, else at its end; the same thread under a restarted host is not made anew.
   const shows = computed(() => {
     const on = surface();
+    // No agent on this Mac: Brain can't start, and the thread offers the installs (m-noagent).
+    if (on === "host_down" && isMacApp() && brainAgentInstalls(brain()).length > 0) return "no_agent";
     if (on !== "chat") return on;
     if (brainChatUnavailable(brain())) return "unavailable";
     return chatState() === "failed" ? "failed" : `chat:${routedBrainThread() ?? brain()?.chat_thread_id ?? ""}`;
@@ -387,6 +390,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
       }}</Each>
       <If when={shows() === "waking"}><Notice title="Brain is starting…" /></If>
       <If when={shows() === "host_down"}><Notice title="Brain can't start" detail={brain()?.host_problem?.detail} /></If>
+      <If when={shows() === "no_agent"}><MacNoAgent /></If>
       {/* A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`. */}
       <If when={shows() === "offline"}>
         <ThreadWait testID="brain-offline" waiting={() => true} empty={() => <View />} reload={() => {}}

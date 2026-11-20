@@ -275,6 +275,10 @@ describe("tray model", () => {
     expect(down.state).toMatchObject({ kind: "cant_start", words: "Can't start", dot: "seal" });
     expect(down.notice).toMatchObject({ title: "Brain can't start", detail: "Cursor is not signed in" });
     expect(down.notice!.actions.map((a) => a.label)).toEqual(["Use claude", "Switch executor"]);
+    // No agent on this Mac: the thread offers the installs and says why; the state stays, the notice goes.
+    const noAgent = trayModel(input({ surface: "host_down", installsOffered: true, hostProblem: { code: "not_installed", executor: "claude", detail: "claude is not installed", installed_executors: [] } }));
+    expect(noAgent.state).toMatchObject({ kind: "cant_start", words: "Can't start" });
+    expect(noAgent.notice).toBeNull();
   });
 
   test("Running is ordered by last opened; queued Work is quiet and not counted", () => {

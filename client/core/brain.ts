@@ -43,6 +43,10 @@ export type BrainHostProblem = {
   installed_executors: string[];
 };
 
+/** An agent the computer installs for Brain while it has none (daemon brain.AgentInstall): `command` runs as a terminal
+ * Session there (the computer's own `mewla deps -agent`), which installs it, signs in and moves Brain to it. */
+export type BrainAgentInstall = { id: string; name: string; command: string };
+
 /**
  * `brain_snapshot.brain`: Brain's state, not its conversation. The conversation
  * is the host's, followed with `codex_conversation_subscribe` in the scope of
@@ -55,6 +59,7 @@ export type BrainSnapshot = {
   host_problem?: BrainHostProblem;
   executors?: BrainExecutorRef[];
   executor_states?: Record<string, BrainExecutorState>;
+  agent_installs?: BrainAgentInstall[];
   chat_thread_id?: string;
   current_work?: unknown[];
   open_work?: unknown[];
@@ -86,6 +91,14 @@ export function newBrainChat(transport: Pick<Transport, "request">): Promise<Bra
   return transport
     .request<{ brain?: BrainSnapshot }>("brain_chat_new", {}, { reply: "brain_snapshot" })
     .then((frame) => frame.brain ?? {});
+}
+
+/** The agents to install while Brain can't start because no agent is on the computer ("No agent on this Mac"); empty
+ * otherwise: an installed agent that is signed out is a sign-in, not an install. */
+export function brainAgentInstalls(snapshot: BrainSnapshot | null | undefined): BrainAgentInstall[] {
+  if (snapshot?.host_problem?.code !== "not_installed") return [];
+  if (Object.values(snapshot.executor_states ?? {}).some((state) => state.installed)) return [];
+  return (snapshot.agent_installs ?? []).filter((install) => install.id && install.command);
 }
 
 /**

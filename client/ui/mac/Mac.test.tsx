@@ -175,6 +175,27 @@ describe("Mewla for Mac", () => {
     expect(app.shows("id:session-mode")).toBe(true);
   }, 40_000);
 
+  test("no agent on this Mac: Brain can't start, the thread offers the installs, and one runs this Mac's own command in a terminal Session", async () => {
+    const installs = [
+      { id: "claude", name: "Claude Code", command: "'/Applications/Mewla.app/Contents/Helpers/mewla' deps -agent claude -state-dir '/Users/me/.mewla'" },
+      { id: "codex", name: "Codex", command: "'/Applications/Mewla.app/Contents/Helpers/mewla' deps -agent codex -state-dir '/Users/me/.mewla'" },
+    ];
+    const noAgent = { host_problem: { code: "not_installed", executor: "claude", detail: "Brain is set to run on claude, but claude is not installed on this computer.", installed_executors: [] }, agent_installs: installs };
+    const host = phoneHost({ brain: noAgent }, { "app.pairing": () => pairing });
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host });
+    await app.waitFor("id:mac-no-agent", { timeout: 15_000 });
+    expect(app.shows("id:mac-no-agent >> text:No agent on this Mac")).toBe(true);
+    expect(app.shows("id:mac-install-claude >> text:Install Claude Code")).toBe(true);
+    // The composer reads "Brain can't start"; the notice with the computer's detail is this page's, not shown.
+    expect(app.shows("text:Brain is set to run on claude, but claude is not installed on this computer.")).toBe(false);
+    await app.press("id:mac-install-codex");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_session").length === 1, { timeout: 10_000 });
+    const created = framesOf(app.host.posts(), "create_session")[0];
+    expect([created.command, created.name]).toEqual([installs[1].command, "Install Codex"]);
+    // Its terminal Session opens, where the installer and the sign-in ask.
+    await app.waitFor("id:session-state", { timeout: 10_000 });
+  }, 40_000);
+
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host });
