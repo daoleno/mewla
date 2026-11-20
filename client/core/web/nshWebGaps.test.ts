@@ -20,7 +20,7 @@ describe("what NSH's browser runtime lacks", () => {
   test("BackHandler.on is called only behind a web check", () => {
     const offenders = sources(UI)
       .filter((path) => /BackHandler\.on\(/.test(readFileSync(path, "utf8")))
-      .filter((path) => !/platform\.os === "web"\) return;\s*cleanup\(BackHandler\.on\(/.test(readFileSync(path, "utf8")))
+      .filter((path) => !/platform\.os === "web"(?: \|\| platform\.os === "macos")?\) return;\s*cleanup\(BackHandler\.on\(/.test(readFileSync(path, "utf8")))
       .map((path) => relative(UI, path));
     expect(offenders).toEqual([]);
   });

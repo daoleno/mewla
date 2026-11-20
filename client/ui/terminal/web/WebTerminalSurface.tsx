@@ -34,8 +34,9 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
   let queued = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   // On a Mac the page is not served by the app's origin: its files come from this Mac's own daemon (loopback).
-  const base = platform.os === "macos" ? localDaemonURL() : "";
-  const page = base ? terminalPageHtml(`${base}/terminal/`) : (html ??= terminalPageHtml());
+  // On a Mac the page comes from this Mac's daemon (its terminal.js, VT and fonts); elsewhere it carries no base.
+  const macDaemonBase = platform.os === "macos" ? localDaemonURL() || undefined : undefined;
+  const page = macDaemonBase ? terminalPageHtml(`${macDaemonBase}/terminal/`) : (html ??= terminalPageHtml());
 
   const flush = () => {
     if (!ready || !web || outbox.length === 0) return;
@@ -151,7 +152,7 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
       accessibilityLabel="Terminal"
       class={props.class ?? "flex-1"}
       html={page}
-      baseUrl={base || undefined}
+      baseUrl={macDaemonBase}
       scrollable={false}
       onLoadStart={() => {
         ready = false;
