@@ -16,6 +16,8 @@ async function terminal(upload: () => unknown) {
   const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host, network: { [UPLOAD]: upload as never } });
   await app.host.send("links.open", { url: "mewla://sessions/w6" });
   await app.waitFor("id:session-attach", { timeout: 10_000 });
+  // No key bar on the Mac: Attach is the header's alone.
+  expect(app.count("id:terminal-attach")).toBe(0);
   app.onPick(() => [file]);
   return app;
 }

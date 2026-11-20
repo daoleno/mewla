@@ -367,7 +367,8 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       </View>
       <If when={!MAC && uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
       <If when={!MAC && attachment.problem()}><Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachment.problem()}</Text></If>
-      <View
+      {/* Mewla for Mac has no key bar: a keyboard has every key, and Attach is the header's (DESIGN-MAC.md §2.3.1). */}
+      <If when={!MAC}><View
         style={{
           marginBottom: lift(),
           // Clear of the system's navigation bar (three buttons or the gesture handle), as the chat composer is.
@@ -401,7 +402,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           ))}
           </></If>
         </Scroll>
-      </View>
+      </View></If>
     </View>
   );
 }
