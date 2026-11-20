@@ -484,6 +484,30 @@ func TestMewlaExtensionNeedsNoKeyAndTheToolsGetMewlasStandIn(t *testing.T) {
 	}
 }
 
+// Mewla Dev beside an installed Mewla: Chrome's one native host manifest is the
+// installed Mewla's, so this daemon never writes it, on any path.
+func TestADaemonBesideTheInstalledMewlaLeavesChromeAlone(t *testing.T) {
+	c := newFakeComputer(t)
+	c.installMewlaExtension("Default")
+	c.withNode()
+	s := c.service(true)
+	s.executable = func() (string, error) { return "/opt/mewla/bin/mewla", nil }
+	s.LeaveChromeAlone()
+	status := s.Refresh()
+	if !status.Enabled || status.Browser.State != BrowserOff || !strings.Contains(status.Browser.Summary, "installed on this computer") {
+		t.Fatalf("status %+v", status)
+	}
+	if err := s.InstallNativeHost(c.chrome.UserDataDir, "/opt/mewla/bin/mewla", []string{MewlaExtensionID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(c.chrome.UserDataDir, "NativeMessagingHosts")); !os.IsNotExist(err) {
+		t.Fatalf("Chrome's native hosts were touched: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(c.root, "state", "agent-use", "native-host.sh")); !os.IsNotExist(err) {
+		t.Fatalf("a launcher was written: %v", err)
+	}
+}
+
 func TestWithoutAnyExtensionTheStatusAsksForMewlaForChrome(t *testing.T) {
 	c := newFakeComputer(t)
 	c.withNode()

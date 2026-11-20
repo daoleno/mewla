@@ -116,6 +116,9 @@ type hostManifest struct {
 // runs `mewla agent-use native-host`. It is written again whenever the Mewla
 // binary moves.
 func (s *Service) InstallNativeHost(userDataDir, mewla string, extensionIDs []string) error {
+	if s.leaveChrome.Load() {
+		return nil
+	}
 	return s.installNativeHost(userDataDir, mewla, extensionIDs, false)
 }
 

@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
@@ -140,6 +141,19 @@ type Service struct {
 	// executable is the mewla binary the extension's host and the tools'
 	// stand-in for Chrome run; replaced in tests.
 	executable func() (string, error)
+	// leaveChrome: another Mewla on this computer gives agents the person's
+	// Chrome (LeaveChromeAlone).
+	leaveChrome atomic.Bool
+}
+
+// LeaveChromeAlone is for a daemon beside an installed Mewla (Mewla Dev): the
+// person's Chrome has one native host manifest, and it is that Mewla's. Agents
+// get no Chrome here and the manifest is never written. Call it before Run.
+func (s *Service) LeaveChromeAlone() {
+	s.leaveChrome.Store(true)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cachedAt = time.Time{}
 }
 
 // Bridge is the daemon's side of Mewla's Chrome extension (see bridge.go).
@@ -220,7 +234,9 @@ func (s *Service) refreshBrowser() Status {
 	defer s.mu.Unlock()
 	_ = s.loadLocked()
 	status := Status{Enabled: !s.settings.Off, CodexComputerUse: s.lookCodex(s.home)}
-	if status.Enabled {
+	if s.leaveChrome.Load() {
+		status.Browser = BrowserStatus{State: BrowserOff, Summary: "The Mewla installed on this computer gives agents your Chrome."}
+	} else if status.Enabled {
 		status.Browser, _ = s.browserLocked()
 	} else {
 		status.Browser = BrowserStatus{State: BrowserOff, Summary: "Agents can't use this computer. Turn it on to let them."}

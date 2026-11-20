@@ -88,6 +88,8 @@ jobs:
         run: |
           set -euo pipefail
           D="$RUNNER_TEMP/dev-run"; mkdir -p "$D/data"
+          chrome_hosts="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.mewla.browser.json"
+          manifest_before=$(shasum -a 256 "$chrome_hosts" 2>/dev/null || echo none)
           printf '%s' '{"mewla:theme_preference":"classic-light"}' > "$D/data/storage.json"
           ditto -x -k "$RUNNER_TEMP/app/Mewla-Dev-"*-macos-arm64.zip "$D"
           start() {
@@ -136,6 +138,13 @@ jobs:
             stop
             test -n "$ok" || { echo "Mewla Dev did not join its daemon ($theme $name)"; cat "$D"/data/logs/* || true; exit 1; }
           done; done
+          # Mewla Dev leaves the computer-wide setup to the installed Mewla: no Chrome native host, no cloud CLIs.
+          grep -q "beside the installed Mewla" "$D/state/logs/app-daemon.log"
+          grep -q "agent use: your Chrome: off" "$D/state/logs/app-daemon.log"
+          if grep -E "agent use: your Chrome: (preparing|ready)" "$D/state/logs/app-daemon.log"; then exit 1; fi
+          test ! -e "$D/state/cli" || { echo "Mewla Dev's daemon set up cloud CLIs:"; ls -la "$D/state/cli"; exit 1; }
+          [ "$(shasum -a 256 "$chrome_hosts" 2>/dev/null || echo none)" = "$manifest_before" ] || { echo "Mewla Dev wrote Chrome's native host manifest"; exit 1; }
+          echo "Mewla Dev left Chrome's native host and the cloud CLIs alone"
           cat "$D"/data/logs/*
           # What the daemon said about the terminals the app opened.
           grep -iE "terminal|attach" "$D/state/logs/app-daemon.log" | tail -40 || true

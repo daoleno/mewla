@@ -47,6 +47,9 @@ impl Config {
             command.env("MEWLA_NO_AUTOUPDATE", "1");
             // And it ends with the app however the app ends (a SIGTERM or a crash skips `stop`): it watches this pid.
             command.env("MEWLA_EXIT_WITH_PARENT", std::process::id().to_string());
+            // It runs beside the Mewla installed here, which owns the computer-wide setup: Chrome's native host, the
+            // cloud CLIs and the computer's cloud profiles are left to that one.
+            command.env("MEWLA_BESIDE_INSTALLED", "1");
             // Mewla Dev on someone's Mac may hold Brain to one agent (`MEWLA_APP_BRAIN_HOST_EXECUTOR`, e.g. codex,
             // which is told its folder trust per launch and so writes nothing into the person's agent config).
             if let Ok(executor) = std::env::var("MEWLA_APP_BRAIN_HOST_EXECUTOR") {
