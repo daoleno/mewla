@@ -154,6 +154,17 @@ describe("Mewla for Mac", () => {
     await app.waitFor("text:Said with no window shown.", { timeout: 5_000 });
   }, 60_000);
 
+  test("Brain's terminal follows Brain's host: one the computer replaces (a restart, a lost Session resumed) moves the open terminal to the new host", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ terminal: true }) });
+    const active = () => framesOf(app.host.posts(), "set_active_worker").map((frame) => frame.worker_id);
+    await app.waitUntil(() => active().includes("brain-host"), { timeout: 15_000 });
+    await app.host.send("app.daemonPush", { type: "brain_snapshot", brain: { ...brain, host_worker: { ...brainHost, id: "brain-host-2" } } });
+    await app.waitUntil(() => active().at(-1) === "brain-host-2", { timeout: 10_000 });
+    await app.wait(4_000);
+    expect(active().at(-1)).toBe("brain-host-2");
+    expect(app.shows("id:session-mode")).toBe(true);
+  }, 40_000);
+
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host });

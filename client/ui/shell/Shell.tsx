@@ -30,7 +30,7 @@ import { CalendarAlertCard } from "../calendar/AlertCard";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
 import { isMacApp } from "../mac/local";
 import { MacStarting } from "../mac/Starting";
-import { current, onTransport, workers } from "../session";
+import { brain, current, onTransport, workers } from "../session";
 import { routeOwner, screenRoute } from "../../core/screen/float";
 import { ScreenFloatHost } from "../screenfloat/ScreenFloatHost";
 import { workFiles } from "../work/state";
@@ -69,6 +69,13 @@ export function openPhonePage() {
 /** Screen, where an agent's display and the Mac's screen have their full view: the floating screen's Open. */
 export function openScreenPage(worker: string | null, takeOver = false) {
   openPage({ name: "computer" }, screenRoute(worker, takeOver));
+}
+
+/** Moves every Brain terminal on the stack to Brain's current host. */
+function followBrainHost(host: string) {
+  const routes = nav.routes();
+  const stale = (route: Route) => route.name === "session" && route.brain === true && route.workerId !== host;
+  if (routes.some(stale)) nav.setRoutes(routes.map((route) => (stale(route) ? { name: "session", workerId: host, brain: true } : route)));
 }
 
 /** Goes to a place a URL, the palette or `G` then a letter names. */
@@ -180,6 +187,12 @@ export function Shell() {
   // Narrow to wide: an open tray becomes the left pane (§14.6), and the phone's overlay does not come back when narrowed again.
   effect(() => {
     if (wide()) untracked(() => trayOpen() && trayOpen.set(false));
+  });
+  // Brain's terminal is Brain's host's: one the computer replaces (after a restart, or a lost Session resumed) takes the
+  // open terminal with it, on whatever page of the stack it is.
+  effect(() => {
+    const host = brain()?.host_worker?.id;
+    if (host) untracked(() => followBrainHost(host));
   });
   return (
     // On the Mac the window is transparent: the left pane is the sidebar material, the right pane paper (DESIGN-MAC.md §3).
