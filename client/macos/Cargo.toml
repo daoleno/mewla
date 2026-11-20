@@ -27,6 +27,8 @@ nsh-base = "=0.6.1"
 dispatch2 = "0.3.1"
 objc2-foundation = { version = "0.3.2", features = ["NSString", "NSError"] }
 objc2-service-management = { version = "0.3.2", features = ["SMAppService", "objc2-foundation"] }
+# The release's secrets in the Keychain (secure.rs); already in the lock through NSH's networking.
+security-framework = "3.7.0"
 
 [profile.release]
 lto = "thin"

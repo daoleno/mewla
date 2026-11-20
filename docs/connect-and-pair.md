@@ -226,6 +226,10 @@ no QR scanning, push notifications or in-app browser, and it keeps its device
 key in the browser's local storage, which is weaker than the phone's keychain.
 Pair only browser profiles you control.
 
+Mewla for Mac pairs itself with this Mac's daemon. Signed with Developer ID, it
+keeps its device key in your login Keychain; an ad hoc signed build and Mewla
+Dev keep it in `secure.json` (readable only by you) in the app's data folder.
+
 ## Add another browser
 
 Once one device is paired, a new browser can ask for access at any HTTPS

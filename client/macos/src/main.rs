@@ -65,7 +65,14 @@ fn main() -> std::process::ExitCode {
     } else {
         daemon::start(&config)
     };
-    let secrets = secure::Store::open(options.data_dir.clone().or_else(|| nsh_engine::logging::log_dir(&options.app_id).and_then(|d| d.parent().map(Into::into))));
+    // The release signed with Developer ID keeps its secrets in the Keychain under its own id; Mewla Dev and an ad hoc
+    // signed release in their file (secure.rs).
+    let keychain = release && secure::keychain_usable();
+    log::warn!("secrets: {}", if keychain { "the Keychain" } else { "secure.json (not Developer ID signed, or Mewla Dev)" });
+    let secrets = secure::Store::open(
+        options.data_dir.clone().or_else(|| nsh_engine::logging::log_dir(&options.app_id).and_then(|d| d.parent().map(Into::into))),
+        keychain.then(|| options.app_id.clone()),
+    );
     install_host(&options.host, config, secrets, release);
 
     let code = run_app(AppSource::Bundle(launch.bundle), options);
@@ -154,9 +161,12 @@ fn set_dock_icon(shown: bool) {
         return;
     }
     let policy = if shown { NSApplicationActivationPolicy::Regular } else { NSApplicationActivationPolicy::Accessory };
-    if app.activationPolicy() != policy {
+    let before = app.activationPolicy();
+    if before != policy {
         app.setActivationPolicy(policy);
     }
+    // What macOS holds now, not what was asked: the Mac run reads it (a Dock icon is Regular).
+    log::warn!("dock: shown {shown}: activation policy {:?} -> {:?}", before.0, app.activationPolicy().0);
 }
 
 /// The app's `nsh` resources and its window's options, read as NSH's release runner reads them

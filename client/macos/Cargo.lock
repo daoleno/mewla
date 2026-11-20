@@ -2133,6 +2133,7 @@ dependencies = [
  "nsh-platform-macos",
  "objc2-foundation",
  "objc2-service-management",
+ "security-framework",
  "serde_json",
 ]
 
