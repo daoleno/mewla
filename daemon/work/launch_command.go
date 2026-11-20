@@ -67,6 +67,38 @@ func (c *ExecutorConfig) ResolveWorkerCommand(executor, explicitCommand, model, 
 	return PrepareDelegatedCommand(provider, command)
 }
 
+// ResolveScheduledActionCommand is ResolveWorkerCommand for Calendar's
+// unattended launch: the same catalog lookup and the same per-launch model and
+// reasoning rules (and errors) as a Worker spawn, then Calendar's unattended
+// contract. Without a model or reasoning it is exactly ScheduledActionCommand.
+func (c *ExecutorConfig) ResolveScheduledActionCommand(executor, model, reasoning string) (string, error) {
+	executor = strings.TrimSpace(executor)
+	model, reasoning = strings.TrimSpace(model), strings.TrimSpace(reasoning)
+	var e Executor
+	ok := false
+	if c != nil && executor != "" {
+		e, ok = c.ByName[executor]
+	}
+	if !ok {
+		return "", fmt.Errorf("%w: %s", ErrUnknownExecutor, executor)
+	}
+	if model != "" || reasoning != "" {
+		worker := NewWorkerExecutor(executor, e)
+		var command string
+		var err error
+		if worker.Provider == WorkerProviderCodex {
+			command, err = codexWorkerCommand(worker.Command, model, reasoning, false)
+		} else {
+			command, err = withLaunchModel(worker.Provider, worker.Command, model, reasoning)
+		}
+		if err != nil {
+			return "", err
+		}
+		e.Command = command
+	}
+	return ScheduledActionCommand(executor, e)
+}
+
 // withLaunchModel replaces any model/reasoning options already in command with
 // the requested ones, so a catalog command never carries two values.
 func withLaunchModel(provider, command, model, reasoning string) (string, error) {

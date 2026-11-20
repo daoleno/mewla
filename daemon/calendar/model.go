@@ -69,9 +69,16 @@ type Item struct {
 	Summary           string `json:"summary,omitempty"`
 	ActionInstruction string `json:"action_instruction,omitempty"`
 	ActionCwd         string `json:"action_cwd,omitempty"`
-	SourceThreadID    string `json:"source_thread_id,omitempty"`
-	SourceMessageID   string `json:"source_message_id,omitempty"`
-	LinkedWorkID      string `json:"linked_work_id,omitempty"`
+	// ActionExecutor, ActionModel and ActionReasoning are the choice a
+	// scheduled_action runs with, meaning what mewla worker spawn's -executor,
+	// -model and -reasoning mean. All empty: the "Scheduled action" row of the
+	// Brain workspace's routing.md, else the executor Brain runs on.
+	ActionExecutor  string `json:"action_executor,omitempty"`
+	ActionModel     string `json:"action_model,omitempty"`
+	ActionReasoning string `json:"action_reasoning,omitempty"`
+	SourceThreadID  string `json:"source_thread_id,omitempty"`
+	SourceMessageID string `json:"source_message_id,omitempty"`
+	LinkedWorkID    string `json:"linked_work_id,omitempty"`
 	// Owner names the part of Mewla that created and acts on this item. Only
 	// the daemon sets it; clients cannot create or change it. An owned item
 	// is an ordinary reminder the user can move, repeat differently or cancel.
@@ -126,6 +133,9 @@ func (i Item) Validate() error {
 	}
 	if summary := strings.TrimSpace(i.Summary); utf8.RuneCountInString(summary) > MaxSummaryRunes || strings.ContainsAny(summary, "\r\n") {
 		return fmt.Errorf("summary must be one line of at most %d characters", MaxSummaryRunes)
+	}
+	if i.Kind != KindScheduledAction && i.HasActionChoice() {
+		return fmt.Errorf("only a scheduled_action takes an executor, model or reasoning")
 	}
 	switch i.Kind {
 	case KindEvent:
@@ -187,6 +197,12 @@ func (i Item) Validate() error {
 		}
 	}
 	return nil
+}
+
+// HasActionChoice reports whether the item names any of its own executor,
+// model or reasoning.
+func (i Item) HasActionChoice() bool {
+	return strings.TrimSpace(i.ActionExecutor) != "" || strings.TrimSpace(i.ActionModel) != "" || strings.TrimSpace(i.ActionReasoning) != ""
 }
 
 func (i Item) TriggerAt() time.Time {

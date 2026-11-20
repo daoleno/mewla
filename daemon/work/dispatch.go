@@ -38,6 +38,12 @@ func NewLauncher(run SessionRunner, execs *ExecutorConfig) *Launcher {
 // StartDedicated always spawns a fresh session of the named executor. The
 // caller chooses the executor and persists the returned started metadata.
 func (l *Launcher) StartDedicated(item *Item, cwd, role string) (*Item, error) {
+	return l.StartDedicatedWith(item, cwd, role, "", "")
+}
+
+// StartDedicatedWith is StartDedicated with the model and reasoning the launch
+// should use; empty keeps the executor's own.
+func (l *Launcher) StartDedicatedWith(item *Item, cwd, role, model, reasoning string) (*Item, error) {
 	if item == nil {
 		return nil, fmt.Errorf("work item required")
 	}
@@ -49,11 +55,10 @@ func (l *Launcher) StartDedicated(item *Item, cwd, role string) (*Item, error) {
 	}
 
 	role = strings.TrimSpace(role)
-	executor, ok := l.execs.ByName[role]
-	if !ok {
+	if _, ok := l.execs.ByName[role]; !ok {
 		return nil, fmt.Errorf("%w: %s", ErrExecutorNotConfigured, role)
 	}
-	command, err := ScheduledActionCommand(role, executor)
+	command, err := l.execs.ResolveScheduledActionCommand(role, model, reasoning)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +86,16 @@ func (l *Launcher) StartDedicated(item *Item, cwd, role string) (*Item, error) {
 	next.Frontmatter.Started = &now
 	next.Frontmatter.WorkerSession = sessionID
 	return next, nil
+}
+
+// ScheduledCommand is the command StartDedicatedWith would launch, without
+// launching it, so a choice can be refused before anything is created. Its
+// errors are a Worker spawn's for the same choice.
+func (l *Launcher) ScheduledCommand(role, model, reasoning string) (string, error) {
+	if l == nil || l.execs == nil {
+		return "", fmt.Errorf("executor config required")
+	}
+	return l.execs.ResolveScheduledActionCommand(role, model, reasoning)
 }
 
 func buildInitialPrompt(path string) string {

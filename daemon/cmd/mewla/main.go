@@ -1067,7 +1067,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		snapshot, persist, err := srv.SetThreadRuntime(sessionID, choice)
 		return snapshot, persist, err
 	}
-	calendarScheduler := calendar.NewScheduler(calendarStore, &calendar.WorkRunner{Store: workStore, Launcher: launcher, Watcher: w, Brain: brainService})
+	calendarRunner := &calendar.WorkRunner{Store: workStore, Launcher: launcher, Watcher: w, Brain: brainService, RoutingPath: brainStore.RoutingGuidePath()}
+	calendarStore.RefuseActionChoice(calendarRunner.CheckActionChoice)
+	calendarScheduler := calendar.NewScheduler(calendarStore, calendarRunner)
 	controlHandler.calendarScheduler = calendarScheduler
 	calendarScheduler.Alert(func(item calendar.Item, alertAt time.Time) error {
 		err := pusher.NotifyCalendarAlert(push.CalendarAlert{
@@ -1695,7 +1697,7 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla calendar create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
-	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, summary, instruction, cwd, sourceThread string
+	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, summary, instruction, cwd, sourceThread, executor, model, reasoning string
 	var revision int64
 	var lead int
 	fs.IntVar(&lead, "lead", -1, "minutes before an event starts or a deadline falls due that the phone alerts (default: event 10, deadline 30; a reminder alerts at its time)")
@@ -1716,6 +1718,9 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs.StringVar(&summary, "summary", "", "scheduled action: one line, in the user's language, saying what it does (shown in Calendar)")
 	fs.StringVar(&instruction, "instruction", "", "scheduled action instruction")
 	fs.StringVar(&cwd, "cwd", "", "scheduled action working directory")
+	fs.StringVar(&executor, "executor", "", "scheduled action: configured executor name (default: the Brain host executor). With none of -executor, -model and -reasoning the action runs on the \"Scheduled action\" row of routing.md, else on the Brain host executor")
+	fs.StringVar(&model, "model", "", "scheduled action: model for each run (codex, claude, pi, grok, agent); empty keeps the client default")
+	fs.StringVar(&reasoning, "reasoning", "", "scheduled action: reasoning level for each run (codex, claude, pi); empty keeps the client default")
 	fs.StringVar(&sourceThread, "source-thread", "", "required for scheduled_action: source_thread_id for canonical Calendar result projection")
 	fs.Int64Var(&revision, "revision", 0, "expected revision")
 	if err := fs.Parse(args); err != nil {
@@ -1755,6 +1760,18 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	if lead >= 0 {
 		item.AlertLeadMinutes = &lead
 	}
+	// A flag that was typed wins over the same field of -item-json, which is
+	// how an update changes the choice.
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "executor":
+			item.ActionExecutor = executor
+		case "model":
+			item.ActionModel = model
+		case "reasoning":
+			item.ActionReasoning = reasoning
+		}
+	})
 	if item.Kind == calendar.KindScheduledAction && strings.TrimSpace(item.SourceThreadID) == "" {
 		return fmt.Errorf("scheduled_action requires -source-thread (source_thread_id)")
 	}

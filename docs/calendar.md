@@ -51,7 +51,7 @@ A Mewla action is a small job for an agent: "At 09:30 on weekdays, summarise
 yesterday's merged pull requests." When it is due, Mewla:
 
 1. creates a visible Work item and starts the agent in its own Session, on
-   Brain's executor;
+   the executor, model and reasoning the action names (see below);
 2. waits for that Work to finish or fail;
 3. posts the result to the Brain thread where you created the action, and
    sends one push notification that opens that thread.
@@ -232,6 +232,18 @@ without one shows the first sentence of its instruction. Events use
 `-end-date` and `-end-time`. `mewla calendar update` takes the complete item as
 `-item-json` plus its current `-revision`, so two edits cannot silently
 overwrite each other.
+
+A Mewla action runs on the agent you choose for it: `-executor`, `-model` and
+`-reasoning` mean what they mean for `mewla worker spawn` (see
+[Worker routing](brain-and-work.md#worker-routing)), on `create` and, like any
+field, on `update` (a flag typed beside `-item-json` replaces that field of
+it). An action that names none runs on the `Scheduled action` row of Brain's
+`routing.md`, and without that row on Brain's own executor and its model. An
+action that names only a model keeps Brain's executor. A choice the executor
+cannot honor is refused when you create or update the action, with the error a
+spawn gives; if one becomes invalid later (a removed executor), that run fails
+and says why instead of falling back to Brain's model. Events, reminders and
+deadlines take none of these.
 
 ## Limits
 

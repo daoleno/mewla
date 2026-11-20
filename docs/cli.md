@@ -186,6 +186,7 @@ mewla service tunnel start|status|stop -id <service> -generation <generation>
 
 mewla calendar list --json
 mewla calendar create -title "Review plan" -kind reminder -date 2026-10-09 -time 09:30
+mewla calendar create -title "Digest" -kind scheduled_action -date 2026-10-09 -time 09:30 -instruction "..." -source-thread <thread> -executor claude -model <model> -reasoning low
 mewla calendar run -id <item> --json
 mewla calendar snooze -id <item> -minutes 15 --json
 mewla calendar done -id <item> --json

@@ -3371,6 +3371,8 @@ func assertCalendarPromptContract(t *testing.T, value string) {
 		"scheduled_action runs work",
 		"current thread_id from mewla brain context --json as -source-thread",
 		"never invent or retarget it",
+		"pass -executor, -model and -reasoning from",
+		"\"Scheduled action\" row of routing.md",
 		"A recurring series keeps running after one occurrence fails",
 		"local YYYY-MM-DD and HH:MM with an IANA timezone",
 		"occurs twice at a DST change",
