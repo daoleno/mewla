@@ -3,7 +3,8 @@ import { Application, GlobalShortcut, Tray, Window } from "nsh/desktop";
 import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWords, type MenuBarItem, type MenuBarReaction } from "../../core/mac/menuBar";
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
-import { brainChat, connection, current, ready } from "../session";
+import { brain, brainChat, connection, current, ready } from "../session";
+import { openBrainTerminal } from "../shell/nav";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
@@ -25,7 +26,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -180,9 +181,11 @@ export function startMac(): void {
   if (script) {
     let connected = false;
     let sent = false;
+    let terminal = false;
     effect(() => {
       if (!current() || connection() !== "connected") return;
       const chat = Boolean(brainChat());
+      const hostId = brain()?.host_worker?.id ?? "";
       untracked(() => {
         if (!connected) {
           connected = true;
@@ -193,6 +196,12 @@ export function startMac(): void {
           if (script.settings) openMacSettings(script.settings);
           if (script.shortcutOffer) openShortcutOffer();
           if (script.perch && !script.quickSend) togglePerch();
+        }
+        // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
+        if (!terminal && script.terminal && hostId) {
+          terminal = true;
+          openBrainTerminal(hostId);
+          console.log(`dev script: terminal ${hostId}`);
         }
         if (!sent && script.quickSend && chat) {
           sent = true;

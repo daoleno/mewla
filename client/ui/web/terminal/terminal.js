@@ -1223,7 +1223,9 @@
   }
 
   addEventListener("message", function (e) {
-    if (e.source !== app) return;
+    // In a browser the page is a frame: only its parent, the app, is heard. In a native web view (a Mac's terminal)
+    // the page is the top document and NSH delivers the app's batches as message events (WebViewRef.postMessage).
+    if (!bridge && e.source !== app) return;
     // NSH's handshake: the port to the app (its bridge takes it where it runs).
     if (!bridge && e.ports && e.ports[0]) {
       port = e.ports[0];

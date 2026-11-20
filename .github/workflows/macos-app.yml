@@ -37,7 +37,7 @@ jobs:
           web: "true"
       - name: Install NSH
         run: client/scripts/fetch-nsh.sh
-      # NSH 0.6.0 needs Rust 1.97 or later.
+      # NSH 0.6 needs Rust 1.97 or later.
       - name: Rust
         run: |
           rustup toolchain install stable --profile minimal
@@ -79,6 +79,11 @@ jobs:
       # Mewla Dev runs here (its own state and port; in the foreground, so it has its menu bar item): its bundle loads,
       # it joins its daemon, opens the perch and Pair a phone, then Settings and the shortcut offer; the windows are
       # captured (no agent here, so Brain does not start). A JS error in the app's log fails the step.
+      # A stand-in claude (no agent on a runner): Brain's host starts, so Ready, the thread and its terminal show.
+      - name: A stub agent for the smoke run
+        run: |
+          sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+          claude --version
       - name: Mewla Dev runs and shows its windows
         run: |
           set -euo pipefail
@@ -94,17 +99,19 @@ jobs:
             echo $! > "$D/app.pid"
           }
           # A SIGTERM skips the app's own stop of its daemon: the daemon sees its parent gone (MEWLA_EXIT_WITH_PARENT)
-          # and stops by itself; one still running after 30 s fails the step.
+          # and stops by itself, its session host and Sessions with it; anything still running after 120 s fails the step.
           stop() {
             kill -TERM "$(cat "$D/app.pid")"
-            for i in $(seq 1 30); do pgrep -f "$D" >/dev/null || return 0; sleep 1; done
+            for i in $(seq 1 120); do pgrep -f "$D" >/dev/null || { echo "everything stopped $i s after the app"; return 0; }; sleep 1; done
             echo "the daemon outlived the app:"; pgrep -fl "$D" || true
+            tail -40 "$D/state/logs/app-daemon.log" || true
             pkill -TERM -f "$D" || true
             return 1
           }
           # Three runs per appearance, one surface group each (a window that takes the focus closes the perch):
-          # the perch and Pair a phone; Settings › General and the shortcut offer; Settings › Privacy & access.
-          scripts=('main={"perch":true,"pairPhone":true}' 'general={"settings":"general","shortcutOffer":true}' 'access={"settings":"access"}')
+          # the perch and Pair a phone; Settings › General and the shortcut offer; Settings › Privacy & access; Brain's
+          # host's terminal (the web terminal in a web view, its page from the app's own daemon).
+          scripts=('main={"perch":true,"pairPhone":true}' 'general={"settings":"general","shortcutOffer":true}' 'access={"settings":"access"}' 'terminal={"terminal":true}')
           for theme in light dark; do for entry in "${scripts[@]}"; do
             name="${entry%%=*}"; script="${entry#*=}"
             python3 -I -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["mewla:theme_preference"]="classic-"+sys.argv[2]; json.dump(d,open(p,"w"))' "$D/data/storage.json" "$theme"
@@ -116,6 +123,11 @@ jobs:
               [ "${now:-0}" -gt "${seen:-0}" ] && { ok=1; break; }
               sleep 1
             done
+            if [ "$name" = terminal ]; then
+              for i in $(seq 1 90); do cat "$D"/data/logs/* 2>/dev/null | grep -q "dev script: terminal" && break; sleep 1; done
+              # Opened, or failed (the open's own bound is 15 s).
+              for i in $(seq 1 40); do cat "$D"/data/logs/* 2>/dev/null | grep -qE "terminal: (opened|error)" && break; sleep 1; done
+            fi
             sleep 8
             client/macos/scripts/capture-windows.sh "Mewla Dev" "$D/captures/$theme-$name" "$theme-$name-" || true
             # The menu bar here (a runner's, nobody's screen): who owns the status item windows, and the strip itself.
@@ -125,6 +137,9 @@ jobs:
             test -n "$ok" || { echo "Mewla Dev did not join its daemon ($theme $name)"; cat "$D"/data/logs/* || true; exit 1; }
           done; done
           cat "$D"/data/logs/*
+          # What the daemon said about the terminals the app opened.
+          grep -iE "terminal|attach" "$D/state/logs/app-daemon.log" | tail -40 || true
+          echo "--- the daemon's log, last 120 lines"; tail -120 "$D/state/logs/app-daemon.log" || true
           if grep -E "ERROR (js|nsh)" "$D"/data/logs/*; then exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
@@ -204,6 +219,15 @@ jobs:
             sleep 1
           done
           launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
+          # A daemon that did not come up: why launchd could not spawn it (the job, launchd's own log, its BTM entry).
+          if ! curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1; then
+            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" || true
+            log show --last 5m --style compact --predicate 'process == "launchd" AND eventMessage CONTAINS "com.daoleno.mewla"' | tail -60 || true
+            log show --last 5m --style compact --predicate 'eventMessage CONTAINS "Contents/Helpers/mewla" OR eventMessage CONTAINS "com.daoleno.mewla.daemon"' | grep -iv "launchd" | tail -40 || true
+            sudo sfltool dumpbtm 2>/dev/null | grep -B4 -A12 "com.daoleno.mewla" | head -60 || true
+            codesign -dv --verbose=2 /Applications/Mewla.app/Contents/Helpers/mewla 2>&1 | head -12 || true
+            tail -30 "$HOME/.mewla/logs/launchd.log" 2>/dev/null || true
+          fi
       - name: One daemon, the app's, with the same identity and device
         run: |
           set -euo pipefail

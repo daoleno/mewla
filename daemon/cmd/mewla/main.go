@@ -1302,8 +1302,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 			},
 		},
 	)
-	if err := runJoinedRuntime(ctx, runtimeOwners); err != nil {
-		return err
+	runErr := runJoinedRuntime(ctx, runtimeOwners)
+	// An app's own daemon (MEWLA_EXIT_WITH_PARENT) leaves no session host behind.
+	stopSessionHostWithParent(stateDir)
+	if runErr != nil {
+		return runErr
 	}
 	if errors.Is(context.Cause(ctx), errDaemonRestart) {
 		return errDaemonRestart

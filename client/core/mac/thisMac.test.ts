@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { phonesAndBrowsers, seenWords } from "./thisMac";
+import { httpOrigin, phonesAndBrowsers, seenWords } from "./thisMac";
 
 const now = new Date(2026, 10, 20, 14, 5);
 const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).toISOString();
@@ -22,5 +22,14 @@ describe("This Mac's phones and browsers", () => {
   test("earlier today is the time", () => {
     expect(seenWords(at(20, 9, 30), now)).toBe("09:30");
     expect(seenWords("", now)).toBe("");
+  });
+});
+
+describe("a computer's address as an http origin", () => {
+  test("its WebSocket address gives the origin its files are served at", () => {
+    expect(httpOrigin("ws://127.0.0.1:19877/ws")).toBe("http://127.0.0.1:19877");
+    expect(httpOrigin("wss://mac.example.ts.net/ws")).toBe("https://mac.example.ts.net");
+    expect(httpOrigin("http://127.0.0.1:9876/")).toBe("http://127.0.0.1:9876");
+    expect(httpOrigin("mewla://settings?p=x")).toBe("");
   });
 });
