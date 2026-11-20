@@ -13,7 +13,8 @@
 //! the install `mewla boot install` made (agent.rs), so it runs with the app closed and after a restart. Mewla Dev
 //! starts `mewla serve` as its child on its own state and stops it when the app quits.
 //!
-//! Mewla Dev runs beside an installed Mewla with its own state, address and data, named by the environment:
+//! Mewla Dev runs beside an installed Mewla with its own state, address and data (its daemon leaves Chrome's native
+//! host and the cloud CLIs to that Mewla: `MEWLA_BESIDE_INSTALLED`), named by the environment:
 //! `MEWLA_APP_STATE_ROOT` (the daemon's state root), `MEWLA_APP_ADDR` (`127.0.0.1:<port>`), `MEWLA_APP_DATA_DIR`
 //! (the app's storage and logs), `MEWLA_APP_PHONE_ADDRESS` (the address the phone QR names),
 //! `MEWLA_APP_QUICK_CHAT_SHORTCUT`, `MEWLA_APP_BRAIN_HOST_EXECUTOR` (Brain held to one agent),

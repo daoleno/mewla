@@ -750,6 +750,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize agent use: %w", err)
 	}
+	besideInstalled := besideInstalledMewla()
+	if besideInstalled {
+		agentUse.LeaveChromeAlone()
+		log.Printf("beside the installed Mewla: Chrome's native host and the cloud CLIs are left to it")
+	}
 	go agentUse.Refresh()
 	go agentUse.Run(ctx)
 	// The person's phone holds one connection to this computer; Workers use it when the
@@ -849,7 +854,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
-	connectionManager.EnableLocalCloudCLI()
+	if !besideInstalled {
+		connectionManager.EnableLocalCloudCLI()
+	}
 	connectionManager.SetAccountService(accountService{stateDir: authManager.StorageDir(), auth: authManager})
 	// Connecting Tailscale creates its OAuth client in the person's own Chrome,
 	// through the browser tools agents use.
@@ -3652,4 +3659,14 @@ func (values *stringListFlag) String() string { return strings.Join(*values, ", 
 func (values *stringListFlag) Set(value string) error {
 	*values = append(*values, value)
 	return nil
+}
+
+// besideInstalledMewla says this daemon runs beside the Mewla installed on this
+// computer (MEWLA_BESIDE_INSTALLED=1: Mewla Dev sets it for the daemon it
+// starts on its own state). The computer-wide setup is that Mewla's: this one
+// never registers Chrome's native host (Chrome has one manifest, pointing at
+// one Mewla), and never installs cloud CLIs, reads the computer's cloud
+// profiles or checks them with their clouds.
+func besideInstalledMewla() bool {
+	return os.Getenv("MEWLA_BESIDE_INSTALLED") == "1"
 }
