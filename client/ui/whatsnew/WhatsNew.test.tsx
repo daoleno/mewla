@@ -9,12 +9,22 @@ import { knowsScene } from "./scenes";
  * update leaves a line in Brain's chat. The fake computer keeps the record as the daemon does (daemon/whatsnew). This
  * app is at the release's version (nsh.json, APP_VERSION), which release preparation moves, and the bundled notes grow
  * with every release: so the tests bring their own releases (NEWS), newer than any real one, from the computer, and
- * count from the app's version on (a baseline at or past it), so no bundled note and no release number is in them.
+ * count from past every bundled release (BASELINE), so no bundled note and no release number is in them.
  */
 
 const APP = "../FakeDaemonApp.tsx";
 /** The app's own version: release preparation moves it, so no test names it. */
 const APP_VERSION: string = manifest.version;
+const later = (a: string, b: string) => {
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i] ? a : b;
+  return a;
+};
+/**
+ * Past every bundled release: the app's version, or the next release's notes when they are in before its version is
+ * (a feature lands with its What's New before release preparation moves the version).
+ */
+const BASELINE: string = (notes as { releases: { version: string }[] }).releases.reduce((top, r) => later(top, r.version), APP_VERSION);
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const DAEMON_UPDATE = "GET http://127.0.0.1:1/daemon-update";
 const host = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: "2026-11-16T07:00:00.000Z" };
@@ -50,7 +60,7 @@ const NEWS = {
   ],
 };
 /** The record of a computer at TOP whose person last saw `baseline` (by default this app's version: all three are news). */
-const news = (baseline = APP_VERSION, seen?: string[]): Kept => ({ baseline, releases: NEWS, ...(seen ? { seen } : {}) });
+const news = (baseline = BASELINE, seen?: string[]): Kept => ({ baseline, releases: NEWS, ...(seen ? { seen } : {}) });
 /** Only TOP's three highlights are news. */
 const NEWEST_ONLY = "99.8.0";
 
@@ -99,7 +109,7 @@ describe("What's New: when it shows", () => {
   test("a release with fixes only shows no sheet, only its line in Brain's chat, which lists the fixes", async () => {
     const release = { version: TOP, date: "2026-11-20", highlights: [], fixes: ["Sessions open faster."] };
     // The baseline is this app's version, past every bundled release, so only this one is news.
-    const record: Kept = { baseline: APP_VERSION, updates: [{ version: TOP, at: at(3) }], releases: { releases: [release] } };
+    const record: Kept = { baseline: BASELINE, updates: [{ version: TOP, at: at(3) }], releases: { releases: [release] } };
     const app = await open(APP, setup({ record, computer: TOP }));
     await app.waitFor("id:update-line", { timeout: 15_000 });
     expect(app.shows(`text:Updated to ${TOP} ·`)).toBe(true);
@@ -111,7 +121,7 @@ describe("What's New: when it shows", () => {
   }, 40_000);
 
   test("a version released without notes leaves only \"Updated to\": no What's new that opens nothing, or older notes", async () => {
-    const record: Kept = { baseline: APP_VERSION, updates: [{ version: TOP, at: at(3) }], releases: { releases: [] } };
+    const record: Kept = { baseline: BASELINE, updates: [{ version: TOP, at: at(3) }], releases: { releases: [] } };
     const app = await open(APP, setup({ record, computer: TOP }));
     await app.waitFor("id:update-line", { timeout: 15_000 });
     expect(app.shows(`text:Updated to ${TOP}`)).toBe(true);
@@ -204,7 +214,7 @@ describe("What's New: Try it", () => {
       version: TOP, date: "2026-11-20", fixes: [],
       highlights: [{ id: "t-about-page", title: "A test page", line: "Shown again from About.", media: { scene: "chat-diagram" }, try: { kind: "open", target: "brain" } }],
     };
-    const record: Kept = { baseline: APP_VERSION, seen: ["t-about-page"], updates: [{ version: TOP, at: at(3) }], releases: { releases: [release] } };
+    const record: Kept = { baseline: BASELINE, seen: ["t-about-page"], updates: [{ version: TOP, at: at(3) }], releases: { releases: [release] } };
     const app = await open(APP, setup({ record, computer: TOP }));
     // The computer's notes and version are in once its update line is.
     await app.waitFor("id:update-line", { timeout: 15_000 });

@@ -9,7 +9,7 @@ export type ScreenSignal =
       ice_servers?: { urls: string[]; username?: string; credential?: string }[];
       /** On the offer: the computer takes scrolls by picture pixels (client message 250), not only wheel notches. */
       fine_scroll?: boolean;
-      /** On the offer: the video carries the computer's own cursor, so the viewer draws no arrow of its own. */
+      /** On the offer: the video carries the computer's own cursor, so the viewer draws no arrow of its own (missing: an older computer, which may). */
       cursor?: boolean;
       /** On the offer: the computer's signature over its DTLS fingerprints (screenIdentity). */
       assertion?: { timestamp?: unknown; nonce_hex?: unknown; signature_hex?: unknown };

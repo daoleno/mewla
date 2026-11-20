@@ -50,12 +50,13 @@ func TestPixelScrollWithoutScrollIsDropped(t *testing.T) {
 
 // The offer tells the viewer what the computer can do.
 func TestOfferSaysFineScrollAndCursor(t *testing.T) {
-	b, _ := json.Marshal(Signal{Type: "rtc", SDPType: "offer", FineScroll: true, Cursor: true})
+	yes, no := true, false
+	b, _ := json.Marshal(Signal{Type: "rtc", SDPType: "offer", FineScroll: true, Cursor: &yes})
 	if !strings.Contains(string(b), `"fine_scroll":true`) || !strings.Contains(string(b), `"cursor":true`) {
 		t.Fatalf("offer = %s", b)
 	}
-	b, _ = json.Marshal(Signal{Type: "rtc", SDPType: "offer"})
-	if strings.Contains(string(b), "fine_scroll") || strings.Contains(string(b), "cursor") {
+	b, _ = json.Marshal(Signal{Type: "rtc", SDPType: "offer", Cursor: &no})
+	if strings.Contains(string(b), "fine_scroll") || !strings.Contains(string(b), `"cursor":false`) {
 		t.Fatalf("offer = %s", b)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -255,6 +256,8 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 			_, err := inputWriter.Write(msg)
 			return err
 		},
+		// A Mac's agent display is captured with its cursor (the agent's own capture): the viewer draws no second arrow.
+		Cursor: runtime.GOOS == "darwin",
 		Signal: func(v any) { sendJSON(v) },
 		Stats: func(st screencast.Stats) {
 			out.advise(struct {
