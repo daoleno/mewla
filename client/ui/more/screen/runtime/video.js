@@ -93,8 +93,8 @@ export function createVideoPicture(doc, handlers) {
     if (closed || !message) return;
     try {
       if (message.type === "rtc" && message.sdp_type === "offer") {
-        // An older computer's offer does not say whether its video carries the cursor: it may (a Mac's did), so no second arrow.
-        handlers.offered?.({ fineScroll: message.fine_scroll === true, cursor: message.cursor !== false });
+        // An older computer's offer does not say whether its video carries the cursor (undefined): the viewer decides.
+        handlers.offered?.({ fineScroll: message.fine_scroll === true, cursor: typeof message.cursor === "boolean" ? message.cursor : undefined });
         // The relay's TURN (and STUN), for when there is no direct path.
         if (Array.isArray(message.ice_servers) && message.ice_servers.length) {
           try { pc.setConfiguration({ ...pc.getConfiguration(), iceServers: message.ice_servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential })) }); } catch {}

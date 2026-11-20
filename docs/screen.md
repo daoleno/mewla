@@ -104,7 +104,8 @@ handle it turns solid, and a tap on it clicks where the pointer points. The
 handle moves the pointer as fast as your finger, slower and finer when you go
 slowly, and keeps clear of the screen's edges. Zoomed in with the pointer out of
 view, the next tap brings it back. A press you hold shows the pointer pressed,
-and your phone taps back. An agent's browser window laid out for your phone is
+and your phone taps back; rest on it longer and it lets go, so a finger that
+paused to read still scrolls when it moves. An agent's browser window laid out for your phone is
 used like a page on your phone: no pointer, no zoom button. On a Mac or a
 Windows PC the page you scroll follows your finger to the pixel; on Linux it
 moves in wheel steps. The pointer on your phone is the only one: the Mac leaves

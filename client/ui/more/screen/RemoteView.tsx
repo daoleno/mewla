@@ -145,7 +145,7 @@ export class RemoteSession {
     switch (message.type) {
       case "ready":
         this.viewerReady = true;
-        this.post([{ type: "align", align: this.align }, { type: "layout", reflowed: untracked(this.reflow).on }], true);
+        this.post([{ type: "align", align: this.align }, { type: "layout", reflowed: untracked(this.reflow).on }, { type: "computer", mac: this.mac }], true);
         this.flush();
         return;
       case "signal":
@@ -251,6 +251,15 @@ export class RemoteSession {
     else this.setReflow(NO_REFLOW);
   }
 
+  private mac = false;
+
+  /** The computer is a Mac (an older one's video carries the cursor without saying so). */
+  setMac(on: boolean): void {
+    if (on === this.mac) return;
+    this.mac = on;
+    this.post([{ type: "computer", mac: on }]);
+  }
+
   /** How the window is shown; the viewer uses a window laid out for this view like a phone's page. */
   private setReflow(state: StageReflow): void {
     const was = untracked(this.reflow).on;
@@ -342,6 +351,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   let input: InputRef | null = null;
   const soft = needsSoftKeyboard();
   html ??= viewerHtml();
+  effect(() => props.session.setMac(props.modifiers === MAC_MODIFIERS));
 
   // What the field holds as it last reported it; each change is diffed against that, not against the
   // sentinel: a key that lands before a reset reaches the field extends what it held (screen [67] kept every

@@ -89,8 +89,11 @@ export function mountScreenViewer(container, post) {
   let fbH = 0;
   const control = new TouchControl({ handle: true });
   const view = control.view;
-  // The computer's video carries its own cursor: the arrow is not drawn twice (the handle still is).
-  let cursorInPicture = false;
+  // The computer's video carries its own cursor: the arrow is not drawn twice (the handle still is). The offer says
+  // so; an older computer's does not, and then a Mac's video has the cursor and the others' do not.
+  let offeredCursor = undefined;
+  let macComputer = false;
+  const cursorInPicture = () => (offeredCursor === undefined ? macComputer : offeredCursor);
   let buttons = 0;
   const stats = { bytes: 0, updates: 0, since: performance.now() };
   let pendingInput = 0;
@@ -135,7 +138,7 @@ export function mountScreenViewer(container, post) {
     const p = control.pointer;
     const on = fbW && p.shown && control.visible();
     const tip = control.toLocal(p);
-    cursorEl.style.display = on && !cursorInPicture ? "block" : "none";
+    cursorEl.style.display = on && !cursorInPicture() ? "block" : "none";
     if (on) {
       cursorEl.style.transform = `translate(${tip.x}px, ${tip.y}px)${p.pressed ? " scale(.86)" : ""}`;
       cursorEl.classList.toggle("pressed", p.pressed);
@@ -310,7 +313,8 @@ export function mountScreenViewer(container, post) {
       return mouseEvent(e, "down");
     }
     const l = local(e.clientX, e.clientY);
-    run(control.down(e.pointerId, l.x, l.y, performance.now()));
+    // Each event's own stamp (as its moves have), never the time its handler ran: a busy page runs late.
+    run(control.down(e.pointerId, l.x, l.y, e.timeStamp || performance.now()));
   });
   overlay.addEventListener("pointermove", (e) => {
     if (!live()) return;
@@ -326,13 +330,13 @@ export function mountScreenViewer(container, post) {
     if (!live()) return;
     if (e.pointerType === "mouse") return mouseEvent(e, "up");
     const l = local(e.clientX, e.clientY);
-    run(control.up(e.pointerId, l.x, l.y, performance.now()));
+    run(control.up(e.pointerId, l.x, l.y, e.timeStamp || performance.now()));
     reportZoom();
   });
   overlay.addEventListener("pointercancel", (e) => {
     if (!live()) return;
     if (e.pointerType === "mouse") return mouseEvent(e, "up");
-    run(control.cancel(e.pointerId, performance.now()));
+    run(control.cancel(e.pointerId, e.timeStamp || performance.now()));
   });
   overlay.addEventListener("contextmenu", (e) => e.preventDefault());
   // A desktop mouse's wheel and trackpad: notches, as a wheel turns.
@@ -548,7 +552,7 @@ export function mountScreenViewer(container, post) {
       offered: (features) => {
         if (ticket !== opening) return;
         control.fineScroll = !!features.fineScroll;
-        cursorInPicture = !!features.cursor;
+        offeredCursor = typeof features.cursor === "boolean" ? features.cursor : undefined;
         drawPointer();
       },
       resized: (width, height) => {
@@ -621,6 +625,10 @@ export function mountScreenViewer(container, post) {
       case "layout":
         run(control.setHandle(!message.reflowed));
         drawZoom();
+        break;
+      case "computer":
+        macComputer = !!message.mac;
+        drawPointer();
         break;
       case "align":
         control.align = message.align === "top" ? "top" : "center";
