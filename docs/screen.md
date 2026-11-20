@@ -80,15 +80,38 @@ When Screen can't show the picture, it says why with one button: the computer
 is locked, its screen is off, Screen isn't turned on or allowed yet, or there is
 no display.
 
+One finger acts on the computer and two fingers move your view, the same on
+your own screen and on an agent's:
+
 | Gesture | On the computer |
 | --- | --- |
-| Tap | Click, with a ring where it landed |
-| Tap twice | Zoom the view in there, or back out (the computer doesn't change) |
-| Press and hold, then lift | A menu: **Right click**, **Double click** or **Drag** (the next drag holds the button) |
-| Press and hold, then drag | Drag with the button held |
-| One-finger drag | Scroll; zoomed in, move around the view instead |
-| Two-finger tap | Right-click |
-| Pinch | Zoom the view on your phone |
+| Tap | Click there, with a ring where it landed |
+| Tap twice | Double click (three times: triple click) |
+| Drag | Scroll what is under your finger; flick it and it keeps going |
+| Press and hold, then lift | Right click |
+| Press and hold, then drag | Drag with the button held: select text, move things |
+| Drag the pointer's handle | Move the pointer precisely, without a click: menus that open on hover open |
+| Tap the handle | Click at the pointer, once the handle has placed it |
+| Hold the handle, then drag | Drag from the pointer's tip |
+| Two-finger tap | Right click |
+| Pinch, or drag with two fingers | Zoom and move your view (the computer doesn't change) |
+| The zoom button | Zoom in around the pointer with one hand, and back |
+
+On a whole desktop, the computer's pointer is drawn on your phone after your
+first touch, with a round handle beside it. After a tap the handle is faint and
+a tap on it is just a tap there; once you have moved the pointer with the
+handle it turns solid, and a tap on it clicks where the pointer points. The
+handle moves the pointer as fast as your finger, slower and finer when you go
+slowly, and keeps clear of the screen's edges. Zoomed in with the pointer out of
+view, the next tap brings it back. A press you hold shows the pointer pressed,
+and your phone taps back. An agent's browser window laid out for your phone is
+used like a page on your phone: no pointer, no zoom button. On a Mac or a
+Windows PC the page you scroll follows your finger to the pixel; on Linux it
+moves in wheel steps. The pointer on your phone is the only one: the Mac leaves
+its own out of the picture your phone gets.
+
+While Screen connects, the view is black with a spinner; the picture appears
+whole as soon as the first one arrives.
 
 The keyboard button brings up the phone's keyboard, and a bar of the keys it
 lacks docks above it: **Paste** (types what the phone copied, such as a

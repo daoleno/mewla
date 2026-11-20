@@ -5,7 +5,8 @@
 // with the platform's decoder: no per-frame bridge, no JavaScript decode.
 //
 // Input goes back as RFB client messages, each led by a sequence number:
-// "input" (reliable, ordered) carries keys, button changes, the wheel and the
+// "input" (reliable, ordered) carries keys, button changes, the wheel, pixel
+// scrolls (Mewla's message 250, where the offer says fine_scroll) and the
 // clipboard; "pointer" (unordered, never resent) carries moves only, which
 // the computer drops when they arrive after a later reliable message.
 
@@ -19,6 +20,9 @@ export function createVideoPicture(doc, handlers) {
   video.disablePictureInPicture = true;
   video.tabIndex = 0;
   video.className = "picture";
+  // No picture until the first frame: Android's WebView otherwise paints its own default poster (a grey
+  // play button) in the element's default box. The viewer covers the element until a frame is shown.
+  video.poster = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
   const pc = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
   let input = null;
@@ -89,6 +93,7 @@ export function createVideoPicture(doc, handlers) {
     if (closed || !message) return;
     try {
       if (message.type === "rtc" && message.sdp_type === "offer") {
+        handlers.offered?.({ fineScroll: message.fine_scroll === true, cursor: message.cursor === true });
         // The relay's TURN (and STUN), for when there is no direct path.
         if (Array.isArray(message.ice_servers) && message.ice_servers.length) {
           try { pc.setConfiguration({ ...pc.getConfiguration(), iceServers: message.ice_servers.map((server) => ({ urls: server.urls, username: server.username, credential: server.credential })) }); } catch {}
@@ -140,6 +145,19 @@ export function createVideoPicture(doc, handlers) {
     sendReliable(out);
   }
 
+  // A scroll by picture pixels at (x, y), where the computer said it takes them (its offer's fine_scroll):
+  // Mewla's own client message 250, never sent to a computer that did not offer it.
+  function scroll(x, y, dx, dy) {
+    const out = new Uint8Array(10);
+    const view = new DataView(out.buffer);
+    out[0] = 250;
+    view.setUint16(2, x);
+    view.setUint16(4, y);
+    view.setInt16(6, Math.max(-32768, Math.min(32767, dx)));
+    view.setInt16(8, Math.max(-32768, Math.min(32767, dy)));
+    sendReliable(out);
+  }
+
   // The person's clipboard, as the computer's (Latin-1, as RFB carries it).
   function paste(text) {
     const chars = Array.from(text).map((ch) => ch.codePointAt(0)).filter((cp) => cp < 256);
@@ -171,6 +189,7 @@ export function createVideoPicture(doc, handlers) {
     sendPointer,
     key,
     paste,
+    scroll,
     received,
     play,
     get width() { return width; },

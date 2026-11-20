@@ -34,6 +34,8 @@ const (
 	macMouseUp
 	macMouseDrag
 	macScroll
+	// macScrollPixels scrolls by pixels (Lines holds them), as a trackpad does.
+	macScrollPixels
 	macKey
 	macText
 )

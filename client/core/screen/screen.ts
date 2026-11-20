@@ -239,6 +239,7 @@ export class ScreenConnection {
   /**
    * watch: see the agent using the screen without taking over; input goes nowhere.
    * route: another viewer socket, such as an agent's display.
+   * drawsPointer: this viewer draws the pointer itself (a phone's touch control), so the computer's video leaves its cursor out.
    */
   constructor(
     private server: StoredServer,
@@ -246,6 +247,7 @@ export class ScreenConnection {
     private watch = false,
     private worker?: string,
     private route?: ScreenRoute,
+    private drawsPointer = false,
   ) {}
 
   async connect(): Promise<void> {
@@ -258,6 +260,7 @@ export class ScreenConnection {
     const params: Record<string, string> = { ...(this.route?.params ?? {}), ...PLAYS_VIDEO };
     if (!this.route && this.watch) params.watch = "1";
     if (!this.route && this.watch && this.worker) params.worker = this.worker;
+    if (this.drawsPointer) params.pointer = "local";
     const url = viewerURL(this.server, this.route?.path ?? "/screen/viewer", params);
     const authorization = await deviceAuthorization(this.server, this.route?.purpose ?? "mewla-screen-view");
     if (this.closed) return;

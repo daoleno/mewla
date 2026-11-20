@@ -1,10 +1,11 @@
 // Remote screen viewer: the computer's screen as pushed video (video.js),
-// plus touch gestures, local zoom and key injection. The host owns the
-// authenticated WebSocket and relays the WebRTC signalling both ways; the
-// picture and the input go peer to peer. generate.mjs bundles it (with
-// noVNC's keyboard module, for desktop keys) for the native WebView and for
-// web; app code imports only the output.
+// touch control (core/screen/touchControl: one model, no modes), local zoom
+// and key injection. The host owns the authenticated WebSocket and relays the
+// WebRTC signalling both ways; the picture and the input go peer to peer.
+// generate.mjs bundles it (with noVNC's keyboard module, for desktop keys) for
+// the native WebView and for web; app code imports only the output.
 import Keyboard from "@novnc/novnc/core/input/keyboard.js";
+import { TOUCH, TouchControl } from "../../../../core/screen/touchControl";
 import { createVideoPicture } from "./video.js";
 
 const XK = {
@@ -15,31 +16,34 @@ const XK = {
   F1: 0xffbe,
 };
 
-const SLOP = 9;
-const LONG_PRESS_MS = 480;
-const DOUBLE_TAP_MS = 380;
-// One wheel notch moves a Chrome page by about this many remote pixels (measured); a finger
-// dragging a page scrolls it by the distance the finger moved on the picture.
+// A desktop mouse's wheel: one notch moves a Chrome page about this many remote pixels (measured).
 const NOTCH_REMOTE = 120;
 const MIN_NOTCH_LOCAL = 8;
-const MAX_ZOOM = 2; // CSS pixels per remote pixel at most
-// A double tap zooms the view this much past fit (and back).
-const TAP_ZOOM = 2.5;
 // Room kept around the field the keyboard comes up for.
 const KEYBOARD_MARGIN = 48;
+const KNOB = TOUCH.KNOB_R * 2;
 
 const STYLE = `
 .mewla-screen{position:absolute;inset:0;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .mewla-screen video.picture{position:absolute;left:0;top:0;margin:0!important;transform-origin:0 0}
 .mewla-screen video.picture{outline:none;background:#000;object-fit:fill;pointer-events:none}
+.mewla-screen .cover{position:absolute;inset:0;background:#000;z-index:1;pointer-events:none}
 .mewla-screen .touch{position:absolute;inset:0;touch-action:none;z-index:2}
-.mewla-screen .cursor{position:absolute;left:0;top:0;width:18px;height:24px;display:none;pointer-events:none;z-index:3;margin:-1px 0 0 -1px}
+.mewla-screen .cursor{position:absolute;left:0;top:0;width:18px;height:24px;display:none;pointer-events:none;z-index:3;margin:-1px 0 0 -1px;transform-origin:1px 1px}
+.mewla-screen .cursor.pressed path{fill:#3a3a3c}
+.mewla-screen .knob{position:absolute;left:0;top:0;width:${KNOB}px;height:${KNOB}px;margin:-${KNOB / 2}px 0 0 -${KNOB / 2}px;border-radius:50%;box-sizing:border-box;display:none;pointer-events:none;z-index:3;transition:background-color .12s,border-color .12s,opacity .12s}
+.mewla-screen .knob{border:1.5px solid rgba(255,255,255,.75);background:rgba(0,0,0,.12);box-shadow:0 0 0 1px rgba(0,0,0,.25);opacity:.55}
+.mewla-screen .knob.aimed{border:2px solid rgba(0,0,0,.45);background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.45);opacity:1}
 .mewla-screen .ring{position:absolute;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:50%;border:2px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.35);pointer-events:none;z-index:3;animation:mewla-ring .32s ease-out forwards}
 @keyframes mewla-ring{from{transform:scale(.5);opacity:1}to{transform:scale(1.15);opacity:0}}
-.mewla-screen .menu{position:absolute;display:none;flex-direction:column;gap:2px;padding:6px;border-radius:16px;background:rgba(28,28,30,.96);box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:4;font:500 15px/1.2 -apple-system,system-ui,Roboto,sans-serif}
-.mewla-screen .menu button{all:unset;min-width:148px;min-height:44px;padding:0 14px;border-radius:11px;color:#fff;box-sizing:border-box;display:flex;align-items:center}
-.mewla-screen .menu button:active{background:rgba(255,255,255,.16)}
+.mewla-screen .zoom{all:unset;position:absolute;right:12px;bottom:${TOUCH.EDGE_BOTTOM}px;width:40px;height:40px;border-radius:50%;background:rgba(28,28,30,.72);display:none;align-items:center;justify-content:center;z-index:4;box-shadow:0 0 0 1px rgba(255,255,255,.18)}
+.mewla-screen .zoom:active{background:rgba(60,60,64,.9)}
+.mewla-screen .zoom .out{display:none}
+.mewla-screen .zoom.in .out{display:block}
+.mewla-screen .zoom.in .plus{display:none}
 `;
+
+const ZOOM_ICON = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.6 12.6 17 17M6 8.5h5"/><path class="plus" d="M8.5 6v5"/></svg>';
 
 /**
  * Mounts a viewer into `container` and returns its host interface. `post`
@@ -58,13 +62,23 @@ export function mountScreenViewer(container, post) {
   const overlay = doc.createElement("div");
   overlay.className = "touch";
   root.appendChild(overlay);
+  // Black over the picture until its first frame is shown (the video element is never hidden: WebKit
+  // stops a muted autoplay it thinks nobody sees).
+  const cover = doc.createElement("div");
+  cover.className = "cover";
+  root.appendChild(cover);
+  // The computer's pointer, drawn here at finger speed, and its handle.
   root.insertAdjacentHTML("beforeend", '<svg class="cursor" viewBox="0 0 18 24"><path d="M1 1v19l5-5 3.5 7 3-1.5L9 13.5h7z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>');
   const cursorEl = root.lastChild;
-  // A long press offers what a finger can't do in one gesture: a right click, a double click, a drag.
-  const menuEl = doc.createElement("div");
-  menuEl.className = "menu";
-  menuEl.innerHTML = '<button data-act="right">Right click</button><button data-act="double">Double click</button><button data-act="drag">Drag</button>';
-  root.appendChild(menuEl);
+  const knobEl = doc.createElement("div");
+  knobEl.className = "knob";
+  root.appendChild(knobEl);
+  // One hand's zoom on a whole desktop: in around the pointer, and back.
+  const zoomEl = doc.createElement("button");
+  zoomEl.className = "zoom";
+  zoomEl.setAttribute("aria-label", "Zoom");
+  zoomEl.innerHTML = ZOOM_ICON;
+  root.appendChild(zoomEl);
   container.appendChild(root);
 
   // The picture: pushed video (WebRTC) in a <video> element.
@@ -73,11 +87,10 @@ export function mountScreenViewer(container, post) {
   let picture = null;
   let fbW = 0;
   let fbH = 0;
-  const view = { s: 1, tx: 0, ty: 0, fit: 1 };
-  let mode = "touch";
-  // Where a picture shorter than the page sits: the middle, or against the top.
-  let align = "center";
-  let cursor = { x: 0, y: 0 };
+  const control = new TouchControl({ handle: true });
+  const view = control.view;
+  // The computer's video carries its own cursor: the arrow is not drawn twice (the handle still is).
+  let cursorInPicture = false;
   let buttons = 0;
   const stats = { bytes: 0, updates: 0, since: performance.now() };
   let pendingInput = 0;
@@ -110,42 +123,34 @@ export function mountScreenViewer(container, post) {
     if (!pendingInput) pendingInput = performance.now();
   }
 
-  // ---- view transform ----------------------------------------------------
+  // ---- view and pointer ------------------------------------------------------
 
   function applyView() {
-    if (!picture) return;
-    picture.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`;
-    drawCursor();
+    if (picture) picture.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`;
+    drawPointer();
+    drawZoom();
   }
 
-  function clampView() {
-    const cw = root.clientWidth;
-    const ch = root.clientHeight;
-    const w = fbW * view.s;
-    const h = fbH * view.s;
-    view.tx = w <= cw ? (cw - w) / 2 : Math.min(0, Math.max(cw - w, view.tx));
-    view.ty = h <= ch ? (align === "top" ? 0 : (ch - h) / 2) : Math.min(0, Math.max(ch - h, view.ty));
+  function drawPointer() {
+    const p = control.pointer;
+    const on = fbW && p.shown && control.visible();
+    const tip = control.toLocal(p);
+    cursorEl.style.display = on && !cursorInPicture ? "block" : "none";
+    if (on) {
+      cursorEl.style.transform = `translate(${tip.x}px, ${tip.y}px)${p.pressed ? " scale(.86)" : ""}`;
+      cursorEl.classList.toggle("pressed", p.pressed);
+    }
+    const knob = on ? control.handlePlace() : null;
+    knobEl.style.display = knob ? "block" : "none";
+    if (knob) {
+      knobEl.style.transform = `translate(${knob.x}px, ${knob.y}px)`;
+      knobEl.classList.toggle("aimed", p.aimed);
+    }
   }
 
-  function fitView() {
-    if (!fbW || !fbH) return;
-    view.fit = Math.min(root.clientWidth / fbW, root.clientHeight / fbH);
-    view.s = view.fit;
-    clampView();
-    applyView();
-    reportZoom();
-  }
-
-  function zoomAt(scale, cx, cy) {
-    const max = Math.max(view.fit, MAX_ZOOM);
-    const next = Math.max(view.fit, Math.min(max, scale));
-    const fx = (cx - view.tx) / view.s;
-    const fy = (cy - view.ty) / view.s;
-    view.s = next;
-    view.tx = cx - fx * next;
-    view.ty = cy - fy * next;
-    clampView();
-    applyView();
+  function drawZoom() {
+    zoomEl.style.display = fbW && control.handle ? "flex" : "none";
+    zoomEl.classList.toggle("in", !control.fitted());
   }
 
   let lastZoomReport = 0;
@@ -156,9 +161,9 @@ export function mountScreenViewer(container, post) {
     post({ type: "zoom", zoom });
   }
 
-  function toRemote(clientX, clientY) {
-    const r = root.getBoundingClientRect();
-    return { x: (clientX - r.left - view.tx) / view.s, y: (clientY - r.top - view.ty) / view.s };
+  function fitView() {
+    run(control.fitView());
+    reportZoom();
   }
 
   function local(clientX, clientY) {
@@ -166,25 +171,8 @@ export function mountScreenViewer(container, post) {
     return { x: clientX - r.left, y: clientY - r.top };
   }
 
-  function drawCursor() {
-    if (mode !== "trackpad" || !fbW) {
-      cursorEl.style.display = "none";
-      return;
-    }
-    cursorEl.style.display = "block";
-    cursorEl.style.transform = `translate(${view.tx + cursor.x * view.s}px, ${view.ty + cursor.y * view.s}px)`;
-  }
-
-  // Keep the trackpad cursor on screen while zoomed in.
-  function followCursor() {
-    const margin = 40;
-    const sx = view.tx + cursor.x * view.s;
-    const sy = view.ty + cursor.y * view.s;
-    if (sx < margin) view.tx += margin - sx;
-    if (sx > root.clientWidth - margin) view.tx -= sx - (root.clientWidth - margin);
-    if (sy < margin) view.ty += margin - sy;
-    if (sy > root.clientHeight - margin) view.ty -= sy - (root.clientHeight - margin);
-    clampView();
+  function toRemote(clientX, clientY) {
+    return control.toRemote(local(clientX, clientY));
   }
 
   // ---- pointer output ------------------------------------------------------
@@ -208,73 +196,76 @@ export function mountScreenViewer(container, post) {
 
   function click(x, y, button) {
     flushMove();
-    sendPointer(x, y, 0);
+    sendPointer(x, y, buttons);
     markInput();
     if (button === "left") {
-      sendPointer(x, y, 1);
-      sendPointer(x, y, 0);
+      sendPointer(x, y, buttons | 1);
+      sendPointer(x, y, buttons);
       return;
     }
     // Menus that open on press close again on an instant release (Qt does),
     // so a right click holds the button briefly like a real one.
-    sendPointer(x, y, 4);
+    sendPointer(x, y, buttons | 4);
     setTimeout(() => sendPointer(x, y, buttons), 90);
   }
 
-  function press(x, y) {
+  function setButton(x, y, down) {
     flushMove();
-    buttons = 1;
+    buttons = down ? 1 : 0;
     sendPointer(x, y, buttons);
     markInput();
   }
 
-  function release(x, y) {
+  // RFB wheel: buttons 8/16 vertical and 32/64 horizontal, one press per notch.
+  function wheel(x, y, dx, dy) {
     flushMove();
-    buttons = 0;
-    sendPointer(x, y, 0);
-    markInput();
-  }
-
-  // RFB wheel: buttons 4/5 vertical and 6/7 horizontal, one press per notch.
-  let scrollRest = { x: 0, y: 0 };
-  // `dx`/`dy` are local pixels (a mouse wheel's own units, or finger travel);
-  // a notch is as long on the page as a notch is on the remote screen.
-  function scrollBy(x, y, dx, dy) {
-    const step = Math.max(MIN_NOTCH_LOCAL, NOTCH_REMOTE * view.s);
-    scrollRest.x += dx;
-    scrollRest.y += dy;
     const send = (mask, count) => {
       for (let i = 0; i < Math.min(count, 12); i++) {
         sendPointer(x, y, buttons | mask);
         sendPointer(x, y, buttons);
       }
     };
-    const vy = Math.trunc(scrollRest.y / step);
-    if (vy) {
-      send(vy > 0 ? 16 : 8, Math.abs(vy));
-      scrollRest.y -= vy * step;
-      markInput();
-    }
-    const vx = Math.trunc(scrollRest.x / step);
-    if (vx) {
-      send(vx > 0 ? 64 : 32, Math.abs(vx));
-      scrollRest.x -= vx * step;
-      markInput();
-    }
+    if (dy) send(dy > 0 ? 16 : 8, Math.abs(dy));
+    if (dx) send(dx > 0 ? 64 : 32, Math.abs(dx));
+    markInput();
   }
 
-  // ---- gestures ------------------------------------------------------------
-
-  const pointers = new Map();
-  let gesture = null;
-  let lastTap = { at: 0, x: 0, y: 0 };
-
-  function haptic() {
-    post({ type: "haptic" });
+  // What the touch control decided, done.
+  function run(actions) {
+    let viewChanged = false;
+    let pointerChanged = false;
+    for (const a of actions) {
+      switch (a.type) {
+        case "move": queueMove(a.x, a.y); break;
+        case "button": setButton(a.x, a.y, a.down); break;
+        case "click": click(a.x, a.y, a.button); break;
+        case "wheel": wheel(a.x, a.y, a.dx, a.dy); break;
+        case "scroll":
+          flushMove();
+          if (video) video.scroll(Math.round(a.x), Math.round(a.y), a.dx, a.dy);
+          markInput();
+          break;
+        case "view": viewChanged = true; break;
+        case "pointer": pointerChanged = true; break;
+        case "ring": ring(a); break;
+        case "haptic": post({ type: "haptic" }); break;
+      }
+    }
+    if (viewChanged) applyView();
+    else if (pointerChanged) drawPointer();
+    schedule();
   }
 
-  function zoomed() {
-    return view.s > view.fit * 1.02;
+  // The control's timers (a hold, a flick's frames).
+  let timer = 0;
+  function schedule() {
+    clearTimeout(timer);
+    const at = control.deadline();
+    if (at === null) return;
+    timer = setTimeout(() => {
+      timer = 0;
+      run(control.tick(performance.now()));
+    }, Math.max(0, at - performance.now()));
   }
 
   // Where a tap landed, for a moment.
@@ -287,209 +278,14 @@ export function mountScreenViewer(container, post) {
     setTimeout(() => el.remove(), 360);
   }
 
-  // The next one-finger drag drags (the long-press menu's Drag).
-  let dragArmed = false;
-  let menuAt = null;
-  function showMenu(local, remote) {
-    menuAt = remote;
-    menuEl.style.display = "flex";
-    const w = menuEl.offsetWidth;
-    const h = menuEl.offsetHeight;
-    menuEl.style.left = `${Math.max(8, Math.min(root.clientWidth - w - 8, local.x - w / 2))}px`;
-    menuEl.style.top = `${local.y - h - 16 >= 8 ? local.y - h - 16 : Math.min(root.clientHeight - h - 8, local.y + 16)}px`;
-  }
-  function hideMenu() {
-    menuEl.style.display = "none";
-    menuAt = null;
-  }
-  menuEl.addEventListener("pointerdown", (e) => e.stopPropagation());
-  menuEl.addEventListener("click", (e) => {
-    const act = e.target?.dataset?.act;
-    const at = menuAt;
-    hideMenu();
-    if (!at || !live()) return;
-    if (act === "right") click(at.x, at.y, "right");
-    else if (act === "double") {
-      click(at.x, at.y, "left");
-      click(at.x, at.y, "left");
-    } else if (act === "drag") dragArmed = true;
+  zoomEl.addEventListener("pointerdown", (e) => e.stopPropagation());
+  zoomEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    run(control.zoomButton());
+    reportZoom();
   });
 
-  // A touch beside the picture (the page is taller or wider than it) is not a
-  // click on the computer: it would land on the picture's nearest edge.
-  function besidePicture(point) {
-    return point.x < 0 || point.y < 0 || point.x > fbW || point.y > fbH;
-  }
-
-  function startOne(p) {
-    const start = { x: p.x, y: p.y };
-    gesture = {
-      kind: "pending",
-      start,
-      last: start,
-      at: performance.now(),
-      held: false,
-      remote: mode === "trackpad" ? { ...cursor } : toRemote(p.clientX, p.clientY),
-      beside: mode === "touch" && besidePicture(toRemote(p.clientX, p.clientY)),
-      armed: mode === "touch" && dragArmed,
-      afterTap: mode === "trackpad" && performance.now() - lastTap.at < DOUBLE_TAP_MS,
-    };
-    const g = gesture;
-    g.timer = setTimeout(() => {
-      if (gesture !== g || g.kind !== "pending") return;
-      g.held = true;
-      haptic();
-      if (mode === "touch") queueMove(g.remote.x, g.remote.y);
-    }, LONG_PRESS_MS);
-    if (g.afterTap) {
-      // Tap, then press and drag: drag with the button held (trackpad mode).
-      clearTimeout(g.timer);
-      g.kind = "drag";
-      press(cursor.x, cursor.y);
-    }
-  }
-
-  function moveOne(p) {
-    const g = gesture;
-    const dx = p.x - g.last.x;
-    const dy = p.y - g.last.y;
-    const moved = Math.hypot(p.x - g.start.x, p.y - g.start.y) > SLOP;
-    if (g.kind === "pending" && moved) {
-      clearTimeout(g.timer);
-      if (mode === "trackpad") g.kind = g.held ? "drag" : "move";
-      // Touching the picture moves it like any page: a drag scrolls, and a
-      // press held first (or Drag from the long-press menu) drags, selecting
-      // text or moving a slider. Zoomed in, a drag moves the view instead.
-      else g.kind = g.held || g.armed ? "drag" : zoomed() ? "pan" : "scroll";
-      if ((g.kind === "drag" || g.kind === "scroll") && g.beside) g.kind = "none";
-      if (g.kind === "drag") {
-        if (mode === "touch") press(g.remote.x, g.remote.y);
-        else press(cursor.x, cursor.y);
-      }
-    }
-    g.last = { x: p.x, y: p.y };
-    if (g.kind === "pan") {
-      view.tx += dx;
-      view.ty += dy;
-      clampView();
-      applyView();
-    } else if (g.kind === "scroll") {
-      // Content follows the finger: the finger going up scrolls the page down.
-      scrollBy(g.remote.x, g.remote.y, -dx, -dy);
-    } else if (g.kind === "drag" && mode === "touch") {
-      const r = toRemote(p.clientX, p.clientY);
-      queueMove(r.x, r.y);
-    } else if ((g.kind === "move" || g.kind === "drag") && mode === "trackpad") {
-      const speed = Math.hypot(dx, dy);
-      const accel = Math.min(2.6, 1 + speed / 18);
-      // At fit, a swipe across the phone crosses the remote screen; zoomed in,
-      // the cursor slows by the square root of the zoom for precision.
-      const unit = (accel * 1.2) / (view.fit * Math.sqrt(view.s / view.fit));
-      cursor.x = Math.max(0, Math.min(fbW - 1, cursor.x + dx * unit));
-      cursor.y = Math.max(0, Math.min(fbH - 1, cursor.y + dy * unit));
-      followCursor();
-      applyView();
-      queueMove(cursor.x, cursor.y);
-    }
-  }
-
-  function endOne(p, cancelled) {
-    const g = gesture;
-    gesture = null;
-    clearTimeout(g.timer);
-    if (g.armed) dragArmed = false;
-    if (g.kind === "scroll") scrollRest = { x: 0, y: 0 };
-    if (cancelled) {
-      if (g.kind === "drag") release(mode === "touch" ? toRemote(p.clientX, p.clientY).x : cursor.x, mode === "touch" ? toRemote(p.clientX, p.clientY).y : cursor.y);
-      return;
-    }
-    if (g.kind === "drag") {
-      const r = mode === "touch" ? toRemote(p.clientX, p.clientY) : cursor;
-      release(r.x, r.y);
-      return;
-    }
-    if (g.kind !== "pending" || g.beside) return;
-    if (g.held) {
-      if (mode === "touch") showMenu(g.start, g.remote);
-      else click(g.remote.x, g.remote.y, "right");
-      return;
-    }
-    const now = performance.now();
-    // Two quick taps in one place zoom the view in there, or back out to fit (a double click is in the
-    // long-press menu). The first tap has clicked already.
-    if (mode === "touch" && now - lastTap.at < DOUBLE_TAP_MS && Math.hypot(lastTap.x - g.start.x, lastTap.y - g.start.y) < 28) {
-      if (zoomed()) fitView();
-      else {
-        zoomAt(view.fit * TAP_ZOOM, g.start.x, g.start.y);
-        reportZoom();
-      }
-      lastTap = { at: 0, x: 0, y: 0, remote: lastTap.remote };
-      return;
-    }
-    const target = mode === "trackpad" ? cursor : g.remote;
-    click(target.x, target.y, "left");
-    if (mode === "touch") ring(g.start);
-    lastTap = { at: now, x: g.start.x, y: g.start.y, remote: { x: target.x, y: target.y } };
-  }
-
-  function twoFingerState() {
-    const [a, b] = [...pointers.values()];
-    return {
-      dist: Math.hypot(a.x - b.x, a.y - b.y),
-      cx: (a.x + b.x) / 2,
-      cy: (a.y + b.y) / 2,
-      clientX: (a.clientX + b.clientX) / 2,
-      clientY: (a.clientY + b.clientY) / 2,
-    };
-  }
-
-  function startTwo() {
-    if (gesture && gesture.kind === "drag") {
-      const r = mode === "touch" ? gesture.remote : cursor;
-      release(r.x, r.y);
-    }
-    if (gesture) clearTimeout(gesture.timer);
-    const s = twoFingerState();
-    gesture = { kind: "two", decided: null, start: s, last: s, scale: view.s, at: performance.now() };
-  }
-
-  function moveTwo() {
-    const g = gesture;
-    const s = twoFingerState();
-    if (!g.decided) {
-      if (Math.abs(s.dist - g.start.dist) > 26) g.decided = "pinch";
-      else if (Math.hypot(s.cx - g.start.cx, s.cy - g.start.cy) > 12) g.decided = mode === "touch" ? "pinch" : "scroll";
-    }
-    if (g.decided === "pinch") {
-      zoomAt(g.scale * (s.dist / g.start.dist), s.cx, s.cy);
-      view.tx += s.cx - g.last.cx;
-      view.ty += s.cy - g.last.cy;
-      clampView();
-      applyView();
-    } else if (g.decided === "scroll") {
-      const at = mode === "trackpad" ? cursor : toRemote(s.clientX, s.clientY);
-      // Content follows the fingers, like a Mac trackpad's natural scrolling.
-      scrollBy(at.x, at.y, g.last.cx - s.cx, g.last.cy - s.cy);
-    }
-    g.last = s;
-  }
-
-  function endTwo() {
-    const g = gesture;
-    if (!g.decided && performance.now() - g.at < 320) {
-      const at = mode === "trackpad" ? cursor : toRemote(g.start.clientX, g.start.clientY);
-      click(at.x, at.y, "right");
-    }
-    if (g.decided === "pinch") reportZoom();
-    scrollRest = { x: 0, y: 0 };
-    // Lifting one finger after two never turns into a tap or drag.
-    gesture = { kind: "done" };
-  }
-
-  function pointerInfo(e) {
-    const l = local(e.clientX, e.clientY);
-    return { x: l.x, y: l.y, clientX: e.clientX, clientY: e.clientY };
-  }
+  // ---- touch and mouse ------------------------------------------------------
 
   // Desktop browsers with a real mouse get direct mouse semantics.
   function mouseEvent(e, phase) {
@@ -507,58 +303,65 @@ export function mountScreenViewer(container, post) {
 
   overlay.addEventListener("pointerdown", (e) => {
     e.preventDefault();
-    if (menuAt) hideMenu();
     if (!live()) return;
     try { overlay.setPointerCapture(e.pointerId); } catch {}
     if (e.pointerType === "mouse") {
       focusKeyboard();
       return mouseEvent(e, "down");
     }
-    pointers.set(e.pointerId, pointerInfo(e));
-    if (pointers.size === 1) startOne(pointers.get(e.pointerId));
-    else if (pointers.size === 2) startTwo();
+    const l = local(e.clientX, e.clientY);
+    run(control.down(e.pointerId, l.x, l.y, performance.now()));
   });
   overlay.addEventListener("pointermove", (e) => {
     if (!live()) return;
     if (e.pointerType === "mouse") return mouseEvent(e, "move");
-    if (!pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, pointerInfo(e));
-    if (!gesture) return;
-    if (pointers.size === 1 && gesture.kind !== "two" && gesture.kind !== "done") moveOne(pointers.get(e.pointerId));
-    else if (pointers.size === 2 && gesture.kind === "two") moveTwo();
+    // Every sample the touch screen took, not one per frame: the handle's speed is measured from them.
+    const samples = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    for (const s of samples.length ? samples : [e]) {
+      const l = local(s.clientX, s.clientY);
+      run(control.move(e.pointerId, l.x, l.y, s.timeStamp || performance.now()));
+    }
   });
-  const finish = (e, cancelled) => {
+  overlay.addEventListener("pointerup", (e) => {
     if (!live()) return;
     if (e.pointerType === "mouse") return mouseEvent(e, "up");
-    if (!pointers.has(e.pointerId)) return;
-    const p = pointerInfo(e);
-    const count = pointers.size;
-    pointers.delete(e.pointerId);
-    if (!gesture) return;
-    if (gesture.kind === "two" && count === 2) endTwo();
-    else if (count === 1 && gesture.kind !== "two" && gesture.kind !== "done") endOne(p, cancelled);
-    if (pointers.size === 0) gesture = null;
-  };
-  overlay.addEventListener("pointerup", (e) => finish(e, false));
-  overlay.addEventListener("pointercancel", (e) => finish(e, true));
+    const l = local(e.clientX, e.clientY);
+    run(control.up(e.pointerId, l.x, l.y, performance.now()));
+    reportZoom();
+  });
+  overlay.addEventListener("pointercancel", (e) => {
+    if (!live()) return;
+    if (e.pointerType === "mouse") return mouseEvent(e, "up");
+    run(control.cancel(e.pointerId, performance.now()));
+  });
   overlay.addEventListener("contextmenu", (e) => e.preventDefault());
+  // A desktop mouse's wheel and trackpad: notches, as a wheel turns.
+  let wheelRest = { x: 0, y: 0 };
   overlay.addEventListener("wheel", (e) => {
     e.preventDefault();
     if (!live()) return;
     if (e.ctrlKey) {
       const l = local(e.clientX, e.clientY);
-      zoomAt(view.s * Math.exp(-e.deltaY / 200), l.x, l.y);
+      control.zoomAt(view.s * Math.exp(-e.deltaY / 200), l);
+      applyView();
       reportZoom();
       return;
     }
     const r = toRemote(e.clientX, e.clientY);
     // A notch of the wheel (about 100 px, or 3 lines) is a notch on the screen.
     const unit = e.deltaMode === 1 ? 33 : 1;
-    const notch = Math.max(MIN_NOTCH_LOCAL, NOTCH_REMOTE * view.s) / 100;
-    scrollBy(r.x, r.y, e.deltaX * unit * notch, e.deltaY * unit * notch);
+    const step = Math.max(MIN_NOTCH_LOCAL, NOTCH_REMOTE * view.s);
+    const notch = step / 100;
+    wheelRest.x += e.deltaX * unit * notch;
+    wheelRest.y += e.deltaY * unit * notch;
+    const nx = Math.trunc(wheelRest.x / step);
+    const ny = Math.trunc(wheelRest.y / step);
+    wheelRest.x -= nx * step;
+    wheelRest.y -= ny * step;
+    if (nx || ny) wheel(r.x, r.y, nx, ny);
   }, { passive: false });
 
-  // ---- keys ----------------------------------------------------------------
+// ---- keys ----------------------------------------------------------------
 
   // A mouse and a keyboard use the computer directly: a click gives the
   // picture the keyboard, and noVNC sends every key, modifiers and releases
@@ -721,17 +524,18 @@ export function mountScreenViewer(container, post) {
     if (pendingInput && now - pendingInput > 3000) pendingInput = 0;
   }, 1000);
 
-  // ---- lifecycle -----------------------------------------------------------
+    // ---- lifecycle -----------------------------------------------------------
 
   function pictureSized(width, height) {
     if (width === fbW && height === fbH) return;
     fbW = width;
     fbH = height;
-    // A new picture (a window laid out for the phone, or put back): nothing tapped on the old one counts.
-    lastTap = { at: 0, x: 0, y: 0 };
+    // A new picture (a window laid out for the phone, or put back): nothing aimed at the old one counts.
     beforeKeyboard = null;
-    if (!cursor.x && !cursor.y) cursor = { x: fbW / 2, y: fbH / 2 };
-    fitView();
+    tapped = false;
+    control.viewport(root.clientWidth, root.clientHeight);
+    run(control.picture(width, height));
+    reportZoom();
   }
 
   // Pushed video: the computer offers, this page answers through the host.
@@ -740,19 +544,29 @@ export function mountScreenViewer(container, post) {
     let connected = false;
     video = createVideoPicture(doc, {
       signal: (signal) => post({ type: "signal", signal }),
+      // What the computer's offer says it can do: scroll by pixels, and whether its video carries its cursor.
+      offered: (features) => {
+        if (ticket !== opening) return;
+        control.fineScroll = !!features.fineScroll;
+        cursorInPicture = !!features.cursor;
+        drawPointer();
+      },
       resized: (width, height) => {
         if (ticket !== opening) return;
         picture = video.element;
         pictureSized(width, height);
-        if (!connected) {
-          connected = true;
-          post({ type: "connected", width, height });
-        }
       },
+      // The view is live with its first picture shown, not before: the page's own loading state covers
+      // the time without one.
       frame: () => {
         if (ticket !== opening) return;
         stats.updates++;
         onDrawn();
+        if (!connected && fbW) {
+          connected = true;
+          cover.style.display = "none";
+          post({ type: "connected", width: fbW, height: fbH });
+        }
       },
       failed: () => {
         if (ticket === opening) post({ type: "disconnected", clean: false });
@@ -785,10 +599,13 @@ export function mountScreenViewer(container, post) {
     const old = video;
     video = null;
     picture = null;
+    cover.style.display = "";
     fbW = fbH = 0;
     buttons = 0;
-    pointers.clear();
-    gesture = null;
+    clearTimeout(timer);
+    control.picture(0, 0);
+    drawPointer();
+    drawZoom();
     old.close();
     if (notify) post({ type: "disconnected", clean: true });
   }
@@ -800,13 +617,14 @@ export function mountScreenViewer(container, post) {
       case "text": if (live()) typeText(message.text, message.mods); break;
       case "key": if (live()) withModifiers(message.mods, () => sendKey(keysymNamed(message.key), null)); break;
       case "signal": if (video) video.signal(message.signal); break;
-      case "mode":
-        mode = message.mode === "trackpad" ? "trackpad" : "touch";
-        drawCursor();
+      // A window laid out for the phone is used like a phone's page: no pointer drawn, no zoom button.
+      case "layout":
+        run(control.setHandle(!message.reflowed));
+        drawZoom();
         break;
       case "align":
-        align = message.align === "top" ? "top" : "center";
-        clampView();
+        control.align = message.align === "top" ? "top" : "center";
+        control.clamp();
         applyView();
         break;
       case "fit": fitView(); break;
@@ -822,6 +640,9 @@ export function mountScreenViewer(container, post) {
   }
   reportSize();
 
+  // A tap since the picture came: the keyboard keeps the point it clicked in sight.
+  let tapped = false;
+  overlay.addEventListener("pointerup", () => { tapped = true; });
   let lastSize = { w: root.clientWidth, h: root.clientHeight };
   // The scale the view had before the keyboard came up, while it is up; null when it isn't.
   let beforeKeyboard = null;
@@ -831,39 +652,42 @@ export function mountScreenViewer(container, post) {
     const h = root.clientHeight;
     const last = lastSize;
     lastSize = { w, h };
-    if (!fbW) return;
-    const wasFit = view.s <= view.fit * 1.02;
-    view.fit = Math.min(w / fbW, h / fbH);
+    if (!fbW) {
+      control.viewport(w, h);
+      return;
+    }
+    const wasFit = control.fitted();
     if (w === last.w && h < last.h) {
       // The keyboard came up: the picture keeps its size and the view moves so the field tapped last stays
       // in sight above it.
       if (beforeKeyboard === null) beforeKeyboard = { fit: wasFit, height: last.h };
-      const at = lastTap.remote;
-      if (at) {
-        const y = view.ty + at.y * view.s;
+      control.size(w, h);
+      if (tapped) {
+        const y = control.toLocal(control.pointer).y;
         if (y > h - KEYBOARD_MARGIN) view.ty -= y - (h - KEYBOARD_MARGIN);
         if (y < KEYBOARD_MARGIN) view.ty += KEYBOARD_MARGIN - y;
       }
-      clampView();
+      control.clamp();
       applyView();
       return;
     }
     if (w === last.w && h > last.h && beforeKeyboard) {
       const back = beforeKeyboard;
+      control.size(w, h);
       if (h < back.height) {
-        clampView();
+        control.clamp();
         applyView();
         return;
       }
       beforeKeyboard = null;
       if (back.fit) return fitView();
-      clampView();
+      control.clamp();
       applyView();
       return;
     }
     beforeKeyboard = null;
-    if (wasFit) fitView();
-    else { clampView(); applyView(); }
+    run(control.viewport(w, h));
+    applyView();
   });
   resizeObserver.observe(root);
 
@@ -873,6 +697,7 @@ export function mountScreenViewer(container, post) {
       close(false);
       clearInterval(statsTimer);
       clearTimeout(sizeTimer);
+      clearTimeout(timer);
       resizeObserver.disconnect();
       container.removeChild(root);
     },

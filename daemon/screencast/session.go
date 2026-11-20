@@ -47,6 +47,14 @@ type Config struct {
 	// Input takes the person's RFB client messages (KeyEvent, PointerEvent,
 	// ClientCutText), whole and in order. Nil: the view is for watching.
 	Input func(msg []byte) error
+	// Scroll takes the person's scrolls by picture pixels (Mewla's client
+	// message 250: x, y, then signed dx and dy; +dy scrolls down, as a wheel
+	// turned toward the person). Non-nil, the offer says fine_scroll and the
+	// viewer sends them instead of wheel notches.
+	Scroll func(x, y, dx, dy int) error
+	// Cursor says the video carries the computer's own cursor: the offer
+	// tells the viewer, which then draws no arrow of its own.
+	Cursor bool
 	// Signal sends a signalling message to the viewer over the Mewla link.
 	Signal func(v any)
 	// Stats hears what the stream did, about once a second.
@@ -110,6 +118,10 @@ type Signal struct {
 	// viewer device's over the answer's (Config.VerifyAnswer).
 	Assertion     any    `json:"assertion,omitempty"`
 	Authorization string `json:"authorization,omitempty"`
+	// FineScroll and Cursor, on the offer: the computer takes pixel scrolls
+	// (Config.Scroll), and its video carries its own cursor (Config.Cursor).
+	FineScroll bool `json:"fine_scroll,omitempty"`
+	Cursor     bool `json:"cursor,omitempty"`
 }
 
 const (
@@ -346,7 +358,7 @@ func (s *Session) setup() error {
 	if viewerServers == nil {
 		viewerServers = s.cfg.ICEServers
 	}
-	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: viewerServers, Assertion: assertion})
+	s.cfg.Signal(Signal{Type: "rtc", SDPType: "offer", SDP: offerSDP, ICEServers: viewerServers, Assertion: assertion, FineScroll: s.cfg.Scroll != nil && s.cfg.Input != nil, Cursor: s.cfg.Cursor})
 	return nil
 }
 
@@ -466,6 +478,19 @@ func (s *Session) reliable(data []byte) {
 		if msg[0] == 5 {
 			s.mask = msg[1]
 		}
+		if msg[0] == scrollMessage {
+			// Mewla's own: never passed on as an RFB message.
+			if s.cfg.Scroll == nil {
+				continue
+			}
+			x, y := int(binary.BigEndian.Uint16(msg[2:])), int(binary.BigEndian.Uint16(msg[4:]))
+			dx, dy := int(int16(binary.BigEndian.Uint16(msg[6:]))), int(int16(binary.BigEndian.Uint16(msg[8:])))
+			if err := s.cfg.Scroll(x, y, dx, dy); err != nil {
+				s.cancel(err)
+				return
+			}
+			continue
+		}
 		if err := s.cfg.Input(msg); err != nil {
 			s.cancel(err)
 			return
@@ -492,9 +517,17 @@ func (s *Session) move(data []byte) {
 	}
 }
 
+// scrollMessage is Mewla's client message for a scroll by picture pixels:
+// type, padding, x, y (uint16), dx, dy (int16), big-endian. RFB leaves message
+// types from 128 to vendors; a viewer sends it only when the offer says
+// fine_scroll.
+const scrollMessage = 250
+
 // rfbLength is the length of the RFB client message msg starts with, or 0.
 func rfbLength(msg []byte) int {
 	switch msg[0] {
+	case scrollMessage:
+		return 10
 	case 4: // KeyEvent
 		return 8
 	case 5: // PointerEvent

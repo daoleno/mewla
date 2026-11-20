@@ -5,7 +5,7 @@ import { Button } from "nsh/base";
 import { ScreenConnection, type ScreenRoute } from "../../../core/screen/screen";
 import { activeModifiers, COMMIT_SETTLE_MS, FIELD_RESET_MS, FieldTyping, fieldNeedsReset, KEYBOARD_SENTINEL, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
-import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
+import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
 import { keyboardLift } from "../../../core/shell/belowStack";
 import { belowSections } from "../../shell/below";
@@ -13,6 +13,7 @@ import { echoLine, echoNextChange, fitMessage, NO_REFLOW, pushEcho, shouldFit, t
 import type { StoredServer } from "../../../core/storedServerContract";
 import { SCREEN_VIEWER_SOURCE } from "./viewerSource";
 import { viewerBaseUrl } from "../../viewerBase";
+import { haptic } from "../../shell/haptics";
 
 export interface RemoteModifier {
   key: ScreenModifier;
@@ -108,15 +109,12 @@ export class RemoteSession {
   readonly viewSize = signal<StageSize | null>(null);
   /** The size the window was last laid out for, while held. */
   private fitted: StageSize | null = null;
-  /** The viewer felt a long press (a right-click). No haptic: the app has two (SPEC §16.3). */
-  onHaptic: (() => void) | null = null;
   private connection: ScreenConnection | null = null;
   private web: WebViewRef | null = null;
   private viewerReady = false;
   private outbox: ScreenHostMessage[] = [];
   private stopDeadline: (() => void) | null = null;
   private attempt = 0;
-  mode: ScreenPointerMode = "touch";
 
   constructor(
     private readonly server: StoredServer,
@@ -147,7 +145,7 @@ export class RemoteSession {
     switch (message.type) {
       case "ready":
         this.viewerReady = true;
-        this.post([{ type: "mode", mode: this.mode }, { type: "align", align: this.align }], true);
+        this.post([{ type: "align", align: this.align }, { type: "layout", reflowed: untracked(this.reflow).on }], true);
         this.flush();
         return;
       case "signal":
@@ -162,7 +160,8 @@ export class RemoteSession {
         this.viewerStats.set({ fps: message.fps, kbps: message.kbps, inputMs: message.inputMs });
         return;
       case "haptic":
-        this.onHaptic?.();
+        // A hold took (a right click, or a drag about to start): the finger feels it before the picture shows it.
+        haptic.impact();
         return;
       case "size":
         this.viewSize.set({ width: message.width, height: message.height, dpr: message.dpr });
@@ -193,7 +192,7 @@ export class RemoteSession {
         ready: () => {},
         rtt: (ms) => attempt === this.attempt && this.rtt.set(ms),
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
-        reflow: (state) => attempt === this.attempt && this.reflow.set(state),
+        reflow: (state) => attempt === this.attempt && this.setReflow(state),
         streamStats: (stats) => attempt === this.attempt && this.stats.set(stats),
         closed: (reason, outdated) => {
           if (attempt !== this.attempt) return;
@@ -204,6 +203,7 @@ export class RemoteSession {
       this.options.watch,
       this.options.worker,
       this.options.route,
+      needsSoftKeyboard(),
     );
     this.connection = connection;
     // Signing or opening the socket failed: say why now, not after the deadline.
@@ -233,7 +233,7 @@ export class RemoteSession {
     connection?.close();
     // A hold rides on the socket: closing it lets the agent go on (and puts its window back).
     this.holding.set(false);
-    this.reflow.set(NO_REFLOW);
+    this.setReflow(NO_REFLOW);
     this.fitted = null;
     this.rtt.set(null);
     if (connection) this.post([{ type: "close" }]);
@@ -248,7 +248,14 @@ export class RemoteSession {
     this.holding.set(on);
     this.fitted = null;
     if (on) this.fitIfNeeded();
-    else this.reflow.set(NO_REFLOW);
+    else this.setReflow(NO_REFLOW);
+  }
+
+  /** How the window is shown; the viewer uses a window laid out for this view like a phone's page. */
+  private setReflow(state: StageReflow): void {
+    const was = untracked(this.reflow).on;
+    this.reflow.set(state);
+    if (state.on !== was) this.post([{ type: "layout", reflowed: state.on }]);
   }
 
   /** While held, lays the window out for the view once, and again when the view turns or grows (never for the keyboard). */
@@ -257,11 +264,6 @@ export class RemoteSession {
     if (!this.options.reflow || !this.connection || !untracked(this.holding) || !size || !shouldFit(this.fitted, size)) return;
     this.fitted = size;
     this.connection.control(fitMessage(size));
-  }
-
-  setMode(mode: ScreenPointerMode): void {
-    this.mode = mode;
-    this.post([{ type: "mode", mode }]);
   }
 
   /** A short picture sits at the top, or in the middle (sideways, where it owns the display). */
@@ -309,8 +311,8 @@ export class RemoteSession {
 }
 
 /**
- * The picture of a remote screen, which is also its input surface (a tap clicks,
- * a drag scrolls, a long press right-clicks, two fingers zoom), and while the
+ * The picture of a remote screen, which is also its input surface (touchControl: a tap clicks,
+ * a drag scrolls, a hold right-clicks or drags, the pointer's handle points precisely, two fingers move the view), and while the
  * keyboard is up a slim bar of the keys a phone keyboard lacks.
  */
 export function RemoteView(props: { session: RemoteSession; label: string; modifiers: RemoteModifier[]; typing: boolean; onTypingChange: (on: boolean) => void; class?: string }) {

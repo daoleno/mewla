@@ -21,7 +21,6 @@ import {
   type IndicatorTone,
   type StreamReadout,
 } from "../../../core/screen/screenPageModel";
-import type { ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import { changeIPhone, getIPhoneStatus, type IPhoneChange, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { phoneAvailable, phoneStatus, readPhone } from "../../phone/state";
 import { daemon } from "../daemon";
@@ -74,7 +73,6 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
   const givenBack = signal<{ worker: string; name: string; stopped?: boolean } | null>(null);
   const session = signal<RemoteSession | null>(null);
   const typing = signal(false);
-  const mode = signal<ScreenPointerMode>("touch");
   const details = signal(false);
   const slow = signal(false);
   const slowNote = signal(false);
@@ -193,7 +191,6 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
         return true;
       },
     });
-    viewer.mode = untracked(mode);
     viewer.locked.set(!!next.locked);
     sessions++;
     session.set(viewer);
@@ -505,11 +502,6 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
     void connect("watch", worker || undefined);
   };
   const stopWatched = () => void stopAgent(watching()?.worker);
-  const toggleMode = () => {
-    const next = mode() === "touch" ? "trackpad" : "touch";
-    mode.set(next);
-    session()?.setMode(next);
-  };
 
   // Only where phone use is on; it says who is using the phone, and opens the phone's own page.
   // Rebuilt only when it comes or goes: a status read while the menu is open never takes the item from under a finger.
@@ -541,7 +533,6 @@ export function ScreenPage(props: { nav: PageNav; worker?: string; takeOver?: bo
       {agentWindowsItem()}
       {keyed(menuKind, (kind) =>
         <If when={kind === "local"} else={<If when={kind === "watch"} else={<>
-            <MenuItem onSelect={toggleMode} class={ITEM}><Text class="text-body">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text></MenuItem>
             <MenuItem onSelect={() => session()?.fitView()} class={ITEM}><Text class="text-body">Fit screen</Text></MenuItem>
             <If when={canShowFullSize()}><MenuItem testID="screen-full-size" onSelect={() => void session()?.fullSize(`Screen of ${untracked(title)}`)} class={ITEM}><Text class="text-body">Full size</Text></MenuItem></If>
             {keepAwakeItem()}

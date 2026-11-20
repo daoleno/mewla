@@ -3,11 +3,25 @@
     {
       "version": "0.4.18",
       "date": "2026-11-20",
-      "highlights": [],
+      "highlights": [
+        {
+          "id": "0.4.18-screen-touch",
+          "title": "Screen works under your finger",
+          "line": "Tap to click, drag to scroll, hold for right click; drag the pointer's handle to aim.",
+          "media": {
+            "scene": "screen-pointer"
+          },
+          "try": {
+            "kind": "open",
+            "target": "screen"
+          }
+        }
+      ],
       "fixes": [
         "Phone use pastes far less: a long post goes in as one paste, with fewer notices on the phone.",
         "When the phone turns off Phone use's hidden screen, the apps on it come back as they were.",
-        "Two Mewla apps on one phone no longer take Phone use from each other on their own."
+        "Two Mewla apps on one phone no longer take Phone use from each other on their own.",
+        "Screen's first second is black until the picture comes, never a video player's placeholder."
       ]
     },
     {
