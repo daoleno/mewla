@@ -7,6 +7,10 @@ export type ScreenSignal =
       sdp_type: "offer" | "answer";
       sdp: string;
       ice_servers?: { urls: string[]; username?: string; credential?: string }[];
+      /** On the offer: the computer takes scrolls by picture pixels (client message 250), not only wheel notches. */
+      fine_scroll?: boolean;
+      /** On the offer: the video carries the computer's own cursor, so the viewer draws no arrow of its own. */
+      cursor?: boolean;
       /** On the offer: the computer's signature over its DTLS fingerprints (screenIdentity). */
       assertion?: { timestamp?: unknown; nonce_hex?: unknown; signature_hex?: unknown };
       /** On the answer: this device's signature over its DTLS fingerprints. */
@@ -21,7 +25,8 @@ export type ScreenHostMessage =
   | { type: "close" }
   | { type: "text"; text: string; mods: ScreenModifier[] }
   | { type: "key"; key: ScreenKey; mods: ScreenModifier[] }
-  | { type: "mode"; mode: ScreenPointerMode }
+  /** The picture is a window laid out for this view (a reflowed agent browser): used like a phone's page, no pointer drawn. */
+  | { type: "layout"; reflowed: boolean }
   /** Fit the picture to the view (the view's own zoom; the computer doesn't change). */
   | { type: "fit" }
   /** Web: the view goes full size, and the browser's own shortcuts go to the remote. */
@@ -34,7 +39,6 @@ export type ScreenKey =
   | "Escape" | "Tab" | "Return" | "BackSpace" | "Delete"
   | "Left" | "Up" | "Right" | "Down" | "Home" | "End" | "PageUp" | "PageDown"
   | `F${number}`;
-export type ScreenPointerMode = "touch" | "trackpad";
 
 export type ScreenViewerMessage =
   | { type: "ready" }

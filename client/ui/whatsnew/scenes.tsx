@@ -382,6 +382,52 @@ function ScreenReflow() {
   );
 }
 
+/** Screen on a phone: a tap lands near a small button, the pointer's handle brings it onto it, a tap on the handle clicks. */
+function ScreenPointer() {
+  // The pointer appears where the tap landed, then the handle carries it 14 px left onto the button.
+  const pointer = loop([
+    { offset: 0, opacity: 0, translateX: 0 },
+    { offset: 0.2, opacity: 0, translateX: 0 },
+    { offset: 0.24, opacity: 1, translateX: 0 },
+    { offset: 0.42, opacity: 1, translateX: 0 },
+    { offset: 0.62, opacity: 1, translateX: -14 },
+    { offset: 0.92, opacity: 1, translateX: -14 },
+    { offset: 1, opacity: 0, translateX: -14 },
+  ]);
+  const resting = loop([{ offset: 0, opacity: 0 }, { offset: 0.2, opacity: 0 }, { offset: 0.24, opacity: 1 }, { offset: 0.44, opacity: 1 }, { offset: 0.48, opacity: 0 }, { offset: 1, opacity: 0 }]);
+  const solid = loop([{ offset: 0, opacity: 0 }, { offset: 0.44, opacity: 0 }, { offset: 0.48, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const clicked = loop(between(0.76, 0.94));
+  return (
+    <View class="h-[176px] w-[132px] overflow-hidden rounded-[18px] bg-black px-2 pb-2 pt-2.5">
+      <View class="h-[18px] flex-row items-center gap-1">
+        <View class="size-[12px] rounded-full bg-white/85" />
+        <View class="h-[6px] w-[36px] rounded-full bg-white/70" />
+      </View>
+      {/* A whole desktop at a third of its size: a toolbar of small buttons. */}
+      <View class="relative mt-6 h-[78px] rounded-[3px] bg-white p-1.5">
+        <View class="flex-row gap-[3px]">
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <View class="relative size-[8px] rounded-[1px] border border-border">
+              <If when={i === 3}><View class="absolute inset-0 bg-add" style={clicked} /></If>
+            </View>
+          ))}
+        </View>
+        <View class="mt-2 h-[4px] w-[70px] rounded-full bg-track" />
+        <View class="mt-1.5 h-[4px] w-[56px] rounded-full bg-track" />
+        <View class="mt-1.5 h-[4px] w-[64px] rounded-full bg-track" />
+        <Press at={0.14} style={{ left: 37, top: -1 }} />
+        <View class="absolute" style={{ left: 50, top: 10, ...pointer }}>
+          <Icon name="navigate" size={11} tone="ink" />
+          {/* The handle: faint after a tap, solid once it placed the pointer. */}
+          <View class="absolute size-[14px] rounded-full border border-foreground/40" style={{ left: 8, top: 14, ...resting }} />
+          <View class="absolute size-[14px] rounded-full border border-foreground/50 bg-white shadow" style={{ left: 8, top: 14, ...solid }} />
+        </View>
+        <Press at={0.7} style={{ left: 31, top: 23 }} />
+      </View>
+    </View>
+  );
+}
+
 /** A picture in a chat: hold it, Save, and it is in the gallery. */
 function PictureSave() {
   const menu = loop([{ offset: 0, opacity: 0, translateY: 6 }, { offset: 0.24, opacity: 0, translateY: 6 }, { offset: 0.32, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
@@ -497,6 +543,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "update-line": UpdateLine,
   "chat-diagram": ChatDiagram,
   "screen-reflow": ScreenReflow,
+  "screen-pointer": ScreenPointer,
   "picture-save": PictureSave,
   "work-menu": WorkMenu,
   "trigger-watch": TriggerWatch,

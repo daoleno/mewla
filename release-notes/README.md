@@ -34,7 +34,7 @@ version without one, so a manual tag cannot ship one either.
   no ellipsis. English, in the person's words: what they can now do, never how it was built. A fix the person felt
   or asked for can be a highlight ("Fixed: …").
 - **media.scene**: the loop drawn in `client/ui/whatsnew/scenes.tsx` (`chat-card`, `update-restart`,
-  `agent-windows`, `browser-survives`, `network-hop`, `update-line`, `chat-diagram`, `screen-reflow`, `picture-save`,
+  `agent-windows`, `browser-survives`, `network-hop`, `update-line`, `chat-diagram`, `screen-reflow`, `screen-pointer`, `picture-save`,
   `work-menu`, `trigger-watch`). A new feature usually gets a new scene there;
   `WhatsNew.test.tsx` fails on a name the app does not draw.
 - **try**: `{"kind": "open", "target": …}` with brain, sessions, new-session, screen, calendar, computer or

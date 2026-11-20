@@ -195,7 +195,7 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	if watch {
 		cast, err = s.screen.WatchWorkerCast(ctx, device.ID, r.URL.Query().Get("worker"))
 	} else {
-		cast, err = s.screen.OpenCast(ctx, device.ID, observer)
+		cast, err = s.screen.OpenCast(ctx, device.ID, observer, r.URL.Query().Get("pointer") == "local")
 	}
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
@@ -283,9 +283,16 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 
 	signOffer, verifyAnswer := s.screenBinding(device.ID)
 	iceServers, viewerICE, relayMaxKbps := s.screenICE(ctx)
+	// Where the system scrolls by pixels (a Mac, Windows), the page follows the finger, not wheel notches.
+	var scroll func(x, y, dx, dy int) error
+	if cast.FineScroll() {
+		scroll = cast.Scroll
+	}
 	session, err = screencast.Start(ctx, screencast.Config{
 		Source:     cast,
 		Input:      cast.Input,
+		Scroll:     scroll,
+		Cursor:     cast.Cursor(),
 		NewEncoder: castEncoder(),
 		Signal:     func(v any) { sendJSON(v) },
 		Stats: func(st screencast.Stats) {

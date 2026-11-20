@@ -234,8 +234,10 @@ type windowsSession struct {
 	sum     [32]byte
 	have    bool
 	buttons uint8
-	mods    map[uint32]bool    // modifier keysyms held down
-	sent    map[uint32]charKey // characters pressed, to let go the same way
+	// wheelRest is the part of a pixel scroll short of one wheel unit, vertical then horizontal.
+	wheelRest [2]float64
+	mods      map[uint32]bool    // modifier keysyms held down
+	sent      map[uint32]charKey // characters pressed, to let go the same way
 }
 
 // Frame takes pictures of the primary display until one differs from the
@@ -391,6 +393,44 @@ func (s *windowsSession) Pointer(x, y int, buttons uint8) error {
 	}
 	if buttons&64 != 0 {
 		events = append(events, mouseInput(0, 0, 120, hwheel))
+	}
+	return sendInput(events...)
+}
+
+// wheelPerPixel turns a scroll by pixels into wheel units: a notch (120) moves
+// a browser's page about 100 pixels. Windows takes deltas below a notch, and
+// apps that scroll smoothly (browsers, Office) follow them.
+const wheelPerPixel = 1.2
+
+// Scroll scrolls by (dx, dy) pixels at (x, y) with wheel deltas below a notch.
+func (s *windowsSession) Scroll(x, y, dx, dy int) error {
+	w, h := screenSize()
+	if w <= 1 || h <= 1 {
+		return errors.New("this computer has no display")
+	}
+	x, y = max(0, min(x, w-1)), max(0, min(y, h-1))
+	const (
+		move     = 0x0001
+		absolute = 0x8000
+		wheel    = 0x0800
+		hwheel   = 0x1000
+	)
+	nx := int32((x*65535 + (w-1)/2) / (w - 1))
+	ny := int32((y*65535 + (h-1)/2) / (h - 1))
+	s.mu.Lock()
+	// Windows' wheel turns up for a positive delta; a positive dy scrolls down.
+	s.wheelRest[0] -= float64(dy) * wheelPerPixel
+	s.wheelRest[1] += float64(dx) * wheelPerPixel
+	v, hz := int32(s.wheelRest[0]), int32(s.wheelRest[1])
+	s.wheelRest[0] -= float64(v)
+	s.wheelRest[1] -= float64(hz)
+	s.mu.Unlock()
+	events := []input{mouseInput(nx, ny, 0, move|absolute)}
+	if v != 0 {
+		events = append(events, mouseInput(0, 0, v, wheel))
+	}
+	if hz != 0 {
+		events = append(events, mouseInput(0, 0, hz, hwheel))
 	}
 	return sendInput(events...)
 }

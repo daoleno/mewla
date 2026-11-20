@@ -623,7 +623,8 @@ func (s *macSession) start(ctx context.Context, content objc.ID) error {
 	config.Send(objc.RegisterName("setWidth:"), uint64(width))
 	config.Send(objc.RegisterName("setHeight:"), uint64(height))
 	config.Send(objc.RegisterName("setPixelFormat:"), uint32(0x42475241)) // 'BGRA'
-	config.Send(objc.RegisterName("setShowsCursor:"), true)
+	// A phone's view draws the pointer itself, at finger speed: its picture leaves the cursor out (one arrow, never two).
+	config.Send(objc.RegisterName("setShowsCursor:"), cursorShown(ctx))
 	config.Send(objc.RegisterName("setQueueDepth:"), int64(4))
 	mac.msgSendCMTime(config, objc.RegisterName("setMinimumFrameInterval:"), cmTime{Value: 1, Timescale: 30, Flags: 1})
 
@@ -781,10 +782,18 @@ func (s *macSession) post(events []macEvent, pid int) {
 			if event != 0 && e.Clicks > 0 {
 				mac.CGEventSetIntegerValueField(event, cgMouseClickStateField, int64(e.Clicks))
 			}
-		case macScroll:
-			event = mac.CGEventCreateScrollWheelEvent2(s.source0, cgScrollUnitLine, 2, e.Lines[0], e.Lines[1], 0)
+		case macScroll, macScrollPixels:
+			unit := uint32(cgScrollUnitLine)
+			if e.Kind == macScrollPixels {
+				unit = cgScrollUnitPixel
+			}
+			event = mac.CGEventCreateScrollWheelEvent2(s.source0, unit, 2, e.Lines[0], e.Lines[1], 0)
 			if event != 0 {
 				mac.CGEventSetLocation(event, cgPoint{e.X, e.Y})
+				if e.Kind == macScrollPixels {
+					// A continuous scroll, as a trackpad's: apps move by the pixels, not by lines.
+					mac.CGEventSetIntegerValueField(event, fieldScrollContinous, 1)
+				}
 			}
 		case macKey:
 			event = mac.CGEventCreateKeyboardEvent(s.source0, e.KeyCode, e.Down)
@@ -862,6 +871,15 @@ func utf16Units(r rune) []uint16 {
 
 func (s *macSession) Pointer(x, y int, buttons uint8) error {
 	s.post(s.input.pointer(x, y, buttons), 0)
+	return nil
+}
+
+// Scroll scrolls by (dx, dy) pixels at framebuffer pixel (x, y), as a
+// trackpad does: the page follows the person's finger, not a wheel's notches.
+// Framebuffer pixels are points here (the capture is at the logical size).
+func (s *macSession) Scroll(x, y, dx, dy int) error {
+	px, py := s.input.point(image.Pt(x, y))
+	s.post([]macEvent{{Kind: macScrollPixels, X: px, Y: py, Lines: [2]int32{int32(-dy), int32(-dx)}, Flags: s.input.flags()}}, 0)
 	return nil
 }
 

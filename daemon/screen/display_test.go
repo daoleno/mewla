@@ -41,7 +41,7 @@ func viewerService(t *testing.T) (*Service, *FakeBackend) {
 
 func openHeld(t *testing.T, service *Service, ctx context.Context, obs *Observer) *Cast {
 	t.Helper()
-	cast, err := service.OpenCast(ctx, "phone", obs)
+	cast, err := service.OpenCast(ctx, "phone", obs, false)
 	if err != nil {
 		t.Fatal(err)
 	}
