@@ -49,7 +49,10 @@ const TABLE = {
   tableScroll: "m-0",
   tableRow: "border-0 bg-transparent",
   tableHead: "bg-transparent",
-  tableCell: "min-w-[132px] border-0 border-t border-border px-4 py-3 text-[15px] leading-[22px]",
+  // No min-width of its own: NSH gives each column a floor (its cells' whole text when short, half its widest line,
+  // 10–30 rem, when long) and the table scrolls past the floors. A cell wider than its column ran into the next
+  // one on Android ("9,308" over "2027-03-31", owner 11-20).
+  tableCell: "border-0 border-t border-border px-4 py-3 text-[15px] leading-[22px]",
   tableHeaderCell: "border-t-0 text-[13px] font-semibold leading-4 text-muted-foreground",
   code: INLINE_CODE,
 };
