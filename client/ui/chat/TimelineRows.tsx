@@ -38,6 +38,7 @@ import { nav } from "../shell/nav";
 import { agentDisplays, displayOfWorker } from "../screenfloat/agentDisplays";
 import { isMermaidLanguage } from "../../core/mermaid/mermaid";
 import { MermaidBlock } from "../mermaid/MermaidBlock";
+import { threadType } from "../kit/density";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -138,8 +139,9 @@ function FileRow(props: { file: ActivityFileRow; onFile?: (path: string) => void
 
 /** A tool row's words: what it did in 600, then the detail, soft, on one line that truncates. */
 function ToolLine(props: { title: string; detail?: string; running?: boolean }) {
+  const type = threadType();
   return (
-    <Text class={`min-w-0 flex-1 text-sub line-clamp-1 ${props.running ? "text-foreground" : "text-muted-foreground"}`}>
+    <Text class={`min-w-0 flex-1 ${type.line} line-clamp-1 ${props.running ? "text-foreground" : "text-muted-foreground"}`}>
       <Text class="font-semibold">{props.title}</Text>
       {props.detail ? `  ${props.detail}` : ""}
     </Text>

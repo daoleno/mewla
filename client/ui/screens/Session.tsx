@@ -63,6 +63,7 @@ import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 import { showAlert } from "../shell/alert";
 import { getGitRepository } from "../../core/git/requests";
+import { headerSize } from "../kit/density";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -601,26 +602,29 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const ACTION = CAPSULE.action;
   const actionSlop = { top: ACTION.slop, bottom: ACTION.slop, left: ACTION.gap / 2, right: ACTION.gap / 2 };
   const actionStyle = { width: ACTION.size, height: ACTION.size };
+  const head = headerSize();
+  // On the Mac's bar the actions are 28 with 16 icons (RESULT-DESIGN-PAIRS #4); the phone's capsule keeps its own.
+  const barStyle = head.action ? { width: head.action, height: head.action } : actionStyle;
   const actions = (bar: boolean) => {
     const look = `items-center justify-center rounded-full active:bg-accent${bar ? " hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : ""}`;
     return (
       <View testID="session-actions" class={`shrink-0 flex-row items-center${bar ? " ml-1.5" : ""}`} style={{ gap: ACTION.gap, marginRight: bar ? 0 : ACTION.end }}>
         <If when={isRepo()}>
-          <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} hitSlop={actionSlop} class={look} style={actionStyle}>
-            <Icon name="diff" size={22} color="foreground" />
+          <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
+            <Icon name="diff" size={bar ? head.actionIcon : 22} color="foreground" />
           </Button>
         </If>
         {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a
             chat. Brain's chat is home's, so on Brain's terminal the button goes back there. */}
         <If when={props.brain || canChat()}>
           <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
-            hitSlop={actionSlop} class={look} style={actionStyle}>
-            <Icon name={mode() === "chat" ? "terminal" : "chat"} size={22} color="foreground" />
+            hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
+            <Icon name={mode() === "chat" ? "terminal" : "chat"} size={bar ? head.actionIcon : 22} color="foreground" />
           </Button>
         </If>
         <If when={hasMenu()}>
-          <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} hitSlop={actionSlop} class={look} style={actionStyle}>
-            <Icon name="more-horizontal" size={22} color="foreground" />
+          <Button ref={menuAnchor.ref} testID="session-menu" accessibilityLabel="Session menu" onPress={() => void menu()} hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
+            <Icon name="more-horizontal" size={bar ? head.actionIcon : 22} color="foreground" />
           </Button>
         </If>
       </View>
@@ -666,13 +670,14 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       // is never the title again.
       headerTitle={
         <View class="min-w-0 flex-1 flex-row items-center">
-          <AgentIcon kind={kind()} size={28} />
-          <View class="ml-2.5 min-w-0 flex-1">
-            <Text role="header" class="text-body font-semibold text-foreground line-clamp-1">{title()}</Text>
-            <If when={props.brain} else={<If when={worker()}><View testID="session-status" class="min-w-0 flex-row">
-                <If when={projectWord()}><Text testID="session-project" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{projectWord()}</Text></If>
-                <Text testID="session-state" class="shrink-0 text-sub text-muted-foreground line-clamp-1">{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
-              </View></If>}><Text testID="session-status" class="text-sub text-muted-foreground line-clamp-1">{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
+          <AgentIcon kind={kind()} size={head.mark} />
+          {/* The phone's two lines; the Mac's one: the title, then its subtitle 6 after (RESULT-DESIGN-PAIRS #4). */}
+          <View class={head.oneLine ? "ml-2 min-w-0 flex-1 flex-row items-baseline gap-1.5" : "ml-2.5 min-w-0 flex-1"}>
+            <Text role="header" class={`${head.name} text-foreground line-clamp-1${head.oneLine ? " shrink-0" : ""}`}>{title()}</Text>
+            <If when={props.brain} else={<If when={worker()}><View testID="session-status" class={head.oneLine ? "min-w-0 shrink flex-row" : "min-w-0 flex-row"}>
+                <If when={projectWord()}><Text testID="session-project" class={`min-w-0 shrink ${head.sub} text-muted-foreground line-clamp-1`}>{projectWord()}</Text></If>
+                <Text testID="session-state" class={`shrink-0 ${head.sub} text-muted-foreground line-clamp-1`}>{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
+              </View></If>}><Text testID="session-status" class={`${head.oneLine ? "min-w-0 shrink " : ""}${head.sub} text-muted-foreground line-clamp-1`}>{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
           </View>
           {actions(true)}
         </View>

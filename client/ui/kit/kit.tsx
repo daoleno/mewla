@@ -3,7 +3,8 @@ import { announce, Clipboard, effect, platform, safeArea, Scroll, signal, Text, 
 import { isAvailable as mobile } from "nsh/mobile";
 import { CAPSULE, capsulePageInset, capsuleRailPageInset } from "../../core/shell/capsule";
 import { Button, Input, Switch } from "nsh/base";
-import { PAGE_COLUMN_WIDTH } from "../../core/web/places";
+import { pageColumnWidth } from "../../core/web/places";
+import { dense, density } from "./density";
 import { rail, wide } from "../shell/layout";
 import type { RailAction } from "../shell/railPages";
 import { NavPage } from "../shell/NavPage";
@@ -55,7 +56,8 @@ export function Page(props: {
   children?: JSX.Element;
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
-  const width = () => (wide() ? PAGE_COLUMN_WIDTH.page : (props.maxWidth ?? 720));
+  const page = pageColumnWidth("page", density() !== "phone")!;
+  const width = () => (wide() ? page : (props.maxWidth ?? 720));
   // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
   const display = untracked(() => Boolean(props.display));
   const titleAway = signal(!display);
@@ -234,14 +236,16 @@ export function RankedRow(props: { title: string; subtitle?: string; share: numb
  * `label` puts a SectionLabel (icon, name, count) in place of the plain one; `sheet` draws the group on a sheet's surface.
  */
 export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; label?: JSX.Element; sheet?: boolean; children?: JSX.Element }) {
+  // Mewla for Mac: groups 12 apart, radius 14 (RESULT-DESIGN-PAIRS #8).
+  const size = dense({ phone: { gap: "mt-6", radius: "rounded-(--radius-group)" }, window: { gap: "mt-3", radius: "rounded-[14px]" } });
   return (
-    <View class={props.label ? "" : "mt-6"} testID={props.testID}>
+    <View class={props.label ? "" : size.gap} testID={props.testID}>
       {props.label ?? null}
       <If when={!props.label && (props.title || props.detail)}><View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
           <Caption role="header" inRow text={props.title ?? ""} />
           {props.detail ?? null}
         </View></If>
-      <View class={props.sheet ? "overflow-hidden rounded-(--radius-group) bg-sheet-surface" : "overflow-hidden rounded-(--radius-group) bg-card"}>
+      <View class={`overflow-hidden ${size.radius} ${props.sheet ? "bg-sheet-surface" : "bg-card"}`}>
         <View class="-mb-px">{props.children}</View>
       </View>
       <If when={props.footer}>{(footer) => <View class="mt-2 px-4"><Text class="text-caption text-muted-foreground">{footer()}</Text></View>}</If>
@@ -294,18 +298,23 @@ export interface RowProps {
 
 /** One row: a glyph, a title over a subtitle, a value or a control, a chevron when it opens something. */
 export function Row(props: RowProps) {
+  // Mewla for Mac: rows 44, 0 14 at the sides, labels 14, the hairline 14 in (RESULT-DESIGN-PAIRS #8).
+  const size = dense({
+    phone: { row: "min-h-[56px] px-4 py-3", text: "text-body", sub: "text-sub", inset: 16 },
+    window: { row: "min-h-[44px] px-[14px] py-1.5", text: "text-[14px] leading-[19px]", sub: "text-[12px] leading-[16px]", inset: 14 },
+  });
   const body = (
-    <View class={`min-h-[56px] flex-row items-center px-4 py-3 ${props.lead ? "gap-3.5" : "gap-3"}`}>
+    <View class={`${size.row} flex-row items-center ${props.lead ? "gap-3.5" : "gap-3"}`}>
       {props.leading ?? (<If when={props.lead} else={<If when={props.icon}>{(icon) => <Icon name={icon()} size={24} tone={props.destructive ? "ink" : "soft"} />}</If>}>{(leadValue) => <RowTile lead={leadValue()} />}</If>)}
       <View class="min-w-0 flex-1">
-        <Text class={props.destructive ? "text-body text-destructive" : props.mono ? "font-mono text-code" : "text-body"} style={props.titleTone === "warn" || props.titleTone === "error" ? { numberOfLines: 2, color: color(stateTextColor(props.titleTone)) } : { numberOfLines: 2 }}>{props.title}</Text>
-        <If when={props.subtitle}>{(subtitle) => <Text class="mt-0.5 text-sub text-muted-foreground line-clamp-3" style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{subtitle()}</Text>}</If>
+        <Text class={props.destructive ? `${size.text} text-destructive` : props.mono ? "font-mono text-code" : size.text} style={props.titleTone === "warn" || props.titleTone === "error" ? { numberOfLines: 2, color: color(stateTextColor(props.titleTone)) } : { numberOfLines: 2 }}>{props.title}</Text>
+        <If when={props.subtitle}>{(subtitle) => <Text class={`mt-0.5 ${size.sub} text-muted-foreground line-clamp-3`} style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{subtitle()}</Text>}</If>
       </View>
-      <If when={props.value}>{(value) => <Text class="max-w-[50%] text-right text-body text-muted-foreground line-clamp-1" style={{ fontVariant: ["tabular-nums"] }}>{value()}</Text>}</If>
+      <If when={props.value}>{(value) => <Text class={`max-w-[50%] text-right ${size.text} text-muted-foreground line-clamp-1`} style={{ fontVariant: ["tabular-nums"] }}>{value()}</Text>}</If>
       {props.trailing ?? null}
       <If when={props.check}><Icon name="check" tone="ink" size={20} /></If>
       <If when={props.chevron}><Icon name="chevron-right" size={18} tone="faint" /></If>
-      <Hairline inset={props.lead ? 60 : props.icon || props.leading ? 52 : 16} />
+      <Hairline inset={props.lead ? 60 : props.icon || props.leading ? 52 : size.inset} />
     </View>
   );
   if (!props.onPress && !props.onLongPress) {
@@ -343,6 +352,11 @@ export function Row(props: RowProps) {
 
 /** A setting that takes effect at once. `busy` while the computer has not answered yet. */
 export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead; checked: boolean; busy?: boolean; disabled?: boolean; testID?: string; accessibilityLabel?: string; onChange: (checked: boolean) => void }) {
+  // Mewla for Mac: 36 × 22, a 16 thumb 3 in; on ink, off the track (RESULT-DESIGN-PAIRS #8).
+  const toggle = dense({
+    phone: { track: "h-[30px] w-[50px] rounded-full bg-track checked:bg-primary", thumb: "m-[2px] size-[26px] rounded-full bg-card checked:translate-x-[20px]" },
+    window: { track: "h-[22px] w-[36px] rounded-full bg-track checked:bg-primary", thumb: "m-[3px] size-4 rounded-full bg-card checked:translate-x-[14px]" },
+  });
   return (
     <Row
       title={props.title}
@@ -359,8 +373,8 @@ export function SwitchRow(props: { title: string; subtitle?: string; lead?: Lead
             disabled={props.disabled || props.busy}
             onChange={({ checked }) => props.onChange(checked)}
             class="disabled:opacity-40"
-            trackClass="h-[30px] w-[50px] rounded-full bg-track checked:bg-primary"
-            thumbClass="m-[2px] size-[26px] rounded-full bg-card checked:translate-x-[20px]"
+            trackClass={toggle.track}
+            thumbClass={toggle.thumb}
           />
         </View>
       }

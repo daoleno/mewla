@@ -16,7 +16,8 @@ import { createMenuAnchor, showMenu } from "../kit/Menu";
 import { requestPaneKey, rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { showDeviceRequest } from "../enrollment/state";
-import { RowEnd, RowHair, RowText, RowTile } from "./rowParts";
+import { MacPane, RowEnd, RowHair, RowText, RowTile } from "./rowParts";
+import { isMacApp } from "../mac/local";
 import { progressMarkLabel } from "../../core/work/judgedProgress";
 import { setTraySort, tray, traySort } from "./state";
 
@@ -69,10 +70,14 @@ function onAndroidBack(listener: () => boolean): void {
   cleanup(BackHandler.on("press", listener));
 }
 
+/** A row in Mewla for Mac's pane (RESULT-DESIGN-PAIRS #6): 40 tall, radius 9, on the material; hover and selected the well. */
+const MAC_ROW = "min-h-[40px] gap-2.5 overflow-hidden rounded-[9px] px-2.5 py-1";
+
 /** A section label (caption 600, soft) with an optional link at the right ("Calendar ›", "All ›"). */
 function Label(props: { title: string; link?: string; onLink?: () => void; testID?: string }) {
+  const mac = MacPane();
   return (
-    <View class="mb-2 mt-6 min-h-[18px] flex-row items-center justify-between px-4">
+    <View class={`${mac ? "mb-1 mt-3 px-2.5" : "mb-2 mt-6 px-4"} min-h-[18px] flex-row items-center justify-between`}>
       <Text role="header" class="text-caption font-semibold text-muted-foreground">{props.title}</Text>
       <If when={props.link}>{(link) => <Button testID={props.testID} onPress={props.onLink} class="min-h-[44px] -my-3 flex-row items-center justify-center pl-4 active:opacity-70">
           <Text class="text-caption font-semibold text-muted-foreground">{link()}</Text>
@@ -83,7 +88,8 @@ function Label(props: { title: string; link?: string; onLink?: () => void; testI
 }
 
 function Group(props: { children: JSX.Element; testID?: string }) {
-  return <View testID={props.testID} class="overflow-hidden rounded-(--radius-group) bg-sheet-surface">{props.children}</View>;
+  // On the Mac's pane the rows sit on the material, no card.
+  return <View testID={props.testID} class={MacPane() ? "gap-px" : "overflow-hidden rounded-(--radius-group) bg-sheet-surface"}>{props.children}</View>;
 }
 
 /** The pressed well of the row whose page is in the right pane (the wide layout's left pane). */
@@ -97,9 +103,10 @@ export function SelectedWell() {
  */
 function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: TrayTarget) => void; selected?: boolean; last?: boolean }) {
   const row = props.row;
+  const mac = MacPane();
   return (
     <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end, row().mark ? progressMarkLabel(row().mark!) : ""].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
-      class={`min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
+      class={`${mac ? MAC_ROW : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       <If when={props.selected}><SelectedWell /></If>
       <If when={row().tileTarget} else={<RowTile tile={() => row().tile} mark={() => row().mark} />}>
         {(target) => <Button testID="tray-row-session" accessibilityLabel="Open its Session" onPress={() => props.onTile(target())} class="-m-2 rounded-full p-2 active:opacity-60">
@@ -108,7 +115,7 @@ function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: 
       </If>
       <RowText row={row} />
       <RowEnd row={row} />
-      <If when={!(props.selected || props.last)}><RowHair /></If>
+      <If when={!(mac || props.selected || props.last)}><RowHair /></If>
     </Button>
   );
 }
@@ -123,13 +130,14 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected
   const named = () => r().ask !== undefined;
   // A failed Session has nothing to answer: "Open" opens it.
   const tag = () => (r().oneTap ? "Approve" : r().opens ? "Open" : "Answer");
+  const mac = MacPane();
   return (
-    <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} selected={props.selected} onPress={props.onOpen} class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+    <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} selected={props.selected} onPress={props.onOpen} class={`${mac ? MAC_ROW : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
       <If when={props.selected}><SelectedWell /></If>
       <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" || r().kind === "trigger" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
       <View class="min-w-0 flex-1">
-        <Text testID="tray-request-title" class="text-body font-semibold line-clamp-1">{named() ? r().source : r().title}</Text>
-        <Text testID="tray-request-line" class="text-sub text-muted-foreground line-clamp-1">{named() ? r().ask : r().source}</Text>
+        <Text testID="tray-request-title" class={`${mac ? "text-[13px] leading-[17px]" : "text-body"} font-semibold line-clamp-1`}>{named() ? r().source : r().title}</Text>
+        <Text testID="tray-request-line" class={`${mac ? "text-[11.5px] leading-[15px]" : "text-sub"} text-muted-foreground line-clamp-1`}>{named() ? r().ask : r().source}</Text>
       </View>
       <Button testID={r().oneTap ? "tray-approve" : r().opens ? "tray-open" : "tray-answer"} disabled={props.busy} onPress={() => (r().oneTap ? props.onApprove() : props.onOpen())}
         class={`h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
@@ -138,7 +146,7 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected
           <Text class="text-caption font-semibold text-seal-foreground">{tag()}</Text>
         </BusyLabel>
       </Button>
-      <If when={!(props.selected || props.last)}><RowHair /></If>
+      <If when={!(mac || props.selected || props.last)}><RowHair /></If>
     </Button>
   );
 }
@@ -182,6 +190,8 @@ export type TrayBodyProps = TrayProps & {
  * Idle, Done and All Sessions. The phone's overlay and the wide layout's left pane both show it.
  */
 export function TrayBody(props: TrayBodyProps) {
+  // The left pane on Mewla for Mac draws at the Mac's sizes; the phone's tray, a foldable's pane and the perch keep theirs.
+  const mac = Boolean(props.pane) && isMacApp();
   const doneOpen = signal(false);
   const filter = signal<TrayFilter>({});
   const busy = signal("");
@@ -265,18 +275,19 @@ export function TrayBody(props: TrayBodyProps) {
       {(item, index) => <TrayRow row={item} selected={selected(rowKey(item()))} last={!more() && index() === list().length - 1} onPress={() => openRow(item())} onTile={openTarget} />}
     </Each>
   );
+  const bar = mac ? "size-7" : props.pane ? "size-10" : "size-11";
   return (
-    <>
-      <View class={`flex-row items-center px-4 ${props.pane ? "min-h-[52px] gap-0.5 pr-2" : "gap-2 pb-1 pt-4"}`}>
-        <If when={counted()} else={<Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>}>
-          <TrayCounts pane={props.pane} filter={filter} onPick={pick} />
+    <MacPane.Provider value={mac}>
+      <View class={`flex-row items-center ${mac ? "min-h-[40px] gap-0.5 pl-[14px] pr-1.5" : props.pane ? "min-h-[52px] gap-0.5 px-4 pr-2" : "gap-2 px-4 pb-1 pt-4"}`}>
+        <If when={counted()} else={<Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${mac ? "text-[13px] font-semibold text-muted-foreground" : props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>}>
+          <TrayCounts pane={props.pane} mac={mac} filter={filter} onPick={pick} />
         </If>
         {/* The mock's order: the options glyph (Sort, Services), then + (New Session). */}
-        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Options" onPress={() => void menu()} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="options" size={24} tone="ink" /></Button>
-        <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${props.pane ? "size-10" : "size-11"} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="add" size={24} tone="ink" /></Button>
+        <Button ref={menuAnchor.ref} testID="tray-menu" accessibilityLabel="Options" onPress={() => void menu()} class={`${bar} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="options" size={mac ? 16 : 24} tone="ink" /></Button>
+        <Button testID="tray-new" accessibilityLabel="New session" onPress={props.onNewSession} class={`${bar} items-center justify-center rounded-full hover:bg-accent active:opacity-70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}><Icon name="add" size={mac ? 16 : 24} tone="ink" /></Button>
       </View>
       <If when={m().projects.length}><ProjectChips filter={filter} onPick={pick} /></If>
-      <Scroll testID="tray-scroll" class="flex-1" contentClass="px-4" style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
+      <Scroll testID="tray-scroll" class="flex-1" contentClass={mac ? "px-2.5" : "px-4"} style={{ paddingBottom: safeArea().bottom + 16 }} keyboardShouldPersistTaps="handled">
         <If when={m().notice}><Notice onAction={noticeAction} /></If>
         {/* The first read (SPEC §16.4 Tray): three placeholder rows from `wait.quiet` until the Workers are in. */}
         <If when={firstRead()}>
@@ -316,8 +327,8 @@ export function TrayBody(props: TrayBodyProps) {
               <Group>
                 {/* One quiet row that opens in place: what is done stays findable without filling the list. */}
                 <Button testID="tray-done-toggle" accessibilityLabel={`Done, ${f().done.length}`} onPress={() => doneOpen.set(!doneOpen())}
-                  class="min-h-[52px] flex-row items-center gap-2 px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                  <Text class="flex-1 text-body">Done</Text>
+                  class={`${mac ? MAC_ROW : "min-h-[52px] gap-2 px-4"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
+                  <Text class={`flex-1 ${mac ? "text-[13px]" : "text-body"}`}>Done</Text>
                   <Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{String(f().done.length)}</Text>
                   <Icon name={doneOpen() ? "chevron-up" : "chevron-down"} size={18} tone="faint" />
                   <If when={doneOpen()}><RowHair left={() => 16} /></If>
@@ -326,14 +337,14 @@ export function TrayBody(props: TrayBodyProps) {
               </Group>
             </View></If>
           <Button testID="tray-all-sessions" selected={selected("all")} onPress={props.open.allSessions}
-            class="mt-6 min-h-[52px] flex-row items-center justify-between overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            class={`${mac ? `mt-3 ${MAC_ROW}` : "mt-6 min-h-[52px] overflow-hidden rounded-(--radius-group) bg-sheet-surface px-4"} flex-row items-center justify-between hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
             <If when={selected("all")}><SelectedWell /></If>
-            <Text class="text-body">All Sessions</Text>
-            <Icon name="chevron-right" size={18} tone="faint" />
+            <Text class={mac ? "text-[13px] leading-[17px]" : "text-body"}>All Sessions</Text>
+            <Icon name="chevron-right" size={mac ? 14 : 18} tone="faint" />
           </Button>
         </View>
       </Scroll>
-    </>
+    </MacPane.Provider>
   );
 }
 
@@ -341,7 +352,7 @@ export function TrayBody(props: TrayBodyProps) {
  * The tray's title as its counts ("2 need you · 3 new · 17 running"): each count is a filter that keeps only its own
  * rows, and a second tap clears it. The same words the state control says, so header and tray still agree.
  */
-function TrayCounts(props: { pane?: boolean; filter: () => TrayFilter; onPick: (next: TrayFilter) => void }) {
+function TrayCounts(props: { pane?: boolean; mac?: boolean; filter: () => TrayFilter; onPick: (next: TrayFilter) => void }) {
   const m = () => tray();
   const parts = () => [
     { kind: "needs" as const, n: m().needs.length, words: m().needs.length === 1 ? "1 needs you" : `${m().needs.length} need you` },
@@ -356,8 +367,8 @@ function TrayCounts(props: { pane?: boolean; filter: () => TrayFilter; onPick: (
           <Button testID={`tray-count-${part().kind}`} accessibilityLabel={part().words} selected={on()}
             onPress={() => props.onPick({ ...props.filter(), kind: on() ? undefined : part().kind })}
             class={`flex-row items-center gap-1.5 rounded-full px-1.5 py-0.5 active:opacity-70 ${on() ? "bg-foreground" : ""}`}>
-            <If when={part().kind === "needs"}><View class="size-2 rounded-full bg-seal" /></If>
-            <Text class={`${props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"} ${on() ? "text-background" : ""}`}>{part().words}</Text>
+            <If when={part().kind === "needs"}><View class={`${props.mac ? "size-[7px]" : "size-2"} rounded-full bg-seal`} /></If>
+            <Text class={`${props.mac ? "text-[13px] font-semibold" : props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"} ${on() ? "text-background" : ""}`}>{part().words}</Text>
           </Button>
         );
       }}</Each>

@@ -19,6 +19,7 @@ import { pageNav } from "../shell/nav";
 import { atLogin, readStartAtLogin, setStartAtLogin } from "./login";
 import { ShortcutRecorder } from "./QuickChatShortcut";
 import { daemonPairing, isThisMac, MAC_TITLE_BAR, showMainWindow, type DaemonPairing } from "./local";
+import { MaterialTint } from "./materials";
 
 /**
  * Settings (⌘,; DESIGN-MAC.md §2.5, `m-settings`, `m-access`): a window of its own, 720 × 560, with a 190 sidebar in
@@ -93,7 +94,7 @@ function General(props: { shortcut: () => string | null }) {
           trailing={<ShortcutRecorder compact testID="mac-settings-shortcut" recording={recording} onRecording={(on) => recording.set(on)} />} />
       </Section>
       <Section>
-        <Row title="Appearance" trailing={<View style={{ width: 220 }}><Segmented<Appearance> testID="mac-settings-appearance" accessibilityLabel="Appearance"
+        <Row title="Appearance" trailing={<View style={{ width: 230 }}><Segmented<Appearance> testID="mac-settings-appearance" accessibilityLabel="Appearance"
           options={[{ key: "system", label: "System" }, { key: "light", label: "Light" }, { key: "dark", label: "Dark" }]} value={appearance()} onChange={chooseAppearance} /></View>} />
       </Section>
       <Section>
@@ -234,6 +235,7 @@ export function MacSettings() {
     <View testID="mac-settings" class="flex-1 flex-row text-foreground">
       <View class="border-r border-border" style={{ width: SIDEBAR, paddingTop: MAC_TITLE_BAR.height! + 2, paddingHorizontal: 10 }}
         macos={{ backdrop: { material: "sidebar", blending: "behindWindow" } }} desktop={{ windowDrag: true }}>
+        <MaterialTint material="sidebar" />
         <View role="tablist" class="gap-0">
           {PAGES.map((page) => <SidebarRow page={page} />)}
         </View>

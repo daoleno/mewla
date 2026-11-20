@@ -1,4 +1,5 @@
 import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
+import { threadType } from "../kit/density";
 import { delayed } from "../kit/wait";
 import { derived } from "../kit/derived";
 import { motion } from "../../core/motion/tokens";
@@ -134,6 +135,7 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
   const pictures = () => sentPictures(it().attachments);
   const files = () => it().attachments.filter((file) => !pictures().includes(file));
   const tap = () => !it().pending && props.handlers.onUserMessage?.(it());
+  const type = threadType();
   return (
     <View class="max-w-[84%] items-end gap-1 self-end">
       <If when={pictures().length}><View testID="sent-pictures" class={`flex-row flex-wrap justify-end gap-2 ${failed() ? "opacity-55" : ""}`}>
@@ -142,10 +144,10 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
           ))}
         </View></If>
       <If when={it().body || files().length}><View testID="user-message" selectable onPress={tap}
-          class={`max-w-full rounded-(--radius-bubble) bg-card px-4 py-3 ${failed() ? "opacity-55" : ""}`}>
+          class={`max-w-full bg-card ${type.bubble} ${failed() ? "opacity-55" : ""}`}>
           <If when={it().body}><View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
               <Text testID="user-message-text" onPress={tap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
-                class={`shrink-0 text-message ${SELECTION}`}>{it().body}</Text>
+                class={`shrink-0 ${type.bubbleText} ${SELECTION}`}>{it().body}</Text>
               <If when={folded()}><BubbleFade /></If>
             </View></If>
           <If when={folds()}><Button testID="user-message-fold" accessibilityLabel={open() ? "Fold the message" : "Show the whole message"} onPress={() => props.expansion.toggle(untracked(it).id)}
@@ -258,6 +260,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
   const linked = createReplyLinks(() => props.handlers.fileIdentity?.() ?? null);
   // Its code blocks; a diagram in it is drawn once it stops streaming.
   const replyCode = renderCodeWhile(() => Boolean(reply().streaming));
+  const type = threadType();
   return (
     <View class="py-1">
       <If when={kind() === "update-line"} else={<><If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "plugin-notice"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><PluginNoticeCard item={pluginNotice} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
@@ -265,7 +268,7 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
               with the system's handles and menu (Copy, Select all, Share). */}
           <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
-            <TextView markdown={linked(reply().body ?? "", Boolean(reply().streaming))} options={{ streaming: Boolean(reply().streaming) }} selectable class={`text-message ${SELECTION}`}
+            <TextView markdown={linked(reply().body ?? "", Boolean(reply().streaming))} options={{ streaming: Boolean(reply().streaming) }} selectable class={`${type.message} ${SELECTION}`}
               renderCodeBlock={replyCode}
               classes={TABLE}
               onLinkPress={(event) => props.handlers.onLink?.(event.url)}

@@ -25,6 +25,13 @@ import { current, resumeConnection } from "../session";
  * same contract (on the Mac its page comes from this Mac's daemon, WebTerminalSurface).
  */
 const webSurface = platform.os === "web" || platform.os === "macos";
+/**
+ * Mewla for Mac's terminal fills the right pane under its header on the canvas: no group around it (no surface,
+ * radius or inset), 10 20 inside the grid (RESULT-DESIGN-PAIRS #5). The phones and the web keep the group.
+ */
+const MAC = platform.os === "macos";
+const GROUP = MAC ? "flex-1 overflow-hidden bg-background" : "mx-1.5 mt-1 flex-1 overflow-hidden rounded-(--radius-group) bg-card";
+const GROUP_FILL = MAC ? "bg-background" : "bg-card";
 const Surface: typeof TerminalSurface = webSurface ? WebTerminalSurface : TerminalSurface;
 // The text size is the device's (fontSize.ts): mono 10/14 on the phones until a pinch sets 8–14; 13 on the web.
 loadTerminalTextSize();
@@ -37,7 +44,7 @@ function theme(): TerminalTheme {
   const dark = colorScheme() === "dark";
   // Selection is ink, not the platform's colour (SPEC 11, Terminal): ink handles and an ink wash at 20 %.
   return {
-    background: token("card"), foreground: token("foreground"), cursor: token("foreground"),
+    background: token(MAC ? "background" : "card"), foreground: token("foreground"), cursor: token("foreground"),
     selection: dark ? "#F2F3F533" : "#13141633", handle: dark ? "#F2F3F5" : "#131416",
     palette: dark ? PALETTE_DARK : PALETTE_LIGHT,
   };
@@ -289,12 +296,12 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     const usual = keyBarPadding(false);
     return terminalTight({ keyboard: lift(), room: paneHeight() - GROUP_TOP - usual.top - KEY_HEIGHT - usual.bottom - lift() });
   };
-  const padding = () => terminalGroupPadding(tight());
+  const padding = () => (MAC ? { top: 10, right: 20, bottom: 10, left: 20 } : terminalGroupPadding(tight()));
 
   return (
     <View class="flex-1" style={{ backgroundColor: token("background") }} onLayout={({ bounds }) => paneHeight.set(bounds.size.height)}>
       {/* The terminal group (a surface, radius 20) and what floats over it, above the key bar (and so above the keyboard). */}
-      <View testID="terminal-group" class="mx-1.5 mt-1 flex-1 overflow-hidden rounded-(--radius-group) bg-card"
+      <View testID="terminal-group" class={GROUP}
         style={NATIVE_PADDING ? undefined : { paddingTop: padding().top, paddingRight: padding().right, paddingBottom: padding().bottom, paddingLeft: padding().left }}>
         <Surface class="flex-1" fontSize={terminalTextSize() ?? TERMINAL_FONT.default} theme={theme()} padding={NATIVE_PADDING ? padding() : undefined}
           ref={(node) => {
@@ -323,16 +330,16 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
           }}
           onTapCell={({ col, row, text, index }) => tap(col, row, text, index)}
           onCopy={({ text }) => void Clipboard.writeText(text).catch(() => {})} />
-        <View class="absolute inset-0 bg-card" style={{ pointerEvents: "none", opacity: wait.dim() ? 0.5 : 0, transitionProperty: "opacity", transitionDuration: motion.dur.base }} />
+        <View class={`absolute inset-0 ${GROUP_FILL}`} style={{ pointerEvents: "none", opacity: wait.dim() ? 0.5 : 0, transitionProperty: "opacity", transitionDuration: motion.dur.base }} />
         <SlowLine on={wait.slow()} testID="terminal-slow-line" />
         <If when={wait.view() === "failed"}>
-          <View testID="terminal-attach-failed" class="absolute inset-0 justify-center bg-card">
+          <View testID="terminal-attach-failed" class={`absolute inset-0 justify-center ${GROUP_FILL}`}>
             <StateView icon="terminal" title="Couldn't attach" detail={`${current()?.name || "Your computer"} didn't answer`}
               actions={[{ title: "Try again", onPress: wait.retry, testID: "terminal-try-again" }]} />
           </View>
         </If>
         <If when={wait.view() === "away"}>
-          <View class="absolute inset-0 justify-center bg-card">
+          <View class={`absolute inset-0 justify-center ${GROUP_FILL}`}>
             <StateView {...states.away(current()?.name, undefined, wait.retry)} />
           </View>
         </If>
