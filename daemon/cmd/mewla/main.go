@@ -87,6 +87,10 @@ type pairConfig struct {
 	// showLink also prints the paste link under the QR, for a terminal whose
 	// QR cannot be scanned (setup over SSH).
 	showLink bool
+	// json prints the pairing as one JSON object on stdout (pairingJSON):
+	// what a desktop app around this daemon draws and pairs itself with.
+	json   bool
+	stdout io.Writer
 }
 
 type cliConfig struct {
@@ -323,6 +327,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	logStopSignal(stopRequested)
 	stopRequested, restartDaemon := context.WithCancelCause(stopRequested)
 	defer restartDaemon(nil)
+	// An app that runs its own daemon (Mewla Dev for Mac) takes it with it.
+	stopWithParent(stopRequested, restartDaemon)
 	// The daemon's runtime ends only after the model relay has drained, so a
 	// stop or restart never cuts a Worker's reply (relay_stop.go).
 	ctx, endRuntime := context.WithCancelCause(context.Background())
@@ -333,6 +339,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	// person's, so an agent installed or a variable set later is seen. A
 	// service-started daemon elsewhere gets the login shell's PATH before
 	// Brain looks for its agent.
+	pinAppCLIOnPath()
 	platform.RefreshEnvironment()
 	go platform.KeepEnvironmentCurrent(ctx, 15*time.Second)
 
@@ -1445,6 +1452,9 @@ func runUpdateCommand(args []string, stderr io.Writer) error {
 	}
 	if fs.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+	if err := refuseInMacApp("updates this computer's Mewla with the app"); err != nil {
+		return err
 	}
 	client, err := selfupdate.NewClient()
 	if err != nil {
@@ -2801,6 +2811,7 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	cfg.stdout = os.Stdout
 	return runPair(cfg, stderr)
 }
 
@@ -2877,6 +2888,9 @@ func runPair(cfg pairConfig, stderr io.Writer) error {
 	}
 	if !pairingInfo.ShortLinks {
 		links.localShort = ""
+	}
+	if cfg.json {
+		return writePairingJSON(cfg.stdout, pairingInfo, links)
 	}
 	if cfg.details {
 		printPairingDetails(stderr, "Pair a new phone or browser.", links)
@@ -3098,6 +3112,7 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
 	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json)")
 	fs.BoolVar(&cfg.details, "details", false, "also show the paste link, every browser link and how to revoke a device")
+	fs.BoolVar(&cfg.json, "json", false, "print the pairing as JSON on stdout: links, the phone QR's modules, expiry")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [address]")
 		fmt.Fprintln(stderr, "")

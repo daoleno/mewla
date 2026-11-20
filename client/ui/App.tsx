@@ -12,6 +12,7 @@ import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
 import { openNotificationLink, startNotifications } from "./push/push";
 import { startAppUpdate } from "./update/update";
+import { startMac } from "./mac/mac";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
 
@@ -52,6 +53,7 @@ export function startApp(): void {
   void start();
   startNotifications();
   startAppUpdate();
+  startMac();
 
   // Android's navigation bar draws its buttons for the app's appearance, also when it changes while the app runs
   // (Settings › Appearance, or the system's when it follows it); NSH sets only the status bar. iOS has no such bar.

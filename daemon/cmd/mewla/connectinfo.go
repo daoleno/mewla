@@ -144,6 +144,9 @@ type pairingLinks struct {
 	phoneLink    string
 	localBrowser string
 	localShort   string // http://127.0.0.1:9876/p/<token>, when the daemon serves it
+	localLink    string // the connect link of this computer's own address: an app on this computer pairs with it
+	wifiAddress  string // the best Wi-Fi/LAN address, and its phone link: a phone on the same network
+	wifiLink     string
 	httpsBrowser []string
 }
 
@@ -180,6 +183,17 @@ func buildPairingLinks(
 		links.phoneAddress = strings.TrimRight(phoneAddress, "/")
 		links.phoneLink = offers[0].ConnectLink
 	}
+	for _, entry := range rankedPhoneAddresses(entries) {
+		if classifyAddress(entry.URL) != kindLAN {
+			continue
+		}
+		offers, err := buildConnectionOffersWithPublicKey(strings.TrimRight(entry.URL, "/"), daemonPublicKey, pairing)
+		if err != nil {
+			return links, err
+		}
+		links.wifiAddress, links.wifiLink = strings.TrimRight(entry.URL, "/"), offers[0].ConnectLink
+		break
+	}
 	var localSeen time.Time
 	for _, entry := range entries {
 		switch classifyAddress(entry.URL) {
@@ -187,11 +201,16 @@ func buildPairingLinks(
 			if links.localBrowser != "" && !entry.LastSeenAt.After(localSeen) {
 				continue
 			}
+			offers, err := buildConnectionOffersWithPublicKey(strings.TrimRight(entry.URL, "/"), daemonPublicKey, pairing)
+			if err != nil {
+				return links, fmt.Errorf("build connection info: %w", err)
+			}
 			browser, err := buildWebPairingURL(entry.URL, daemonPublicKey, pairing)
 			if err != nil {
 				return links, err
 			}
 			links.localBrowser, localSeen = browser, entry.LastSeenAt
+			links.localLink = offers[0].ConnectLink
 			links.localShort = shortBrowserLink(entry.URL, pairing.Value)
 		case kindHTTPS:
 			browser, err := buildWebPairingURL(entry.URL, daemonPublicKey, pairing)

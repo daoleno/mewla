@@ -1,4 +1,4 @@
-import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View } from "nsh";
+import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View, type JSX } from "nsh";
 import { CAPSULE, capsuleInset, capsuleRailInset } from "../../core/shell/capsule";
 import { brainThreadReadingScope } from "../../core/timeline/readingPlace";
 import { Capsule, CapsulePage, createCapsule, type CapsuleReading } from "../shell/Capsule";
@@ -35,6 +35,8 @@ import { PillButton } from "../kit/kit";
 import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { HomeCat } from "./Cat";
+import { isMacApp } from "../mac/app";
+import { MacReady } from "../mac/Ready";
 import { StateControl } from "../tray/StateControl";
 import { ChatUpdateRow, chatUpdate } from "../update/ChatUpdateRow";
 import { HOME_HEADER_HEIGHT, homeHeaderInset, Tray } from "../tray/Tray";
@@ -262,6 +264,9 @@ export function openBrainHost(): void {
 /** Brain's ⋯: where its menu's popover sits on wide. */
 const menuAnchor = createMenuAnchor();
 
+/** Brain's home in the Mac's perch (mac/Perch.tsx): the perch's own header in place of the home header. */
+export type PerchHome = { header: () => JSX.Element };
+
 /**
  * Home's header (SPEC §11): the cat (the computer page), "Brain" with the computer's name under
  * it when there are several, the state control (the tray), and ⋯ (Brain's menu). 52 pt, canvas,
@@ -361,7 +366,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
           empty={() => (
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
-            <ThreadWait waiting={() => chatState() === "loading"} hasRows={() => rows().length > 0} empty={() => <Notice title="What should Brain do?" />}
+            <ThreadWait waiting={() => chatState() === "loading"} hasRows={() => rows().length > 0} empty={() => <If when={isMacApp()} else={<Notice title="What should Brain do?" />}><MacReady /></If>}
               reload={() => brainChat()?.reload()} reconnect={() => currentTransport()?.resume()} computer={() => current()?.name}
               failedAction={{ title: "Open terminal", onPress: () => openTerminal(brain()?.host_worker?.id ?? ""), testID: "brain-chat-open-terminal" }} />
           )}
@@ -436,7 +441,7 @@ export function browseWorkspace(): void {
   openPage(workspaceRoute(brainHostIdentity()));
 }
 
-export function Home() {
+export function Home(props: { perch?: PerchHome } = {}) {
   const text = createComposerText(brainDraft);
   // What's New waits while Brain's composer holds a draft.
   effect(() => brainComposing.set(text.text().trim().length > 0));
@@ -486,7 +491,7 @@ export function Home() {
     ]}>
       <CapsulePage>
         {/* With the side rail up (an open iPhone Duo on its side, beside the pane) nothing is left for the header. */}
-        <If when={!capsuled() && !rail()}><HomeHeader /></If>
+        <If when={!capsuled() && !rail()}><If when={props.perch} else={<HomeHeader />}>{(perch) => perch().header()}</If></If>
         <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
         <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
         <If when={!routedBrainThread()}><Composer text={text} editor={editor} /></If>

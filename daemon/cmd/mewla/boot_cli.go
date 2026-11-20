@@ -101,6 +101,9 @@ func runBootCommand(args []string, stderr io.Writer) error {
 	}
 	switch args[0] {
 	case "install":
+		if err := refuseInMacApp("starts this computer's Mewla itself"); err != nil {
+			return err
+		}
 		config, err := parseBootConfig("mewla boot install", args[1:])
 		if err != nil {
 			return err

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,5 +72,18 @@ func TestRefreshEnvironmentAddsAnInstallerFolderCreatedLater(t *testing.T) {
 	refresh()
 	if !slices.Contains(filepath.SplitList(os.Getenv("PATH")), bin) {
 		t.Fatalf("PATH = %q, want %s", os.Getenv("PATH"), bin)
+	}
+}
+
+func TestPinnedDirectoryStaysFirstThroughARefresh(t *testing.T) {
+	t.Cleanup(func() { pinned = nil })
+	list := func(dirs ...string) string { return strings.Join(dirs, string(os.PathListSeparator)) }
+	pinned = []string{"/Applications/Mewla.app/Contents/Helpers"}
+	updates := environmentUpdates(
+		[]string{"PATH=" + list("/Applications/Mewla.app/Contents/Helpers", "/usr/bin")},
+		[]string{"PATH=" + list("/Users/me/.local/bin", "/usr/bin")},
+	)
+	if got, want := updates["PATH"], list("/Applications/Mewla.app/Contents/Helpers", "/Users/me/.local/bin", "/usr/bin"); got != want {
+		t.Fatalf("PATH = %q, want %q", got, want)
 	}
 }

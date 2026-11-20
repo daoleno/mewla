@@ -28,6 +28,8 @@ import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
 import { CalendarAlertCard } from "../calendar/AlertCard";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
+import { isMacApp } from "../mac/local";
+import { MacStarting } from "../mac/Starting";
 import { current, onTransport, workers } from "../session";
 import { routeOwner, screenRoute } from "../../core/screen/float";
 import { ScreenFloatHost } from "../screenfloat/ScreenFloatHost";
@@ -180,7 +182,8 @@ export function Shell() {
     if (wide()) untracked(() => trayOpen() && trayOpen.set(false));
   });
   return (
-    <View class="flex-1 bg-background">
+    // On the Mac the window is transparent: the left pane is the sidebar material, the right pane paper (DESIGN-MAC.md §3).
+    <View class={isMacApp() ? "flex-1" : "flex-1 bg-background"}>
       {/* Clear of what the system draws at the sides: a phone's notch or island on its side, the iPhone Duo's
           84 pt status rail (right of its cover screen, right of its inner screen on its side). Every page, its
           composer, the tray and their controls lay out between them; the canvas runs on under the system's. */}
@@ -188,7 +191,7 @@ export function Shell() {
         <If when={wide()}><LeftPane /></If>
         <If when={wide()}><PaneHandle /></If>
         {/* A floating screen docked on wide has its strip at the pane's right: the page lays out left of it. */}
-        <View testID="right-pane" class="flex-1" style={{ paddingRight: floatsShown() > 0 ? screenDock() : 0 }} onLayout={({ bounds }) => {
+        <View testID="right-pane" class={isMacApp() ? "flex-1 bg-background" : "flex-1"} style={{ paddingRight: floatsShown() > 0 ? screenDock() : 0 }} onLayout={({ bounds }) => {
           rightPaneWidth.set(bounds.size.width);
           paneBottom.set(bounds.origin.y + bounds.size.height);
         }}><Stack /></View>
@@ -207,6 +210,8 @@ export function Shell() {
  * it in (BrowserJoin); "Use a pairing link" leads to the pairing page, as on a phone.
  */
 export function FirstRun() {
+  // Mewla for Mac joins its own daemon: no onboarding to pair a computer, it is this one.
+  if (isMacApp()) return <MacStarting />;
   const web = platform.os === "web" && host.available();
   // A phone: the guided onboarding, which also shows the connected step after any pairing.
   if (!web) return <Onboarding onContinue={() => goHome()} onSettings={() => openPage({ name: "computer" })} />;

@@ -249,23 +249,26 @@ function placeTitle(place: WebPlace): string {
 
 /** The left pane's width on wide (SPEC §14.1): dragged within 280–420, 320 by default, ← and → step 16. */
 export const PANE_WIDTH = { initial: 320, min: 280, max: 420, step: 16 } as const;
+/** The left pane's widths in Mewla for Mac (DESIGN-MAC.md §2.3): 280, 240–360 by the handle. */
+export const MAC_PANE_WIDTH = { initial: 280, min: 240, max: 360, step: 16 } as const;
+export type PaneWidthRange = { readonly initial: number; readonly min: number; readonly max: number; readonly step: number };
 /** Where the left pane's width is kept on this device. */
 export const PANE_WIDTH_KEY = "mewla.wide.paneWidth";
 
-export function clampPaneWidth(value: number): number {
-  if (!Number.isFinite(value)) return PANE_WIDTH.initial;
-  return Math.round(Math.min(PANE_WIDTH.max, Math.max(PANE_WIDTH.min, value)));
+export function clampPaneWidth(value: number, range: PaneWidthRange = PANE_WIDTH): number {
+  if (!Number.isFinite(value)) return range.initial;
+  return Math.round(Math.min(range.max, Math.max(range.min, value)));
 }
 
 /** A saved width, or the default when nothing (or nothing numeric) was saved. */
-export function storedPaneWidth(raw: string | null | undefined): number {
+export function storedPaneWidth(raw: string | null | undefined, range: PaneWidthRange = PANE_WIDTH): number {
   const value = raw == null || raw.trim() === "" ? NaN : Number(raw);
-  return clampPaneWidth(Number.isFinite(value) ? value : PANE_WIDTH.initial);
+  return clampPaneWidth(Number.isFinite(value) ? value : range.initial, range);
 }
 
 /** ← (-1) or → (+1) on the focused handle. */
-export function stepPaneWidth(width: number, direction: -1 | 1): number {
-  return clampPaneWidth(width + direction * PANE_WIDTH.step);
+export function stepPaneWidth(width: number, direction: -1 | 1, range: PaneWidthRange = PANE_WIDTH): number {
+  return clampPaneWidth(width + direction * range.step, range);
 }
 
 /** From this right-pane width a list page shows the item it opens beside it (Git review › diff, Files › file). */

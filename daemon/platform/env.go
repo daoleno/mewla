@@ -38,7 +38,30 @@ func RefreshEnvironment() {
 var (
 	refreshMu   sync.Mutex
 	lastRefresh time.Time
+	// pinned are the directories PinFirstOnPath keeps at the front of PATH.
+	pinned []string
 )
+
+// PinFirstOnPath puts dir first on PATH and keeps it there through every
+// refresh: the Mac app's daemon (its `mewla` in the app's Contents/Helpers)
+// so that the Sessions, Workers and agents it starts run its own CLI, not an
+// older copy a login shell's PATH names first.
+func PinFirstOnPath(dir string) {
+	refreshMu.Lock()
+	defer refreshMu.Unlock()
+	if strings.TrimSpace(dir) == "" {
+		return
+	}
+	pinned = append(pinned, dir)
+	_ = os.Setenv("PATH", pinnedFirst(os.Getenv("PATH")))
+}
+
+func pinnedFirst(list string) string {
+	if len(pinned) == 0 {
+		return list
+	}
+	return mergePathList(strings.Join(pinned, string(os.PathListSeparator)), list)
+}
 
 // environmentUpdates is what to set so current matches fresh, the person's
 // environment now: every variable fresh has with a different value, keyed as
@@ -66,6 +89,9 @@ func environmentUpdates(current, fresh []string) map[string]string {
 		old, known := have[folded]
 		if folded == "PATH" && known {
 			value = mergePathList(value, old)
+		}
+		if folded == "PATH" {
+			value = pinnedFirst(value)
 		}
 		if known && old == value {
 			continue

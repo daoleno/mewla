@@ -11,8 +11,8 @@ import { tray } from "../tray/state";
 import { catNeedsYou } from "../computer/ComputerPage";
 import { catUpdateHint } from "../update/hint";
 
-/** The cat is the computer (SPEC §1.3, §5), from the same model as the state control. */
-const state = computed(() => {
+/** The cat is the computer (SPEC §1.3, §5), from the same model as the state control: the header cat, the Mac's menu bar cat. */
+export const catNow = computed(() => {
   const t = tray();
   return catState({
     kind: t.state.kind,
@@ -52,7 +52,7 @@ export function HomeCat(props: { onPress?: () => void; /** The still's size (40)
   const box = props.box ?? 48;
   const mark = () => (
     <>
-      <PetSprite testID="home-cat-sprite" state={state} size={props.size ?? 40} mode="once" canMove={canMove} delivered={delivered} />
+      <PetSprite testID="home-cat-sprite" state={catNow} size={props.size ?? 40} mode="once" canMove={canMove} delivered={delivered} />
       <If when={catNeedsYou()} else={<If when={catUpdateHint()}><View testID="home-cat-update" accessibilityLabel="Update available" class="absolute right-1 top-1 size-3 rounded-full border-2 border-background bg-primary" /></If>}><View testID="home-cat-dot" accessibilityLabel="Needs you" class="absolute right-1 top-1 size-[14px] rounded-full border-2 border-background bg-seal" /></If>
     </>
   );

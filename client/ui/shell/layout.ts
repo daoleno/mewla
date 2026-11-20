@@ -2,7 +2,8 @@ import { computed, platform, safeArea, signal, Storage, windowSize } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
 import { railEdge } from "../../core/shell/rail";
 import { screenDockWidth } from "../../core/screen/float";
-import { clampPaneWidth, nextWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
+import { clampPaneWidth, MAC_PANE_WIDTH, nextWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
+import { isMacApp } from "../mac/app";
 
 /**
  * The window's width less what the system draws at its sides (the iPhone Duo's 84 pt side bar, a phone's cutout
@@ -33,16 +34,18 @@ export const wide = computed(() => {
 export const rail = computed(() => railEdge({ os: platform.os, phone: mobile && platform.idiom === "phone", safe: safeArea() }));
 
 /** The left pane's width: dragged, stepped or reset on its handle, kept on this device. */
-export const paneWidth = signal<number>(PANE_WIDTH.initial);
+/** The left pane's widths: the Mac's are narrower (DESIGN-MAC.md §2.3). */
+export const paneRange = isMacApp() ? MAC_PANE_WIDTH : PANE_WIDTH;
+export const paneWidth = signal<number>(paneRange.initial);
 let paneWidthRead = false;
 /** Reads the saved width once (the shell's first render). */
 export function loadPaneWidth(): void {
   if (paneWidthRead) return;
   paneWidthRead = true;
-  void Storage.getItem(PANE_WIDTH_KEY).then((raw) => paneWidth.set(storedPaneWidth(raw))).catch(() => {});
+  void Storage.getItem(PANE_WIDTH_KEY).then((raw) => paneWidth.set(storedPaneWidth(raw, paneRange))).catch(() => {});
 }
 export function setPaneWidth(value: number): void {
-  const width = clampPaneWidth(value);
+  const width = clampPaneWidth(value, paneRange);
   paneWidth.set(width);
   void Storage.setItem(PANE_WIDTH_KEY, String(width)).catch(() => {});
 }
