@@ -93,6 +93,8 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
             "release tag $RELEASE_TAG does not match tracked version",
             "checked-out release tag does not resolve to HEAD",
             "release tag commit is not on origin/main",
+            # A manual tag cannot release a version without its What's New either.
+            'scripts/release-notes.py" --repo "$ROOT" --check --require "$EXPECTED_VERSION"',
         ):
             self.assertIn(needle, IDENTITY_VERIFIER)
 

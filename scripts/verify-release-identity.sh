@@ -9,7 +9,9 @@
 # The version is client/ui/nsh.json "version"; the Android versionCode and the
 # iOS build number follow from it (scripts/lib/release_identity.py). Every
 # other identity source (the client's Gradle and Xcode projects, the daemon),
-# the tag and the stage must agree with them.
+# the tag and the stage must agree with them. The version has its What's New
+# (release-notes/<version>.json) and the copies the app and the daemon ship are
+# current, so a manual tag cannot release a version without its notes either.
 
 set -euo pipefail
 
@@ -22,7 +24,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --stage) STAGE="${2:?}"; shift 2 ;;
     --tag) RELEASE_TAG="${2:?}"; shift 2 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "error: unknown arg $1" >&2; exit 2 ;;
   esac
 done
@@ -51,6 +53,9 @@ PY
   echo "error: could not read the tracked release identity" >&2
   exit 1
 }
+# Every released version carries its What's New (release-notes/README.md).
+python3 "$ROOT/scripts/release-notes.py" --repo "$ROOT" --check --require "$EXPECTED_VERSION"
+
 EXPECTED_CERT_FP="C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:4C:E3:65:FE:1C:7A:06:AB:95:4E:5D:D1:BD:CD:A4:FD"
 
 if [[ -n "$RELEASE_TAG" ]]; then

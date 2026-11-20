@@ -208,6 +208,8 @@ export interface UpdateLine {
   at: number;
   /** Whether its release has pages (else the line opens its notes list). */
   highlights: boolean;
+  /** Whether its release has notes at all: a line without them says only that Mewla updated. */
+  notes: boolean;
 }
 
 export function updateLines(record: WhatsNewRecord, releases: WhatsNewRelease[]): UpdateLine[] {
@@ -215,10 +217,12 @@ export function updateLines(record: WhatsNewRecord, releases: WhatsNewRelease[])
   const lines = new Map<string, UpdateLine>();
   for (const update of record.updates) {
     if (lines.has(update.version)) continue;
+    const release = byVersion.get(update.version);
     lines.set(update.version, {
       version: update.version,
       at: update.at,
-      highlights: Boolean(byVersion.get(update.version)?.highlights.length),
+      highlights: Boolean(release?.highlights.length),
+      notes: Boolean(release && (release.highlights.length || release.fixes.length)),
     });
   }
   return [...lines.values()].sort((a, b) => a.at - b.at);

@@ -8,6 +8,7 @@ const line = (version: string, minute: number): UpdateLineItem => ({
   timestamp: new Date(Date.UTC(2026, 10, 16, 8, minute)).toISOString(),
   version,
   highlights: true,
+  notes: true,
 });
 
 describe("withUpdateLines", () => {

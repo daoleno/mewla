@@ -279,14 +279,23 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
   );
 }
 
-/** An update's quiet line (core/whatsnew): "Updated to 0.4.9 · What's new"; a tap opens its notes. */
+/**
+ * An update's quiet line (core/whatsnew): "Updated to 0.4.9 · What's new"; a tap opens its notes. A version with no
+ * notes (one released before every release had them) says only that Mewla updated: nothing to open.
+ */
 function UpdateLine(props: { item: () => UpdateLineItem }) {
   return (
-    <Button testID="update-line" accessibilityLabel={`Updated to ${props.item().version}. What's new`} onPress={() => openWhatsNew(untracked(props.item).version)}
-      class="flex-row items-center justify-center gap-1 self-center px-4 py-2 active:opacity-70">
-      <Text class="text-caption text-muted-foreground">{`Updated to ${props.item().version} ·`}</Text>
-      <Text class="text-caption font-semibold text-foreground">What's new</Text>
-    </Button>
+    <If when={props.item().notes} else={
+      <View testID="update-line" class="items-center self-center px-4 py-2">
+        <Text class="text-caption text-muted-foreground">{`Updated to ${props.item().version}`}</Text>
+      </View>
+    }>
+      <Button testID="update-line" accessibilityLabel={`Updated to ${props.item().version}. What's new`} onPress={() => openWhatsNew(untracked(props.item).version)}
+        class="flex-row items-center justify-center gap-1 self-center px-4 py-2 active:opacity-70">
+        <Text class="text-caption text-muted-foreground">{`Updated to ${props.item().version} ·`}</Text>
+        <Text class="text-caption font-semibold text-foreground">What's new</Text>
+      </Button>
+    </If>
   );
 }
 

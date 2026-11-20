@@ -110,10 +110,16 @@ describe("notes", () => {
 });
 
 describe("updateLines", () => {
-  test("one line per version, in time order, saying whether it has pages", () => {
-    const notes = [release("0.4.8", []), release("0.4.9", ["f"])];
-    const lines = updateLines(record({ updates: [{ version: "0.4.9", at: 20 }, { version: "0.4.8", at: 10 }, { version: "0.4.9", at: 30 }] }), notes);
-    expect(lines).toEqual([{ version: "0.4.8", at: 10, highlights: false }, { version: "0.4.9", at: 20, highlights: true }]);
+  test("one line per version, in time order, saying whether it has pages and whether it has notes at all", () => {
+    const notes = [{ ...release("0.4.8", []), fixes: ["A fix."] }, release("0.4.9", ["f"])];
+    const updates = [{ version: "0.4.9", at: 20 }, { version: "0.4.8", at: 10 }, { version: "0.4.9", at: 30 }, { version: "0.4.10", at: 40 }];
+    const lines = updateLines(record({ updates }), notes);
+    expect(lines).toEqual([
+      { version: "0.4.8", at: 10, highlights: false, notes: true },
+      { version: "0.4.9", at: 20, highlights: true, notes: true },
+      // Released without notes: its line has nothing to open.
+      { version: "0.4.10", at: 40, highlights: false, notes: false },
+    ]);
   });
 });
 

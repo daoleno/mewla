@@ -3,7 +3,8 @@
 
 See scripts/lib/release_notes.py. With no flags it writes client/ui/whatsnew/notes.json and
 daemon/whatsnew/notes.json; --check fails when either is not current; --require VERSION fails
-when that version has no notes.
+when that version has no notes (the release preparation and the release identity check require
+the version they release).
 """
 
 import sys
