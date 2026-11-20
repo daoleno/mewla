@@ -4,6 +4,7 @@ import type { PlaceKey } from "../../core/web/places";
 import { runDesktopCommand } from "../shell/desktop/Overlays";
 import { openMacSettings } from "./MacSettings";
 import { openPairPhone } from "./PairPhone";
+import { offerShortcutOnce } from "./QuickChatShortcut";
 import { detachPerch, openPerch } from "./Perch";
 
 const go = (key: PlaceKey) => () => runDesktopCommand({ kind: "go", key });
@@ -36,7 +37,7 @@ export function startMacMenus(perchShortcut: () => string | null): void {
           { label: "New Chat", shortcut: "mod+shift+n", onSelect: () => runDesktopCommand({ kind: "new-chat" }) },
           { label: "Pair a Phone…", onSelect: () => openPairPhone() },
           { type: "separator" },
-          { label: "Close Window", shortcut: "mod+w", onSelect: () => focusedWindow()?.close() },
+          { label: "Close Window", shortcut: "mod+w", onSelect: closeFocusedWindow },
         ],
       },
       {
@@ -79,4 +80,12 @@ export function startMacMenus(perchShortcut: () => string | null): void {
       },
     ]);
   });
+}
+
+/** ⌘W: closes the window in front. Closing the main window is the person's close, as its close button's (mac.ts):
+ * the first one offers the quick chat's shortcut. */
+function closeFocusedWindow(): void {
+  const window = focusedWindow();
+  window?.close();
+  if (window?.id === "main") offerShortcutOnce();
 }

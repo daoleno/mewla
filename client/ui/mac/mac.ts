@@ -62,16 +62,19 @@ export function startMac(): void {
   const params = host.params as MacParams;
   Window.get("main")?.set({ titleBar: MAC_TITLE_BAR, transparent: true });
   // The Dock icon while the window shows; with it closed (⌘W hides it) only the menu bar cat stays.
-  let wasVisible = false;
+  let wasVisible: boolean | undefined;
   effect(() => {
     const visible = Window.get("main")?.state()?.visible;
     if (visible === undefined) return;
     // The Dock icon shows while a window does (§2.4): the window or Settings.
     void host.call("app.dock", { shown: visible || Window.get(MAC_SETTINGS)?.state()?.visible === true }).catch(() => {});
-    // The first time the window closes, the quick chat's shortcut is offered from the cat (§2.4, `m-shortcut`).
-    if (wasVisible && !visible) untracked(offerShortcutOnce);
+    if (visible !== wasVisible) console.log(`window: main ${visible ? "shown" : "hidden"}`);
     wasVisible = visible;
   });
+  // The first time the person closes the window, the quick chat's shortcut is offered from the cat (§2.4,
+  // `m-shortcut`): its close button here, ⌘W in menus.ts. Their close, not the window's state, which also goes
+  // hidden when it is minimized or the app hidden (⌘H).
+  Window.get("main")?.on("closePress", () => untracked(offerShortcutOnce));
 
   // This computer's daemon is the app's computer: join it once the stored computers are read.
   let joined = false;
