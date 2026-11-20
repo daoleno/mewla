@@ -60,13 +60,18 @@ type cloudRuntime struct {
 	run          func(context.Context, string, []string, []string) (cloudOutput, error)
 	checked      map[string]time.Time
 	updates      *cloudUpdates
+	// noInstall: looking up a CLI never starts its install (a cloud nobody
+	// has used yet).
+	noInstall bool
 }
 
 func newCloudRuntime(dir string) *cloudRuntime {
 	return &cloudRuntime{profileFiles: awsProfileFiles, dir: dir, providers: map[string]cloudProvider{"aws": awsCLI{}, "gcp": gcloudCLI{}, "gws": gwsCLI{}}, run: runCloudProcess, checked: map[string]time.Time{}}
 }
 func (c *cloudRuntime) executable(id string) (string, error) {
-	c.refresh(id, false)
+	if !c.noInstall {
+		c.refresh(id, false)
+	}
 	return c.resolveExecutable(id)
 }
 
@@ -76,7 +81,9 @@ func (c *cloudRuntime) resolveExecutable(id string) (string, error) {
 	return binary, err
 }
 func (c *cloudRuntime) acquireExecutable(id string) (string, *os.File, error) {
-	c.refresh(id, false)
+	if !c.noInstall {
+		c.refresh(id, false)
+	}
 	return c.resolveExecutableLease(id)
 }
 func (c *cloudRuntime) resolveExecutableLease(id string) (string, *os.File, error) {
@@ -130,12 +137,23 @@ type boundedBuffer struct {
 	data     []byte
 	limit    int
 	overflow bool
+	// tail keeps the last limit bytes instead of the first: an installer's
+	// progress is long, and what it says last is why it failed.
+	tail bool
 }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	n := len(p)
+	if b.tail {
+		b.data = append(b.data, p...)
+		if len(b.data) > b.limit {
+			b.data = append([]byte(nil), b.data[len(b.data)-b.limit:]...)
+			b.overflow = true
+		}
+		return n, nil
+	}
 	left := b.limit - len(b.data)
 	if n > left {
 		b.overflow = true
@@ -146,6 +164,17 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 func (b *boundedBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return string(b.data) }
 func runCloudProcess(ctx context.Context, binary string, args, env []string) (cloudOutput, error) {
+	return runCloudProcessAs(ctx, binary, args, env, false)
+}
+
+// runCloudInstallProcess runs an installer step: its output is long (gcloud's
+// component update writes tens of kilobytes of progress), so output past the
+// bound is dropped from the front instead of failing the step.
+func runCloudInstallProcess(ctx context.Context, binary string, args, env []string) (cloudOutput, error) {
+	return runCloudProcessAs(ctx, binary, args, env, true)
+}
+
+func runCloudProcessAs(ctx context.Context, binary string, args, env []string, installer bool) (cloudOutput, error) {
 	binary, lease, err := holdCloudBinary(binary)
 	if err != nil {
 		return cloudOutput{}, err
@@ -157,8 +186,8 @@ func runCloudProcess(ctx context.Context, binary string, args, env []string) (cl
 	cmd.Env = env
 	cmd.Dir = cloudWorkDir(binary)
 	cmd.WaitDelay = time.Second
-	out := &boundedBuffer{limit: MaxResultBytes}
-	stderr := &boundedBuffer{limit: 16384}
+	out := &boundedBuffer{limit: MaxResultBytes, tail: installer}
+	stderr := &boundedBuffer{limit: 16384, tail: installer}
 	cmd.Stdout = out
 	cmd.Stderr = stderr
 	err = cmd.Run()
@@ -166,7 +195,7 @@ func runCloudProcess(ctx context.Context, binary string, args, env []string) (cl
 	if ctx.Err() != nil {
 		return result, ctx.Err()
 	}
-	if out.overflow || stderr.overflow {
+	if !installer && (out.overflow || stderr.overflow) {
 		return result, errors.New("CLI output exceeded the limit; narrow the command")
 	}
 	if err != nil {

@@ -112,7 +112,8 @@ func (m *Manager) cloudInUse(id string) bool {
 
 // syncCloudProfiles is the profile sync of a cloud for a caller that holds
 // m.mu: the full one when the cloud is in use, otherwise only the profile
-// names AWS keeps in its local files, which starts no CLI and makes no call.
+// names AWS keeps in its local files, which starts no CLI and makes no call
+// (the other clouds list their accounts in refreshCloudProfiles).
 func (m *Manager) syncCloudProfiles(ctx context.Context, id string) error {
 	if m.cloudInUse(id) {
 		return m.cloud.providers[id].syncProfiles(m, ctx, false)
@@ -157,14 +158,6 @@ func (m *Manager) refreshCloudProfiles() {
 				}
 			}
 			used := m.cloudInUse(id)
-			if !used && id != "aws" {
-				// Nothing of this cloud is set up or called before it is used.
-				m.mu.Unlock()
-				s.mu.Lock()
-				s.active[id] = false
-				s.mu.Unlock()
-				return
-			}
 			checked := map[string]time.Time{}
 			for key, at := range m.cloud.checked {
 				checked[key] = at
@@ -174,6 +167,9 @@ func (m *Manager) refreshCloudProfiles() {
 			cloud.profileFiles = m.cloud.profileFiles
 			cloud.providers = m.cloud.providers
 			cloud.updates = m.cloud.updates
+			// A cloud nobody has used reads what is already on the computer: it
+			// installs no CLI and calls no cloud.
+			cloud.noInstall = !used
 			cloud.checked = checked
 			cloud.run = func(ctx context.Context, binary string, args, env []string) (cloudOutput, error) {
 				select {
@@ -223,6 +219,14 @@ func (m *Manager) refreshCloudProfiles() {
 						select {
 						case <-done:
 						case <-ctx.Done():
+						}
+					}
+					if _, err = cloud.resolveExecutable(id); err != nil {
+						// No CLI and none installed: every account of this cloud says so.
+						for _, r := range snapshot.records {
+							if r.CLI != nil {
+								r.Account.ProfileStatus = "unavailable"
+							}
 						}
 					}
 				}

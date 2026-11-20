@@ -341,37 +341,9 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	} else {
 		m.refreshCloudProfiles()
 	}
-	var r *record
-	for _, candidate := range m.records {
-		if candidate.Account.Integration != q.Integration || candidate.CLI == nil || !candidate.Account.Enabled {
-			continue
-		}
-		if q.Profile != "" && m.cloud.providers[q.Integration].profileRecord(m, q.Profile) != candidate {
-			continue
-		}
-		if r != nil {
-			return Response{}, errors.New("Choose --profile; more than one profile is enabled")
-		}
-		r = candidate
-	}
-	if r == nil {
-		return Response{}, errors.New("Enable a profile in Extensions first")
-	}
-	read, err := m.cloud.providers[q.Integration].classify(q.CLIArgs)
+	r, tool, err := m.cloudRunPlan(q)
 	if err != nil {
 		return Response{}, err
-	}
-	tool := "execute"
-	if read {
-		tool = "read"
-	}
-	args, _ := json.Marshal(map[string]any{"args": q.CLIArgs, "authorize": q.Authorize})
-	_, _, err = checkInvoke(r, Request{Tool: tool, Arguments: args})
-	if err != nil {
-		return Response{}, err
-	}
-	if !read && !q.Authorize {
-		return Response{}, callRefused("This command needs task-specific user authorization. With that authorization, pass --mewla-authorize.")
 	}
 	out, err := m.cloudCommand(ctx, q.Integration, firstNonEmpty(q.Profile, r.CLI.Profile), q.CLIArgs)
 	if err != nil {
@@ -433,6 +405,45 @@ func markDeviceCode(f *connectFlow, p cloudProvider, output string) bool {
 
 // cloudTarget is the enabled profile a command names, or the only enabled one
 // when it names none; nil when that takes discovering profiles first.
+// cloudRunPlan picks the account a CLI command runs as and says whether the
+// command may run at all. It reads only what the daemon already holds, so a
+// command that will be refused is known before anything is installed.
+func (m *Manager) cloudRunPlan(q Request) (*record, string, error) {
+	var r *record
+	for _, candidate := range m.records {
+		if candidate.Account.Integration != q.Integration || candidate.CLI == nil || !candidate.Account.Enabled {
+			continue
+		}
+		if q.Profile != "" && m.cloud.providers[q.Integration].profileRecord(m, q.Profile) != candidate {
+			continue
+		}
+		if r != nil {
+			return nil, "", errors.New("Choose --profile; more than one profile is enabled")
+		}
+		r = candidate
+	}
+	if r == nil {
+		return nil, "", errors.New("Enable a profile in Extensions first")
+	}
+	read, err := m.cloud.providers[q.Integration].classify(q.CLIArgs)
+	if err != nil {
+		return nil, "", err
+	}
+	tool := "execute"
+	if read {
+		tool = "read"
+	}
+	args, _ := json.Marshal(map[string]any{"args": q.CLIArgs, "authorize": q.Authorize})
+	_, _, err = checkInvoke(r, Request{Tool: tool, Arguments: args})
+	if err != nil {
+		return nil, "", err
+	}
+	if !read && !q.Authorize {
+		return nil, "", callRefused("This command needs task-specific user authorization. With that authorization, pass --mewla-authorize.")
+	}
+	return r, tool, nil
+}
+
 func (m *Manager) cloudTarget(q Request) *record {
 	var found *record
 	for _, r := range m.records {

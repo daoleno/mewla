@@ -80,6 +80,11 @@ func lazyManager(t *testing.T) lazyFixture {
 		return cloudOutput{Stdout: `{"AccountAliases":["Test account"]}`}, nil
 	}
 	m.cloud.enableUpdates()
+	// Never the real computer's gws sign-in.
+	empty := t.TempDir()
+	previous := gwsConfigDirs
+	gwsConfigDirs = func() []string { return []string{empty} }
+	t.Cleanup(func() { gwsConfigDirs = previous })
 	return f
 }
 
@@ -245,6 +250,212 @@ func TestACloudCommandWithNoAccountOnDoesNotCheckEveryProfile(t *testing.T) {
 	for _, r := range f.ran() {
 		if strings.HasPrefix(r, "sts ") {
 			t.Fatal("a command checked profiles nobody turned on", r)
+		}
+	}
+}
+
+func TestACommandThatWillBeRefusedDownloadsNothing(t *testing.T) {
+	for _, tc := range []struct {
+		id   string
+		args []string
+	}{{"aws", []string{"s3", "ls"}}, {"gcp", []string{"projects", "list"}}, {"gws", []string{"drive", "files", "list"}}} {
+		t.Run(tc.id, func(t *testing.T) {
+			f := lazyManager(t)
+			_, err := f.m.Handle(context.Background(), Request{Action: "cloud_run", Integration: tc.id, CLIArgs: tc.args})
+			if err == nil || !strings.Contains(err.Error(), "Enable a profile") {
+				t.Fatal("expected the enable prompt", err)
+			}
+			if n := f.aws.installs.Load() + f.gcp.installs.Load() + f.gws.installs.Load(); n != 0 {
+				t.Fatal("a refused command installed a CLI", n)
+			}
+		})
+	}
+}
+
+func TestAWriteWithoutAuthorizationDownloadsNothing(t *testing.T) {
+	f := lazyManager(t)
+	os.WriteFile(f.config, []byte("[profile used]\nregion=us-east-1\n"), 0600)
+	f.list(t)
+	enableCloudProfiles(f.m)
+	f.m.mu.Lock()
+	for _, r := range f.m.records {
+		if r.Account.Integration == "aws" {
+			f.m.setGroup(r, "read", true)
+		}
+	}
+	f.m.mu.Unlock()
+	_, err := f.m.Handle(context.Background(), Request{Action: "cloud_run", Integration: "aws", CLIArgs: []string{"ec2", "terminate-instances"}})
+	if err == nil || !strings.Contains(err.Error(), "authorized") {
+		t.Fatal("expected a refusal for a write without authorization", err)
+	}
+	if f.aws.installs.Load() != 0 {
+		t.Fatal("a refused write installed the CLI")
+	}
+}
+
+// An installer's progress is long; it must not fail the install.
+func TestInstallerStepWithLongOutputSucceedsAndKeepsItsLastLine(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "noisy.sh")
+	body := "#!/bin/sh\ni=0\nwhile [ $i -lt 3000 ]; do echo 'progress progress progress progress' >&2; i=$((i+1)); done\necho 'LASTLINE' >&2\n"
+	if err := os.WriteFile(script, []byte(body), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCloudProcess(context.Background(), script, nil, os.Environ()); err == nil {
+		t.Fatal("a command's output is still bounded")
+	}
+	out, err := runCloudInstallProcess(context.Background(), script, nil, os.Environ())
+	if err != nil || out.ExitCode != 0 || !strings.HasSuffix(strings.TrimSpace(out.Stderr), "LASTLINE") {
+		t.Fatal("an installer step with long output failed", err, out.ExitCode, len(out.Stderr))
+	}
+	failure := cloudStepFailure("Could not update the staged gcloud SDK", cloudOutput{Stderr: "x\nERROR: disk full\n", ExitCode: 1}, nil)
+	if !strings.Contains(failure.Error(), "disk full") {
+		t.Fatal("the failure lost the tool's last line", failure)
+	}
+}
+
+// An account the person already signed in with their own gcloud is listed as an
+// off card from what is on the computer: no install, no call to Google.
+func TestSignedInGcloudAccountIsListedWithoutInstallOrNetwork(t *testing.T) {
+	f := lazyManager(t)
+	f.gcp.name = cliStub(t, "gcloud")
+	f.m.cloud.run = func(_ context.Context, _ string, args, _ []string) (cloudOutput, error) {
+		f.mu.Lock()
+		*f.runs = append(*f.runs, strings.Join(args, " "))
+		f.mu.Unlock()
+		switch {
+		case len(args) > 1 && args[0] == "config":
+			return cloudOutput{Stdout: `[{"name":"default","is_active":true,"properties":{"core":{"account":"person@example.com","project":"demo"}}}]`}, nil
+		case len(args) > 1 && args[0] == "auth" && args[1] == "list":
+			return cloudOutput{Stdout: `[{"account":"person@example.com"}]`}, nil
+		case len(args) > 1 && args[1] == "print-access-token":
+			return cloudOutput{Stdout: "token"}, nil
+		}
+		return cloudOutput{Stdout: "ok"}, nil
+	}
+	response := f.list(t)
+	var id string
+	for _, a := range response.Accounts {
+		if a.Integration == "gcp" {
+			id = a.ID
+			if a.Enabled || a.Identity != "person@example.com" {
+				t.Fatal("the signed-in account is not an off card", a.Enabled, a.Identity)
+			}
+		}
+	}
+	if id == "" {
+		t.Fatal("an account already signed in with gcloud is not listed", f.ran())
+	}
+	if f.gcp.installs.Load() != 0 {
+		t.Fatal("listing the account installed gcloud")
+	}
+	for _, r := range f.ran() {
+		if strings.Contains(r, "print-access-token") {
+			t.Fatal("listing the account asked Google for a token", r)
+		}
+	}
+	// Turning it on is the first use: the real check, with no second sign-in.
+	if _, err := f.m.Handle(context.Background(), Request{Action: "enable", ID: id}); err != nil {
+		t.Fatal(err)
+	}
+	f.settle(t)
+	valid := false
+	for _, a := range f.m.cachedList().Accounts {
+		if a.ID == id {
+			valid = a.Status == "connected" && a.ProfileStatus == "valid"
+		}
+	}
+	if !valid {
+		t.Fatal("the account did not check as valid after being turned on", f.ran())
+	}
+}
+
+func TestSignedInWorkspaceAccountIsListedWithoutInstallOrCall(t *testing.T) {
+	f := lazyManager(t)
+	dir := t.TempDir()
+	gwsConfigDirs = func() []string { return []string{dir} }
+	os.WriteFile(filepath.Join(dir, "credentials.enc"), []byte("sealed"), 0600)
+	response := f.list(t)
+	found := false
+	for _, a := range response.Accounts {
+		if a.Integration == "gws" {
+			found = !a.Enabled && a.ProfileStatus == "unchecked"
+		}
+	}
+	if !found {
+		t.Fatal("a Workspace account gws is signed in to is not listed as an off card")
+	}
+	if f.gws.installs.Load() != 0 || len(f.ran()) != 0 {
+		t.Fatal("listing it installed gws or ran a CLI", f.gws.installs.Load(), f.ran())
+	}
+	// A sign-out made outside Mewla removes the card.
+	os.Remove(filepath.Join(dir, "credentials.enc"))
+	f.m.snapshots.checked = map[string]time.Time{}
+	for _, a := range f.list(t).Accounts {
+		if a.Integration == "gws" {
+			t.Fatal("the card stayed after gws signed out")
+		}
+	}
+}
+
+// An enabled card whose CLI could not be installed says why, and Check now tries again.
+func TestCardSaysWhyItsCLIFailedToInstallAndCheckNowRetries(t *testing.T) {
+	f := lazyManager(t)
+	f.aws.fn = func(context.Context, string) error { return errors.New("dial tcp: no route to host") }
+	os.WriteFile(f.config, []byte("[profile used]\nregion=us-east-1\n"), 0600)
+	var id string
+	for _, a := range f.list(t).Accounts {
+		if a.Integration == "aws" {
+			id = a.ID
+		}
+	}
+	if _, err := f.m.Handle(context.Background(), Request{Action: "enable", ID: id}); err != nil {
+		t.Fatal(err)
+	}
+	f.settle(t)
+	card := func() Account {
+		for _, a := range f.m.cachedList().Accounts {
+			if a.ID == id {
+				return a
+			}
+		}
+		t.Fatal("card missing")
+		return Account{}
+	}
+	if a := card(); a.ProfileStatus != "unavailable" || !strings.Contains(a.Unavailable, "no route to host") {
+		t.Fatal("the card does not say why its CLI is missing", a.ProfileStatus, a.Unavailable)
+	}
+	// Check now: the install is tried again, and works this time.
+	f.aws.fn = installStub("mewla-lazy-aws")
+	if _, err := f.m.Handle(context.Background(), Request{Action: "refresh", ID: id}); err != nil {
+		t.Fatal(err)
+	}
+	f.settle(t)
+	if f.aws.installs.Load() != 2 {
+		t.Fatal("Check now did not try the install again", f.aws.installs.Load())
+	}
+	if a := card(); a.Unavailable != "" || a.ProfileStatus != "valid" {
+		t.Fatal("the card still says unavailable after a good install", a.ProfileStatus, a.Unavailable)
+	}
+}
+
+func TestWorkspaceCardSaysWhyItsCLIFailedToInstall(t *testing.T) {
+	f := lazyManager(t)
+	dir := t.TempDir()
+	gwsConfigDirs = func() []string { return []string{dir} }
+	os.WriteFile(filepath.Join(dir, "credentials.enc"), []byte("sealed"), 0600)
+	var id string
+	for _, a := range f.list(t).Accounts {
+		if a.Integration == "gws" {
+			id = a.ID
+		}
+	}
+	if _, err := f.m.Handle(context.Background(), Request{Action: "enable", ID: id}); err != nil {
+		t.Fatal(err)
+	}
+	f.settle(t)
+	for _, a := range f.m.cachedList().Accounts {
+		if a.ID == id && (a.ProfileStatus != "unavailable" || !strings.Contains(a.Unavailable, "no network in this test")) {
+			t.Fatal("the Workspace card does not say why its CLI is missing", a.ProfileStatus, a.Unavailable)
 		}
 	}
 }

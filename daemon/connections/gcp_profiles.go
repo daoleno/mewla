@@ -116,6 +116,9 @@ func (m *Manager) syncGCPProfiles(ctx context.Context, force bool) error {
 		m.cloudDiscovered()
 	}
 	for account := range seen {
+		if m.cloudLocal {
+			break // listing what is on the computer; no call to Google
+		}
 		profile := "account:" + account
 		r := m.gcpProfileRecord(profile)
 		key := "gcp:" + account
@@ -141,7 +144,10 @@ func (m *Manager) syncGCPProfiles(ctx context.Context, force bool) error {
 			delete(m.cloud.checked, "gcp:"+r.CLI.Account)
 		}
 	}
-	m.cloud.checked["gcp:list"] = time.Now()
+	if !m.cloudLocal {
+		// Listing what is on the computer must not hold back the first real check.
+		m.cloud.checked["gcp:list"] = time.Now()
+	}
 	return m.save()
 }
 func gcpConfigDir() (string, error) {

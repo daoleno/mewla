@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -52,6 +54,9 @@ func (m *Manager) gwsProfileRecord(profile string) *record {
 // syncGWSProfiles mirrors gws's single signed-in account. The CLI's config
 // directory defines it: a sign-out outside Mewla removes the card.
 func (m *Manager) syncGWSProfiles(ctx context.Context, force bool) error {
+	if m.cloudLocal {
+		return m.syncGWSLocal()
+	}
 	if _, err := m.cloud.executable("gws"); err != nil {
 		return nil
 	}
@@ -97,6 +102,53 @@ func (m *Manager) syncGWSProfiles(ctx context.Context, force bool) error {
 		m.cloudDiscovered()
 	}
 	m.cloud.checked["gws:list"] = time.Now()
+	return m.save()
+}
+
+// gwsConfigDirs are where gws keeps its config on this computer.
+var gwsConfigDirs = func() []string {
+	dirs := []string{}
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, ".config", "gws"))
+	}
+	if base, err := os.UserConfigDir(); err == nil {
+		dirs = append(dirs, filepath.Join(base, "gws"))
+	}
+	return dirs
+}
+
+// gwsSignedInLocally says whether gws's own config directory holds a sign-in.
+// It only looks at which files exist: no CLI runs and nothing is read.
+func gwsSignedInLocally() bool {
+	for _, dir := range gwsConfigDirs() {
+		for _, name := range []string{"credentials.enc", "credentials.json"} {
+			if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.Mode().IsRegular() {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// syncGWSLocal lists the Google account gws is already signed in to, as a card
+// that is off and unchecked. It needs no gws copy and makes no call to Google;
+// turning the card on is the first use, which asks gws who it is.
+func (m *Manager) syncGWSLocal() error {
+	existing := m.gwsProfileRecord(gwsProfile)
+	if !gwsSignedInLocally() {
+		if existing != nil && !existing.Account.Enabled {
+			delete(m.records, existing.Account.ID)
+		}
+		return nil
+	}
+	if existing == nil {
+		r := &record{CLI: &cloudAccount{Profile: gwsProfile}, Account: Account{ID: "gws-cli-default", Integration: "gws", Name: "Google account", Identity: "Google account", Profile: gwsProfile, AuthMethod: "cli", ProfileKind: "Google account", Status: "authorization_required", ProfileStatus: "unchecked", Active: true, Tools: gwsTools(), History: []Event{}}, Grants: map[string]string{}}
+		m.setGroup(r, "read", true)
+		m.records[r.Account.ID] = r
+	}
+	if m.cloudDiscovered != nil {
+		m.cloudDiscovered()
+	}
 	return m.save()
 }
 

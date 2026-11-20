@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,6 +136,7 @@ func (c *cloudRuntime) refresh(id string, force bool) <-chan struct{} {
 			delete(u.failed, id)
 		} else {
 			u.failed[id] = installFailure(err)
+			log.Printf("cloud cli: installing %s failed: %s", id, u.failed[id])
 		}
 		u.mu.Unlock()
 		if err == nil {
