@@ -1,4 +1,4 @@
-import { cleanup, colorScheme, computed, effect, host, reduceMotion, signal, Storage, untracked } from "nsh";
+import { cleanup, colorScheme, computed, effect, host, lifecycle, reduceMotion, signal, Storage, untracked } from "nsh";
 import { Application, GlobalShortcut, Tray, Window } from "nsh/desktop";
 import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWords, type MenuBarItem, type MenuBarReaction } from "../../core/mac/menuBar";
 import type { PetState } from "../../core/settings/petPreview";
@@ -26,7 +26,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; raise?: number } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -189,6 +189,8 @@ export function startMac(): void {
       const now = route ? `${route.name}${route.workerId ? ` ${route.workerId}` : ""}` : "";
       if (now !== top) console.log(`dev script: page ${(top = now)}`);
     });
+    // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
+    effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
     effect(() => {
       if (!current() || connection() !== "connected") return;
       const chat = Boolean(brainChat());
@@ -209,6 +211,14 @@ export function startMac(): void {
           terminal = true;
           openBrainTerminal(hostId);
           console.log(`dev script: terminal ${hostId}`);
+          // `raise` seconds later the window comes in front for a capture: shown, never focused (in the background the
+          // app does not activate and takes no keys).
+          if (script.raise) {
+            setTimeout(() => {
+              Window.get("main")?.show();
+              console.log("dev script: raised");
+            }, script.raise * 1000);
+          }
         }
         if (!sent && script.quickSend && chat) {
           sent = true;

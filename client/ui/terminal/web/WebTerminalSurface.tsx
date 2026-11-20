@@ -139,6 +139,12 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
         return props.onCopy?.({ text: event.text });
       case "probe":
         return props.onProbe?.({ text: event.text, drawn: event.drawn, history: event.history, grid: event.grid });
+      case "painted":
+        if (mac) console.log(`terminal: ${event.cells > 0 ? "first paint" : "first draw"} (${event.cells} non-blank cells)`);
+        return;
+      case "visibility":
+        if (mac) console.log(`terminal: page ${event.state}`);
+        return;
     }
   };
 
