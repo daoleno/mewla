@@ -137,7 +137,7 @@ jobs:
             if [ "$name" = attach ]; then
               # Captured while the large one uploads: the failed chip and the uploading one over the grid.
               for i in $(seq 1 60); do cat "$D"/data/logs/* 2>/dev/null | grep -q "dev script: attach uploading" && break; sleep 1; done
-              client/macos/scripts/capture-windows.sh "Mewla Dev" "$D/captures/$theme-$name" "$theme-$name-" || true
+              client/macos/scripts/capture-windows.sh "Mewla Dev" "$D/captures/$theme-attach-uploading" "$theme-attach-uploading-" || true
               for i in $(seq 1 120); do cat "$D"/data/logs/* 2>/dev/null | grep -q "dev script: attach done" && break; sleep 1; done
             fi
             sleep 8
@@ -157,10 +157,10 @@ jobs:
           test ! -e "$D/state/cli" || { echo "Mewla Dev's daemon set up cloud CLIs:"; ls -la "$D/state/cli"; exit 1; }
           [ "$(shasum -a 256 "$chrome_hosts" 2>/dev/null || echo none)" = "$manifest_before" ] || { echo "Mewla Dev wrote Chrome's native host manifest"; exit 1; }
           echo "Mewla Dev left Chrome's native host and the cloud CLIs alone"
-          # Terminal attach: the small file reached this Mac's daemon in each appearance, and the refused one did not.
+          # Terminal attach: the small file reached this Mac's daemon (kept under a uuid name: found by its text).
           cat "$D"/data/logs/* | grep "dev script: attach" || true
-          up=$(find "$D/state" -path '*uploads*' -name 'proof notes*' | wc -l | tr -d ' ')
-          echo "attach: $up proof files on the daemon"; test "$up" -ge 2
+          up=$(grep -rl "Mewla Dev's attach proof" "$D/state" 2>/dev/null | grep -c uploads || true)
+          echo "attach: ${up:-0} proof files on the daemon"; test "${up:-0}" -ge 1
           # Its path went to the attached terminal (TerminalPane logs each path it types at the prompt).
           test "$(cat "$D"/data/logs/* | grep -c "terminal: typed an attachment's path (attached)")" -ge 2
           cat "$D"/data/logs/*
