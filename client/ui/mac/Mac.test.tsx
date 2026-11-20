@@ -123,6 +123,16 @@ describe("Mewla for Mac", () => {
     await app.waitUntil(() => app.window("shortcut-offer").state() === null, { timeout: 5_000 });
   }, 30_000);
 
+  test("⌘W on the main window is a close too: the quick chat's shortcut is offered from the cat", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    await app.keyboard.press("mod+w");
+    await app.waitUntil(() => app.window("main").state()?.visible === false, { timeout: 5_000 });
+    await app.waitUntil(() => app.window("shortcut-offer").state()?.visible === true, { timeout: 10_000 });
+    await app.press("id:shortcut-offer >> id:shortcut-done");
+    await app.waitUntil(() => app.window("shortcut-offer").state() === null, { timeout: 5_000 });
+  }, 30_000);
+
   test("first run, Brain's empty thread: Ready when you are, with this Mac's agents, Brain's host first", async () => {
     const executors = [
       { id: "claude", name: "claude", provider: "claude" },
