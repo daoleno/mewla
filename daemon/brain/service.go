@@ -40,6 +40,9 @@ var (
 
 const codexFullAuthorizationFlag = work.CodexFullAuthorizationFlag
 
+// codexUpdateCheckKey is Codex's config key for its update check at startup.
+const codexUpdateCheckKey = "check_for_update_on_startup"
+
 type Watcher interface {
 	Workers() []*classifier.Worker
 	GetWorker(id string) *classifier.Worker
@@ -4496,6 +4499,11 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 	case work.WorkerProviderCodex:
 		if !codexCommandHasFullAuthorization(command) {
 			command = strings.TrimSpace(command + " " + codexFullAuthorizationFlag)
+		}
+		// Codex's startup self-update takes the first Enter and exits, and updates the person's codex: the host
+		// starts with it off, as delegated Workers do (work/delegated_trust.go).
+		if !strings.Contains(command, codexUpdateCheckKey) {
+			command = strings.TrimSpace(command + " -c " + codexUpdateCheckKey + "=false")
 		}
 		if resumeSessionID != "" {
 			var err error
