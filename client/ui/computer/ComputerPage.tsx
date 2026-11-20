@@ -3,7 +3,9 @@ import { Button } from "nsh/base";
 import { fixButtonKind, type FixRow } from "../../core/computer/needsFixing";
 import { failureText } from "../../core/more/daemon";
 import { setServerAutoConnect, type StoredServer } from "../../core/servers";
-import { changeAgentUse, installDaemonUpdate } from "../../core/settings/computer";
+import { getOrCreateLocalDeviceIdentity } from "../../core/auth";
+import { phonesAndBrowsers, type DeviceRow } from "../../core/mac/thisMac";
+import { changeAgentUse, installDaemonUpdate, listPairedDevices } from "../../core/settings/computer";
 import { computerProblemsMayChange } from "../../core/settings/computerModel";
 import { connectionTone, fixRowLead, fixRowTone } from "../../core/computer/colour";
 import { color } from "../kit/colors";
@@ -18,6 +20,10 @@ import { otherState } from "./computers";
 import { pet } from "../pets/pets";
 import { connection, current, resumeConnection, servers, shownConnection, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
+import { wide } from "../shell/layout";
+import { isMacApp, isThisMac } from "../mac/local";
+import { openMacSettings } from "../mac/MacSettings";
+import { openPairPhone } from "../mac/PairPhone";
 import { markComputerUpdateSeen } from "../update/hint";
 import { appUpdateWaiting } from "../update/update";
 import { computerAgentUse, computerOptionalUpdate, computerUpdate, fixRows, readComputer } from "./state";
@@ -68,14 +74,35 @@ function connectionTail(): string {
   return currentPathMark()?.label ?? "";
 }
 
+/** "This Mac · Mewla 0.5.0" for this Mac's own daemon while connected (DESIGN-MAC.md §2.4); else empty. */
+function thisMacWords(): string {
+  if (!isThisMac(current()) || shownConnection() !== "connected") return "";
+  const version = computerUpdate()?.version;
+  return version ? `This Mac · Mewla ${version}` : "This Mac";
+}
+
+/** This Mac's Phones and browsers, read when the page shows this Mac (empty elsewhere). */
+function useThisMacDevices(): () => DeviceRow[] {
+  const rows = signal<DeviceRow[]>([]);
+  effect(() => {
+    const server = current();
+    if (!server || !isThisMac(server) || connection() !== "connected") return rows.set([]);
+    void Promise.all([listPairedDevices(server), getOrCreateLocalDeviceIdentity()])
+      .then(([devices, identity]) => untracked(current)?.id === server.id && rows.set(phonesAndBrowsers(devices, identity.deviceId, new Date())))
+      .catch(() => {});
+  });
+  return rows;
+}
+
 /** The header block (SPEC §11 Computer page): the 72 pt cat beside the name at display 32/700, the connection line under it. */
 function CatHeader(props: { nav: PageNav }) {
   const mark = () => currentPathMark();
   return (
     <View class="gap-1 pt-2">
       <View class="flex-row items-center gap-3">
-        {/* The cat does not move here: its portrait, sitting (SPEC §5), not the nap the idle header shows. */}
-        <Image testID="computer-cat" src={pet().art.portrait} accessibilityElementsHidden style={{ width: 72, height: 72 }} />
+        {/* The cat does not move here: its portrait, sitting (SPEC §5), not the nap the idle header shows. This Mac on
+            the wide layout has none: the left pane's cat is the screen's (DESIGN-MAC.md §2.3). */}
+        <If when={!(isThisMac(current()) && wide())}><Image testID="computer-cat" src={pet().art.portrait} accessibilityElementsHidden style={{ width: 72, height: 72 }} /></If>
         <View class="min-w-0 flex-1 gap-0.5">
           <Button testID="computer-details" accessibilityLabel={`${current()?.name ?? "This computer"}, details`} onPress={() => current() && props.nav.push({ name: "settings-computer", id: current()!.id })}
             class="self-stretch active:opacity-70">
@@ -87,8 +114,8 @@ function CatHeader(props: { nav: PageNav }) {
             <If when={connectionTone(shownConnection()) === "off"} else={<View testID="computer-connection-dot" class="size-2 rounded-full" style={{ backgroundColor: color(connectionTone(shownConnection()) === "ok" ? "ok" : "seal") }} />}><View testID="computer-connection-dot" class="size-2 rounded-full border-2 border-muted-foreground" /></If>
             {/* One space each side of the dot: "Connected · LAN", the row's gap is only the status dot's. */}
             <View class="min-w-0 shrink flex-row">
-              <Text class="text-sub" style={{ color: color(stateTextColor(connectionTone(shownConnection()))) }}>{WORDS[shownConnection()]}</Text>
-              <If when={connectionTail()}><Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text></If>
+              <Text class="text-sub" style={{ color: color(stateTextColor(connectionTone(shownConnection()))) }}>{thisMacWords() || WORDS[shownConnection()]}</Text>
+              <If when={connectionTail() && !thisMacWords()}><Text testID="computer-path" class="min-w-0 shrink text-sub text-muted-foreground line-clamp-1">{` · ${connectionTail()}`}</Text></If>
             </View>
           </View>
         </View>
@@ -194,6 +221,7 @@ export function ComputerPage(props: {
   }
 
   const others = () => servers().filter((s) => s.id !== current()?.id);
+  const devices = useThisMacDevices();
   const optional = computerOptionalUpdate;
   const updateRow = (): FixRow | null => (optional() ? { key: "update-optional", title: `Update available · ${optional()}`, button: "Update", action: { kind: "update" }, blocking: false } : null);
 
@@ -218,9 +246,18 @@ export function ComputerPage(props: {
           ))}
         </Section></If>
 
+      {/* This Mac (DESIGN-MAC.md §2.4): the phones and browsers paired with it first, with Pair a phone. */}
+      <If when={isThisMac(current())}><Section title="Phones and browsers" testID="this-mac-devices">
+          <Each of={devices()} key={(row) => row.id}>{(row) => (
+            <Row testID={`device-${row().id}`} lead={tile(row().icon)} title={row().name} value={row().seen} />
+          )}</Each>
+          <Row testID="pair-phone-row" lead={tile("qr-code")} title="Pair a phone" chevron onPress={openPairPhone} />
+        </Section></If>
+
       <Section title="Computers" testID="computers">
-        {/* This computer first: its row and its ⓘ open its details (it is already the one in use). */}
-        <If when={current()}><Row
+        {/* This computer first: its row and its ⓘ open its details (it is already the one in use). This Mac is the
+            page itself, so only the others. */}
+        <If when={current() && !isThisMac(current())}><Row
             testID={`computer-${current()!.id}`}
             lead={tile("desktop")}
             title={current()!.name || current()!.url}
@@ -270,7 +307,7 @@ export function ComputerPage(props: {
 
       <Section>
         {/* This app's update waits there: the same ink dot as the cat's, until it is installed. */}
-        <Row testID="computer-settings" lead={tile("settings")} title="Settings" accessibilityLabel={appUpdateWaiting() ? "Settings, Update available" : "Settings"} chevron onPress={() => props.nav.push({ name: "settings" })}
+        <Row testID="computer-settings" lead={tile("settings")} title="Settings" accessibilityLabel={appUpdateWaiting() ? "Settings, Update available" : "Settings"} chevron onPress={() => (isMacApp() ? openMacSettings() : props.nav.push({ name: "settings" }))}
           trailing={<If when={appUpdateWaiting()}><View testID="computer-settings-update" class="size-2.5 rounded-full bg-primary" /></If>} />
       </Section>
       <View class="h-6" />

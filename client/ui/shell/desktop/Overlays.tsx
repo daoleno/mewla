@@ -17,6 +17,8 @@ import { newSessionOpen } from "../../screens/NewSession";
 import { brain, workers } from "../../session";
 import { workSurface } from "../../work/state";
 import { openPlace } from "../Shell";
+import { isMacApp } from "../../mac/local";
+import { PairPhoneDialog } from "../../mac/PairPhone";
 import { goHome, openBrainTerminal, openPage } from "../nav";
 import { focusComposer, terminalOwnsKeys } from "./keys";
 
@@ -27,7 +29,8 @@ const pendingGo = signal(false);
 
 const mod = () => modKeyLabel(keymap.label("mod+k").includes("⌘"));
 
-function run(action: PaletteAction | DesktopCommand) {
+/** Runs a palette action or a desktop command: the keys, the palette and (Mewla for Mac) the menu bar's menus. */
+export function runDesktopCommand(action: PaletteAction | DesktopCommand) {
   paletteOpen.set(false);
   switch (action.kind) {
     case "go": return openPlace({ key: action.key } as Parameters<typeof openPlace>[0]);
@@ -57,7 +60,7 @@ function run(action: PaletteAction | DesktopCommand) {
 /** A key the shell bound: what the keyboard model makes of it. */
 function pressed(keystroke: string) {
   const result = resolveGlobalKey(keyOfKeystroke(keystroke), { pendingGo: untracked(pendingGo), target: null });  pendingGo.set(result.pendingGo);
-  if (result.command) run(result.command);
+  if (result.command) runDesktopCommand(result.command);
 }
 
 /**
@@ -132,7 +135,7 @@ function Palette() {
         query={query()} onQueryChange={({ query: next }) => query.set(next)}
         onSelect={({ id }) => {
           const item = untracked(byId).get(id);
-          if (item) run(item.action);
+          if (item) runDesktopCommand(item.action);
         }}
         onCancel={() => paletteOpen.set(false)}
         placeholder="Go to, open a Session or Work, or run an action…"
@@ -185,6 +188,7 @@ export function DesktopOverlays() {
     <View class="absolute">
       <Palette />
       <Shortcuts />
+      <If when={isMacApp()}><PairPhoneDialog /></If>
     </View>
   );
 }

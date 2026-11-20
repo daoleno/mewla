@@ -18,6 +18,7 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/hostdeps"
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // depsPrompt checks the one thing Brain cannot work without, a signed-in agent
@@ -402,6 +403,47 @@ func executorItem(check doctor.ExecutorsCheck, id string) (doctor.ExecutorCheck,
 func addToolDirToPath(binary string) {
 	if strings.Contains(binary, string(os.PathSeparator)) {
 		hostdeps.AddToPath(filepath.Dir(binary))
+	}
+}
+
+// appCLIDir is the directory of this executable when it is the CLI a Mac app
+// carries (Mewla.app/Contents/Helpers/mewla), else "".
+func appCLIDir(executable string) string {
+	dir := filepath.Dir(executable)
+	if filepath.Base(executable) == "mewla" && strings.HasSuffix(dir, ".app/Contents/Helpers") {
+		return dir
+	}
+	return ""
+}
+
+// inMacApp is whether this is the CLI Mewla for Mac carries (also through a link to it, as ~/.local/bin/mewla).
+func inMacApp() bool {
+	executable, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
+		executable = resolved
+	}
+	return appCLIDir(executable) != ""
+}
+
+// refuseInMacApp stops a command that would change the Mac app's own daemon from outside it: replacing its
+// binary (inside the signed bundle) or installing a second LaunchAgent.
+func refuseInMacApp(what string) error {
+	if !inMacApp() {
+		return nil
+	}
+	return fmt.Errorf("Mewla for Mac %s; use the app (Mewla › Check for Updates…, or its menu bar cat)", what)
+}
+
+// pinAppCLIOnPath keeps the Mac app's CLI first on the daemon's PATH, so
+// everything it starts finds `mewla` without a terminal step.
+func pinAppCLIOnPath() {
+	if executable, err := os.Executable(); err == nil {
+		if dir := appCLIDir(executable); dir != "" {
+			platform.PinFirstOnPath(dir)
+		}
 	}
 }
 

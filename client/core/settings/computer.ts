@@ -128,3 +128,22 @@ export async function revokeThisDevice(server: StoredServer): Promise<boolean> {
     return false;
   }
 }
+
+/** A device paired with a computer, as it lists them (GET /devices): a phone, a browser, this Mac's app, a computer. */
+export interface PairedDevice {
+  id: string;
+  name: string;
+  /** "computer" for another computer; empty for an app. */
+  kind?: string;
+  added_at: string;
+  last_seen_at: string;
+  app_version?: string;
+  /** "android", "ios", "web" or "desktop". */
+  app_platform?: string;
+}
+
+/** The devices paired with `server`. */
+export async function listPairedDevices(server: StoredServer): Promise<PairedDevice[]> {
+  const body = await signedJSON<{ devices?: PairedDevice[] }>(server, "GET", "/devices", "mewla-device-admin:list:GET:/devices");
+  return Array.isArray(body.devices) ? body.devices : [];
+}

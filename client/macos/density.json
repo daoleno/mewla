@@ -1,0 +1,13 @@
+{
+  "//": "The Mac's type (DESIGN-MAC.md §2.2, §2.3, §3): read at arm's length with a pointer, a step under the phone's. package.sh builds client/ui for the Mac with these in place of client/ui/nsh.json's tailwind fontSize ([size, line height as a ratio]).",
+  "fontSize": {
+    "display": [26, 1.2308],
+    "title": [17, 1.2941],
+    "body": [14, 1.4286],
+    "message": [14.5, 1.5172],
+    "sub": [12.5, 1.36],
+    "caption": [11.5, 1.3913],
+    "code": [12, 1.5],
+    "term": [12, 1.5]
+  }
+}

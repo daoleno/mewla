@@ -34,7 +34,7 @@ export function restoreAppearance(): void {
   }).catch(() => {});
 }
 
-function chooseAppearance(next: Appearance): void {
+export function chooseAppearance(next: Appearance): void {
   appearance.set(next);
   setColorScheme(next);
   void Storage.setItem(APPEARANCE_KEY, next === "system" ? "system" : `classic-${next}`).catch(() => {});

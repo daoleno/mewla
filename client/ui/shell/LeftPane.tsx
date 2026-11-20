@@ -1,7 +1,7 @@
 import { computed, effect, keymap, PanResponder, Text, untracked, View, type ViewRef } from "nsh";
 import { Button } from "nsh/base";
 import { brainRowLine, paneSelection, paneStateLine, paneTrayTitle } from "../../core/tray/pane";
-import { PANE_WIDTH, stepPaneWidth } from "../../core/web/places";
+import { stepPaneWidth } from "../../core/web/places";
 import { currentDiagnosis } from "../computer/computers";
 import { HomeCat } from "../home/Cat";
 import { openBrainHost, showRequestCard } from "../home/Home";
@@ -12,8 +12,9 @@ import { StateDotMark } from "../tray/StateControl";
 import { refreshOpened, tray } from "../tray/state";
 import { homeHeaderInset, SelectedWell, TrayBody, type TrayOpeners } from "../tray/Tray";
 import { currentBrain } from "../brain";
+import { isMacApp, macLightsRow } from "../mac/local";
 import { paletteOpen } from "./desktop/Overlays";
-import { paneWidth, setPaneWidth } from "./layout";
+import { paneRange, paneWidth, setPaneWidth } from "./layout";
 import { goHome, nav, openPage } from "./nav";
 
 /** A left-pane row replaces the right pane's page above Brain (SPEC §14.1): Brain › that page › what it pushed. */
@@ -27,6 +28,9 @@ const REPLACE: TrayOpeners = {
   computer: () => openPage({ name: "computer" }),
 };
 
+/** Mewla for Mac's density (DESIGN-MAC.md §2.3): the pane's parts at the Mac's sizes, 10 pt from its sides. */
+const MAC = isMacApp();
+
 /** Which row's page is in the right pane. */
 const selected = computed(() => paneSelection(nav.routes() as readonly { name: string }[]));
 
@@ -34,13 +38,13 @@ const selected = computed(() => paneSelection(nav.routes() as readonly { name: s
 function PaneHeader() {
   const line = () => paneStateLine({ kind: tray().state.kind, diagnosis: currentDiagnosis() || undefined });
   return (
-    <View testID="pane-header" class="h-[68px] flex-row items-center gap-2 px-2">
+    <View testID="pane-header" class={MAC ? "mb-2 h-[48px] flex-row items-center gap-2 px-2.5" : "h-[68px] flex-row items-center gap-2 px-2"}>
       <View class="overflow-hidden rounded-full">
         <If when={selected() === "computer"}><SelectedWell /></If>
-        <HomeCat onPress={REPLACE.computer} />
+        <HomeCat onPress={REPLACE.computer} size={MAC ? 40 : undefined} box={MAC ? 44 : undefined} />
       </View>
       <View class="min-w-0 flex-1">
-        <Text testID="pane-computer" role="header" class="text-title font-bold tracking-title line-clamp-1">{current()?.name || "Mewla"}</Text>
+        <Text testID="pane-computer" role="header" class={MAC ? "text-[15px] leading-[19px] font-bold line-clamp-1" : "text-title font-bold tracking-title line-clamp-1"}>{current()?.name || "Mewla"}</Text>
         <If when={line().words}><View class="flex-row items-center gap-1.5">
             <StateDotMark dot={line().dot} />
             <Text testID="pane-state" class={`text-sub line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{line().words}</Text>
@@ -54,10 +58,10 @@ function PaneHeader() {
 function SearchOrRun() {
   return (
     <Button testID="pane-search" accessibilityLabel="Search or run" onPress={() => paletteOpen.set(true)}
-      class="mx-4 mb-2 h-[44px] flex-row items-center gap-2 rounded-[14px] bg-card px-3 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-      <Icon name="search" size={18} tone="soft" />
-      <Text class="flex-1 text-body text-muted-foreground line-clamp-1">Search or run</Text>
-      <View class="rounded-md border border-border px-1.5 py-0.5"><Text testID="pane-search-key" class="text-caption text-muted-foreground">{keymap.label("mod+k").replace(/\+/g, " ")}</Text></View>
+      class={`${MAC ? "mx-2.5 mb-2 h-[30px] rounded-[9px] bg-card/70 px-2.5" : "mx-4 mb-2 h-[44px] rounded-[14px] bg-card px-3"} flex-row items-center gap-2 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
+      <Icon name="search" size={MAC ? 15 : 18} tone="soft" />
+      <Text class={`flex-1 text-muted-foreground line-clamp-1 ${MAC ? "text-[13px]" : "text-body"}`}>Search or run</Text>
+      <View class="rounded-md border border-border px-1.5 py-0.5"><Text testID="pane-search-key" class={MAC ? "text-[11px] text-muted-foreground" : "text-caption text-muted-foreground"}>{keymap.label("mod+k").replace(/\+/g, " ")}</Text></View>
     </Button>
   );
 }
@@ -68,14 +72,14 @@ function BrainRow() {
   const running = () => brainThread().conversation?.activity?.status === "running";
   const line = () => brainRowLine(brainThread().conversation?.events);
   return (
-    <View class="mx-4 overflow-hidden rounded-(--radius-group) bg-sheet-surface">
+    <View class={MAC ? "mx-2.5 overflow-hidden rounded-[10px]" : "mx-4 overflow-hidden rounded-(--radius-group) bg-sheet-surface"}>
       <Button testID="pane-brain" accessibilityLabel={line() ? `Brain, ${line()}` : "Brain"} selected={on()} onPress={() => goHome()}
-        class="min-h-[68px] flex-row items-center gap-3.5 px-4 py-3 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+        class={`${MAC ? "min-h-[44px] gap-2.5 px-2.5 py-1.5" : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
         <If when={on()}><SelectedWell /></If>
-        <View class="size-[28px] items-center justify-center rounded-lg bg-foreground"><Icon name="brain" size={18} tone="canvas" /></View>
+        <View class={`${MAC ? "size-[26px] rounded-[7px]" : "size-[28px] rounded-lg"} items-center justify-center bg-foreground`}><Icon name="brain" size={MAC ? 16 : 18} tone="canvas" /></View>
         <View class="min-w-0 flex-1">
-          <Text class="text-body font-semibold line-clamp-1">Brain</Text>
-          <If when={line()}><Text testID="pane-brain-line" class="text-sub text-muted-foreground line-clamp-1">{line()}</Text></If>
+          <Text class={MAC ? "text-[13.5px] font-semibold line-clamp-1" : "text-body font-semibold line-clamp-1"}>Brain</Text>
+          <If when={line()}><Text testID="pane-brain-line" class={MAC ? "text-[12px] text-muted-foreground line-clamp-1" : "text-sub text-muted-foreground line-clamp-1"}>{line()}</Text></If>
         </View>
         <If when={running()}><View testID="pane-brain-live" accessibilityLabel="Working" class="size-1.5 rounded-full bg-foreground" /></If>
       </Button>
@@ -98,13 +102,13 @@ export function PaneHandle() {
       // Pressed, it has the focus, as a browser gives it to what is clicked: the arrows are its.
       node?.focus();
     },
-    onPanResponderMove: (_e, g) => paneWidth.set(Math.round(Math.min(PANE_WIDTH.max, Math.max(PANE_WIDTH.min, start + g.dx)))),
+    onPanResponderMove: (_e, g) => paneWidth.set(Math.round(Math.min(paneRange.max, Math.max(paneRange.min, start + g.dx)))),
     onPanResponderRelease: (_e, g) => {
       if (Math.abs(g.dx) < 3 && Math.abs(g.dy) < 3) {
         const now = Date.now();
         if (now - lastTap < 400) {
           lastTap = 0;
-          return setPaneWidth(PANE_WIDTH.initial);
+          return setPaneWidth(paneRange.initial);
         }
         lastTap = now;
       }
@@ -113,15 +117,15 @@ export function PaneHandle() {
     onPanResponderTerminate: () => setPaneWidth(untracked(paneWidth)),
   });
   const bindArrows = () => keymap.bind({
-    left: () => setPaneWidth(stepPaneWidth(untracked(paneWidth), -1)),
-    right: () => setPaneWidth(stepPaneWidth(untracked(paneWidth), 1)),
+    left: () => setPaneWidth(stepPaneWidth(untracked(paneWidth), -1, paneRange)),
+    right: () => setPaneWidth(stepPaneWidth(untracked(paneWidth), 1, paneRange)),
   });
   let unbind: (() => void) | null = null;
   return (
     <View {...drag.panHandlers} ref={(ref) => void (node = ref)} testID="pane-handle" role="adjustable" accessibilityLabel="Resize the left pane" focusable
-      accessibilityValue={{ min: PANE_WIDTH.min, max: PANE_WIDTH.max, now: paneWidth() }}
+      accessibilityValue={{ min: paneRange.min, max: paneRange.max, now: paneWidth() }}
       onPress={(e) => {
-        if (e.clickCount === 2) setPaneWidth(PANE_WIDTH.initial);
+        if (e.clickCount === 2) setPaneWidth(paneRange.initial);
       }}
       onFocus={() => {
         unbind?.();
@@ -149,8 +153,12 @@ export function LeftPane() {
     untracked(refreshOpened);
   });
   return (
-    // Below the status bar on a touch screen (an Android foldable, a tablet), as Brain's header beside it is.
-    <View testID="left-pane" accessibilityLabel="Tray" role="navigation" class="bg-background" style={{ width: paneWidth(), paddingTop: homeHeaderInset() }}>
+    // Below the status bar on a touch screen (an Android foldable, a tablet), as Brain's header beside it is; on the
+    // Mac below the traffic lights' row.
+    // On the Mac the sidebar material, the desktop showing through (P2), with a hairline at its right.
+    <View testID="left-pane" accessibilityLabel="Tray" role="navigation" class={isMacApp() ? "border-r-[0.5px] border-border" : "bg-background"}
+      macos={isMacApp() ? { backdrop: { material: "sidebar", blending: "behindWindow" } } : undefined}
+      style={{ width: paneWidth(), paddingTop: homeHeaderInset() + macLightsRow() }}>
       <PaneHeader />
       <SearchOrRun />
       <BrainRow />

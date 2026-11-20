@@ -97,6 +97,11 @@ const qrAlphaRun = 16
 // version, with long runs of QR alphanumeric characters (such as a base32
 // payload) in alphanumeric segments and everything else as bytes.
 func encodeQR(text string) (*coding.Code, error) {
+	return encodeQRAt(text, coding.L)
+}
+
+// encodeQRAt is encodeQR at the error correction level given.
+func encodeQRAt(text string, level coding.Level) (*coding.Code, error) {
 	var segments []coding.Encoding
 	start := 0
 	for index := 0; index < len(text); {
@@ -121,10 +126,10 @@ func encodeQR(text string) (*coding.Code, error) {
 		for _, segment := range segments {
 			bits += segment.Bits(version)
 		}
-		if bits > version.DataBytes(coding.L)*8 {
+		if bits > version.DataBytes(level)*8 {
 			continue
 		}
-		plan, err := coding.NewPlan(version, coding.L, 0)
+		plan, err := coding.NewPlan(version, level, 0)
 		if err != nil {
 			return nil, err
 		}
