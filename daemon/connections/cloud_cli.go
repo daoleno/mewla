@@ -117,6 +117,9 @@ func (c *cloudRuntime) resolveExecutableLease(id string) (string, *os.File, erro
 		}
 		closeCloudLease(lease)
 	}
+	if reason := c.installError(id); reason != "" {
+		return "", nil, errors.New("Could not install the CLI: " + reason)
+	}
 	return "", nil, errors.New("Install the CLI to continue")
 }
 

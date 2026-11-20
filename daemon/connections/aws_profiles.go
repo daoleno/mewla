@@ -167,7 +167,7 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 		r.Account.Profile = name
 		r.CLI.SSOSession = fields[name]["sso_session"]
 		r.Account.ProfileSignInBy, r.Account.ProfileSignInLimit = awsProfileExpiry(config, fields[name], r.CLI)
-		if !force && time.Since(m.cloud.checked[name]) < time.Minute {
+		if m.cloudLocal || !force && time.Since(m.cloud.checked[name]) < time.Minute {
 			continue
 		}
 		checks = append(checks, &check{r: r})

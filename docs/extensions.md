@@ -278,9 +278,12 @@ Extensions shows the profiles from the current computer's AWS CLI, including
 login sessions, SSO, static keys and credential processes. Each card shows its
 kind, status, account ID and alias when available. Refresh to pick up profiles
 added or removed in a terminal. The list appears immediately from the last known
-state. Profile discovery, identity and expiry checks refresh in the background
-at most once a minute; open pages receive the results automatically. A quiet
-**Checking…** pill marks rows being refreshed. Other services never wait for these checks.
+state. Until you turn on an AWS profile or start an AWS sign-in, Mewla only reads
+the profile names from `~/.aws`: it installs no AWS CLI and makes no AWS call with
+the credentials found there. Once AWS is in use, profile discovery, identity and
+expiry checks refresh in the background at most once a minute; open pages
+receive the results automatically. A quiet **Checking…** pill marks rows being
+refreshed. Other services never wait for these checks.
 
 **Add an account.** If your organization uses IAM Identity Center, Mewla adds
 your accounts from it. Mewla uses the access portal already in your AWS config
@@ -341,7 +344,11 @@ profile returns the CLI's error plus a line naming the profile and where the
 person signs in again.
 
 Mewla installs and updates its own official CLI inside its state directory,
-without sudo or changing your system installation. It checks at most daily,
+without sudo or changing your system installation. A cloud's CLI is set up the
+first time you use that cloud (an account turned on, a sign-in started, a
+`mewla aws`, `mewla gcloud` or `mewla gws` command), never at start and never
+for a cloud you have not used. If that install fails, the sign-in and the
+command say why. It checks at most daily,
 updates in the background, and waits for a check before the first command or
 after seven days without a successful check. Running commands keep their
 original installation. Mewla keeps the active and previous installation; older

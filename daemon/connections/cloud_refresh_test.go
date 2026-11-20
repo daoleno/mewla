@@ -10,11 +10,24 @@ import (
 	"time"
 )
 
+// enableCloudProfiles turns on every discovered AWS profile: the person's first
+// use of AWS, after which Mewla checks the profiles.
+func enableCloudProfiles(m *Manager) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range m.records {
+		if r.Account.Integration == "aws" && r.CLI != nil {
+			r.Account.Enabled = true
+		}
+	}
+}
+
 func TestCloudListReturnsCachedRowsWithoutWaitingForCLI(t *testing.T) {
 	m, config, _, _ := testCloudManager(t)
 	defer m.Close()
 	os.WriteFile(config, []byte("[profile cached]\nregion=us-east-1\n"), 0600)
 	mustHandle(t, m, Request{Action: "list"})
+	enableCloudProfiles(m)
 	started, release := make(chan struct{}, 1), make(chan struct{})
 	var calls atomic.Int32
 	m.cloud.run = func(ctx context.Context, _ string, args, env []string) (cloudOutput, error) {
@@ -85,6 +98,7 @@ func TestCloudRefreshCannotResurrectDeletedOrOverwritePermissions(t *testing.T) 
 	defer m.Close()
 	os.WriteFile(config, []byte("[profile deleted]\n[profile changed]\n"), 0600)
 	mustHandle(t, m, Request{Action: "list"})
+	enableCloudProfiles(m)
 	started, release := make(chan struct{}, 2), make(chan struct{})
 	m.cloud.run = func(ctx context.Context, _ string, args, env []string) (cloudOutput, error) {
 		if args[0] == "sts" {
@@ -142,6 +156,11 @@ func TestCloudRefreshConcurrencyIsBounded(t *testing.T) {
 		fmt.Fprintf(&profiles, "[profile p%d]\n", i)
 	}
 	os.WriteFile(config, []byte(profiles.String()), 0600)
+	m.Handle(context.Background(), Request{Action: "list"})
+	m.snapshots.wg.Wait()
+	enableCloudProfiles(m)
+	m.snapshots.checked = map[string]time.Time{}
+	m.cloud.checked = map[string]time.Time{}
 	var active, max atomic.Int32
 	m.cloud.run = func(ctx context.Context, _ string, args, env []string) (cloudOutput, error) {
 		n := active.Add(1)

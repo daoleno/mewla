@@ -30,11 +30,14 @@ type cloudUpdates struct {
 	// Memory also throttles attempts when the state directory cannot be written.
 	attempted  map[string]time.Time
 	maintained map[string]bool
+	// failed is why the last install of each CLI failed in this process; the
+	// person's next use of that cloud says it instead of a generic prompt.
+	failed map[string]string
 }
 
 func (c *cloudRuntime) enableUpdates() {
 	ctx, cancel := context.WithCancel(context.Background())
-	u := &cloudUpdates{ctx: ctx, cancel: cancel, active: map[string]chan struct{}{}, used: map[string]bool{}, attempted: map[string]time.Time{}, maintained: map[string]bool{}}
+	u := &cloudUpdates{ctx: ctx, cancel: cancel, active: map[string]chan struct{}{}, used: map[string]bool{}, attempted: map[string]time.Time{}, maintained: map[string]bool{}, failed: map[string]string{}}
 	c.updates = u
 	u.wg.Add(1)
 	go func() {
@@ -126,12 +129,40 @@ func (c *cloudRuntime) refresh(id string, force bool) <-chan struct{} {
 			_ = atomicfile.Write(filepath.Join(dir, "update.json"), data, 0600)
 		}
 		save() // A crash or failed download must not create a request/restart loop.
-		if c.providers[id].install(ctx, dir) == nil {
+		err = c.providers[id].install(ctx, dir)
+		u.mu.Lock()
+		if err == nil {
+			delete(u.failed, id)
+		} else {
+			u.failed[id] = installFailure(err)
+		}
+		u.mu.Unlock()
+		if err == nil {
 			state.Succeeded = time.Now()
 			save()
 		}
 	}()
 	return done
+}
+
+// installFailure is one short line of an installer's error.
+func installFailure(err error) string {
+	text := strings.Join(strings.Fields(err.Error()), " ")
+	if len(text) > 200 {
+		text = text[:200]
+	}
+	return text
+}
+
+// installError is why this process's last install of the CLI failed, or "".
+func (c *cloudRuntime) installError(id string) string {
+	u := c.updates
+	if u == nil {
+		return ""
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.failed[id]
 }
 
 func (c *cloudRuntime) prepare(ctx context.Context, id string) error {

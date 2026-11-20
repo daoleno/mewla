@@ -335,7 +335,7 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	// of every profile would spend its time (an expired SSO token alone takes
 	// seconds to renew) and run in the background instead.
 	if m.cloudTarget(q) == nil {
-		if err := m.cloud.providers[q.Integration].syncProfiles(m, ctx, false); err != nil {
+		if err := m.syncCloudProfiles(ctx, q.Integration); err != nil {
 			return Response{}, err
 		}
 	} else {

@@ -92,6 +92,39 @@ func sameRecord(a, b *record) bool {
 	return bytes.Equal(left, right)
 }
 
+// cloudInUse says whether the person has used this cloud through Mewla: one of
+// its accounts is on, or a sign-in for it is open. Only then does Mewla set up
+// its CLI or call it with the credentials found on this computer. Callers hold
+// m.mu.
+func (m *Manager) cloudInUse(id string) bool {
+	for _, r := range m.records {
+		if r.Account.Integration == id && r.CLI != nil && r.Account.Enabled {
+			return true
+		}
+	}
+	for _, f := range m.connectFlows {
+		if f.Integration == id {
+			return true
+		}
+	}
+	return false
+}
+
+// syncCloudProfiles is the profile sync of a cloud for a caller that holds
+// m.mu: the full one when the cloud is in use, otherwise only the profile
+// names AWS keeps in its local files, which starts no CLI and makes no call.
+func (m *Manager) syncCloudProfiles(ctx context.Context, id string) error {
+	if m.cloudInUse(id) {
+		return m.cloud.providers[id].syncProfiles(m, ctx, false)
+	}
+	if id != "aws" {
+		return nil
+	}
+	m.cloudLocal = true
+	defer func() { m.cloudLocal = false }()
+	return m.syncAWSProfiles(ctx, false)
+}
+
 // Discovery and identity checks run on a detached snapshot. They never hold the
 // manager's account lock while starting a CLI or contacting a cloud service.
 func (m *Manager) refreshCloudProfiles() {
@@ -123,6 +156,15 @@ func (m *Manager) refreshCloudProfiles() {
 					records[key] = cloneRecord(r)
 				}
 			}
+			used := m.cloudInUse(id)
+			if !used && id != "aws" {
+				// Nothing of this cloud is set up or called before it is used.
+				m.mu.Unlock()
+				s.mu.Lock()
+				s.active[id] = false
+				s.mu.Unlock()
+				return
+			}
 			checked := map[string]time.Time{}
 			for key, at := range m.cloud.checked {
 				checked[key] = at
@@ -142,7 +184,7 @@ func (m *Manager) refreshCloudProfiles() {
 				defer func() { <-s.slots }()
 				return originalRun(ctx, binary, args, env)
 			}
-			snapshot := &Manager{records: records, cloud: cloud, transient: true}
+			snapshot := &Manager{records: records, cloud: cloud, transient: true, cloudLocal: !used}
 			m.mu.Unlock()
 			merge := func() {
 				m.mu.Lock()
@@ -173,8 +215,23 @@ func (m *Manager) refreshCloudProfiles() {
 				m.cacheListLocked()
 			}
 			snapshot.cloudDiscovered = func() { merge(); m.pushConnections() }
+			if used {
+				// A cloud that was just turned on may not have its CLI yet:
+				// wait for the install, so the first check is a real one.
+				if _, err := cloud.resolveExecutable(id); err != nil {
+					if done := cloud.refresh(id, false); done != nil {
+						select {
+						case <-done:
+						case <-ctx.Done():
+						}
+					}
+				}
+			}
 			_ = provider.syncProfiles(snapshot, ctx, false)
-			info := cloud.info(id)
+			var info *CLIInfo
+			if used {
+				info = cloud.info(id)
+			}
 			merge()
 			m.mu.Lock()
 			for key, at := range checked {
@@ -193,7 +250,11 @@ func (m *Manager) refreshCloudProfiles() {
 			m.mu.Unlock()
 			s.mu.Lock()
 			s.active[id] = false
-			s.checked[id] = time.Now()
+			if used {
+				// A cloud nobody has used reads local files only, so the person's
+				// first use of it is never held back by that pass.
+				s.checked[id] = time.Now()
+			}
 			s.mu.Unlock()
 			m.pushConnections()
 		}(id, provider)
