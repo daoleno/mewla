@@ -237,7 +237,7 @@ export function startMac(): void {
 
 /**
  * Mewla Dev's terminal attach proof (macos-app.yml, `attach`): through the terminal's own Attach, one file that goes up
- * (its path typed at the prompt), one the daemon refuses (a name over its 1024 bytes: a failed chip), then a large one
+ * (its path typed at the prompt), one that can't (a name over the 1024 bytes uploads allow: a failed chip), then a large one
  * still uploading when the run captures the window.
  */
 async function attachProof(): Promise<void> {
