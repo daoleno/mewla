@@ -109,7 +109,12 @@ installer. cloudRuntime owns execution limits and cloudLogin owns process lifeti
 Provider profile enumeration/deletion and identity discovery remain vendor specific.
 Managed binaries take precedence over PATH. Update attempts are recorded under
 `cli/<provider>/update.json` at most once every 24 hours, including failures and
-daemon restarts. An hourly scheduler checks providers already used; first command
+daemon restarts. Nothing is installed or called for a cloud nobody has used
+(`cloudInUse`: an enabled CLI account or an open sign-in): a Connections list
+refreshes AWS profile names from the local files only (`cloudLocal`) and skips
+gcp and gws, and `refresh` runs only from first-use paths. An install's error is
+kept per CLI for the process (`installError`) so the first use can say it. An
+hourly scheduler checks providers already used; first command
 use and a seven-day gap wait for the shared update (bounded to three minutes).
 The installer lock also prevents two processes from updating the same directory.
 A failed update preserves the active generation and falls back to a validated

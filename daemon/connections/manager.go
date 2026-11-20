@@ -47,6 +47,9 @@ type Manager struct {
 	cloudInfo       map[string]*CLIInfo
 	transient       bool
 	cloudDiscovered func()
+	// cloudLocal: a cloud nobody has used yet. Its profile sync reads the
+	// local config files and nothing else.
+	cloudLocal bool
 
 	mu             sync.Mutex // mutations and invocation are linearized; revoke waits for an in-flight call
 	path           string
@@ -478,6 +481,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (response Response, 
 			return Response{}, errors.New("connect this account again")
 		}
 		r.Account.Enabled = true
+		if r.CLI != nil {
+			// Turning a cloud account on is its first use: check it now.
+			m.refreshCloudProfiles()
+		}
 	case "disable":
 		r.Account.Enabled = false
 	case "disconnect":
