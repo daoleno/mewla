@@ -4,7 +4,7 @@ import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWor
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready } from "../session";
-import { openBrainTerminal } from "../shell/nav";
+import { nav, openBrainTerminal } from "../shell/nav";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
@@ -182,6 +182,13 @@ export function startMac(): void {
     let connected = false;
     let sent = false;
     let terminal = false;
+    // The page on top of the window's stack, each time it changes: what a capture of the window should show.
+    let top = "";
+    effect(() => {
+      const route = nav.routes().at(-1) as { name: string; workerId?: string } | undefined;
+      const now = route ? `${route.name}${route.workerId ? ` ${route.workerId}` : ""}` : "";
+      if (now !== top) console.log(`dev script: page ${(top = now)}`);
+    });
     effect(() => {
       if (!current() || connection() !== "connected") return;
       const chat = Boolean(brainChat());

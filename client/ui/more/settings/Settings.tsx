@@ -29,12 +29,15 @@ function appearanceOf(stored: string | null): Appearance {
 /** Applies the stored appearance once at start (the Expo app's key and values). */
 export function restoreAppearance(): void {
   void Storage.getItem(APPEARANCE_KEY).then((stored) => {
+    // A Mac says in the app's log what it read and what it chose: its proof runs have no other window on it.
+    if (platform.os === "macos") console.log(`appearance: read ${JSON.stringify(stored)}`);
     appearance.set(appearanceOf(stored));
     setColorScheme(appearanceOf(stored));
   }).catch(() => {});
 }
 
 export function chooseAppearance(next: Appearance): void {
+  if (platform.os === "macos") console.log(`appearance: chose ${next}`);
   appearance.set(next);
   setColorScheme(next);
   void Storage.setItem(APPEARANCE_KEY, next === "system" ? "system" : `classic-${next}`).catch(() => {});
