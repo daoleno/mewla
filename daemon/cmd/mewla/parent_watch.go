@@ -5,7 +5,10 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/sessionhost"
 )
 
 // exitWithParentEnv is set by an app that runs its own daemon for as long as
@@ -13,6 +16,10 @@ import (
 // The daemon stops once that process is gone, however it ended (a quit, a
 // SIGTERM or SIGKILL that skipped the app's own stop).
 const exitWithParentEnv = "MEWLA_EXIT_WITH_PARENT"
+
+// parentGone is set once the daemon stops because its parent is gone: the
+// session host, which outlives a daemon restart by design, then ends too.
+var parentGone atomic.Bool
 
 // stopWithParent stops the daemon (stop) once its parent is no longer the
 // process named by MEWLA_EXIT_WITH_PARENT; nothing without it.
@@ -26,6 +33,7 @@ func stopWithParent(ctx context.Context, stop context.CancelCauseFunc) {
 	}
 	go watchParent(ctx, parent, os.Getppid, time.Second, func() {
 		log.Printf("mewla: stopping: the app that started it (pid %d) is gone", parent)
+		parentGone.Store(true)
 		stop(nil)
 	})
 }
@@ -46,4 +54,31 @@ func watchParent(ctx context.Context, parent int, ppid func() int, interval time
 		case <-ticker.C:
 		}
 	}
+}
+
+// stopSessionHostWithParent ends this state's session host and the Sessions
+// in it once the daemon has stopped for its parent: nothing of the app's
+// daemon is left running after the app. stateDir is the resolved one the
+// host was configured with (configureSessionHost), not the -state-dir flag.
+func stopSessionHostWithParent(stateDir string) {
+	if !parentGone.Load() {
+		return
+	}
+	path, err := sessionhost.SocketPath(stateDir)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := sessionhost.Dial(ctx, path, hostVersion())
+	if err != nil {
+		log.Printf("mewla: no session host to stop at %s: %v", path, err)
+		return
+	}
+	defer client.Close()
+	if err := client.Shutdown(ctx, true); err != nil {
+		log.Printf("mewla: the session host did not stop: %v", err)
+		return
+	}
+	log.Printf("mewla: the session host stopped with the app")
 }

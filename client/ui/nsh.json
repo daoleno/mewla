@@ -33,7 +33,8 @@
     "statusBar": true,
     "webview": {
       "hosts": [
-        "viewer.mewla.invalid"
+        "viewer.mewla.invalid",
+        "127.0.0.1"
       ]
     }
   },

@@ -1834,15 +1834,20 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 		if targetID == "" {
 			targetID = raw.WorkerID
 		}
+		log.Printf("terminal: opening %s at %dx%d remote=%s", targetID, raw.Cols, raw.Rows, conn.RemoteAddr())
 		target, err := s.terminalTarget(targetID)
 		if err != nil {
+			log.Printf("terminal: cannot open %s: %v", targetID, err)
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 			return
 		}
 		_, err = s.terminal.Open(clientID(conn), terminal.HostBackendName, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: target.Socket}, func(v any) { s.sendJSONWhenRoom(conn, v) })
 		if err != nil {
+			log.Printf("terminal: cannot open %s: %v", targetID, err)
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
+			return
 		}
+		log.Printf("terminal: opened %s", targetID)
 	case "terminal_input":
 		// scroll: what a scroll drag made (wheel presses, cursor keys) is reading, not typing: it never takes
 		// the Session's size from another viewer.
