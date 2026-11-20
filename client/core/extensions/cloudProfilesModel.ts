@@ -42,6 +42,7 @@ export function cloudProfileStatus(a: PluginAccount): { label: string; tone: "su
     case "valid": return { label: "Signed in", tone: "success" };
     case "expired": return { label: "Expired", tone: "warning" };
     case "invalid": return { label: "Invalid", tone: "warning" };
+    case "unavailable": return { label: "Unavailable", tone: "warning" };
     default: return { label: "Unchecked", tone: "neutral" };
   }
 }

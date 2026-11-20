@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PluginAccount } from "./connections";
-import { AWS_SESSION_LENGTHS, awsSessionFacts, cloudProfileExpiry, cloudProfileGroups, sessionLengthLabel, cloudProfileIdentity, cloudProfileName, cloudProfilesSummary, suggestedAWSProfile, validAWSProfileName } from "./cloudProfilesModel";
+import { cloudProfileStatus, AWS_SESSION_LENGTHS, awsSessionFacts, cloudProfileExpiry, cloudProfileGroups, sessionLengthLabel, cloudProfileIdentity, cloudProfileName, cloudProfilesSummary, suggestedAWSProfile, validAWSProfileName } from "./cloudProfilesModel";
 test("a new AWS profile is offered a name from its account alias and role, which the CLI accepts", () => {
   const account: PluginAccount = { id: "a", integration: "aws", name: "mewla-temp", profile: "mewla-temp", identity: "", enabled: true, status: "connected", history: [], aws: { account_id: "123456789012", account_name: "ACE Labs Mgmt", who: "Admin" } };
   expect(suggestedAWSProfile(account)).toBe("ace-labs-mgmt-admin");
@@ -81,4 +81,8 @@ test("an Identity Center sign-in shows its real end, and only once its start and
   // Signed in elsewhere (a terminal): its start is not known, so there is nothing to show.
   expect(awsSessionFacts(sso)).toBeNull();
   expect(AWS_SESSION_LENGTHS.map(sessionLengthLabel)).toEqual(["1 hour", "2 hours", "4 hours", "8 hours", "12 hours", "1 day", "3 days", "5 days", "7 days", "30 days", "90 days"]);
+});
+test("a profile whose cloud tool could not be set up reads Unavailable, not Unchecked", () => {
+  expect(cloudProfileStatus(profile("p", "unavailable"))).toEqual({ label: "Unavailable", tone: "warning" });
+  expect(cloudProfileStatus(profile("p", "unchecked")).label).toBe("Unchecked");
 });

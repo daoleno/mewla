@@ -277,6 +277,15 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
                 title="Sign in again"
                 trailing={<If when={connectingService() === props.plugin.id} else={<RowButton label="Sign in" accessibilityLabel={`Sign in to ${props.plugin.name} again`} disabled={busy()} onPress={() => flow().recover(a, "reconnect")} />}><Spinner size={16} /></If>}
               /></If>
+            {/* The cloud's CLI could not be set up: the cause the computer gave, and a try again. */}
+            <If when={a.profile_status === "unavailable" && a.unavailable ? a.unavailable : null}>{(reason) => <Row
+                testID={`unavailable-${a.id}`}
+                lead={tile("alert-circle")}
+                title="Unavailable"
+                subtitle={reason()}
+                subtitleTone="warn"
+                trailing={<If when={running() === `recover:${a.id}`} else={<RowButton label="Check now" disabled={busy()} onPress={() => flow().recover(a, "refresh")} />}><Spinner size={16} /></If>}
+              />}</If>
             {/* An Identity Center sign-in ends when the organization's length has passed: AWS does not say it, so it is learned or set here once. */}
             <If when={a.integration === "aws" && a.profile_kind === "SSO"}><Row
                 testID={`session-length-${a.id}`}
