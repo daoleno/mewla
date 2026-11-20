@@ -53,6 +53,15 @@ type HostProblem struct {
 	InstalledExecutors []string `json:"installed_executors,omitempty"`
 }
 
+// AgentInstall is an agent a client offers to install when Brain has none:
+// the client starts Command as a terminal Session on this computer, where the
+// install and the sign-in run and Brain then moves to the agent.
+type AgentInstall struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Command string `json:"command"`
+}
+
 // ExecutorState is what a client needs to offer an executor as a choice: only
 // an installed agent is one, and a signed-in one is the better one.
 type ExecutorState struct {
@@ -77,10 +86,13 @@ type Snapshot struct {
 	Executors    []work.WorkerExecutor `json:"executors"`
 	// ExecutorStates is each executor's install and sign-in state, by id.
 	ExecutorStates map[string]ExecutorState `json:"executor_states,omitempty"`
-	ChatThreadID   string                   `json:"chat_thread_id,omitempty"`
-	Workspace      string                   `json:"workspace,omitempty"`
-	WorklogPath    string                   `json:"worklog_path,omitempty"`
-	GeneratedAt    time.Time                `json:"generated_at"`
+	// AgentInstalls are the agents this computer can install for Brain, while
+	// Brain can't start because no agent is installed here.
+	AgentInstalls []AgentInstall `json:"agent_installs,omitempty"`
+	ChatThreadID  string         `json:"chat_thread_id,omitempty"`
+	Workspace     string         `json:"workspace,omitempty"`
+	WorklogPath   string         `json:"worklog_path,omitempty"`
+	GeneratedAt   time.Time      `json:"generated_at"`
 }
 
 type BrainContext struct {

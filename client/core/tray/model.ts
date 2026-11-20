@@ -167,6 +167,9 @@ export interface TrayInput {
   diagnosis?: string;
   surface: BrainSurface;
   hostProblem?: BrainHostProblem;
+  /** Brain's thread offers the agent installs (Mewla for Mac, no agent on this Mac): it says why itself, so the tray
+   * has no "Brain can't start" notice (its Switch executor has nothing to switch to). */
+  installsOffered?: boolean;
   /** The current computer's Sessions; Brain's host is never among them. */
   workers: readonly Worker[];
   /** Brain's own host Session, for the prompts it is blocked on. */
@@ -441,7 +444,7 @@ function noticeOf(input: TrayInput): TrayNotice | null {
   if (input.connection === "waiting" || input.connection === "idle") {
     return { kind: "offline", title: `${name} is offline`, detail: input.diagnosis || "Can't reach it", actions: [{ id: "try_again", label: "Try again" }, { id: "details", label: "Details" }] };
   }
-  if (input.connection === "connected" && input.surface === "host_down") {
+  if (input.connection === "connected" && input.surface === "host_down" && !input.installsOffered) {
     const suggested = input.hostProblem?.suggest_executor;
     return {
       kind: "cant_start",

@@ -17,6 +17,7 @@ mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Ta
 mewla -loopback-only          # this computer only: no TLS listeners on Wi-Fi/LAN or Tailscale (test daemons)
 mewla doctor [--json]         # is this machine ready? platform, state, port, agents
 mewla deps                    # offer this system's official agent CLI install, then sign-in (Linux, macOS)
+mewla deps -agent codex       # install that agent, sign in, and Brain runs on it (Mewla for Mac's Install buttons run this)
 mewla setup                   # guided setup on top of doctor: pick Brain's agent
 mewla setup remote            # over SSH: sign in with a code, run in the background, pair a phone
 mewla update [--check]        # verify and install the latest release, then restart Mewla onto it

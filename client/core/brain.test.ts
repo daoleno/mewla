@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface, isBrainThreadCacheKey } from "./brain";
+import { brainAgentInstalls, brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface, isBrainThreadCacheKey } from "./brain";
 
 describe("brainSurface", () => {
   const host = { id: "h1", name: "Brain", status: "running" };
@@ -55,5 +55,22 @@ describe("isBrainThreadCacheKey", () => {
     expect(isBrainThreadCacheKey("s1:scope:brain-thread:t-old2", "t-old")).toBe(false);
     expect(isBrainThreadCacheKey("s1:agent:brain-host", "t-old")).toBe(false);
     expect(isBrainThreadCacheKey("", "")).toBe(false);
+  });
+});
+
+describe("brainAgentInstalls (DESIGN-MAC.md §2.4, m-noagent)", () => {
+  const installs = [{ id: "claude", name: "Claude Code", command: "'/A/mewla' deps -agent claude" }, { id: "codex", name: "Codex", command: "'/A/mewla' deps -agent codex" }];
+  const problem = { code: "not_installed", executor: "claude", detail: "", installed_executors: [] };
+  test("no agent on the computer: the installs it offers", () => {
+    expect(brainAgentInstalls({ host_problem: problem, agent_installs: installs }).map((install) => install.id)).toEqual(["claude", "codex"]);
+  });
+  test("an agent installed (signed out, or another than Brain's) is not an install", () => {
+    expect(brainAgentInstalls({ host_problem: problem, agent_installs: installs, executor_states: { codex: { installed: true, signed_in: false } } })).toEqual([]);
+    expect(brainAgentInstalls({ host_problem: { ...problem, code: "not_signed_in" }, agent_installs: installs })).toEqual([]);
+  });
+  test("no problem, or a computer that offers none: nothing", () => {
+    expect(brainAgentInstalls({ agent_installs: installs })).toEqual([]);
+    expect(brainAgentInstalls({ host_problem: problem })).toEqual([]);
+    expect(brainAgentInstalls(null)).toEqual([]);
   });
 });

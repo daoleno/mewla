@@ -348,6 +348,49 @@ func (d *depsPrompt) ensureAgent() bool {
 	return d.signIn(agent)
 }
 
+// installAgent is what an app runs when the person picks an agent to install
+// (mewla deps -agent <id>, in a terminal Session on this computer, where the
+// installer and the sign-in can ask their own questions): the agent's official
+// install unless it is there, its sign-in unless done, then moveBrain puts
+// Brain on it, which starts Brain when it had no agent.
+func (d *depsPrompt) installAgent(id string, moveBrain func(id string) error) bool {
+	var agent hostdeps.Agent
+	for _, candidate := range hostdeps.Agents(d.platform) {
+		if candidate.ID == id {
+			agent = candidate
+		}
+	}
+	if agent.ID == "" {
+		fmt.Fprintf(d.w, "Mewla can't install %s on this computer.\n", id)
+		return false
+	}
+	item, found := executorItem(d.agents(), id)
+	if !found || !item.BinaryFound {
+		fmt.Fprintf(d.w, "Installing %s.\n", agent.Name)
+		if !d.runPlan(agent.Install) {
+			fmt.Fprintf(d.w, "%s is not installed. Try again later: %s\n", agent.Name, agent.Install.Command())
+			return false
+		}
+		item, found = executorItem(d.agents(), id)
+		if !found || !item.BinaryFound {
+			fmt.Fprintf(d.w, "%s is not installed. Try again later: %s\n", agent.Name, agent.Install.Command())
+			return false
+		}
+	}
+	addToolDirToPath(item.BinaryPath)
+	if !item.Usable || item.Auth != doctor.AuthAuthenticated {
+		if !d.signIn(agent) {
+			return false
+		}
+	}
+	if err := moveBrain(id); err != nil {
+		fmt.Fprintf(d.w, "Brain did not move to %s (%v). Move it: %s\n", agent.Name, err, d.style().cmd("mewla brain use "+id))
+		return false
+	}
+	fmt.Fprintf(d.w, "✓ Brain runs on %s.\n", agent.Name)
+	return true
+}
+
 func (d *depsPrompt) signIn(agent hostdeps.Agent) bool {
 	fmt.Fprintf(d.w, "%s is installed. Sign in to it:\n  %s\n", agent.Name, d.style().cmd(agent.Login))
 	if !d.ask("Sign in now?") {
@@ -532,20 +575,29 @@ func bootServiceInstalled() bool {
 func runDepsCommand(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla deps", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	agent := fs.String("agent", "", "install this agent (claude, codex), sign in to it and move Brain to it")
+	stateDir := fs.String("state-dir", "", "the state of the Mewla whose Brain moves (with -agent)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla deps")
+		fmt.Fprintln(stderr, "Usage: mewla deps [-agent <id> [-state-dir <dir>]]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Check for an agent CLI. In a terminal, offer this computer's official")
 		fmt.Fprintln(stderr, "install command and run it after you agree; otherwise print it.")
+		fmt.Fprintln(stderr, "With -agent: install that agent, sign in to it, and Brain runs on it.")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: mewla deps")
+		return fmt.Errorf("usage: mewla deps [-agent <id> [-state-dir <dir>]]")
 	}
 	prepareToolPath()
 	d := newDepsPrompt(bufio.NewReader(os.Stdin), stderr, stdioIsTerminal())
+	if *agent != "" {
+		if !d.installAgent(*agent, func(id string) error { return setRunningBrainHost(*stateDir, id) }) {
+			return errDepsMissing
+		}
+		return nil
+	}
 	if !d.ensureAgent() {
 		return errDepsMissing
 	}

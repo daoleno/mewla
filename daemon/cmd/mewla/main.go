@@ -453,6 +453,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 	})
 	installHostAuthProbe()
 	brainService := brain.NewService(brainStore, w, execs)
+	// No agent here: an app offers the installs, each this daemon's own mewla
+	// deps -agent on this state, in a terminal Session (never another mewla on
+	// PATH, which may be another Mewla's).
+	if exe, err := os.Executable(); err == nil {
+		stateDir := authManager.StorageDir()
+		brainService.SetAgentInstallCommand(func(id string) string {
+			return shellWord(exe) + " deps -agent " + shellWord(id) + " -state-dir " + shellWord(stateDir)
+		})
+	}
 	brainService.SetWorkJudge(brain.NewHeadlessJudge(brainService.HostExecutor, filepath.Join(brainRoot, "judge")))
 	// A Work's progress is judged by the model routing.md's "Work progress"
 	// row names, asked the way Watch asks its own.
@@ -3670,3 +3679,6 @@ func (values *stringListFlag) Set(value string) error {
 func besideInstalledMewla() bool {
 	return os.Getenv("MEWLA_BESIDE_INSTALLED") == "1"
 }
+
+// shellWord quotes s as one word for /bin/sh.
+func shellWord(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

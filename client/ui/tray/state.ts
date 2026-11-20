@@ -1,9 +1,10 @@
 import { elapsedNow } from "../kit/elapsedClock";
 import { computed, signal, Storage, untracked } from "nsh";
 import { answeredKeys, parseAnsweredRequest, sealedOfAnswered, type AnsweredRequest } from "../../core/timeline/answered";
-import { brainSurface } from "../../core/brain";
+import { brainAgentInstalls, brainSurface } from "../../core/brain";
 import { openAlerts } from "../../core/calendar/alerts";
 import { itemInstant, itemsOnDay, rowTime } from "../../core/calendar/model";
+import { isMacApp } from "../mac/local";
 import { getRecentWorkerOpens } from "../../core/sessions/deviceState";
 import { normalizePrompt } from "../../core/sessions/workers";
 import { latestPendingChoice } from "../../core/timeline/claudeChoiceModel";
@@ -124,6 +125,7 @@ export const tray = computed(() => {
     diagnosis: currentDiagnosis(),
     surface: brainSurface({ hasServer: Boolean(server), connected: connection() === "connected", snapshot }),
     hostProblem: snapshot?.host_problem,
+    installsOffered: isMacApp() && brainAgentInstalls(snapshot).length > 0,
     workers: workers(),
     brainHost: brainHost(),
     brainTurn: brainTurn(),
