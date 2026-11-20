@@ -28,6 +28,7 @@
     "openUrl": true,
     "clipboard": true,
     "share": true,
+    "picker": true,
     "application": true,
     "windows": { "kinds": ["normal", "dialog", "popup"], "max": 4 },
     "statusBar": true,

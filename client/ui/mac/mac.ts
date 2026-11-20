@@ -1,4 +1,5 @@
 import { cleanup, colorScheme, computed, effect, host, lifecycle, reduceMotion, signal, Storage, untracked } from "nsh";
+import { newestTerminalAttach } from "../terminal/attach";
 import { Application, GlobalShortcut, Tray, Window } from "nsh/desktop";
 import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWords, type MenuBarItem, type MenuBarReaction } from "../../core/mac/menuBar";
 import type { PetState } from "../../core/settings/petPreview";
@@ -26,7 +27,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; raise?: number } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -214,6 +215,7 @@ export function startMac(): void {
           terminal = true;
           openBrainTerminal(hostId);
           console.log(`dev script: terminal ${hostId}`);
+          if (script.attach) void attachProof();
           // `raise` seconds later the window comes in front for a capture: shown, never focused (in the background the
           // app does not activate and takes no keys).
           if (script.raise) {
@@ -230,5 +232,37 @@ export function startMac(): void {
         }
       });
     });
+  }
+}
+
+/**
+ * Mewla Dev's terminal attach proof (macos-app.yml, `attach`): through the terminal's own Attach, one file that goes up
+ * (its path typed at the prompt), one the daemon refuses (a name over its 1024 bytes: a failed chip), then a large one
+ * still uploading when the run captures the window.
+ */
+async function attachProof(): Promise<void> {
+  const until = async (ok: () => boolean, ms = 60_000) => {
+    for (let waited = 0; !ok(); waited += 250) {
+      if (waited > ms) throw new Error("timed out");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  };
+  try {
+    await until(() => Boolean(newestTerminalAttach()?.uploads.canAttach()));
+    const uploads = newestTerminalAttach()!.uploads;
+    const settled = () => uploads.items().every((item) => item.status === "failed");
+    uploads.add([new File(["Mewla Dev's attach proof\n"], "proof notes.txt", { type: "text/plain" })]);
+    console.log("dev script: attach sent");
+    await until(settled);
+    uploads.add([new File(["refused"], `${"n".repeat(1100)}.txt`, { type: "text/plain" })]);
+    await until(() => uploads.items().some((item) => item.status === "failed"));
+    console.log(`dev script: attach failed ${uploads.items().find((item) => item.status === "failed")?.error ?? ""}`);
+    uploads.add([new File([new Uint8Array(384 << 20)], "screen recording.mov", { type: "video/quicktime" })]);
+    await until(() => uploads.items().some((item) => item.status === "uploading"));
+    console.log("dev script: attach uploading");
+    await until(settled, 120_000);
+    console.log("dev script: attach done");
+  } catch (error) {
+    console.log(`dev script: attach stopped ${error instanceof Error ? error.message : String(error)}`);
   }
 }

@@ -7,7 +7,9 @@ import { HISTORY_FAILED } from "../../core/terminal/history";
 import { linkAction, NO_SEARCH, tapAction } from "../../core/terminal/text";
 import type { Transport } from "../../core/transport";
 import { Icon, type IconName } from "../icons/Icon";
-import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
+import { AttachmentTray } from "../more/files/Pages";
+import { createTerminalAttach, type TerminalAttach } from "./attach";
+import { MacAttachChips } from "./MacAttachChips";
 import { belowSections, bottomBarInset } from "../shell/below";
 import { keyBarPadding, terminalGroupPadding, terminalTight } from "../../core/terminal/keyboardRoom";
 import { keyboardLift } from "../../core/shell/belowStack";
@@ -102,7 +104,9 @@ export type TerminalPathPosition = { line?: number; column?: number };
  * file path (or file: URL) goes to `onOpenPath`; text a program copies
  * (OSC 52) reaches the clipboard.
  */
-export function TerminalPane(props: { transport: Transport; targetId: string; active: () => boolean; onOpenPath?: (path: string, position: TerminalPathPosition) => void; program?: () => string | undefined }) {
+export function TerminalPane(props: { transport: Transport; targetId: string; active: () => boolean; onOpenPath?: (path: string, position: TerminalPathPosition) => void; program?: () => string | undefined;
+  /** Its Attach when the page owns it (Mewla for Mac's header action); otherwise the pane makes its own. */
+  attach?: TerminalAttach }) {
   let surface: NativeComponentRef | undefined;
   const ctrl = signal(false);
   const keyboard = signal(false);
@@ -165,21 +169,21 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     command("key", { data: out });
   };
   // Attach: a picked file goes to the computer, then its path is typed at the prompt, quoted for the shell.
-  const uploads = createAttachmentUploads();
-  cleanup(() => uploads.dispose());
-  const attachProblem = signal("");
+  const attachment = untracked(() => props.attach) ?? createTerminalAttach();
+  const uploads = attachment.uploads;
   effect(() => {
     const ready = uploads.ready();
     if (ready.length === 0) return;
     untracked(() => {
-      for (const file of ready) session.input(`${shellQuote(file.path)} `);
+      for (const file of ready) {
+        session.input(`${shellQuote(file.path)} `);
+        // Mewla for Mac's proof run reads it (macos-app.yml, the attach scenario).
+        if (MAC) console.log(`terminal: typed an attachment's path (${session.attached ? "attached" : "not attached"})`);
+      }
       uploads.clear();
     });
   });
-  const attach = () => {
-    attachProblem.set("");
-    void uploads.pickAndUpload().catch((error) => attachProblem.set(error instanceof Error ? error.message : "Could not attach the file."));
-  };
+  const attach = attachment.attach;
 
   let holdTimer: ReturnType<typeof setTimeout> | undefined;
   let repeatTimer: ReturnType<typeof setInterval> | undefined;
@@ -358,9 +362,11 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
             }} /></If>
         <If when={searching() && rendererFailure() === null}><TerminalSearchBar state={search} onQuery={(query) => nav.runSearch(query, 0)} onStep={(step) => nav.step(step)} onClose={closeSearch} /></If>
         <If when={rendererFailure() !== null}><TerminalRendererFailure message={rendererFailure()!} onRetry={() => command("retry", {})} /></If>
+        {/* Mewla for Mac: the chips float over the grid at its top right; the grid never resizes (DESIGN-MAC.md §2.3.1). */}
+        <If when={MAC}><MacAttachChips attach={attachment} /></If>
       </View>
-      <If when={uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
-      <If when={attachProblem()}><Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachProblem()}</Text></If>
+      <If when={!MAC && uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
+      <If when={!MAC && attachment.problem()}><Text testID="terminal-attach-problem" class="px-3 py-1 text-xs text-destructive">{attachment.problem()}</Text></If>
       <View
         style={{
           marginBottom: lift(),
