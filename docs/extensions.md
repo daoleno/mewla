@@ -395,6 +395,10 @@ appear as one account. Empty configurations, including a fresh `default`, are
 hidden. The active configuration for an account supplies its project; otherwise
 Mewla uses its first configuration with a project. Existing accounts start with
 agent use disabled. Expired accounts share the collapsed Expired group with AWS.
+Until you turn an account on or start a sign-in, Mewla only asks a gcloud that is
+already on the computer for its local lists: it installs nothing and asks Google
+for no token. Turning an account on is its first use: Mewla installs its own
+gcloud if needed, then checks the account with the sign-in you already have.
 
 Connect always starts the CLI's remote flow,
 `gcloud auth login --no-launch-browser --force`. Open Google's URL on any trusted
@@ -452,7 +456,11 @@ Mewla's own Calendar is separate. Google's own verification and fees do not appl
 you sign in through an OAuth client in **your** Google Cloud project, so mail and
 tokens never pass through a Mewla server and Mewla stores no Google keys. `gws`
 keeps its account in its own config directory (`GOOGLE_WORKSPACE_CLI_CONFIG_DIR`
-when set), and Extensions shows that one account.
+when set), and Extensions shows that one account. If `gws` is already signed in on
+this computer, the account is listed (off, unchecked) from its config files alone,
+with no `gws` install and no call to Google; turning it on installs `gws` and asks
+it who is signed in. A card whose CLI could not be installed says why, and
+**Check now** tries again.
 
 Connect, first time:
 
