@@ -1,5 +1,6 @@
 import { host, signal, untracked } from "nsh";
 import { titleBar, Window, type TitleBarOptions } from "nsh/desktop";
+import { httpOrigin } from "../../core/mac/thisMac";
 import { pairWith, readPairingLink } from "../../core/pairFlow";
 import { addPairedServer, current, servers, switchTo } from "../session";
 import { isMacApp } from "./app";
@@ -53,6 +54,17 @@ export function isThisMac(server: { daemonPublicKey: string } | null | undefined
 }
 
 const sameKey = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * This Mac's own daemon's address (loopback), whichever computer is current: the terminal's page files are the app's
+ * own (the daemon embeds them), so a Session's terminal on any computer loads them from here. Empty before joining.
+ */
+export function localDaemonURL(): string {
+  const key = localDaemonKey();
+  if (!key) return "";
+  const url = servers().find((server) => sameKey(server.daemonPublicKey, key))?.url;
+  return url ? httpOrigin(url) : "";
+}
 
 /**
  * Makes this computer's daemon the current server: the one already paired with it, or a new pairing over its own

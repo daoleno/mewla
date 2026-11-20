@@ -35,3 +35,14 @@ export function seenWords(iso: string, now: Date): string {
   if (days === 1) return "Yesterday";
   return at.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+/**
+ * The http origin of a computer's address, which is stored as its WebSocket (`ws://127.0.0.1:9876/ws`): where its
+ * own files are served (the terminal page's on a Mac). Empty for anything else.
+ */
+export function httpOrigin(address: string): string {
+  const match = /^(wss?|https?):\/\/([^/?#]+)/i.exec(address.trim());
+  if (!match) return "";
+  const scheme = match[1].toLowerCase();
+  return `${scheme === "wss" || scheme === "https" ? "https" : "http"}://${match[2]}`;
+}
