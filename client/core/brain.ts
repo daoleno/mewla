@@ -29,8 +29,6 @@ export type BrainExecutorRef = {
   command?: string;
   capabilities?: { interactive_tty?: boolean; structured_events?: boolean };
   host?: boolean;
-  /** Mewla never offers it as Brain's host (agy: `mewla brain use agy` only). */
-  host_by_choice_only?: boolean;
 };
 
 export type BrainExecutorState = { installed: boolean; signed_in: boolean; account?: string };

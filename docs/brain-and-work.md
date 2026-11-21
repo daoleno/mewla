@@ -448,7 +448,7 @@ mewla brain use claude
 The thread and its history move with Brain. First run asks which agent Brain
 uses when more than one is ready and keeps that answer. A start without a
 terminal (a service, CI) never asks: Brain takes the first installed agent in
-the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode (Antigravity is never picked; `mewla brain use agy` chooses it), preferring one
+the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, Antigravity (last: it has no hooks or approval handling), preferring one
 `mewla doctor` verified as signed in over one it could not verify, and the daemon
 log names it and the `mewla brain use` command that changes it.
 
