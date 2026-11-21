@@ -203,7 +203,7 @@ func TestGCPInstallStepFailureNamesTheTool(t *testing.T) {
 				return cloudOutput{}, nil
 			}
 			if filepath.Base(binary) == step {
-				return cloudOutput{ExitCode: 1, Stderr: "noise\nERROR: no usable Python was found\n"}, nil
+				return cloudOutput{ExitCode: 1, Stdout: "Welcome to the Google Cloud CLI!\n", Stderr: "noise\nERROR: no usable Python was found\n"}, nil
 			}
 			t.Fatalf("unexpected process %s", binary)
 			return cloudOutput{}, nil
