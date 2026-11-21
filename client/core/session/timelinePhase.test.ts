@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { interfaceChatThreadReducer } from "../conversation/thread";
-import { interfaceTimelinePhase } from "./timelinePhase";
+import { conversationUnavailableReason, conversationUnreadableDetail, interfaceTimelinePhase, isConversationSyncingReason } from "./timelinePhase";
 
 type ThreadState = Parameters<typeof interfaceChatThreadReducer>[0];
 
@@ -103,5 +103,21 @@ describe("an empty timeline is loading until history has loaded", () => {
     expect(interfaceTimelinePhase({ ...quiet, itemCount: 3, loading: true })).toBe("content");
     expect(interfaceTimelinePhase({ ...quiet, itemCount: 0, loading: true, suppressed: true })).toBe("hidden");
     expect(interfaceTimelinePhase({ ...quiet, itemCount: 0, loading: false, unavailable: true })).toBe("unavailable");
+  });
+});
+
+describe("an agent conversation the computer cannot read", () => {
+  test("the cause after conversation_unreadable reaches the person; no other reason claims one", () => {
+    expect(conversationUnreadableDetail("conversation_unreadable: agy acp speaks protocol version 2; Mewla reads version 1")).toBe(
+      "agy acp speaks protocol version 2; Mewla reads version 1",
+    );
+    expect(conversationUnreadableDetail("conversation_unreadable")).toBe("the agent did not answer");
+    expect(conversationUnreadableDetail("transcript_not_found")).toBeUndefined();
+    expect(conversationUnreadableDetail(undefined)).toBeUndefined();
+    expect(conversationUnavailableReason("conversation_unreadable: this agy no longer offers session/load")).toBe(
+      "This chat can't be read: this agy no longer offers session/load. Open the terminal view.",
+    );
+    // Not a syncing reason: the chat reads as failed, not as loading.
+    expect(isConversationSyncingReason("conversation_unreadable: x")).toBe(false);
   });
 });

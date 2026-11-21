@@ -148,6 +148,8 @@ func (r *ProviderConversationReader) Load(
 		return r.loadPiConversationForWorker(worker, now)
 	case WorkerProviderOpenCode:
 		return r.loadOpenCodeConversationForWorker(worker, now)
+	case WorkerProviderAntigravity:
+		return r.loadAntigravityConversationForWorker(worker, now)
 	default:
 		r.resetSource()
 		return CodexConversation{

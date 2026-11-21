@@ -629,8 +629,6 @@ type WorkerExecutor struct {
 	Command      string             `json:"command,omitempty"`
 	Capabilities WorkerCapabilities `json:"capabilities"`
 	Host         bool               `json:"host,omitempty"`
-	// WorkerOnly marks an agent that runs Workers but cannot host Brain.
-	WorkerOnly bool `json:"worker_only,omitempty"`
 	// ConfigDir is the absolute config directory of a separate sign-in; Command
 	// then starts with the environment variable that selects it. BareCommand is
 	// Command without that prefix, for finding the program.
@@ -666,11 +664,6 @@ func ExpandConfigDir(dir string) string {
 	}
 	return filepath.Clean(dir)
 }
-
-// CanHostBrain reports whether an agent can be Brain's host. Brain reads its
-// own conversation from the agent's transcript, and agy's conversations are in
-// a SQLite database Mewla has no reader for yet: agy runs Workers only.
-func CanHostBrain(provider string) bool { return provider != WorkerProviderAntigravity }
 
 // WorkerExecutors returns all configured executors as portable executor records.
 func (c *ExecutorConfig) WorkerExecutors() []WorkerExecutor {
@@ -731,7 +724,6 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 		Provider:     provider,
 		Command:      command,
 		Capabilities: workerCapabilities(provider),
-		WorkerOnly:   !CanHostBrain(provider),
 		ConfigDir:    configDir,
 		BareCommand:  bare,
 	}
@@ -826,9 +818,10 @@ func workerCapabilities(provider string) WorkerCapabilities {
 	case WorkerProviderGrok:
 		caps.StructuredEvents = true
 	case WorkerProviderAntigravity:
-		// agy keeps its conversations in SQLite (conversations/<id>.db) and has no
-		// reader here yet, so Chat shows the terminal. Resume is its own
-		// --conversation <id>, found from conversation_summaries.db.
+		// Chat is read by asking `agy acp` to replay the conversation
+		// (work/antigravity_acp.go). Resume is agy's own --conversation <id>,
+		// found from conversation_summaries.db.
+		caps.StructuredEvents = true
 		caps.NativeResume = true
 	case WorkerProviderClaude:
 		// Claude Code exposes structured chat via local JSONL transcripts under

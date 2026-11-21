@@ -21,6 +21,11 @@ import (
 // so Mewla reads the id agy chose instead of assigning one.
 var antigravityConversationIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
+// IsAntigravityConversationID reports whether value is an agy conversation id.
+func IsAntigravityConversationID(value string) bool {
+	return antigravityConversationIDPattern.MatchString(value)
+}
+
 // AntigravityDataDir is agy's own directory for conversations, settings and
 // logs: ~/.gemini/antigravity-cli. agy has no environment variable or flag
 // that moves it, so an isolated agy is an isolated HOME.
@@ -98,6 +103,25 @@ func ListAntigravityConversations(home string) ([]AntigravityConversation, error
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ModifiedAt.After(out[j].ModifiedAt) })
 	return out, nil
+}
+
+// GetAntigravityConversation returns the summary row of one conversation by id.
+// Mewla reads only the conversations it started; it never lists another one's
+// content through this.
+func GetAntigravityConversation(home, id string) (AntigravityConversation, bool, error) {
+	if !antigravityConversationIDPattern.MatchString(id) {
+		return AntigravityConversation{}, false, nil
+	}
+	conversations, err := ListAntigravityConversations(home)
+	if err != nil {
+		return AntigravityConversation{}, false, err
+	}
+	for _, conversation := range conversations {
+		if conversation.ID == id {
+			return conversation, true, nil
+		}
+	}
+	return AntigravityConversation{}, false, nil
 }
 
 // FindAntigravityConversation returns the conversation a Worker started in cwd

@@ -29,8 +29,6 @@ export type BrainExecutorRef = {
   command?: string;
   capabilities?: { interactive_tty?: boolean; structured_events?: boolean };
   host?: boolean;
-  /** Runs Workers but cannot host Brain (the computer says so: agy for now). */
-  worker_only?: boolean;
 };
 
 export type BrainExecutorState = { installed: boolean; signed_in: boolean; account?: string };

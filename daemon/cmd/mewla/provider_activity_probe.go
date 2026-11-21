@@ -161,10 +161,13 @@ func probeStateForConversation(conversation work.CodexConversation, err error) w
 		}
 		return watcher.ProbeStateUnreadable
 	}
-	switch strings.TrimSpace(conversation.Reason) {
-	case "", "not_structured_agent", "missing_cwd":
+	reason := strings.TrimSpace(conversation.Reason)
+	switch {
+	case reason == "", reason == "not_structured_agent", reason == "missing_cwd":
 		return watcher.ProbeStateOK
-	case "transcript_malformed":
+	case reason == "transcript_malformed", strings.HasPrefix(reason, "conversation_unreadable"):
+		// The source is there and cannot be read (agy answered another way
+		// than Mewla reads): a loss of evidence, not a missing transcript.
 		return watcher.ProbeStateUnreadable
 	default:
 		// transcript_not_found, session_not_found, db_unavailable, ...

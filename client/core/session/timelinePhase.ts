@@ -36,8 +36,21 @@ export function interfaceTimelinePhase({
   return "empty";
 }
 
+const UNREADABLE_PREFIX = "conversation_unreadable";
+
+/**
+ * Why the computer could not read an agent's conversation, when the agent changed how it
+ * shares it ("conversation_unreadable: <why>"); undefined for every other reason.
+ */
+export function conversationUnreadableDetail(reason?: string): string | undefined {
+  if (!reason?.startsWith(UNREADABLE_PREFIX)) return undefined;
+  return reason.slice(UNREADABLE_PREFIX.length).replace(/^:\s*/, "").trim() || "the agent did not answer";
+}
+
 /** Why a Session's chat is not available, in the person's words. */
 export function conversationUnavailableReason(reason?: string): string {
+  const unreadable = conversationUnreadableDetail(reason);
+  if (unreadable) return `This chat can't be read: ${unreadable}. Open the terminal view.`;
   switch (reason) {
     case "not_codex":
       return "Chat is only available for supported Worker sessions.";

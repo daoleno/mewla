@@ -38,10 +38,10 @@ func TestParseAntigravityAuth(t *testing.T) {
 	}
 }
 
-func TestRecommendHostNeverPicksAWorkerOnlyAgent(t *testing.T) {
+func TestRecommendHostPicksAntigravityOnlyWhenNothingElseIsUsable(t *testing.T) {
 	only := []ExecutorCheck{{ID: "agy", Provider: "antigravity"}}
-	if got := recommendHost(only); got != "" {
-		t.Fatalf("agy alone cannot host Brain, got %q", got)
+	if got := recommendHost(only); got != "agy" {
+		t.Fatalf("agy alone hosts Brain, got %q", got)
 	}
 	both := []ExecutorCheck{{ID: "agy", Provider: "antigravity"}, {ID: "pi", Provider: "pi"}}
 	if got := recommendHost(both); got != "pi" {
