@@ -214,3 +214,13 @@ func TestGCPInstallStepFailureNamesTheTool(t *testing.T) {
 		}
 	}
 }
+
+// Windows has no managed gcloud: the card, the sign-in and the command say what to install there, not a Unix path.
+func TestGCPInstallSupportNamesWindows(t *testing.T) {
+	if message, _ := gcpInstallSupport("windows/amd64"); !strings.Contains(message, "for Windows") || strings.Contains(message, "~/") {
+		t.Fatalf("windows: %q", message)
+	}
+	if message, _ := gcpInstallSupport("linux/amd64"); message != "" {
+		t.Fatalf("linux installs by itself: %q", message)
+	}
+}

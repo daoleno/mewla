@@ -2,10 +2,18 @@
   "releases": [
     {
       "version": "0.4.19",
-      "date": "2026-11-21",
+      "date": "2026-11-22",
       "highlights": [],
       "fixes": [
-        "On Android, share files, pictures and links from other apps to Mewla, or open a file with Mewla: they arrive in Brain's composer as attachments."
+        "On Android, share files, pictures and links from other apps to Mewla, or open a file with Mewla: they arrive in Brain's composer as attachments.",
+        "Screen: a page an agent left on your Mac takes your taps in order and tells you when it can't. A window you are watching keeps the Mac awake.",
+        "When Claude or Codex stops answering, Brain says so in one line, and your Work waits instead of failing. It carries on when the answers come back.",
+        "Work that is really done closes itself, and you can reopen it. A wait now has an end, and the ones that run past it reach Brain once a day, in one list.",
+        "Calendar is the first row of your computer's page, with today's count.",
+        "AWS, Google Cloud and Google Workspace are set up the first time you use them, not at start. If setup fails, the card says why.",
+        "A scheduled action runs on the model you chose for it.",
+        "An open Brain terminal follows Brain after a restart.",
+        "On Android, updating from the app opens the installer alone, not a list that also offers Mewla."
       ]
     },
     {
