@@ -67,6 +67,21 @@ was down when an action was due, it runs on startup only if it is at most 15
 minutes late; older ones are marked failed so stale work does not start
 unexpectedly.
 
+If the action's agent is refused by its model provider (a rate limit, an
+overload, a dropped network), the run is **held**, not failed:
+
+- While its Session lives, it waits and is continued in that Session once the
+  provider answers. The agent sees what it already did, so nothing is redone
+  blindly.
+- If the Session ends while the run is held, a new agent starts only if the run
+  did no work, meaning every request its agent ever made was refused. An agent that had a
+  request answered may have acted, so that run fails instead of running twice.
+- A held run is made up at most 12 hours after its time, and never after the
+  item's next occurrence; past that it fails with "Not run: … refused requests
+  (rate limit) from … until …".
+- **Run now** (`mewla calendar run`) on a held run replaces it with a fresh run;
+  on a failed one it runs it again.
+
 Mewla actions run unattended; see
 [Permission bypass risks](executors.md#permission-bypass-risks).
 
