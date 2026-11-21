@@ -115,9 +115,13 @@ func cloudStepFailure(step string, out cloudOutput, err error) error {
 	if err != nil {
 		reason = installFailure(err)
 	} else {
-		lines := strings.Split(strings.TrimSpace(out.Stderr+"\n"+out.Stdout), "\n")
-		for i := len(lines) - 1; i >= 0 && reason == ""; i-- {
-			reason = strings.TrimSpace(lines[i])
+		// What a tool says about a failure is on its stderr; its stdout may only be a greeting
+		// ("Welcome to the Google Cloud CLI!"), so stdout is read only when stderr said nothing.
+		for _, text := range []string{out.Stderr, out.Stdout} {
+			lines := strings.Split(strings.TrimSpace(text), "\n")
+			for i := len(lines) - 1; i >= 0 && reason == ""; i-- {
+				reason = strings.TrimSpace(lines[i])
+			}
 		}
 		if len(reason) > 200 {
 			reason = reason[:200]
