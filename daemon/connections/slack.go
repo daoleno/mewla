@@ -220,8 +220,7 @@ func (m *Manager) invokeSlackFile(parent context.Context, q Request) (Response, 
 		m.mu.Unlock()
 		return Response{}, true, err
 	}
-	snapshot := *r
-	snapshot.Account = cloneAccount(r.Account)
+	snapshot := r.detached()
 	sensitive := m.sensitiveValues(r, secret)
 	dir := filepath.Join(filepath.Dir(m.path), "slack-files", r.Account.ID)
 	m.mu.Unlock()

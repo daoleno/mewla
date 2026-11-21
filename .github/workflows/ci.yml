@@ -72,6 +72,11 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" ~/ffmpeg-debs
       - name: Test
         run: go test ./...
+      # The connections manager is written by request handlers and read by background refreshes; a
+      # record written without its lock crashed a CI run (11-21). +22 s of CPU here (28 s vs 6 s).
+      # The other packages are not -race clean yet (brain and server tests race on logging and clocks).
+      - name: Test connections (-race)
+        run: go test -race -count=1 ./connections/
       - name: Vet
         run: go vet ./...
       - name: Verify public publisher build configuration

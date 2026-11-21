@@ -147,7 +147,7 @@ func TestCloudRunUsesProfileAndBothGates(t *testing.T) {
 	writeLoginTimingCache(t, config, "identity", "session", "2026-11-02T09:00:00Z")
 	mustHandle(t, m, Request{Action: "list"})
 	r := m.awsProfileRecord("test")
-	r.Account.Enabled = true
+	m.edit(func() { r.Account.Enabled = true })
 	q := Request{Action: "cloud_run", Integration: "aws", Profile: "test", CLIArgs: []string{"ec2", "describe-instances"}}
 	if result := mustHandle(t, m, q); result.CLIOutput == nil {
 		t.Fatal("CLI text not returned")
@@ -160,7 +160,7 @@ func TestCloudRunUsesProfileAndBothGates(t *testing.T) {
 	if _, err := m.Handle(context.Background(), q); err == nil {
 		t.Fatal("ungranted execute allowed")
 	}
-	m.setGroup(r, "write", true)
+	m.edit(func() { m.setGroup(r, "write", true) })
 	if _, err := m.Handle(context.Background(), q); err == nil {
 		t.Fatal("task authorization missing")
 	}

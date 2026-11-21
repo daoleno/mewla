@@ -105,8 +105,7 @@ func (m *Manager) mcpResources(parent context.Context, q Request) (Response, err
 		m.mu.Unlock()
 		return Response{}, err
 	}
-	snapshot := *r
-	snapshot.Account = cloneAccount(r.Account)
+	snapshot := r.detached()
 	sensitive := m.sensitiveValues(r, secret)
 	m.mu.Unlock()
 

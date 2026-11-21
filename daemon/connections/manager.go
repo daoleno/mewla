@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +42,27 @@ type record struct {
 	// earlier sign-in, folded into this one. A request naming one reaches
 	// this account.
 	Aliases []string `json:"aliases,omitempty"`
+}
+
+// detached is a copy a caller may keep and read after it lets go of m.mu: the
+// maps and pointers inside it are its own, never the live record's.
+func (r *record) detached() record {
+	c := *r
+	c.Account = cloneAccount(r.Account)
+	c.Spec = bytes.Clone(r.Spec)
+	if r.CLI != nil {
+		cli := *r.CLI
+		cli.Configurations = append([]string(nil), r.CLI.Configurations...)
+		c.CLI = &cli
+	}
+	if r.OAuth != nil {
+		auth := *r.OAuth
+		c.OAuth = &auth
+	}
+	c.Grants = maps.Clone(r.Grants)
+	c.Updates = maps.Clone(r.Updates)
+	c.Aliases = slices.Clone(r.Aliases)
+	return c
 }
 
 type Manager struct {

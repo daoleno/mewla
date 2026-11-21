@@ -492,8 +492,7 @@ func (m *Manager) invokeMCPAccount(parent context.Context, q Request) (Response,
 		m.mu.Unlock()
 		return Response{}, true, err
 	}
-	snapshot := *r
-	snapshot.Account = cloneAccount(r.Account)
+	snapshot := r.detached()
 	sensitive := m.sensitiveValues(r, secret)
 	m.mu.Unlock()
 

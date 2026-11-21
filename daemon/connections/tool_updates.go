@@ -121,8 +121,7 @@ func (m *Manager) syncRemoteTools(parent context.Context, id string, force bool,
 		m.mu.Unlock()
 		return nil
 	}
-	snapshot := *r
-	snapshot.Account = cloneAccount(r.Account)
+	snapshot := r.detached()
 	m.mu.Unlock()
 	if err != nil {
 		return err
