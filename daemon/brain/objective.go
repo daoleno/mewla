@@ -243,5 +243,5 @@ func (s *Store) objectiveProgressLocked(file objectiveFile) (Objective, error) {
 func isObjectiveChildWork(workID string) bool {
 	return !strings.HasPrefix(workID, calendarWorkPrefix) &&
 		!strings.HasPrefix(workID, resourcePressureWorkPrefix) &&
-		!strings.HasPrefix(workID, overdueWorkPrefix)
+		!readOnceWork(workID)
 }

@@ -113,7 +113,7 @@ func (s *Service) overdueWaits(now time.Time) []OverdueWait {
 }
 
 func (s *Service) overdueWait(item Work, now time.Time) (OverdueWait, bool) {
-	if item.Status == WorkDone || item.Status == WorkCancelled || strings.HasPrefix(item.ID, overdueWorkPrefix) ||
+	if item.Status == WorkDone || item.Status == WorkCancelled || readOnceWork(item.ID) ||
 		(s.standing != nil && s.standing(item.ID)) {
 		return OverdueWait{}, false
 	}
@@ -167,6 +167,7 @@ func (s *Service) RunWaitEnds(ctx context.Context) {
 	if err := s.backfillWaitEnds(); err != nil {
 		log.Printf("brain wait ends backfill: %v", err)
 	}
+	go s.runGrantAnswers(ctx)
 	ticker := time.NewTicker(overdueTick)
 	defer ticker.Stop()
 	for {

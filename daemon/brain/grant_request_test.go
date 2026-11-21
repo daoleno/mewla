@@ -82,25 +82,161 @@ func TestGrantRequestCardAsEventAndStatusChange(t *testing.T) {
 	}
 }
 
-// How a card ended reaches Brain as one event on a Work of its own, once.
-func TestNoteGrantAnsweredRaisesOneEvent(t *testing.T) {
-	store, service := grantTestService(t)
-	card, err := service.AskGrant("accessibility", "A Worker needs to click and type.", time.Now())
+func grantBatches(t *testing.T, store *Store) []Work {
+	t.Helper()
+	items, err := store.ListWork()
 	if err != nil {
 		t.Fatal(err)
 	}
-	card.Status = GrantGranted
+	var out []Work
+	for _, item := range items {
+		if strings.HasPrefix(item.ID, grantAnswersWorkPrefix) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func sealedCard(t *testing.T, service *Service, permission, status string) TimelineItem {
+	t.Helper()
+	card, err := service.AskGrant(permission, "A Worker needs it.", service.nowUTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	card.Status = status
+	return card
+}
+
+// The batch Work is read once: its event is opened for Brain only after a
+// quiet spell, Brain reads it, and the runtime closes the Work as a fact, with
+// no judge call.
+func TestGrantAnswerReachesBrainOnceAndClosesWhenRead(t *testing.T) {
+	store, service, clock := waitEndFixture(t)
+	if err := store.SetHostSession("host", "codex"); err != nil {
+		t.Fatal(err)
+	}
 	line := "Accessibility is now allowed on this Mac. You can start the Worker again with the screen."
-	for i := 0; i < 2; i++ {
-		if err := service.NoteGrantAnswered(card, line); err != nil {
+	if err := service.NoteGrantAnswered(sealedCard(t, service, "accessibility", GrantGranted), line); err != nil {
+		t.Fatal(err)
+	}
+	batches := grantBatches(t, store)
+	if len(batches) != 1 {
+		t.Fatalf("batches %+v", batches)
+	}
+	events, _ := store.ListWorkEvents(batches[0].ID)
+	if len(events) != 1 || events[0].Summary != line || events[0].Kind != grantAnswersEventKind {
+		t.Fatalf("events %+v", events)
+	}
+	// Brain is not woken before the list has been quiet.
+	clock.advance(grantAnswersQuiet - time.Second)
+	if err := service.openGrantAnswers(); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := store.fsmState(batches[0].ID); st.Review != nil {
+		t.Fatal("Brain was woken before the quiet spell ended")
+	}
+	clock.advance(2 * time.Second)
+	for i := 0; i < 2; i++ { // a second look changes nothing
+		if err := service.openGrantAnswers(); err != nil {
 			t.Fatal(err)
 		}
 	}
-	events, err := store.ListWorkEvents("grant-request:" + card.ID)
-	if err != nil {
+	claimed, _ := claimAndDeliverTestReview(t, store, "host")
+	if claimed.WorkID != batches[0].ID || claimed.Kind != grantAnswersEventKind {
+		t.Fatalf("Brain was handed %+v, want the answers", claimed)
+	}
+	input, err := marshalDirectWorkEventInput(claimed, batches[0])
+	if err != nil || !strings.Contains(input, "Accessibility is now allowed") {
+		t.Fatalf("Brain's input lacks the answer: %v %s", err, input)
+	}
+	settleCanonicalHostTurnForTest(t, store, "host", claimed.ProviderTurnID)
+	if _, ended, err := store.EndReviewDelivery(batches[0].ID, claimed.HandlingID, claimed.ProviderTurnID); err != nil || !ended {
+		t.Fatalf("end handling = %v, %v", ended, err)
+	}
+	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictKeep, Reason: "x"}}
+	service.SetWorkJudge(judge)
+	clock.advance(settleDebounce + time.Minute)
+	if err := service.settleWorkLocked(); err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Summary != line || events[0].Kind != "grant_request" || !events[0].Actionable {
+	service.waitBackground()
+	if got, _ := store.Work(batches[0].ID); got.Status != WorkDone || len(judge.briefs) != 0 {
+		t.Fatalf("read answers = %s, judge calls %d", got.Status, len(judge.briefs))
+	}
+}
+
+// Cards sealed close together arrive as one event, not one each: the newer
+// list carries the older lines and the older, unread, is replaced.
+func TestGrantAnswersSealedTogetherArriveAsOneEvent(t *testing.T) {
+	store, service, clock := waitEndFixture(t)
+	if err := store.SetHostSession("host", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	for _, permission := range []string{"screen_recording", "accessibility", "chrome"} {
+		if err := service.NoteGrantAnswered(sealedCard(t, service, permission, GrantGranted), permission+" is now allowed."); err != nil {
+			t.Fatal(err)
+		}
+		clock.advance(5 * time.Second)
+	}
+	batches := grantBatches(t, store)
+	var open []Work
+	for _, batch := range batches {
+		if batch.Status != WorkCancelled {
+			open = append(open, batch)
+		}
+	}
+	if len(batches) != 3 || len(open) != 1 {
+		t.Fatalf("batches %d, open %d, want 3 and 1 (the older ones replaced)", len(batches), len(open))
+	}
+	events, _ := store.ListWorkEvents(open[0].ID)
+	if len(events) != 1 {
 		t.Fatalf("events %+v", events)
+	}
+	for _, permission := range []string{"screen_recording", "accessibility", "chrome"} {
+		if !strings.Contains(events[0].Summary, permission+" is now allowed.") {
+			t.Fatalf("summary %q lacks %s", events[0].Summary, permission)
+		}
+	}
+	// Only the newest was ever opened for Brain, and only once the quiet ended.
+	clock.advance(grantAnswersQuiet)
+	if err := service.openGrantAnswers(); err != nil {
+		t.Fatal(err)
+	}
+	claimed, _ := claimAndDeliverTestReview(t, store, "host")
+	if claimed.WorkID != open[0].ID {
+		t.Fatalf("Brain was handed %+v", claimed)
+	}
+}
+
+// An answer that comes while Brain reads the list is a list of its own after
+// it; it never replaces the one being read, and one sealed after a read list
+// is closed starts a new one.
+func TestGrantAnswerDuringReadingWaitsForANewList(t *testing.T) {
+	store, service, clock := waitEndFixture(t)
+	if err := store.SetHostSession("host", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.NoteGrantAnswered(sealedCard(t, service, "chrome", GrantGranted), "chrome is now allowed."); err != nil {
+		t.Fatal(err)
+	}
+	clock.advance(grantAnswersQuiet + time.Second)
+	if err := service.openGrantAnswers(); err != nil {
+		t.Fatal(err)
+	}
+	claimed, _ := claimAndDeliverTestReview(t, store, "host")
+	if claimed.Kind != grantAnswersEventKind {
+		t.Fatalf("claimed %+v", claimed)
+	}
+	if err := service.NoteGrantAnswered(sealedCard(t, service, "accessibility", GrantDeclined), "accessibility: Not now."); err != nil {
+		t.Fatal(err)
+	}
+	batches := grantBatches(t, store)
+	if len(batches) != 2 {
+		t.Fatalf("batches %d, want the one being read and a new one", len(batches))
+	}
+	for _, batch := range batches {
+		if batch.Status == WorkCancelled {
+			t.Fatalf("the list Brain is reading was replaced: %+v", batch)
+		}
 	}
 }

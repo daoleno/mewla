@@ -481,6 +481,16 @@ repeats a list nor loses one half written. On the first start with ends, every
 open wait without one gets the default end from that moment (written once),
 so the upgrade raises nothing.
 
+**Permission answers** reach Brain by the same lane (`brain/grant_answers.go`).
+A sealed permission card (granted, or Not now) writes its one line to a Work
+`grant-answers:<time>` ("Permission answers") with one `work.grants_answered`
+event. Brain is woken after the list has been quiet for 20 seconds, so cards
+sealed in one go arrive as one event; a card sealed before that joins the
+unopened list (a newer Work carries the older lines and replaces it), and one
+sealed while Brain reads the list starts a list of its own. The Work closes as a
+fact (actor `runtime`, no judge call) once Brain's reading ends, like the
+overdue list, and the stale sweep, the closure judge and Objectives skip it.
+
 **When the judge cannot answer** (the route refuses it, it is killed, rate
 limited or times out, or its reply is not a verdict), nothing is decided: every
 Work stays as it is, shows in the stale list below, and is judged again after
