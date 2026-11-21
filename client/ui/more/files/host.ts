@@ -24,6 +24,9 @@ import { appFileImageUrl, appFileUploadHost, isAppFileUri, keepAppFiles } from "
  * - `files.cancelDownload {downloadId}` (a post): rejects with "Session file download was cancelled.".
  * - `files.thumbnail {uri, maxPixels}` → `{dataUrl}` or null: a picked picture, scaled (below).
  * - `mewla.pdf` (below): a PDF's pages.
+ * - `share.*` (Android only; `shareIn.ts`): what other apps share or open with Mewla, copied by the host, handed to
+ *   Brain's composer as chips whose `uri` is a file:// URI of the copy that `files.upload` streams like a picked one.
+ *   `share.take`, `share.ack {ids}`, `share.release {uris}` and the `share.arrived` event; see `shareIn.ts`.
  *
  * The calls that wait on a person or a transfer have no timeout.
  *
