@@ -25,6 +25,7 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/platform"
+	"github.com/daoleno/mewla/daemon/sessionhost"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
@@ -1601,6 +1602,30 @@ func (w *Watcher) SessionExited(id string) bool {
 	}
 	info, present, err := host.info(strings.TrimSpace(id))
 	return err == nil && present && !info.Alive
+}
+
+// SessionProgressStatus is the newest status the Session's program reported
+// about itself (OSC 7501: working, blocked, idle, done, error) and when. agy
+// reports it; a program that does not has none.
+func (w *Watcher) SessionProgressStatus(id string) (state string, at time.Time, ok bool) {
+	host := w.host()
+	if host == nil || !host.validID(strings.TrimSpace(id)) {
+		return "", time.Time{}, false
+	}
+	info, present, err := host.info(strings.TrimSpace(id))
+	if err != nil || !present || !info.Alive {
+		return "", time.Time{}, false
+	}
+	var latest *sessionhost.ProgramStatus
+	for index := range info.Status {
+		if latest == nil || info.Status[index].UpdatedAt.After(latest.UpdatedAt) {
+			latest = &info.Status[index]
+		}
+	}
+	if latest == nil {
+		return "", time.Time{}, false
+	}
+	return latest.State, latest.UpdatedAt, true
 }
 
 // host is the session host backend, nil when this watcher runs another

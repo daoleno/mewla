@@ -409,6 +409,19 @@ func detectWorkerProcess(baseCommand string, panePID int, processes map[int]proc
 		}
 	}
 
+	if workerCommandName(command) == "agy" && panePID > 0 {
+		// The scan above does not know agy, so without this the Worker's start
+		// would be each poll's own snapshot time, which moves on every poll.
+		scan := descendantProcesses(panePID, processes)
+		if proc, ok := processes[panePID]; ok {
+			scan = append([]processInfo{proc}, scan...)
+		}
+		for _, proc := range scan {
+			if isAntigravityProcess(proc) && !proc.startedAt.IsZero() {
+				return command, proc.startedAt, proc.pid
+			}
+		}
+	}
 	if isWorkerCommand(command) {
 		return command, fallbackAt, basePID
 	}
@@ -520,6 +533,14 @@ func workerCommandFromProcess(proc processInfo) string {
 		return "opencode"
 	}
 	return ""
+}
+
+// isAntigravityProcess reports Antigravity's CLI, one Go binary named agy.
+// It is not a provider family (workerCommandFromProcess), so it takes no part
+// in the foreground proof; detectWorkerProcess only uses it to read its start.
+func isAntigravityProcess(proc processInfo) bool {
+	return normalizeCommand(proc.comm) == "agy" ||
+		processArgsExecutableBase(strings.ToLower(proc.args)) == "agy"
 }
 
 // processArgsExecutableBase returns filepath.Base of the first non-shell/env

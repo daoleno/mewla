@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/workerproc"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -408,5 +410,149 @@ func TestRetryableAntigravityReplay(t *testing.T) {
 	}
 	if retryableAntigravityReplay(errors.New("other")) {
 		t.Error("an error that is not a replay failure is not retried")
+	}
+}
+
+// The daemon's StartedAt for a Session is when it last looked at it, so after a
+// daemon restart an idle conversation was written before it: found by the
+// process's own start time instead.
+func TestAntigravityConversationIsFoundByTheProcessStartNotByWhenTheDaemonLooked(t *testing.T) {
+	if _, ok := workerproc.StartTime(os.Getpid()); !ok {
+		t.Skip("no process start time on this platform")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	cwd := t.TempDir()
+	writeAntigravitySummary(t, home, testAntigravityID, "CASCADE_RUN_STATUS_IDLE", 0)
+	db, err := sql.Open("sqlite", filepath.Join(AntigravityDataDir(home), "conversation_summaries.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	modified := time.Now().UTC().Format("2006-01-02 15:04:05.999999999+00:00")
+	if _, err := db.Exec(`UPDATE conversation_summaries SET workspace_uris = ?, last_modified_time = ?`, `["file://`+cwd+`"]`, modified); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	path := antigravityConversationPath(home, testAntigravityID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	binary := fakeAgy(t, shellPrint(acpInitOK), strings.Join([]string{
+		shellPrint(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"` + testAntigravityID + `","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"hello"}}}}`),
+		shellPrint(`{"jsonrpc":"2.0","id":2,"result":{}}`),
+	}, "\n"))
+	t.Setenv("PATH", filepath.Dir(binary))
+	antigravityReplayFailures.mu.Lock()
+	antigravityReplayFailures.entries = map[string]antigravityReplayFailure{}
+	antigravityReplayFailures.mu.Unlock()
+
+	rediscovered := time.Now().Add(time.Hour) // the daemon looked at the Session just now
+	worker := classifier.Worker{ID: "brain", Cwd: cwd, Command: "agy", StartedAt: rediscovered, ProcessID: os.Getpid()}
+	reader := NewProviderConversationReader()
+	conversation, err := reader.Load(worker, WorkerProviderAntigravity, time.Now())
+	if err != nil || !conversation.Available || len(conversation.Events) != 1 {
+		t.Fatalf("with the process's start time: %+v, %v", conversation, err)
+	}
+	// The same process keeps its conversation: no new lookup, even if the index is gone.
+	if err := os.Remove(filepath.Join(AntigravityDataDir(home), "conversation_summaries.db")); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := reader.Load(worker, WorkerProviderAntigravity, time.Now()); err != nil || !again.Available {
+		t.Fatalf("pinned: %+v, %v", again, err)
+	}
+	// A platform that cannot say when the process started falls back to StartedAt.
+	worker.ProcessID = 0
+	if missing, err := NewProviderConversationReader().Load(worker, WorkerProviderAntigravity, time.Now()); err != nil || missing.Available {
+		t.Fatalf("without a process: %+v, %v", missing, err)
+	}
+}
+
+func TestProjectAntigravitySplitsQueuedWorkEventsBackIntoTheirOwnMessages(t *testing.T) {
+	one := "<mewla_work_event>\n{\"event_id\":\"a\"}\n</mewla_work_event>"
+	two := "<mewla_work_event>\n{\"event_id\":\"b\"}\n</mewla_work_event>"
+	chunk := func(text string) antigravityACPUpdate {
+		raw, _ := json.Marshal(map[string]string{"type": "text", "text": text})
+		return antigravityACPUpdate{Kind: "user_message_chunk", Content: raw}
+	}
+	reply := antigravityACPUpdate{Kind: "agent_message_chunk", Content: json.RawMessage(`{"type":"text","text":"ok"}`)}
+	events := projectAntigravityConversation(testAntigravityID, "/w", "/db", []antigravityACPUpdate{
+		chunk("hello"), reply,
+		chunk(one + "\n" + two), reply,
+		chunk("prose\n" + one + "\n" + two), // not only Work events: left as agy recorded it
+	}).Events
+	var users []CodexConversationEvent
+	for _, event := range events {
+		if event.Kind == "user_message" {
+			users = append(users, event)
+		}
+	}
+	if len(users) != 4 || users[1].Body != one || users[2].Body != two || users[1].ID == users[2].ID {
+		t.Fatalf("users = %+v", users)
+	}
+	if users[1].AdmissionSHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte(one))) || users[2].AdmissionSHA256 != fmt.Sprintf("%x", sha256.Sum256([]byte(two))) {
+		t.Fatalf("each piece is admitted by the digest of what Mewla sent: %+v", users)
+	}
+	if users[3].Body != "prose\n"+one+"\n"+two {
+		t.Fatalf("a message with other text must stay whole: %+v", users)
+	}
+	for index, event := range events {
+		if event.Seq != index+1 {
+			t.Fatalf("seq %d = %d", index, event.Seq)
+		}
+	}
+}
+
+func TestApplyAntigravityProgressIsTheTurnNotTheSummaryStatus(t *testing.T) {
+	started := time.Date(2026, 11, 21, 21, 33, 0, 0, time.UTC)
+	base := func() CodexConversation {
+		return CodexConversation{
+			Available: true,
+			Events:    []CodexConversationEvent{{ID: "u", Kind: "user_message"}, {ID: "a", Kind: "assistant_message"}},
+			// what agy's summary row says between tool calls: idle.
+			Activity: &ProviderActivity{ID: "c:turn:1", Status: ProviderActivityCompleted, StartedAt: started.Format(time.RFC3339Nano), SettledAt: started.Add(time.Second).Format(time.RFC3339Nano)},
+		}
+	}
+	working := base()
+	ApplyAntigravityProgress(&working, "working", started.Add(-time.Minute))
+	if working.Activity.Status != ProviderActivityRunning || working.Activity.SettledAt != "" || !working.Events[1].Partial {
+		t.Fatalf("working = %+v", working)
+	}
+	done := base()
+	ApplyAntigravityProgress(&done, "done", started.Add(10*time.Second))
+	if done.Activity.Status != ProviderActivityCompleted || done.Activity.SettledAt != started.Add(10*time.Second).Format(time.RFC3339Nano) {
+		t.Fatalf("done = %+v", done.Activity)
+	}
+	// A turn first seen after it ended cannot have settled before it was seen.
+	late := base()
+	ApplyAntigravityProgress(&late, "idle", started.Add(-time.Hour))
+	if late.Activity.SettledAt != late.Activity.StartedAt {
+		t.Fatalf("late = %+v", late.Activity)
+	}
+	failed := base()
+	ApplyAntigravityProgress(&failed, "error", started.Add(time.Second))
+	if failed.Activity.Status != ProviderActivityFailed {
+		t.Fatalf("failed = %+v", failed.Activity)
+	}
+	unknown := base()
+	ApplyAntigravityProgress(&unknown, "something new", started)
+	if unknown.Activity.Status != ProviderActivityCompleted {
+		t.Fatalf("an unknown state must change nothing: %+v", unknown.Activity)
+	}
+	// No turn yet, or a conversation that is not available: nothing to apply to.
+	empty := CodexConversation{Available: true}
+	ApplyAntigravityProgress(&empty, "working", started)
+	if empty.Activity != nil {
+		t.Fatal("no activity without a turn")
+	}
+	// The shared parse is never touched.
+	shared := base()
+	cached := shared.Events
+	ApplyAntigravityProgress(&shared, "working", started)
+	if cached[1].Partial {
+		t.Fatal("the cached events were changed")
 	}
 }

@@ -278,8 +278,9 @@ set, so a message is confirmed delivered when it shows in the replayed
 conversation, not by a hook; it has no per-launch way to answer a tool approval
 from the app (Brain runs with `--dangerously-skip-permissions`, as Workers do;
 an approval prompt that still appears is seen on the screen and answered in the
-Terminal); its turn starts have no timestamps in the replay, so Mewla uses
-agy's own run status. Resume uses agy's own `--conversation <id>`;
+Terminal); its turns have no timestamps in the replay, so Mewla stamps what it
+sees and takes a turn's start and end from the status agy reports to its
+terminal (OSC 7501), the only signal that covers a whole turn. Resume uses agy's own `--conversation <id>`;
 Mewla reads the id from agy's `conversation_summaries.db`, because agy never
 accepts an id it did not create. agy updates itself in the background and has no
 switch for it.
