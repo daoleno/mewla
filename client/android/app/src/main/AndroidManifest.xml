@@ -82,6 +82,28 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="mewla" />
       </intent-filter>
+      <!-- What other apps hand to Mewla, as attachments for Brain (share/ShareIn.kt): the share sheet. -->
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <action android:name="android.intent.action.SEND_MULTIPLE" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="*/*" />
+      </intent-filter>
+      <!-- Open with, for a file of any type (WeChat's 「用其他应用打开」 is this): a typed intent, and one with no type, which
+           a typed filter does not match. Not BROWSABLE, and not the web's http(s) links. -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:scheme="content" />
+        <data android:scheme="file" />
+        <data android:mimeType="*/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:scheme="content" />
+        <data android:scheme="file" />
+      </intent-filter>
     </activity>
   </application>
 </manifest>
