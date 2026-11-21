@@ -37,7 +37,7 @@ Unknown does not mean zero:
 - **Some token rates unavailable**: the catalog does not price every reported token type.
 
 Discovery proving that a model exists does not prove its price. In particular,
-Mewla does not guess a rate for `gpt-6-astra` or substitute another model's price.
+Mewla does not guess a rate for `gpt-6.2-astra` or substitute another model's price.
 Failed catalog requests retry automatically with backoff. Refresh Stats to read
 the latest collected result; it does not bypass that backoff. Missing catalog
 entries remain unknown until authoritative pricing becomes available.
