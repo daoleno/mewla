@@ -1,9 +1,10 @@
 //! The release's daemon: a LaunchAgent the app registers with SMAppService (FACTS.md §2), from the plist the
-//! bundle carries (`Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist`, `BundleProgram`
+//! bundle carries (`Contents/Library/LaunchAgents/ai.mewla.daemon.plist`, `BundleProgram`
 //! `Contents/Helpers/mewla`). It runs with the app closed or quit and after a restart, and System Settings lists it
-//! under the app in Login Items. Only the real app (`com.daoleno.mewla`) does this; Mewla Dev never does.
+//! under the app in Login Items. Only the real app (`ai.mewla.app`) does this; Mewla Dev never does.
 //!
-//! Before it registers, it takes over the install `mewla boot install` made (docs/install-daemon.md): that job is
+//! Before it registers, it takes over the install `mewla boot install` made (docs/install-daemon.md), under this
+//! label or under the one of before 11-21 (`com.daoleno.mewla.daemon`): that job is
 //! booted out (one daemon, never two), its plist and its managed `~/Applications/Mewla.app` removed; the state in
 //! `~/.mewla` (pairings, Brain, Work) is the same state the app's daemon opens. `~/.local/bin/mewla`, an installed copy
 //! of the CLI, becomes a link to the app's.
@@ -14,7 +15,10 @@ use std::process::Command;
 use objc2_foundation::NSString;
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 
-pub const LABEL: &str = "com.daoleno.mewla.daemon";
+/// scripts/lib/release_identity.py's DAEMON_LABEL.
+pub const LABEL: &str = "ai.mewla.daemon";
+/// What `mewla boot install` called its job before 11-21 (LEGACY_DAEMON_LABEL).
+const LEGACY_LABEL: &str = "com.daoleno.mewla.daemon";
 const MANAGED_MARK: &str = "<!-- Managed by mewla boot install -->";
 
 unsafe extern "C" {
@@ -56,14 +60,30 @@ fn refresh_daemon(cli: &Path, said: &mut Vec<String>) {
 }
 
 fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {
-    let plist = home.join("Library/LaunchAgents").join(format!("{LABEL}.plist"));
-    let Ok(text) = std::fs::read_to_string(&plist) else { return };
-    if !text.contains(MANAGED_MARK) {
-        said.push(format!("{} is not mewla boot install's: left as it is", plist.display()));
+    let mut taken = false;
+    for label in [LABEL, LEGACY_LABEL] {
+        taken |= take_over_job(home, label, said);
+    }
+    if !taken {
         return;
     }
+    let old_app = home.join("Applications/Mewla.app");
+    let managed = std::fs::read_to_string(old_app.join("Contents/Info.plist")).map(|info| info.contains("MewlaManagedBundle")).unwrap_or(false);
+    if managed && std::fs::remove_dir_all(&old_app).is_ok() {
+        said.push(format!("removed {}", old_app.display()));
+    }
+}
+
+/// One label's boot install: booted out, its plist and metadata removed. Whether there was one.
+fn take_over_job(home: &Path, label: &str, said: &mut Vec<String>) -> bool {
+    let plist = home.join("Library/LaunchAgents").join(format!("{label}.plist"));
+    let Ok(text) = std::fs::read_to_string(&plist) else { return false };
+    if !text.contains(MANAGED_MARK) {
+        said.push(format!("{} is not mewla boot install's: left as it is", plist.display()));
+        return false;
+    }
     // SAFETY: getuid has no preconditions.
-    let target = format!("gui/{}/{LABEL}", unsafe { getuid() });
+    let target = format!("gui/{}/{label}", unsafe { getuid() });
     let out = Command::new("/bin/launchctl").args(["bootout", &target]).output();
     said.push(format!("launchctl bootout {target}: {:?}", out.map(|o| o.status.code())));
     // The job is gone once launchd no longer lists it (its daemon gets SIGTERM and up to a minute to stop).
@@ -79,11 +99,7 @@ fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {
             said.push(format!("removed {}", path.display()));
         }
     }
-    let old_app = home.join("Applications/Mewla.app");
-    let managed = std::fs::read_to_string(old_app.join("Contents/Info.plist")).map(|info| info.contains("MewlaManagedBundle")).unwrap_or(false);
-    if managed && std::fs::remove_dir_all(&old_app).is_ok() {
-        said.push(format!("removed {}", old_app.display()));
-    }
+    true
 }
 
 /// `~/.local/bin/mewla`: an installed copy of the CLI (install.sh's) becomes a link to the app's, so a terminal runs

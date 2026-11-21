@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       dev:
-        description: "Mewla Dev (com.daoleno.mewla.dev), which installs beside Mewla"
+        description: "Mewla Dev (ai.mewla.app.dev), which installs beside Mewla"
         type: boolean
         default: true
   push:
@@ -58,7 +58,7 @@ jobs:
           export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
           ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
           "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --version
-      # Mewla (com.daoleno.mewla, its daemon a LaunchAgent) and Mewla Dev (beside it, its daemon its child).
+      # Mewla (ai.mewla.app, its daemon a LaunchAgent) and Mewla Dev (beside it, its daemon its child).
       - name: Package the app
         run: |
           client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app"
@@ -70,7 +70,7 @@ jobs:
       - name: The bundles carry their daemon and CLI
         run: |
           set -euo pipefail
-          plutil -lint "$RUNNER_TEMP/app/Mewla.app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist"
+          plutil -lint "$RUNNER_TEMP/app/Mewla.app/Contents/Library/LaunchAgents/ai.mewla.daemon.plist"
           test ! -e "$RUNNER_TEMP/app/Mewla Dev.app/Contents/Library"
           for app in "$RUNNER_TEMP/app/Mewla.app" "$RUNNER_TEMP/app/Mewla Dev.app"; do
           "$app/Contents/Helpers/mewla" --version
@@ -92,8 +92,9 @@ jobs:
         run: |
           set -euo pipefail
           D="$RUNNER_TEMP/dev-run"; mkdir -p "$D/data"
-          chrome_hosts="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.mewla.browser.json"
-          manifest_before=$(shasum -a 256 "$chrome_hosts" 2>/dev/null || echo none)
+          chrome_hosts="$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+          hosts_sum() { shasum -a 256 "$chrome_hosts/ai.mewla.browser.json" "$chrome_hosts/com.mewla.browser.json" 2>/dev/null || echo none; }
+          manifest_before=$(hosts_sum)
           printf '%s' '{"mewla:theme_preference":"classic-light"}' > "$D/data/storage.json"
           ditto -x -k "$RUNNER_TEMP/app/Mewla-Dev-"*-macos-aarch64.zip "$D"
           start() {
@@ -176,7 +177,7 @@ jobs:
           grep -q "agent use: your Chrome: off" "$D/state/logs/app-daemon.log"
           if grep -E "agent use: your Chrome: (preparing|ready)" "$D/state/logs/app-daemon.log"; then exit 1; fi
           test ! -e "$D/state/cli" || { echo "Mewla Dev's daemon set up cloud CLIs:"; ls -la "$D/state/cli"; exit 1; }
-          [ "$(shasum -a 256 "$chrome_hosts" 2>/dev/null || echo none)" = "$manifest_before" ] || { echo "Mewla Dev wrote Chrome's native host manifest"; exit 1; }
+          [ "$(hosts_sum)" = "$manifest_before" ] || { echo "Mewla Dev wrote Chrome's native host manifest"; exit 1; }
           echo "Mewla Dev left Chrome's native host and the cloud CLIs alone"
           # The permission card: asked in Brain's thread, Not now sealed it.
           cat "$D"/data/logs/* | grep "dev script: grant" || true
@@ -241,10 +242,10 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-  # Taking over today's install on a clean Mac (FACTS.md §3): the released daemon with install.sh and
-  # mewla boot install, a paired device, then Mewla installed and opened. One daemon, the app's LaunchAgent, with
-  # the same identity and the same device; the old job, plist and bundle gone; mewla on PATH is the app's; the
-  # daemon keeps running when the app quits.
+  # Taking over an install on a clean Mac (FACTS.md §3): the daemon of before 11-21 (v0.4.18, the last release under
+  # the label com.daoleno.mewla.daemon) with install.sh and mewla boot install, a paired device, then Mewla installed
+  # and opened. One daemon, the app's LaunchAgent (ai.mewla.daemon), with the same identity and the same device; the
+  # old job, plist and bundle gone; mewla on PATH is the app's; the daemon keeps running when the app quits.
   takeover:
     name: Mewla takes over a boot-installed daemon
     needs: app
@@ -257,10 +258,10 @@ jobs:
         with:
           name: mewla-macos-${{ github.sha }}
           path: ${{ runner.temp }}/zips
-      - name: Today's install (install.sh, mewla boot install) with a paired device
+      - name: The old install (install.sh v0.4.18, mewla boot install) with a paired device
         run: |
           set -euo pipefail
-          MEWLA_INSTALL_DIR="$HOME/.local/bin" MEWLA_NO_PATH_UPDATE=1 sh install.sh
+          MEWLA_VERSION=v0.4.18 MEWLA_INSTALL_DIR="$HOME/.local/bin" MEWLA_NO_PATH_UPDATE=1 sh install.sh
           export PATH="$HOME/.local/bin:$PATH"
           mewla --version
           mewla boot install
@@ -276,17 +277,17 @@ jobs:
           ditto -x -k "$RUNNER_TEMP/zips/Mewla-"[0-9]*-macos-aarch64.zip /Applications
           open -g /Applications/Mewla.app
           for i in $(seq 1 200); do
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
+            launchctl print "gui/$(id -u)/ai.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
               && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
             sleep 1
           done
-          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
+          launchctl print "gui/$(id -u)/ai.mewla.daemon" | grep -E "program|state|pid"
           # A daemon that did not come up: why launchd could not spawn it (the job, launchd's own log, its BTM entry).
           if ! curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1; then
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" || true
-            log show --last 5m --style compact --predicate 'process == "launchd" AND eventMessage CONTAINS "com.daoleno.mewla"' | tail -60 || true
-            log show --last 5m --style compact --predicate 'eventMessage CONTAINS "Contents/Helpers/mewla" OR eventMessage CONTAINS "com.daoleno.mewla.daemon"' | grep -iv "launchd" | tail -40 || true
-            sudo sfltool dumpbtm 2>/dev/null | grep -B4 -A12 "com.daoleno.mewla" | head -60 || true
+            launchctl print "gui/$(id -u)/ai.mewla.daemon" || true
+            log show --last 5m --style compact --predicate 'process == "launchd" AND eventMessage CONTAINS "ai.mewla"' | tail -60 || true
+            log show --last 5m --style compact --predicate 'eventMessage CONTAINS "Contents/Helpers/mewla" OR eventMessage CONTAINS "ai.mewla.daemon"' | grep -iv "launchd" | tail -40 || true
+            sudo sfltool dumpbtm 2>/dev/null | grep -B4 -A12 "ai.mewla" | head -60 || true
             codesign -dv --verbose=2 /Applications/Mewla.app/Contents/Helpers/mewla 2>&1 | head -12 || true
             tail -30 "$HOME/.mewla/logs/launchd.log" 2>/dev/null || true
           fi
@@ -297,6 +298,8 @@ jobs:
           curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-after.json"
           python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"], (a,b); print("same daemon_id", a["daemon_id"])' "$RUNNER_TEMP/health-before.json" "$RUNNER_TEMP/health-after.json"
           test ! -e "$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist"
+          if launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" >/dev/null 2>&1; then echo "the old label is still loaded"; exit 1; fi
+          test ! -e "$HOME/Library/LaunchAgents/ai.mewla.daemon.plist"
           test ! -e "$HOME/Applications/Mewla.app"
           ls -l "$HOME/.local/bin/mewla"
           [[ "$(readlink "$HOME/.local/bin/mewla")" == "/Applications/Mewla.app/Contents/Helpers/mewla" ]]
@@ -309,23 +312,99 @@ jobs:
       - name: The daemon keeps running when the app quits
         run: |
           set -euo pipefail
-          before=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}')
+          before=$(launchctl print "gui/$(id -u)/ai.mewla.daemon" | awk '/^\tpid = / {print $3}')
           # Quit as the menu does; AppKit may answer the Apple event before the app has finished quitting.
           osascript -e 'quit app "Mewla"' || true
           for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null || break; sleep 1; done
           if pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null; then echo "the app did not quit"; exit 1; fi
-          after=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}')
+          after=$(launchctl print "gui/$(id -u)/ai.mewla.daemon" | awk '/^\tpid = / {print $3}')
           echo "daemon pid before $before, after $after"
           test -n "$before" && test "$before" = "$after"
           curl -fsS http://127.0.0.1:9876/health
       - name: What the app, launchd and Background Task Management said
         if: always()
         run: |
-          find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | while read -r f; do echo "== $f"; tail -60 "$f"; done
+          find "$HOME/Library" -path '*ai.mewla*' -name '*.log*' 2>/dev/null | while read -r f; do echo "== $f"; tail -60 "$f"; done
           log show --last 15m --style compact --predicate 'process == "Mewla" OR process == "smd" OR subsystem == "com.apple.backgroundtaskmanagement" OR (process == "launchd" AND eventMessage CONTAINS "mewla")' 2>/dev/null | tail -120
           sudo sfltool dumpbtm 2>/dev/null | grep -i -B2 -A14 mewla | head -80
           launchctl print "gui/$(id -u)" 2>/dev/null | grep -i mewla
 
+
+  # The daemon's own update across the label change (11-21), on a clean Mac: v0.4.18 boot-installed under
+  # com.daoleno.mewla.daemon with a paired device, then this build's `mewla boot install` with the arguments the old
+  # daemon passes when it updates itself (bootLaunchdReinstallArgs: the state directory, address, working directory
+  # and PATH of its install). The old job is booted out and its plist and metadata removed, the new label runs the
+  # state, `mewla` is the same daemon (id, paired devices, ~/.mewla untouched), and Mewla.app keeps its path.
+  daemon-move:
+    name: An updated daemon takes over the old label
+    needs: app
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-${{ github.sha }}
+          path: ${{ runner.temp }}/zips
+      - name: The old install (v0.4.18, mewla boot install) with a paired device
+        run: |
+          set -euo pipefail
+          MEWLA_VERSION=v0.4.18 MEWLA_INSTALL_DIR="$HOME/.local/bin" MEWLA_NO_PATH_UPDATE=1 sh install.sh
+          export PATH="$HOME/.local/bin:$PATH"
+          mewla boot install
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-before.json"
+          link=$(mewla pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
+          (cd client && bun macos/scripts/pair-proof.ts "$link")
+          mewla devices list | tee "$RUNNER_TEMP/devices-before.txt"
+          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state"
+          test -f "$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist"
+          test -f "$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist.meta.json"
+          (cd "$HOME/.mewla" && find . -type f ! -path './logs/*' ! -name '*.lock' ! -name '*.sock' | sort | xargs shasum -a 256) > "$RUNNER_TEMP/state-before.txt" || true
+          wc -l "$RUNNER_TEMP/state-before.txt"
+      - name: This build's daemon moves it
+        run: |
+          set -euo pipefail
+          ditto -x -k "$RUNNER_TEMP/zips/Mewla-"[0-9]*-macos-aarch64.zip "$RUNNER_TEMP/new"
+          new="$RUNNER_TEMP/new/Mewla.app/Contents/Helpers/mewla"
+          meta="$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist.meta.json"
+          state=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["state_dir"])' "$meta")
+          addr=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["addr"])' "$meta")
+          work=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["working_dir"])' "$meta")
+          pathenv=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["path"])' "$meta")
+          "$new" boot install -state-dir "$state" -addr "$addr" -work-dir "$work" -path-env "$pathenv" | tee "$RUNNER_TEMP/move.out"
+          grep -q "Moved from com.daoleno.mewla.daemon" "$RUNNER_TEMP/move.out"
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break; sleep 1; done
+      - name: One daemon, under the new label, with the same identity and device
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          if launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" >/dev/null 2>&1; then echo "the old label is still loaded"; exit 1; fi
+          test ! -e "$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist"
+          test ! -e "$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist.meta.json"
+          test -f "$HOME/Library/LaunchAgents/ai.mewla.daemon.plist"
+          launchctl print "gui/$(id -u)/ai.mewla.daemon" | grep -E "program|state|pid"
+          launchctl print "gui/$(id -u)/ai.mewla.daemon" | grep -q "state = running"
+          test -x "$HOME/Applications/Mewla.app/Contents/MacOS/mewla"
+          plutil -extract CFBundleIdentifier raw "$HOME/Applications/Mewla.app/Contents/Info.plist" | grep -qx "ai.mewla.app"
+          codesign -dv "$HOME/Applications/Mewla.app" 2>&1 | grep -E "Identifier=ai.mewla.app"
+          curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-after.json"
+          python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"], (a,b); print("same daemon_id", a["daemon_id"])' "$RUNNER_TEMP/health-before.json" "$RUNNER_TEMP/health-after.json"
+          mewla devices list | tee "$RUNNER_TEMP/devices-after.txt"
+          diff <(cut -f1 "$RUNNER_TEMP/devices-before.txt") <(cut -f1 "$RUNNER_TEMP/devices-after.txt")
+          # The state directory is the same one: every file it had is still there (a restart rewrites some of them).
+          awk '{print $2}' "$RUNNER_TEMP/state-before.txt" | while read -r f; do test -e "$HOME/.mewla/$f" || { echo "missing from ~/.mewla: $f"; exit 1; }; done
+          [[ $(pgrep -f "$HOME/Applications/Mewla.app/Contents/MacOS/mewla" | wc -l) -ge 1 ]]
+          mewla boot status | tee "$RUNNER_TEMP/boot-status.txt"
+          if grep -q "old LaunchAgent" "$RUNNER_TEMP/boot-status.txt"; then echo "boot status still sees the old label"; exit 1; fi
+      - name: Uninstall leaves nothing
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          mewla boot uninstall
+          test ! -e "$HOME/Library/LaunchAgents/ai.mewla.daemon.plist"
+          test ! -e "$HOME/Applications/Mewla.app"
 
   # The app's own update on a clean Mac (client/macos/package.sh, NSH's updater): Mewla at one version is installed and
   # paired, its daemon a LaunchAgent; a signed latest.json served on loopback offers the next version; the running app
@@ -384,7 +463,7 @@ jobs:
           client/macos/package.sh --daemon "$RUNNER_TEMP/daemon-new/mewla-darwin-arm64" --out "$RUNNER_TEMP/new" --version "$new" --updater-url "$url" --updater-key "$pub"
           # What `nsh update-manifest` reads the id and version from; the archive is the new app's zip.
           mkdir -p "$RUNNER_TEMP/entry" "$RUNNER_TEMP/serve"
-          python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"url":sys.argv[2],"publicKey":sys.argv[3]}}, open(sys.argv[4],"w"))' "$new" "$url" "$pub" "$RUNNER_TEMP/entry/nsh.json"
+          python3 -I -c 'import json,sys; json.dump({"id":"ai.mewla.app","version":sys.argv[1],"updater":{"url":sys.argv[2],"publicKey":sys.argv[3]}}, open(sys.argv[4],"w"))' "$new" "$url" "$pub" "$RUNNER_TEMP/entry/nsh.json"
           cp "$RUNNER_TEMP/new/Mewla-$new-macos-aarch64.zip" "$RUNNER_TEMP/serve/"
           "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/proof-key/update.secret" --out "$RUNNER_TEMP/serve" "$RUNNER_TEMP/serve/Mewla-$new-macos-aarch64.zip"
           cat "$RUNNER_TEMP/serve/latest.json"
@@ -401,7 +480,7 @@ jobs:
           MEWLA_APP_DATA_DIR="$RUNNER_TEMP/data" /Applications/Mewla.app/Contents/MacOS/Mewla > "$RUNNER_TEMP/app-old.out" 2>&1 &
           echo $! > "$RUNNER_TEMP/app.pid"
           for i in $(seq 1 200); do
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
+            launchctl print "gui/$(id -u)/ai.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
               && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
             sleep 1
           done
@@ -411,7 +490,7 @@ jobs:
           link=$("$cli" pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
           (cd client && bun macos/scripts/pair-proof.ts "$link")
           "$cli" devices list | tee "$RUNNER_TEMP/devices-before.txt"
-          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}' | tee "$RUNNER_TEMP/daemon-pid-before.txt"
+          launchctl print "gui/$(id -u)/ai.mewla.daemon" | awk '/^\tpid = / {print $3}' | tee "$RUNNER_TEMP/daemon-pid-before.txt"
           test -s "$RUNNER_TEMP/daemon-pid-before.txt"
           # The release's first run starts at login by default (the app's log says what the system answered).
           for i in $(seq 1 30); do grep -q "start at login" "$RUNNER_TEMP"/data/logs/* 2>/dev/null && break; sleep 1; done
@@ -462,8 +541,8 @@ jobs:
           while read -r id _; do grep -q "^$id" "$RUNNER_TEMP/devices-after.txt" || { echo "device $id is gone"; exit 1; }; done < "$RUNNER_TEMP/devices-before.txt"
           # One daemon, the LaunchAgent's (the old one restarted in place keeps its pid; a new one has a new pid).
           [[ $(pgrep -f "mewla serve" | wc -l) -eq 1 ]] || { pgrep -fl "mewla serve"; exit 1; }
-          echo "daemon pid before: $(cat "$RUNNER_TEMP/daemon-pid-before.txt"), after: $(launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}')"
-          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
+          echo "daemon pid before: $(cat "$RUNNER_TEMP/daemon-pid-before.txt"), after: $(launchctl print "gui/$(id -u)/ai.mewla.daemon" | awk '/^\tpid = / {print $3}')"
+          launchctl print "gui/$(id -u)/ai.mewla.daemon" | grep -E "program|state|pid"
           # What the updater leaves beside the app while it works is gone.
           ls -la /Applications | grep -i -E "mewla|nsh" || true
           test "$(ls -A /Applications | grep -c -i 'nsh-updater')" -eq 0

@@ -35,7 +35,7 @@ func TestDefaultVersionMatchesReleaseVersion(t *testing.T) {
 	if doc.Version != Version {
 		t.Fatalf("Version %q != client/ui/nsh.json version %q", Version, doc.Version)
 	}
-	if doc.ID != "com.daoleno.mewla" {
+	if doc.ID != "ai.mewla.app" {
 		t.Fatalf("unexpected app id %q", doc.ID)
 	}
 }

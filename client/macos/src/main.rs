@@ -9,7 +9,7 @@
 //! - `app.dock`: the Dock icon shown while the window is, hidden with only the menu bar cat;
 //! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered).
 //!
-//! The daemon: the app (`com.daoleno.mewla`) registers it as a LaunchAgent with SMAppService, after taking over
+//! The daemon: the app (`ai.mewla.app`) registers it as a LaunchAgent with SMAppService, after taking over
 //! the install `mewla boot install` made (agent.rs), so it runs with the app closed and after a restart. Mewla Dev
 //! starts `mewla serve` as its child on its own state and stops it when the app quits.
 //!
@@ -50,7 +50,7 @@ fn main() -> std::process::ExitCode {
 
     let config = daemon::Config::from_env(&contents);
     // The real app's daemon is its LaunchAgent (agent.rs); Mewla Dev's is its child, on its own state.
-    let release = config.state_root.is_none() && options.app_id == "com.daoleno.mewla";
+    let release = config.state_root.is_none() && options.app_id == "ai.mewla.app";
     let child = if release {
         let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
         let cli = config.cli.clone();
@@ -87,7 +87,7 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     let mut params = Map::new();
     params.insert("deviceName".into(), json!("Mewla for Mac"));
     params.insert("computerName".into(), json!(daemon::computer_name()));
-    // The release (com.daoleno.mewla): it starts at login by default; Mewla Dev never registers a login item.
+    // The release (ai.mewla.app): it starts at login by default; Mewla Dev never registers a login item.
     params.insert("release".into(), json!(release));
     if let Some(shortcut) = std::env::var("MEWLA_APP_QUICK_CHAT_SHORTCUT").ok().filter(|s| !s.is_empty()) {
         params.insert("quickChatShortcut".into(), json!(shortcut));
