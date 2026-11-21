@@ -14,7 +14,8 @@ import (
 )
 
 // The app reads the record with every release's notes (an app older than its
-// computer draws the computer's), adds what the person saw, and tells its own
+// computer shows a newer release's line and fixes; its highlights come with the
+// app's own update), adds what the person saw, and tells its own
 // update; each answer is the record as it is then.
 func TestWhatsNewAnswersTheRecordAndKeepsWhatWasSeen(t *testing.T) {
 	store, err := whatsnew.Open(t.TempDir(), "0.4.9", true, time.UnixMilli(1_700_000_000_000))

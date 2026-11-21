@@ -105,13 +105,23 @@ func TestAnUnreadableRecordStartsAgainAsAnExistingInstall(t *testing.T) {
 	}
 }
 
+// The daemon's copy carries every release's line and fixes but no highlights
+// (scripts/lib/release_notes.py): an app older than its computer cannot draw
+// a newer release's scenes, and its sheet would mark them seen before the app
+// that can draw them arrives.
 func TestTheBundledNotesAreTheReleases(t *testing.T) {
 	var notes struct {
 		Releases []struct {
-			Version string `json:"version"`
+			Version    string            `json:"version"`
+			Highlights []json.RawMessage `json:"highlights"`
 		} `json:"releases"`
 	}
 	if err := json.Unmarshal(Notes(), &notes); err != nil || len(notes.Releases) == 0 {
 		t.Fatalf("notes = %v, %v", notes, err)
+	}
+	for _, release := range notes.Releases {
+		if release.Highlights == nil || len(release.Highlights) != 0 {
+			t.Fatalf("%s: highlights = %v, want an empty list", release.Version, release.Highlights)
+		}
 	}
 }

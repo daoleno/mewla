@@ -24,6 +24,11 @@ export interface WhatsNewHighlight {
   line: string;
   media: { scene: string };
   try?: WhatsNewTry;
+  /**
+   * The platforms (`platform.os`: android, ios, web, macos) that have the feature; absent, all of them. A person on
+   * another platform is never offered it, and their sheet does not settle it: their other devices still offer it.
+   */
+  platforms?: string[];
 }
 
 export interface WhatsNewRelease {
@@ -78,7 +83,13 @@ function parseHighlight(raw: unknown): WhatsNewHighlight | null {
   if (isRecord(action) && (action.kind === "open" || action.kind === "prompt") && typeof action.target === "string") {
     out.try = { kind: action.kind, target: action.target };
   }
+  if (Array.isArray(raw.platforms)) out.platforms = raw.platforms.filter((p): p is string => typeof p === "string");
   return out;
+}
+
+/** The releases as a person on `os` has them: a highlight of other platforms only is left out (see `platforms`). */
+export function releasesFor(releases: WhatsNewRelease[], os: string): WhatsNewRelease[] {
+  return releases.map((release) => ({ ...release, highlights: release.highlights.filter((h) => !h.platforms || h.platforms.includes(os)) }));
 }
 
 /** A notes bundle (`{releases: [...]}`), read leniently: a malformed release or highlight is left out. */
@@ -102,7 +113,8 @@ function sortNewestFirst(releases: WhatsNewRelease[]): WhatsNewRelease[] {
 
 /**
  * The app's own notes and the computer's, one release per version. The app's copy wins: it is
- * the one whose pictures this app can draw. The computer's fills in releases newer than the app.
+ * the one whose pictures this app can draw. The computer's fills in releases newer than the app: their line and
+ * fixes (its copy has no highlights, scripts/lib/release_notes.py; the sheet comes with the app's own update).
  */
 export function mergeReleases(own: WhatsNewRelease[], computer: WhatsNewRelease[]): WhatsNewRelease[] {
   const byVersion = new Map<string, WhatsNewRelease>();

@@ -335,6 +335,25 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
         result = self.run_script(root)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_refuses_a_release_whose_whats_new_is_a_wall_of_text(self):
+        # Owner 11-22: 0.4.19's notes were nine long fixes and no highlight. A release from the gift rule on cannot be
+        # prepared that way: too many fixes, each too long (scripts/lib/release_notes.py).
+        root = self.create_repo(root=self.fixture / "wall", whats_new=[CURRENT_VERSION, NEXT_VERSION])
+        notes = root / release_notes.SOURCE_DIR / f"{NEXT_VERSION}.json"
+        notes.write_text(json.dumps({
+            "version": NEXT_VERSION,
+            "date": "2026-11-22",
+            "highlights": [],
+            "fixes": [f"Fix {i}: something changed and this line explains it at length, as a changelog would." for i in range(9)],
+        }), encoding="utf-8")
+        self.assertEqual(release_notes.main(["--repo", str(root)]), 1)
+        git(root, "commit", "-am", "A wall of text")
+        original_base = (root / VERSION_SOURCE).read_bytes()
+        result = self.run_script(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"release-notes/{NEXT_VERSION}.json: 9 fixes", result.stderr)
+        self.assertEqual((root / VERSION_SOURCE).read_bytes(), original_base)
+
     def test_whats_new_copies_must_be_current(self):
         root = self.create_repo(root=self.fixture / "stale")
         (root / "client/ui/whatsnew/notes.json").write_text("{}\n", encoding="utf-8")

@@ -12,6 +12,7 @@ import {
   parseRecord,
   parseReleases,
   pendingPages,
+  releasesFor,
   updateLines,
   type WhatsNewRecord,
   type WhatsNewRelease,
@@ -106,6 +107,33 @@ describe("notes", () => {
     expect(releases.length).toBe(raw.releases.length);
     for (const r of releases) expect(r.highlights.length).toBe(raw.releases.find((x: { version: string }) => x.version === r.version).highlights.length);
     expect(latestRelease(releases, "0.4.8")?.version).toBe("0.4.8");
+  });
+});
+
+describe("releasesFor", () => {
+  const notes = parseReleases({
+    releases: [{
+      version: "0.4.20", date: "2026-11-22", fixes: [],
+      highlights: [
+        { id: "0.4.20-share", title: "Share", line: "Share.", media: { scene: "share-in" }, platforms: ["android"] },
+        { id: "0.4.20-git", title: "Git", line: "Git.", media: { scene: "git-button" } },
+      ],
+    }],
+  });
+
+  test("a highlight of one platform is offered only there, and only there does a sheet settle it", () => {
+    const os = (name: string) => releasesFor(notes, name);
+    expect(pendingPages(os("android"), record(), "0.4.20").map((p) => p.id)).toEqual(["0.4.20-share", "0.4.20-git"]);
+    expect(pendingPages(os("ios"), record(), "0.4.20").map((p) => p.id)).toEqual(["0.4.20-git"]);
+    expect(newsIds(os("web"), record(), "0.4.20")).toEqual(["0.4.20-git"]);
+    // Seen on the web, the phone still offers what only it has.
+    expect(pendingPages(os("android"), record({ seen: ["0.4.20-git"] }), "0.4.20").map((p) => p.id)).toEqual(["0.4.20-share"]);
+  });
+
+  test("a release whose highlights are all another platform's has no page here, and its line opens nothing it cannot show", () => {
+    const only = releasesFor(parseReleases({ releases: [{ version: "0.4.20", date: "2026-11-22", fixes: [], highlights: [{ id: "0.4.20-share", title: "Share", line: "Share.", media: { scene: "share-in" }, platforms: ["android"] }] }] }), "ios");
+    expect(pendingPages(only, record(), "0.4.20")).toEqual([]);
+    expect(updateLines(record({ updates: [{ version: "0.4.20", at: 1 }] }), only)[0]).toMatchObject({ highlights: false, notes: false });
   });
 });
 
