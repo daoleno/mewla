@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mewla for Mac: <out>/<Name>.app and <Name>-<version>-macos-arm64.zip, run on a Mac (Xcode, Rust >= 1.97, NSH).
+# Mewla for Mac: <out>/<Name>.app and <Name>-<version>-macos-aarch64.zip, run on a Mac (Xcode, Rust >= 1.97, NSH).
 #
 #   client/macos/package.sh --daemon <mewla darwin-arm64 binary> [--dev] [--out <dir>]
 #
@@ -8,17 +8,29 @@
 # beside MacOS/Mewla), Contents/Resources/nsh (client/ui, built by `nsh build`), the icon and Info.plist.
 # --dev makes Mewla Dev (com.daoleno.mewla.dev), which installs beside Mewla. Signed ad hoc, inside out; Developer
 # ID and notarization come with the release job (FACTS.md §4).
+#
+# The app's own updates (NSH's updater): the release bundle names its source in nsh/assets/nsh-updater.json, the
+# manifest `latest.json` of the GitHub release (daoleno/mewla), signed with the key client/macos/update-public-key.txt
+# holds the public half of. Mewla Dev has none. A proof can give either its own: --updater-url <https or loopback
+# latest.json URL> --updater-key <base64 public key>, and --version to be a version other than nsh.json's.
+# The archive is named for the updater's platform (macos-aarch64): `nsh update-manifest` reads that from its name.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 daemon=""
 out="$root/client/macos/dist"
 dev=0
+version_override=""
+updater_url=""
+updater_key=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --daemon) daemon="${2:?}"; shift 2 ;;
     --out) out="${2:?}"; shift 2 ;;
     --dev) dev=1; shift ;;
+    --version) version_override="${2:?}"; shift 2 ;;
+    --updater-url) updater_url="${2:?}"; shift 2 ;;
+    --updater-key) updater_key="${2:?}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -27,6 +39,8 @@ file "$daemon" | grep -q 'Mach-O 64-bit.*arm64' || { echo "--daemon is not a mac
 
 if [[ $dev == 1 ]]; then name="Mewla Dev"; id="com.daoleno.mewla.dev"; else name="Mewla"; id="com.daoleno.mewla"; fi
 version=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/client/ui/nsh.json")
+[[ -z "$version_override" ]] || version="$version_override"
+[[ -z "$updater_url" && -z "$updater_key" ]] || [[ -n "$updater_url" && -n "$updater_key" ]] || { echo "--updater-url and --updater-key go together" >&2; exit 2; }
 nsh="${NSH:-$HOME/.nsh/bin/nsh}"
 
 work="$(mktemp -d)"
@@ -37,10 +51,12 @@ trap 'rm -rf "$work"' EXIT
 # out of the app.
 mkdir -p "$work/src"
 rsync -a --exclude .nsh --exclude node_modules "$root/client/core" "$root/client/ui" "$work/src/"
-python3 -I - "$work/src/ui/nsh.json" "$root/client/macos/density.json" <<'PY'
+python3 -I - "$work/src/ui/nsh.json" "$root/client/macos/density.json" "$version_override" <<'PY'
 import json, sys
-path, density = sys.argv[1:3]
+path, density, version = sys.argv[1:4]
 config = json.load(open(path))
+if version:
+    config["version"] = version
 config.setdefault("tailwind", {})["fontSize"] = json.load(open(density))["fontSize"]
 json.dump(config, open(path, "w"), indent=2)
 PY
@@ -55,6 +71,21 @@ except FileNotFoundError:
     info = {}
 info.update({"id": app_id, "name": name})
 json.dump(info, open(path, "w"))
+PY
+
+# The update source (nsh-updater.json, as `nsh package` writes it): the release's, a proof's, or none (Mewla Dev).
+python3 -I - "$work/nsh/assets/nsh-updater.json" "$id" "$version" "$updater_url" "$updater_key" "$dev" "$root/client/macos/update-public-key.txt" <<'PY'
+import json, os, sys
+path, app_id, version, url, key, dev, pub = sys.argv[1:8]
+config = {"id": app_id, "version": version}
+if url:
+    config.update({"url": url, "publicKey": key})
+elif dev != "1":
+    config.update({"github": "daoleno/mewla", "publicKey": open(pub).read().strip()})
+else:
+    sys.exit(0)
+os.makedirs(os.path.dirname(path), exist_ok=True)
+json.dump(config, open(path, "w"))
 PY
 
 # The host.
@@ -135,7 +166,7 @@ codesign --force --sign - --identifier "$id.daemon" "$app/Contents/Helpers/mewla
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 
-zip="$out/${name// /-}-$version-macos-arm64.zip"
+zip="$out/${name// /-}-$version-macos-aarch64.zip"
 rm -f "$zip"
 ditto -c -k --keepParent "$app" "$zip"
 echo "$app"

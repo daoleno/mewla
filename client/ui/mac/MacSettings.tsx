@@ -9,6 +9,8 @@ import { Row, RowButton, Section, SwitchRow } from "../kit/kit";
 import { StateLine } from "../kit/RowTile";
 import { Segmented } from "../kit/Segmented";
 import manifest from "../nsh.json";
+import { appUpdateRow } from "../../core/update/appUpdate";
+import { appUpdateOwner } from "../update/update";
 import { appearance, chooseAppearance, type Appearance } from "../more/settings/Settings";
 import { loadTelegram, telegramRow } from "../more/settings/telegramState";
 import type { MorePage } from "../more/routes";
@@ -98,9 +100,23 @@ function General(props: { shortcut: () => string | null }) {
           options={[{ key: "system", label: "System" }, { key: "light", label: "Light" }, { key: "dark", label: "Dark" }]} value={appearance()} onChange={chooseAppearance} /></View>} />
       </Section>
       <Section>
-        <Row testID="mac-settings-version" title={`Mewla ${manifest.version}`} />
+        <MacVersionRow />
       </Section>
     </View>
+  );
+}
+
+/** "Mewla X", with this app's update beside it while one waits (§2.5): Update to Y, its progress, or Try again. */
+function MacVersionRow() {
+  const model = () => appUpdateRow(appUpdateOwner().state());
+  const action = () => {
+    const row = model();
+    return row?.action === "Update" ? `Update to ${row.subtitle?.replace(/^v/, "")}` : row?.action === "Retry" && row.title === "Update failed" ? "Try again" : null;
+  };
+  return (
+    <Row testID="mac-settings-version" title={`Mewla ${manifest.version}`}
+      value={model()?.progress !== undefined ? model()!.value : undefined}
+      trailing={<If when={action()}>{(label) => <RowButton testID="mac-settings-update" label={label()} onPress={() => appUpdateOwner().press()} />}</If>} />
   );
 }
 

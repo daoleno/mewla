@@ -9,6 +9,8 @@ import { nav, openBrainTerminal, openPage } from "../shell/nav";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
+import { appUpdateOwner } from "../update/update";
+import { appUpdateMenuItem } from "./appUpdateMenu";
 import { isMacApp, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
 import { MENU_BAR_CLIPS, MENU_BAR_IMAGES } from "./menubarImages";
 import { startMacMenus } from "./menus";
@@ -27,7 +29,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; size?: [number, number]; fullScreen?: boolean; minimize?: number } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -136,7 +138,8 @@ export function startMac(): void {
   if (params.release) {
     void Storage.getItem(LOGIN_DEFAULT_KEY).then((done) => {
       if (done) return;
-      return setStartAtLogin(true).then(() => Storage.setItem(LOGIN_DEFAULT_KEY, "1"));
+      // What the system says afterwards is logged: the release's first run is proven by it (macos-app.yml, `update`).
+      return setStartAtLogin(true).then(() => Application.launchAtLogin()).then((on) => { console.log(`start at login: ${on ? "on" : "off"} after the first run's default`); return Storage.setItem(LOGIN_DEFAULT_KEY, "1"); });
     }).catch((error) => console.warn("start at login:", error));
   }
 
@@ -169,6 +172,7 @@ export function startMac(): void {
           checked: atLogin(),
           onSelect: toggleStartAtLogin,
         },
+        ...appUpdateMenuItem(appUpdateOwner().state(), () => appUpdateOwner().press()),
         { type: "separator" },
         { label: "Stop Mewla on this Mac…", onSelect: () => void stopMewla() },
         { label: "Quit Mewla", shortcut: "mod+q", onSelect: () => Application.quit() },
@@ -216,6 +220,8 @@ export function startMac(): void {
           if (script.size) Window.get("main")?.setBounds({ size: { width: script.size[0], height: script.size[1] } });
           if (script.fullScreen) Window.get("main")?.setMode("fullScreen");
           // `minimize` seconds later the window goes to the Dock, which keeps the app's icon (the run reads the policy).
+          // The app's own update (macos-app.yml, `update`): once a newer release is found it is taken, as the row's button takes it.
+          if (script.update) void updateProof();
           if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }
         // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
@@ -241,6 +247,29 @@ export function startMac(): void {
       });
     });
   }
+}
+
+/**
+ * The update proof (macos-app.yml, `update`): a release app finds the newer Mewla a loopback manifest offers, waits
+ * `hold` seconds so the run can capture Settings with its row, then takes it as the row's button does; the app
+ * restarts as the new version. Every state it goes through is logged, and the new app logs that it is current.
+ */
+async function updateProof(hold = 12): Promise<void> {
+  const owner = appUpdateOwner();
+  effect(() => console.log(`dev script: update ${owner.state().kind}`));
+  const until = async (ok: () => boolean, ms = 90_000) => {
+    for (let waited = 0; !ok(); waited += 250) {
+      if (waited > ms) return false;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return true;
+  };
+  if (!(await until(() => ["available", "current", "checkFailed"].includes(owner.state().kind)))) return void console.log("dev script: update stopped (no answer)");
+  const state = owner.state();
+  if (state.kind !== "available") return void console.log(`dev script: update none (${state.kind})`);
+  console.log(`dev script: update found ${state.update.version}`);
+  await new Promise((resolve) => setTimeout(resolve, hold * 1000));
+  owner.press();
 }
 
 /**
@@ -270,7 +299,8 @@ async function attachProof(): Promise<void> {
     uploads.add([new File([new Uint8Array(1 << 30)], "screen recording.mov", { type: "video/quicktime" })]);
     await until(() => uploads.items().some((item) => item.status === "uploading"));
     console.log("dev script: attach uploading");
-    await new Promise((resolve) => setTimeout(resolve, 8000));
+    // Long enough for the run to capture the chip, short enough that the 1 GB one is still going (a busy runner's timers lag).
+    await new Promise((resolve) => setTimeout(resolve, 3000));
     const large = uploads.items().find((item) => item.status === "uploading");
     if (large) {
       uploads.remove(large.id);

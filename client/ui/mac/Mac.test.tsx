@@ -105,6 +105,24 @@ describe("Mewla for Mac", () => {
     expect(app.shows("id:mac-settings >> id:this-mac-devices")).toBe(false);
   }, 30_000);
 
+  test("Settings › General carries this app's update beside its version: Update to X, and the tap goes to the update", async () => {
+    const update = { kind: "available", update: { version: "0.4.18", versionCode: 0, fileName: "", url: "", sha256: "", size: 0 } };
+    const base = phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => pairing, "app.appUpdatePressed": () => undefined });
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: { ...base, params: { ...base.params, devScript: { settings: "general" }, appUpdate: update } } });
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
+    await app.waitFor("id:mac-settings >> id:mac-settings-update");
+    expect(app.shows("id:mac-settings >> text:Update to 0.4.18")).toBe(true);
+    await app.press("id:mac-settings >> id:mac-settings-update");
+    await app.waitUntil(() => app.host.posts().some((post) => post.name === "app.appUpdatePressed"), { timeout: 5_000 });
+  }, 30_000);
+
+  test("Settings › General shows no update row while no update waits", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ settings: "general" }) });
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
+    await app.waitFor("id:mac-settings >> id:mac-settings-version");
+    expect(app.shows("id:mac-settings >> id:mac-settings-update")).toBe(false);
+  }, 30_000);
+
   // The keystroke itself is core/mac/shortcut.test.ts's: the test keyboard reaches only the main window.
   test("the first time the window closes, the quick chat's shortcut is offered from the cat; one the system refuses shows as taken; Change records", async () => {
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
