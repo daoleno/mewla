@@ -272,6 +272,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainWorkClose(req)
 	case "brain_work_shown_set":
 		return a.handleBrainWorkShownSet(req)
+	case "agent_use_need":
+		return a.handleAgentUseNeed(req)
 	case "brain_work_event":
 		return a.handleBrainWorkEvent(req)
 	case "brain_work_event_resolve":

@@ -33,6 +33,11 @@ const (
 	// timelineKindBrowserNotice is a line Mewla writes when the agents'
 	// browser lost the person's sign-ins.
 	timelineKindBrowserNotice = "browser_notice"
+	// timelineKindGrantRequest is a card Mewla writes when Brain or a Worker
+	// needs a permission of this computer the person has not given (grants/):
+	// it holds the reason and where the grant stands (GrantStatus values in
+	// status), and is sealed once granted or declined.
+	timelineKindGrantRequest = "grant_request"
 
 	workResultConversationSource = "work_result"
 )
@@ -280,6 +285,14 @@ type TimelineItem struct {
 	// PluginAccountID names the Extensions account a plugin notice is about,
 	// so its row signs that account in again with one tap.
 	PluginAccountID string `json:"plugin_account_id,omitempty"`
+	// GrantPermission is the permission a grant request card asks for
+	// (screen_recording, accessibility or chrome).
+	GrantPermission string `json:"grant_permission,omitempty"`
+	// GrantRestartTried: Mewla already restarted itself to make a granted
+	// Accessibility count (not shown; it keeps that attempt to once).
+	GrantRestartTried bool `json:"grant_restart_tried,omitempty"`
+	// GrantSealedAt is when the card was sealed (granted or declined).
+	GrantSealedAt *time.Time `json:"grant_sealed_at,omitempty"`
 }
 
 // timelineReadCache is the whole timeline in seq order. It is filled on first
@@ -1020,6 +1033,19 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			Source:    item.Kind,
 			// A plugin notice names its account; the row's Sign in renews it.
 			PluginAccountID: item.PluginAccountID,
+		}, true
+	case timelineKindGrantRequest:
+		return work.CodexConversationEvent{
+			ID:              item.ID,
+			Seq:             seq,
+			Timestamp:       item.CreatedAt.Format(time.RFC3339Nano),
+			Kind:            "status",
+			Role:            "assistant",
+			Title:           item.Title,
+			Body:            item.Body,
+			Status:          item.Status,
+			Source:          item.Kind,
+			GrantPermission: item.GrantPermission,
 		}, true
 	case timelineKindCalendarResult:
 		return work.CodexConversationEvent{

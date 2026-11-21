@@ -155,6 +155,7 @@ type Server struct {
 	outsideAgentsDoor          http.Handler
 	computerName               string
 	agentUse                   *agentuse.Service
+	grantRequests              GrantRequests
 	whatsNew                   *whatsnew.Store
 	daemonUpdater              DaemonUpdater
 	version                    string
@@ -572,6 +573,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/agents", s.handleAgents)
 	mux.HandleFunc("/mcp", s.handleMCP)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
+	mux.HandleFunc("/brain/grant-request", s.handleGrantRequest)
 	mux.HandleFunc("/daemon-update", s.handleDaemonUpdate)
 	mux.HandleFunc("/daemon-update/terminals", s.handleRestartTerminals)
 	mux.HandleFunc("/phone", s.handlePhone)
@@ -3098,6 +3100,7 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	}
 	writeFingerprintString(w, event.Status)
 	writeFingerprintString(w, event.PluginAccountID)
+	writeFingerprintString(w, event.GrantPermission)
 	writeFingerprintBool(w, event.Partial)
 	writeFingerprintBool(w, event.Transient)
 	writeFingerprintStrings(w, event.Files)

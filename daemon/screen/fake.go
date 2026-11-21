@@ -20,6 +20,7 @@ type FakeBackend struct {
 	Width, Height int
 	Unsupported   bool
 	Missing       []string // ids of permissions not granted
+	Stale         []string // ids granted but not counting until Mewla restarts
 	Answer        bool     // Confirm's answer
 	Locked        bool
 	// Tree is what Elements reads; nil reads as no accessibility.
@@ -250,6 +251,13 @@ func (f *FakeBackend) Capability(context.Context) Capability {
 			if perms[i].ID == id {
 				perms[i].Granted = false
 				perms[i].Guidance = "Allow Mewla in " + perms[i].Name
+			}
+		}
+	}
+	for i := range perms {
+		for _, id := range f.Stale {
+			if perms[i].ID == id {
+				perms[i].Granted, perms[i].RestartRequired = false, true
 			}
 		}
 	}

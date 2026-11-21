@@ -138,6 +138,8 @@ export interface CodexConversationEvent {
   work_actions?: ResultAction[];
   /** A plugin notice (source plugin_notice): the Extensions account it is about, which its Sign in renews. */
   plugin_account_id?: string;
+  /** A grant request (source grant_request): the macOS permission it asks for (screen_recording, accessibility, chrome); `status` is its state. */
+  grant_permission?: string;
   work_wait_for?: string;
   /** Task fields are set only for source "task_notification" status events. */
   task_id?: string;
@@ -403,6 +405,7 @@ function normalizeCodexConversationEvent(
         : undefined,
     work_actions: parseResultActions(event.work_actions),
     plugin_account_id: typeof event.plugin_account_id === "string" && event.plugin_account_id ? event.plugin_account_id : undefined,
+    grant_permission: typeof event.grant_permission === "string" && event.grant_permission ? event.grant_permission : undefined,
     // Normalized again later (a snapshot's reconciliation): the record is then already `answered`.
     answered: event.source === "request_answered" ? parseAnsweredRequest(event.request ?? event.answered) ?? undefined : undefined,
     work_wait_for:

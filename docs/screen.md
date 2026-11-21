@@ -32,7 +32,12 @@ computer's screen, switch to it: tap the cat, then the computer under
    system shows its own prompts. Grant them at the computer, or use Screen's
    button to open the right settings page there. Some permissions apply only
    after Mewla restarts; Screen then offers to restart Mewla on the computer and
-   reconnects.
+   reconnects. When Brain or a Worker needs one of them (`mewla agent-use need`,
+   or a Worker that started without the screen for want of it), Brain's thread
+   asks once with a card: **Not now** or **Open System Settings**. The card seals
+   itself when the permission counts, Mewla restarting itself first at a quiet
+   moment if an Accessibility grant needs it (or, if that is not enough, the
+   card's one button **Restart Mewla**), and Brain is told in one line.
 
 On macOS the permissions are **Screen Recording** (to see the screen) and
 **Accessibility** (to click and type), both under **System Settings → Privacy

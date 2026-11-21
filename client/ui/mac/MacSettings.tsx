@@ -172,13 +172,18 @@ function Agents() {
   );
 }
 
-/** One of macOS's grants, mirrored: Allowed in ok, or Allow… opening its pane in System Settings. */
-function Grant(props: { title: string; granted: boolean | null; allowedWord?: string; onAllow?: () => void; testID: string }) {
+/**
+ * One of macOS's grants, mirrored (the same state the card in Brain's thread shows; no second toggle): Allowed, Allow…
+ * opening its pane in System Settings, or, once given but not yet in effect in the running Mewla, Restart Mewla.
+ */
+function Grant(props: { title: string; granted: boolean | null; allowedWord?: string; onAllow?: () => void; restart?: boolean; onRestart?: () => void; testID: string }) {
   return (
     <Row testID={props.testID} title={props.title}
       trailing={<If when={props.granted !== null}>
-        <If when={props.granted} else={<If when={props.onAllow}><RowButton testID={`${props.testID}-allow`} label="Allow…" accessibilityLabel={`Allow ${props.title}`} onPress={() => props.onAllow!()} /></If>}>
+        <If when={props.restart && props.onRestart} else={<If when={props.granted} else={<If when={props.onAllow}><RowButton testID={`${props.testID}-allow`} label="Allow…" accessibilityLabel={`Allow ${props.title}`} onPress={() => props.onAllow!()} /></If>}>
           <StateLine testID={`${props.testID}-state`} tone="ok" label={props.allowedWord ?? "Allowed"} />
+        </If>}>
+          <RowButton testID={`${props.testID}-restart`} label="Restart Mewla" accessibilityLabel={`Restart Mewla to apply ${props.title}`} onPress={() => props.onRestart!()} />
         </If>
       </If>} />
   );
@@ -209,6 +214,12 @@ function Access() {
     const server = untracked(current);
     if (server) void screenRequest(server, { action: "open_settings", permission: id }).then(read).catch((error) => console.warn("open settings:", error));
   };
+  const restartRequired = (id: string) => permissions()?.find((p) => p.id === id)?.restart_required === true;
+  // Given in System Settings, in effect only after Mewla starts again: the daemon restarts, Sessions and Workers keep running.
+  const restart = () => {
+    const server = untracked(current);
+    if (server) void screenRequest(server, { action: "restart" }).then(read).catch((error) => console.warn("restart:", error));
+  };
   const browser = () => agentUse()?.browser ?? null;
   const fixBrowser = () => {
     const server = untracked(current);
@@ -221,8 +232,8 @@ function Access() {
       <ThisMacOnly />
       <If when={isThisMac(current())}><>
       <Section title="What agents may use on this Mac">
-        <Grant testID="mac-access-screen" title="Screen recording" granted={grant("screen_recording")} onAllow={() => open("screen_recording")} />
-        <Grant testID="mac-access-accessibility" title="Accessibility (click and type)" granted={grant("accessibility")} onAllow={() => open("accessibility")} />
+        <Grant testID="mac-access-screen" title="Screen recording" granted={grant("screen_recording")} onAllow={() => open("screen_recording")} restart={restartRequired("screen_recording")} onRestart={restart} />
+        <Grant testID="mac-access-accessibility" title="Accessibility (click and type)" granted={grant("accessibility")} onAllow={() => open("accessibility")} restart={restartRequired("accessibility")} onRestart={restart} />
         <Grant testID="mac-access-chrome" title="Chrome" allowedWord="Extension on" granted={browser() ? browser()!.state === "ready" : null}
           onAllow={browser()?.fix ? fixBrowser : undefined} />
       </Section>

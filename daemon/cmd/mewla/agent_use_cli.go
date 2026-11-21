@@ -18,7 +18,7 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 )
 
-const agentUseUsage = `Usage: mewla agent-use <status|on|off|fix|key> [flags]
+const agentUseUsage = `Usage: mewla agent-use <status|on|off|fix|key|need> [flags]
 
 Let agents on this computer use it the way you do: your Chrome, with the
 sites you are logged in to, in a tab group of their own. It is on by default
@@ -30,6 +30,12 @@ giving Mewla its key once.
   fix             Do the fix status names (opens Chrome on this computer)
   key [-clear]    Paste the Playwright extension's key (shown on its page in
                   Chrome) from stdin; -clear forgets it
+  need <permission> --reason "..."
+                  Ask the person, in Brain's thread, for a permission of this
+                  computer an agent needs and status shows missing:
+                  screen_recording, accessibility or chrome. One card per
+                  permission; it says "asked", "already asked" or, when the
+                  permission is there already, "already granted" (no card)
 
 The app shows the same status on this computer's page (tap the cat, then its name).
 `
@@ -51,6 +57,9 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	}
 	if action == "iphone-mcp" {
 		return runIPhoneMCP(args[1:], stderr)
+	}
+	if action == "need" {
+		return runAgentUseNeed(args[1:], os.Stdout, stderr)
 	}
 	if action == "native-host" || action == "open" {
 		return runExtensionBridge(action, args[1:], stderr)
