@@ -313,6 +313,18 @@ func (s *Service) Restart(deviceID string) error {
 	return nil
 }
 
+// RestartNow is Restart for Mewla's own permission card (no device is asking):
+// Mewla stops at once so its service manager starts it again, which is what
+// makes a granted Accessibility count. Where nothing would start it again it
+// refuses (ErrNoRestart).
+func (s *Service) RestartNow() error {
+	if s.restart == nil {
+		return ErrNoRestart
+	}
+	s.restart()
+	return nil
+}
+
 // Enable asks the person at this computer to allow a device, once, and then
 // asks the operating system for any missing permission while they are there.
 func (s *Service) Enable(ctx context.Context, deviceID, deviceName string) error {

@@ -97,6 +97,9 @@ export function timelineItemsSemanticEqual(
   if (left.type === "plugin-notice" && right.type === "plugin-notice") {
     return left.title === right.title && left.body === right.body && left.accountId === right.accountId;
   }
+  if (left.type === "grant-request" && right.type === "grant-request") {
+    return left.permission === right.permission && left.state === right.state && left.reason === right.reason;
+  }
   if (left.type === "answered" && right.type === "answered") {
     // A stronger answer (who, not "in the terminal") replaces the record under the same id.
     return JSON.stringify(left.record) === JSON.stringify(right.record);

@@ -23,7 +23,10 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { Icon as KitIcon } from "../kit/Icon";
 import { clock } from "../calendar/clock";
 import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
+import { grantPermissionName, grantRequestView, type GrantRequestTimelineItem } from "../../core/timeline/grantRequestModel";
 import type { PluginNoticeTimelineItem } from "../../core/timeline/pluginNoticeModel";
+import { grantRequestAction, type GrantRequestAction } from "../../core/screen/grantRequest";
+import { StateLine } from "../kit/RowTile";
 import { signInFromChat } from "../more/extensions/plugins";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
 import { Icon, type IconName } from "../icons/Icon";
@@ -263,6 +266,52 @@ export function PluginNoticeCard(props: { item: () => PluginNoticeTimelineItem }
         </Button>
         <If when={missing()}><Text testID="plugin-notice-missing" class="text-sm text-muted-foreground">This computer no longer has that account</Text></If>
       </View>
+    </View>
+  );
+}
+
+/**
+ * What a Worker needs on this Mac that only the person can give in System Settings (DESIGN-MAC.md §2.4, `m-perm`): the
+ * reason in one line, and Not now / Open System Settings; sealed once the grant counts or the person says Not now. A grant
+ * that is given but not yet in effect ends in one button, Restart Mewla. The button's answer is the card's next state, which
+ * the thread pushes; a failed one is said in a line under the buttons.
+ */
+export function GrantRequestCard(props: { item: () => GrantRequestTimelineItem }) {
+  const it = props.item;
+  const view = () => grantRequestView(it());
+  const failed = signal("");
+  const busy = signal(false);
+  const press = async (action: GrantRequestAction) => {
+    const server = current();
+    if (!server || untracked(busy)) return;
+    haptic.impact();
+    busy.set(true);
+    failed.set("");
+    try {
+      await grantRequestAction(server, it().id, action);
+    } catch (error) {
+      failed.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      busy.set(false);
+    }
+  };
+  return (
+    <View testID="grant-request" accessibilityLabel={`${grantPermissionName(it().permission)}: ${it().reason}`} class="mx-4 my-1 gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5">
+      <View selectable><Text class={`text-base ${SELECTION}`}>{it().reason}</Text></View>
+      <If when={view().sealed}>
+        <StateLine testID="grant-request-sealed" tone={it().state === "granted" ? "ok" : "off"} label={view().word ?? ""} />
+      </If>
+      <If when={view().buttons.length > 0}>
+        <View class="flex-row items-center gap-2">
+          <Each of={view().buttons} key={(button) => button.id}>{(button) => (
+            <Button testID={`grant-request-${button().id}`} accessibilityLabel={button().label} onPress={() => void press(button().id)}
+              class={`self-start rounded-full px-3.5 py-1.5 active:opacity-70 ${button().id === "not_now" ? "border border-border" : "bg-primary"}`}>
+              <Text class={`text-sm font-semibold ${button().id === "not_now" ? "text-primary" : "text-primary-foreground"}`}>{button().label}</Text>
+            </Button>
+          )}</Each>
+        </View>
+      </If>
+      <If when={failed()}><Text testID="grant-request-failed" class="text-sm text-muted-foreground">{failed()}</Text></If>
     </View>
   );
 }

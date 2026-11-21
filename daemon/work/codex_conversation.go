@@ -312,6 +312,10 @@ type CodexConversationEvent struct {
 	WorkActions []ResultAction `json:"work_actions,omitempty"`
 	// PluginAccountID is the Extensions account a plugin notice is about.
 	PluginAccountID string `json:"plugin_account_id,omitempty"`
+	// GrantPermission is the permission a Source=grant_request card asks for
+	// (screen_recording, accessibility or chrome); Status is asked, opened,
+	// restart, granted or declined.
+	GrantPermission string `json:"grant_permission,omitempty"`
 	// Request is set only for Source=request_answered rows: a request (a
 	// prompt, an approval, a question) and how it was answered.
 	Request *answered.Request `json:"request,omitempty"`

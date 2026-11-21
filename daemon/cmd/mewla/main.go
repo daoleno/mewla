@@ -42,6 +42,7 @@ import (
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/friends"
+	"github.com/daoleno/mewla/daemon/grants"
 	"github.com/daoleno/mewla/daemon/iphone"
 	"github.com/daoleno/mewla/daemon/keeper"
 	"github.com/daoleno/mewla/daemon/launchsh"
@@ -780,6 +781,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 		// On Linux the computer tool drives the agent's own display, which
 		// the display tool did with coordinates alone: one tool, not both.
 		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: computer, Display: worker && !computer && controlHandler.displayOn(), Phone: worker && agentUse.PhoneReady(), IPhone: worker && agentUse.IPhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
+		if worker && (!tools.Computer || !tools.Chrome) {
+			// A tool withheld only for want of a grant is never silent: its card (off this path).
+			noteMissingGrants(agentUse)
+		}
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
@@ -998,6 +1003,28 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	srv.SetScreen(screenService)
 	controlHandler.screen = screenService
+	// The permission card: a grant of this computer Brain or a Worker needs and the person has not given.
+	grantManager := grants.New(
+		grantBackend{screen: screenService, agentUse: agentUse},
+		grantCards{Store: brainStore, Service: brainService},
+		grantRestarter{
+			quiet: func() bool {
+				return updateQuietPoint(
+					func() int { return len(agentEvents.approvals("", false)) },
+					profileOwner.ModelRequestsInFlight,
+					func() int { pending, _ := brainStore.PendingBrainInputAdmissions(); return len(pending) },
+				) == ""
+			},
+			inPlace:  func() error { return inPlaceRestart(controlHandler.restarter) },
+			screen:   screenService,
+			supervis: daemonSupervised,
+		})
+	if runtime.GOOS == "darwin" {
+		grantManager.Where = "this Mac"
+	}
+	grantsManager.Store(grantManager)
+	srv.SetGrantRequests(grantManager)
+	go grantManager.Run(ctx)
 	// Agents use the screen through the daemon, which holds the permissions;
 	// a person viewing it always comes first.
 	screenService.SetAgentGate(agentUse.Enabled)

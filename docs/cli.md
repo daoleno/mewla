@@ -22,6 +22,7 @@ mewla setup                   # guided setup on top of doctor: pick Brain's agen
 mewla setup remote            # over SSH: sign in with a code, run in the background, pair a phone
 mewla update [--check]        # verify and install the latest release, then restart Mewla onto it
 mewla restart                 # restart Mewla running in the background; Sessions keep running
+mewla restart -if-older       # the same, only when the running Mewla is older than this one (Mewla for Mac runs it after an update)
 mewla version [--json]        # version, commit and platform
 mewla boot install|status|uninstall   # start at login: systemd user service (Linux), LaunchAgent (macOS), scheduled task (Windows)
 ```
@@ -203,6 +204,7 @@ mewla screen disable          # turn Screen off; every device must be allowed ag
 mewla screen enable [-allow-sleep]
 
 mewla agent-use status|on|off|fix      # agents use your Chrome; the app's one switch
+mewla agent-use need <screen_recording|accessibility|chrome> --reason "…"   # ask for a missing permission: one card in Brain's thread
 mewla computers list|status            # other Mewla computers this Brain can hand work to
 mewla computers send mac "…"           # hand a task (or an answer) to that computer's Brain
 mewla computers invite | add <invite>  # connect two computers without the app

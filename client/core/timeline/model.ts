@@ -46,6 +46,7 @@ import { compareConversationEvents } from "../conversation/reconciliation";
 import { isImageAttachment } from "../files/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 import { computerMessageTimelineItem } from "./computerMessageCardModel";
+import { grantRequestTimelineItem } from "./grantRequestModel";
 import { pluginNoticeTimelineItem } from "./pluginNoticeModel";
 import { pathBasename } from "./pathDisplay";
 import { choiceAnswerDetails, choiceAnsweredSummary } from "./claudeChoiceModel";
@@ -196,6 +197,11 @@ export function buildTimelineFromSortedEvents(
       const pluginNotice = pluginNoticeTimelineItem(event);
       if (pluginNotice) {
         items.push(pluginNotice);
+        continue;
+      }
+      const grantRequest = grantRequestTimelineItem(event);
+      if (grantRequest) {
+        items.push(grantRequest);
         continue;
       }
       const workCard = brainWorkEventTimelineItemFromConversationEvent(event);

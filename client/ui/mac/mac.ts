@@ -11,6 +11,7 @@ import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
 import { appUpdateOwner } from "../update/update";
 import { appUpdateMenuItem } from "./appUpdateMenu";
+import { grantRequestAction } from "../../core/screen/grantRequest";
 import { isMacApp, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
 import { MENU_BAR_CLIPS, MENU_BAR_IMAGES } from "./menubarImages";
 import { startMacMenus } from "./menus";
@@ -29,7 +30,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -222,6 +223,7 @@ export function startMac(): void {
           // `minimize` seconds later the window goes to the Dock, which keeps the app's icon (the run reads the policy).
           // The app's own update (macos-app.yml, `update`): once a newer release is found it is taken, as the row's button takes it.
           if (script.update) void updateProof();
+          if (script.grant) void grantProof(script.grant);
           if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }
         // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
@@ -246,6 +248,35 @@ export function startMac(): void {
         }
       });
     });
+  }
+}
+
+/**
+ * The permission card's proof (macos-app.yml, `grant`): the run asks for a grant with `mewla agent-use need`; once the card is in
+ * Brain's thread it is logged, and `open_settings` or `not_now` press that button as the card does (the card's own request).
+ * Every state it shows is logged.
+ */
+async function grantProof(press: "asked" | "open_settings" | "not_now"): Promise<void> {
+  const card = () => (brainChat()?.current.conversation?.events ?? []).filter((event) => event.source === "grant_request").at(-1);
+  const until = async (ok: () => boolean, ms = 90_000) => {
+    for (let waited = 0; !ok(); waited += 250) {
+      if (waited > ms) return false;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return true;
+  };
+  if (!(await until(() => Boolean(card())))) return void console.log("dev script: grant stopped (no card)");
+  // The run's `mewla agent-use need` may still be answering: the card pressed is the newest, once the thread has settled.
+  await new Promise((resolve) => setTimeout(resolve, 8_000));
+  console.log(`dev script: grant card ${card()!.status} ${card()!.grant_permission} "${card()!.body}"`);
+  const server = untracked(current);
+  if (press === "asked" || !server) return;
+  try {
+    await grantRequestAction(server, card()!.id, press);
+    await until(() => card()!.status !== "asked", 15_000);
+    console.log(`dev script: grant pressed ${press}: card ${card()!.status}`);
+  } catch (error) {
+    console.log(`dev script: grant press failed ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
