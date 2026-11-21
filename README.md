@@ -25,7 +25,7 @@
 
 Mewla is a phone app and a small daemon that runs next to your repositories.
 The agents are the CLIs you already use (Claude Code, Codex, Cursor, Grok, Pi,
-OpenCode), each in a real terminal on your machine. Mewla gives them a
+OpenCode, Antigravity), each in a real terminal on your machine. Mewla gives them a
 lead and gives you a remote. Open source, self-hosted, in beta.
 
 [Homepage](https://mewla.ai/) · [Docs](https://mewla.ai/docs/) · [Releases](https://github.com/daoleno/mewla/releases)

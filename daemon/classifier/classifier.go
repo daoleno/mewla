@@ -94,6 +94,8 @@ var blockedPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)Would you like`),
 	regexp.MustCompile(`(?i)Is this ok`),
 	regexp.MustCompile(`(?i)Shall I`),
+	// Antigravity (agy): its sign-in menu, which waits for a person in a browser.
+	regexp.MustCompile(`Select login method`),
 	// Claude Code specific
 	regexp.MustCompile(`(?i)Do you want to create`),
 	regexp.MustCompile(`(?i)Do you want to run`),
@@ -130,6 +132,9 @@ var failedPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)command not found`),
 	regexp.MustCompile(`(?i)permission denied`),
 	regexp.MustCompile(`(?i)segmentation fault`),
+	// Antigravity (agy) prints this when a turn ends on a model or API error
+	// that its own retries did not clear.
+	regexp.MustCompile(`^⚠ agent executor error`),
 }
 
 var nonFatalDiagnosticStartPatterns = []*regexp.Regexp{
@@ -169,6 +174,9 @@ func Classify(paneAlive bool, lines []string, command string) (WorkerState, stri
 
 	// Get the last few meaningful lines for pattern matching.
 	tail := lastNonEmpty(lines, 10)
+	if isAntigravityCommand(command) {
+		tail = withoutAntigravityChrome(tail)
+	}
 	interactiveTail := linesAfterLastReadyComposer(tail)
 	if isCodexPane(command, lines) {
 		// Codex's composer carries placeholder or draft text, so the bare-caret
@@ -275,6 +283,25 @@ func matchingGrokChoiceMenu(lines []string) string {
 		return ""
 	}
 	return footerLine
+}
+
+func isAntigravityCommand(command string) bool {
+	return commandBaseName(command) == "agy"
+}
+
+var antigravityChromeRe = regexp.MustCompile(`^(?:─{8,}|>|\? for shortcuts\b.*)$`)
+
+// withoutAntigravityChrome drops agy's composer frame (the rules, the empty
+// "> " line and the "? for shortcuts" footer), which is on screen whenever agy
+// waits and says nothing about what it did last.
+func withoutAntigravityChrome(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if !antigravityChromeRe.MatchString(strings.TrimSpace(line)) {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 func isGrokCommand(command string) bool {

@@ -535,7 +535,7 @@ func (e env) checkExecutors() ExecutorsCheck {
 	default:
 		check.Status = StatusFail
 		check.Remediation = RemediationInstallExecutor
-		check.Summary = "no usable executor found; install and authenticate at least one of Claude Code, Codex, Cursor Agent, Grok, Pi, or OpenCode"
+		check.Summary = "no usable executor found; install and authenticate at least one of Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, or Antigravity"
 		check.RecommendationConfidence = ConfidenceNone
 	}
 	return check
@@ -802,6 +802,11 @@ func (e env) probeAuth(binaryPath, provider, configDir string) AuthState {
 		return parseOpenCodeAuth(out)
 	case work.WorkerProviderPi:
 		return probePiAuth()
+	case work.WorkerProviderAntigravity:
+		// agy has no status command; `agy models` needs a sign-in (or a
+		// GEMINI_API_KEY with modelProvider "gemini") and says so with exit 1.
+		out, err := run(ctx, binaryPath, "models")
+		return parseAntigravityAuth(out, err)
 	default:
 		return AuthUnknown
 	}
@@ -904,6 +909,23 @@ func parseCursorAuth(out []byte) AuthState {
 	return AuthUnknown
 }
 
+// parseAntigravityAuth reads `agy models`: exit 0 and a model list when agy has
+// a sign-in or a Gemini API key, exit 1 with "Please sign in" when it has
+// neither. Any other failure (no network, a timeout) is unknown, never a guess.
+func parseAntigravityAuth(out []byte, err error) AuthState {
+	if err == nil {
+		if strings.Contains(string(out), "gemini-") || strings.Contains(string(out), "Gemini") {
+			return AuthAuthenticated
+		}
+		return AuthUnknown
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 && strings.Contains(strings.ToLower(string(out)), "please sign in") {
+		return AuthUnauthenticated
+	}
+	return AuthUnknown
+}
+
 // parseOpenCodeAuth reads `opencode auth list --format json`: a list of
 // integrations, each with its connections (a stored credential or an
 // environment variable). Any connection means a provider is usable; a list
@@ -962,7 +984,7 @@ func recommendHost(usable []ExecutorCheck) string {
 	if len(usable) == 0 {
 		return ""
 	}
-	order := hostdeps.AgentOrder()
+	order := hostdeps.HostAgentOrder()
 	for _, id := range order {
 		for _, item := range usable {
 			if item.ID == id {
@@ -978,7 +1000,12 @@ func recommendHost(usable []ExecutorCheck) string {
 			}
 		}
 	}
-	return usable[0].ID
+	for _, item := range usable {
+		if work.CanHostBrain(item.Provider) {
+			return item.ID
+		}
+	}
+	return ""
 }
 
 // agentProviders maps hostdeps.AgentOrder ids to their worker provider.
@@ -989,6 +1016,7 @@ var agentProviders = map[string]string{
 	"grok":     work.WorkerProviderGrok,
 	"pi":       work.WorkerProviderPi,
 	"opencode": work.WorkerProviderOpenCode,
+	"agy":      work.WorkerProviderAntigravity,
 }
 
 func firstCommandToken(command string) string {

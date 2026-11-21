@@ -26,6 +26,10 @@ var launchModelFlagsByProvider = map[string]launchModelFlags{
 	WorkerProviderPi:     {model: []string{"--model"}, reasoning: []string{"--thinking"}, levels: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}},
 	WorkerProviderGrok:   {model: []string{"--model", "-m"}},
 	WorkerProviderCursor: {model: []string{"--model"}},
+	// agy --model takes a model id from `agy models` (gemini-4-neon-high); the
+	// thinking level is part of that id, so Brain passes no separate reasoning
+	// even though --effort exists: the two would contradict each other.
+	WorkerProviderAntigravity: {model: []string{"--model"}},
 }
 
 // ResolveWorkerCommand resolves one launch command from the catalog or an

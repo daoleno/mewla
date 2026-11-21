@@ -41,6 +41,8 @@ func ProviderResumeToken(provider, command string) (token string, present bool, 
 		return exclusiveOpenCodeSessionToken(options.argv)
 	case WorkerProviderDSH:
 		return exclusiveResumeFlagToken(options.argv, "--dsh-session")
+	case WorkerProviderAntigravity:
+		return exclusiveResumeFlagToken(options.argv, "--conversation")
 	case WorkerProviderPi:
 		return exclusivePiSessionToken(options.argv)
 	default:
@@ -125,6 +127,11 @@ func WithProviderResumeToken(provider, command, token string) (string, error) {
 			return "", fmt.Errorf("opencode resume requires ses_* session id")
 		}
 		return appendCommandOptions(command, "-s", quoted), nil
+	case WorkerProviderAntigravity:
+		if !antigravityConversationIDPattern.MatchString(token) {
+			return "", fmt.Errorf("invalid Antigravity conversation id")
+		}
+		return appendCommandOptions(command, "--conversation", quoted), nil
 	case WorkerProviderDSH:
 		if !dshSessionIDPattern.MatchString(token) {
 			return "", fmt.Errorf("invalid DSH session id")

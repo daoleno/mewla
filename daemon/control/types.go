@@ -316,6 +316,8 @@ type Executor struct {
 	Command      string               `json:"command,omitempty"`
 	Capabilities ExecutorCapabilities `json:"capabilities"`
 	Host         bool                 `json:"host,omitempty"`
+	// WorkerOnly marks an agent that runs Workers but cannot host Brain.
+	WorkerOnly bool `json:"worker_only,omitempty"`
 }
 
 type Handler interface {

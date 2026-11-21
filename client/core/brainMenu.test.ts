@@ -47,6 +47,15 @@ describe("Switch executor", () => {
     expect(canSwitchBrainExecutor(snapshot)).toBe(true);
   });
 
+  test("an agent that runs Workers but cannot host Brain is never a choice", () => {
+    const agy = { id: "agy", name: "agy", provider: "antigravity", worker_only: true };
+    const states = { ...snapshot.executor_states!, agy: { installed: true, signed_in: true } };
+    const { choices, moreToInstall } = brainExecutorChoices([...snapshot.executors!, agy], states);
+    expect(choices.map((e) => e.id)).toEqual(["claude", "codex"]);
+    expect(moreToInstall).toBe(true);
+    expect(brainExecutorLabel(agy)).toBe("Antigravity");
+  });
+
   test("one line per agent: its product name, no runtime; a second line only to tell rows apart or ask for a sign-in", () => {
     const states = snapshot.executor_states!;
     expect(brainExecutorLabel({ id: "codex", name: "codex", provider: "codex" })).toBe("Codex");

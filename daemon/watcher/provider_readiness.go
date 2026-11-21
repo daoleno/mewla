@@ -160,6 +160,9 @@ func isWorkerInputReady(command, content string) bool {
 	if isOpenCodeCommand(command) || looksLikeOpenCodePane(content) {
 		return isOpenCodeInputReady(content)
 	}
+	if isAntigravityCommand(command) {
+		return isAntigravityInputReady(content)
+	}
 	return strings.TrimSpace(content) != ""
 }
 
@@ -292,6 +295,7 @@ func needsInputReadinessWait(command, content string) bool {
 		isGrokCommand(command) ||
 		isPiCommand(command) ||
 		isOpenCodeCommand(command) ||
+		isAntigravityCommand(command) ||
 		strings.Contains(lowerContent, "openai codex") ||
 		strings.Contains(lowerContent, "cursor agent") ||
 		looksLikeGrokPane(content) ||

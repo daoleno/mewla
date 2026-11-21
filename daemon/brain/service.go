@@ -30,6 +30,7 @@ import (
 var (
 	ErrExecutorNotConfigured   = errors.New("brain host executor is not configured")
 	ErrExecutorLockedByEnv     = errors.New("brain host executor is locked by environment override")
+	ErrExecutorCannotHost      = errors.New("this agent runs Workers but cannot host Brain yet")
 	ErrHostActivationAmbiguous = errors.New("brain Host activation delivery is ambiguous")
 	// ErrRouteTransferNotDurable means TransferSession applied in memory but
 	// route-bindings.json durability was not proven. Host bind/success audit
@@ -1139,6 +1140,9 @@ func (s *Service) setHostExecutor(executorID string, explicit bool) (Snapshot, e
 	executor, ok := s.execs.WorkerExecutor(executorID)
 	if !ok {
 		return Snapshot{}, fmt.Errorf("%w: %s", ErrExecutorNotConfigured, executorID)
+	}
+	if !work.CanHostBrain(executor.Provider) {
+		return Snapshot{}, fmt.Errorf("%w: %s", ErrExecutorCannotHost, executor.ID)
 	}
 	setExecutor := s.store.setImplicitHostExecutorID
 	if explicit {
@@ -4078,7 +4082,7 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 				return executor
 			}
 		}
-		for _, id := range hostdeps.AgentOrder() {
+		for _, id := range hostdeps.HostAgentOrder() {
 			if executor, ok := s.execs.WorkerExecutor(id); ok {
 				return executor
 			}
@@ -4108,6 +4112,10 @@ const (
 	HostAuthUnauthenticated HostAuthState = "unauthenticated"
 	HostAuthUnknown         HostAuthState = "unknown"
 )
+
+// ExecutorAuth is doctor's sign-in verdict for an executor, for a launch that
+// would otherwise stop at the agent's own sign-in screen.
+func ExecutorAuth(executorID string) HostAuthState { return hostAuth(executorID) }
 
 // hostAuth reports an executor's sign-in. The daemon installs doctor's probe
 // with SetHostAuthProbe; without one every executor is unknown. Tests replace it.
@@ -4142,7 +4150,7 @@ func SetHostAuthProbe(probe func(executorID string) HostAuthState) {
 // start without a terminal lands here and logs the pick once.
 func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 	var installed []work.WorkerExecutor
-	for _, id := range hostdeps.AgentOrder() {
+	for _, id := range hostdeps.HostAgentOrder() {
 		executor, ok := s.execs.WorkerExecutor(id)
 		if !ok {
 			continue
@@ -4282,7 +4290,7 @@ func (s *Service) installedAlternativeHosts(current string) []string {
 		return nil
 	}
 	var installed []string
-	for _, id := range hostdeps.AgentOrder() {
+	for _, id := range hostdeps.HostAgentOrder() {
 		if id == current {
 			continue
 		}
@@ -4307,7 +4315,7 @@ func (s *Service) verifiedAlternativeHost(current string) string {
 	if s == nil || s.execs == nil {
 		return ""
 	}
-	for _, id := range hostdeps.AgentOrder() {
+	for _, id := range hostdeps.HostAgentOrder() {
 		if id == current {
 			continue
 		}

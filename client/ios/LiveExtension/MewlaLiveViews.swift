@@ -23,7 +23,7 @@ enum MewlaStyle {
 /// An agent's mark from the app's own logos (client/ui/icons/agents); one-colour marks follow the text colour.
 struct AgentMark: View {
   let agent: String
-  private static let kinds: Set<String> = ["claude", "codex", "cursor", "grok", "pi", "opencode", "dsh", "brain"]
+  private static let kinds: Set<String> = ["claude", "codex", "cursor", "grok", "pi", "opencode", "dsh", "antigravity", "brain"]
 
   var body: some View {
     Image("agent-" + (Self.kinds.contains(agent) ? agent : "terminal"))

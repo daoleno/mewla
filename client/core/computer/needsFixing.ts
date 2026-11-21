@@ -48,7 +48,7 @@ export interface NeedsFixingInput {
   minVersion: string;
 }
 
-const EXECUTOR_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", agent: "Cursor", grok: "Grok", gemini: "Gemini" };
+const EXECUTOR_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", agent: "Cursor", grok: "Grok", gemini: "Gemini", agy: "Antigravity" };
 
 function executorName(id: string): string {
   return EXECUTOR_NAMES[id] ?? (id ? id[0]!.toUpperCase() + id.slice(1) : "The agent");

@@ -29,6 +29,8 @@ export type BrainExecutorRef = {
   command?: string;
   capabilities?: { interactive_tty?: boolean; structured_events?: boolean };
   host?: boolean;
+  /** Runs Workers but cannot host Brain (the computer says so: agy for now). */
+  worker_only?: boolean;
 };
 
 export type BrainExecutorState = { installed: boolean; signed_in: boolean; account?: string };
@@ -55,7 +57,7 @@ export type BrainProviderOutage = {
   kind?: string;
 };
 
-const PROVIDER_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", pi: "Pi", opencode: "OpenCode", "cursor-agent": "Cursor", grok: "Grok" };
+const PROVIDER_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", pi: "Pi", opencode: "OpenCode", "cursor-agent": "Cursor", grok: "Grok", antigravity: "Antigravity" };
 
 function providerName(provider: string): string {
   return PROVIDER_NAMES[provider] ?? (provider ? provider[0]!.toUpperCase() + provider.slice(1) : "The model provider");

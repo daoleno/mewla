@@ -422,6 +422,7 @@ func TestAgentCommandIsWhatTheExecutorRunsByDefault(t *testing.T) {
 		"grok":     work.WorkerProviderGrok,
 		"pi":       work.WorkerProviderPi,
 		"opencode": work.WorkerProviderOpenCode,
+		"agy":      work.WorkerProviderAntigravity,
 	}
 	for _, id := range hostdeps.AgentOrder() {
 		provider, ok := providers[id]

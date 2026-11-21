@@ -17,6 +17,7 @@ these; one installed, signed-in CLI is enough:
 | `grok` | `grok --no-alt-screen --permission-mode bypassPermissions` | Bypassed |
 | `pi` | `pi` | None; Pi is always permissive |
 | `opencode` | `opencode` (OpenCode 2 only) | None: Mewla adds `--auto` |
+| `agy` (Antigravity) | `agy` | None: Mewla adds `--dangerously-skip-permissions` and trusts the Worker's folder for that launch |
 | `dsh` | `dsh` | Opens the DSH web harness, not a terminal agent |
 
 A Session's type follows the program that actually runs: a Cursor Session using
@@ -114,6 +115,7 @@ configuration says:
 | Claude Code | `--permission-mode bypassPermissions`: no per-action approval, and nothing reviews what it runs. An explicit `bypassPermissions` or `--dangerously-skip-permissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected for delegated work |
 | Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
+| Antigravity | `--dangerously-skip-permissions`, and one inline `--settings` for the launch that trusts the Worker's folder and opens agy's tool and plan review gates. Nothing is written to your `~/.gemini`. A `--mode`, `--sandbox`, `-p` or `--continue` in the command is refused for delegated work |
 | OpenCode | `--auto` |
 | Pi | Nothing: it has no approval gate. Calendar may add `--no-extensions` |
 
@@ -245,3 +247,20 @@ mewla doctor
 
 It reports which configured agents are on `PATH`, hints when one looks signed
 out, and exits nonzero when the machine is not ready.
+
+## Antigravity
+
+`agy` is Google's Antigravity CLI (it took over from Gemini CLI for individual
+accounts on 18 June 2026). Install it with
+`curl -fsSL https://antigravity.google/cli/install.sh | bash` (macOS and Linux;
+Windows: `irm https://antigravity.google/cli/install.ps1 | iex`), then run `agy`
+once and sign in with Google OAuth in the browser; Mewla never types a
+credential. Gemini 4 Neon and the other models of your plan appear in
+`agy models`. `mewla doctor` runs `agy models` to see whether it is signed in.
+
+Antigravity runs Workers from Brain, Calendar and the app. It cannot be Brain's
+own agent yet: Brain reads its conversation from the agent's transcript, and
+agy keeps conversations in a SQLite database Mewla has no reader for. Its Chat
+is the terminal. Resume uses agy's own `--conversation <id>`; Mewla reads the id
+from agy's `conversation_summaries.db`, because agy never accepts an id it did
+not create. agy updates itself in the background and has no switch for it.

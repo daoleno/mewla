@@ -49,7 +49,7 @@ sections = [
         {"name": "TweetNaCl.js", "version": "1.0.3", "license": "Unlicense", "url": "https://github.com/dchest/tweetnacl-js", "text": text("Unlicense.txt")},
         # The agent marks in ui/icons/agents (AgentIcon.tsx says where each comes from).
         {"name": "Lobe Icons", "version": "2.21.0", "license": "MIT", "url": "https://github.com/lobehub/lobe-icons", "text": text("lobe-icons-MIT.txt"),
-         "note": "The Claude, Codex, Grok, OpenCode and DeepSeek marks."},
+         "note": "The Claude, Codex, Grok, OpenCode and DeepSeek marks, and the Antigravity mark (from @lobehub/icons-static-svg 1.104.0; the mark stays Google's trademark)."},
         {"name": "Pi Coding Agent mark", "license": "MIT", "url": "https://pi.dev", "text": text("Pi-mark-MIT.txt")},
         # The named products' marks in ui/kit/marks.ts.
         {"name": "Simple Icons", "version": "16.31.0", "license": "CC0-1.0", "url": "https://simpleicons.org", "text": text("simple-icons-CC0.txt"),

@@ -38,7 +38,7 @@ export const storage = {
   "mewla:onboarded": "true",
 };
 
-const AGENT = { claude: "claude", codex: "codex", cursor: "cursor-agent", opencode: "opencode" } as const;
+const AGENT = { claude: "claude", codex: "codex", cursor: "cursor-agent", opencode: "opencode", antigravity: "agy" } as const;
 type Agent = keyof typeof AGENT;
 
 /** Ids the sheet and its test open. */
@@ -77,6 +77,8 @@ const SESS: Sess[] = [
     brief: "Check every outbound link in atlas-docs and list the dead ones.", reply: "42 links checked, 3 dead. The list is in links-report.md. Say the word and I will fix them." },
   { id: "node", agent: "codex", name: "Node 22 upgrade", proj: "atlas-api", st: "done", act: "Merged, CI green", t: "11:20",
     brief: "Move atlas-api to Node 22 and keep CI green.", reply: "Upgraded, two deprecated calls replaced, CI green. Merged at 11:20." },
+  { id: "migrate", agent: "antigravity", name: "Schema migration plan", proj: "atlas-api", st: "done", act: "Plan written, 4 steps", t: "10:05",
+    brief: "Plan the zero-downtime migration of the orders table and list the risky steps.", reply: "Plan written: four steps, the backfill is the risky one. It is in migration-plan.md." },
   { id: "tokens", agent: "cursor", name: "Dark-mode tokens", proj: "landing-site", st: "done", act: "11 files, review passed", t: "Yesterday",
     brief: "Replace hard-coded colours on landing-site with the dark-mode tokens.", reply: "11 files moved to tokens. Review passed yesterday." },
 ];

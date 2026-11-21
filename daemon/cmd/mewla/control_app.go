@@ -693,6 +693,9 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 	if err != nil {
 		return control.ErrorResponse("invalid_executor", err.Error())
 	}
+	if reason := executorNotReady(command); reason != "" {
+		return control.ErrorResponse("executor_not_ready", reason)
+	}
 
 	cwd := strings.TrimSpace(req.Cwd)
 	if cwd == "" {
@@ -2018,7 +2021,8 @@ func controlExecutor(executor work.WorkerExecutor) control.Executor {
 			InteractiveTTY:   executor.Capabilities.InteractiveTTY,
 			StructuredEvents: executor.Capabilities.StructuredEvents,
 		},
-		Host: executor.Host,
+		Host:       executor.Host,
+		WorkerOnly: executor.WorkerOnly,
 	}
 }
 

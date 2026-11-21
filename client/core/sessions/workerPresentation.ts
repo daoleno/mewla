@@ -7,7 +7,7 @@ import {
   type TerminalFlavor,
 } from './terminalFlavor';
 
-export type AgentKind = 'terminal' | 'claude' | 'codex' | 'cursor' | 'grok' | 'pi' | 'opencode' | 'dsh';
+export type AgentKind = 'terminal' | 'claude' | 'codex' | 'cursor' | 'grok' | 'pi' | 'opencode' | 'dsh' | 'antigravity';
 export type WorkerTitleSource = 'alias' | 'explicit_name' | 'default';
 export type { TerminalFlavor };
 
@@ -63,7 +63,7 @@ export function presentWorker(agent: Pick<Worker, 'name' | 'project' | 'cwd' | '
   };
 }
 
-const AGENT_KINDS: ReadonlySet<string> = new Set<AgentKind>(['claude', 'codex', 'cursor', 'grok', 'pi', 'opencode', 'dsh']);
+const AGENT_KINDS: ReadonlySet<string> = new Set<AgentKind>(['claude', 'codex', 'cursor', 'grok', 'pi', 'opencode', 'dsh', 'antigravity']);
 
 /**
  * The kind to present a Worker as. The daemon names the provider of the
@@ -87,6 +87,7 @@ function isGenericWorkerTitle(name: string, kind: AgentKind): boolean {
   if (kind === 'codex' && (lower === 'codex' || lower === 'openai codex')) return true;
   if (kind === 'cursor' && (lower === 'agent' || lower === 'cursor' || lower === 'cursor agent')) return true;
   if (kind === 'grok' && (lower === 'grok' || lower === 'grok cli' || lower === 'xai grok')) return true;
+  if (kind === 'antigravity' && (lower === 'agy' || lower === 'antigravity' || lower === 'antigravity cli')) return true;
   if (kind === 'pi' && (lower === 'pi' || lower === 'pi coding agent')) return true;
   if (kind === 'opencode' && (lower === 'opencode' || lower === 'open code')) return true;
   return (
@@ -128,6 +129,7 @@ function defaultTitle(kind: AgentKind): string {
     case 'pi':
       return 'Pi';
     case 'dsh': return 'DSH';
+    case 'antigravity': return 'Antigravity';
     case 'opencode':
       return 'OpenCode';
     default:
@@ -148,6 +150,7 @@ function shortDefaultTitle(kind: AgentKind): string {
     case 'pi':
       return 'Pi';
     case 'dsh': return 'DSH';
+    case 'antigravity': return 'Antigravity';
     case 'opencode':
       return 'OpenCode';
     default:
@@ -169,6 +172,7 @@ export function typeLabel(kind: AgentKind, terminalFlavor: TerminalFlavor): stri
     case 'pi':
       return 'Pi';
     case 'dsh': return 'DSH';
+    case 'antigravity': return 'Antigravity';
     case 'opencode':
       return 'OpenCode';
     default:
