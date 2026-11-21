@@ -95,6 +95,7 @@ func (s *Service) captureHostTranscript(
 			return false, nil
 		}
 		conversation.Events = work.SuppressPrivateHostTurns(conversation.Events)
+		conversation.Events = suppressRefusedWorkReplies(conversation.Events)
 		revision := providerConversationRevision(conversation)
 		if state.binding == binding && state.revision == revision {
 			return false, nil

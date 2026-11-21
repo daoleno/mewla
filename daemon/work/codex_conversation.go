@@ -265,6 +265,10 @@ type CodexConversationEvent struct {
 	// recorded it as refused (by the person at its prompt, or a permission
 	// rule). Daemon-internal; it is not on the wire.
 	Rejected bool `json:"-"`
+	// ProviderError is set on the text of a provider failure record (Claude's
+	// isApiErrorMessage): the words are the provider refusing the request,
+	// not the agent's reply. Daemon-internal; it is not on the wire.
+	ProviderError *ProviderActivityError `json:"-"`
 	// Partial means the provider may update this same logical event ID again.
 	// It does not imply or permit client-side splitting of completed text.
 	Partial bool `json:"partial,omitempty"`

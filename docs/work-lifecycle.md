@@ -131,10 +131,15 @@ not start one. While the outage lasts:
   delivered again. The person's own messages are never held.
 - `brain_snapshot.provider_outages` lists it, and Brain's Chat shows one line:
   "Claude hasn't answered since 07:03 (rate limit). Work is held, not lost." The
-  log names the provider's own error.
+  log names the provider's own error. The provider's refusal text that ends a
+  Host turn handed a Work event ("API Error: Request rejected (429) …") stays
+  out of Chat, since that delivery is replayed. A refused reply to the person's
+  own message stays, and so does any refusal that is not transient.
 
 The first Activity of that family that settles without an error ends the outage
-at once: the line clears, the lane delivers what it held, and every held Turn is
+at once. Mewla sends nothing extra to find out, so it notices on the next probe
+or the next request a person makes, up to one probe interval after the provider
+is back. Then the line clears, the lane delivers what it held, and every held Turn is
 continued in its own Session on the next poll. Persistent errors (sign-in,
 billing, a bad request) are not an outage, and an unclassified error keeps the
 rows above.

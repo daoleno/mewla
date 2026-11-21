@@ -1,12 +1,17 @@
 package brain
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 var rateLimited = &watcher.ProviderActivityError{
@@ -194,5 +199,90 @@ func TestBrainsSnapshotListsTheOutageAndAFailingJudgeClosesNothingMeanwhile(t *t
 	runSettle(t, service)
 	if got, _ := store.Work(item.ID); got.Status == WorkDone || got.Status == WorkCancelled {
 		t.Fatalf("a Work closed during the outage: %+v", got)
+	}
+}
+
+// 2026-11-21: Brain's Chat showed "API Error: Request rejected (429) · All
+// credentials … are cooling down" under every Work result Brain's refused turn
+// was handed. That delivery is replayed and Chat's one outage line covers it,
+// so the refusal text stays out of Chat. A refused reply to the person's own
+// message, and a sign-in refusal, still show.
+func TestBrainsChatLeavesOutTheProvidersRefusalOfAWorkDeliveryOnly(t *testing.T) {
+	store, service, fw := captureFixture(t)
+	const (
+		threadID = "brain_thread_capture"
+		hostID   = "mewla-worker-brain-capture:@1"
+	)
+	if err := store.SetHostSession(hostID, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	transcript := filepath.Join(dir, "host-claude.jsonl")
+	event := work.FormatDirectWorkEventInput(work.DirectWorkEventInput{
+		EventID: "0e56b60ceaeca351", WorkID: "6dcd42a3-0000-4000-8000-000000000001", WorkRevision: 3,
+		HandlingID: "handling:1", ProviderTurnID: "turn:1", WorkTitle: "Hacker News briefing", Kind: "turn_done",
+		Source: "worker", Summary: "Result ready", NextAction: "read the result", ContextRef: "work:6dcd42a3", PayloadRef: "work:6dcd42a3",
+	})
+	at := time.Date(2026, 11, 20, 23, 2, 15, 0, time.UTC)
+	stamp := func(seconds int) string { return at.Add(time.Duration(seconds) * time.Second).Format(time.RFC3339Nano) }
+	user := func(id string, seconds int, text string) map[string]any {
+		return map[string]any{"type": "user", "uuid": id, "timestamp": stamp(seconds), "sessionId": "host-claude", "cwd": dir,
+			"message": map[string]any{"role": "user", "content": text}}
+	}
+	reply := func(id string, seconds int, text string) map[string]any {
+		return map[string]any{"type": "assistant", "uuid": id, "timestamp": stamp(seconds), "sessionId": "host-claude", "cwd": dir,
+			"message": map[string]any{"role": "assistant", "stop_reason": "end_turn", "content": []map[string]string{{"type": "text", "text": text}}}}
+	}
+	refusal := func(id string, seconds int, code string, status int, text string) map[string]any {
+		record := reply(id, seconds, text)
+		record["isApiErrorMessage"], record["error"], record["apiErrorStatus"] = true, code, status
+		record["message"].(map[string]any)["model"] = "<synthetic>"
+		record["message"].(map[string]any)["stop_reason"] = "stop_sequence"
+		return record
+	}
+	const limited = "API Error: Request rejected (429) · All credentials for model claude-fable-5-2 are cooling down"
+	records := []map[string]any{
+		user("u1", 0, "What is on my plate today?"),
+		reply("a1", 1, "Two Works are running."),
+		user("u2", 2, event),
+		refusal("a2", 8, "rate_limit", 429, limited), // Brain's turn handed the result: replayed
+		user("u3", 60, "Are you there?"),
+		refusal("a3", 61, "rate_limit", 429, limited), // the person's message: not replayed, stays
+		user("u4", 120, event),
+		refusal("a4", 121, "authentication_failed", 401, "API Error: 401 · Please run /login"), // stays
+	}
+	var lines []string
+	parent := any(nil)
+	for _, record := range records {
+		record["parentUuid"], parent = parent, record["uuid"]
+		if record["type"] == "user" {
+			record["promptId"], record["userType"] = "prompt-"+record["uuid"].(string), "external"
+		}
+		raw, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, string(raw))
+	}
+	if err := os.WriteFile(transcript, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetHostProviderTranscript("host-claude", transcript, ""); err != nil {
+		t.Fatal(err)
+	}
+	fw.sessions[hostID] = &classifier.Worker{
+		ID: hostID, Name: "Brain", Hidden: true, State: classifier.StateDone,
+		Command: "claude --session-id host-claude", Cwd: dir,
+	}
+	if captured, err := service.captureHostTranscript(work.NewProviderConversationReader(), &hostTranscriptCaptureState{}); err != nil || !captured {
+		t.Fatalf("capture: captured=%v err=%v", captured, err)
+	}
+	var bodies []string
+	for _, item := range waitForTimelineAssistant(t, store, threadID, 3) {
+		bodies = append(bodies, item.Body)
+	}
+	want := []string{"Two Works are running.", limited, "API Error: 401 · Please run /login"}
+	if strings.Join(bodies, "|") != strings.Join(want, "|") {
+		t.Fatalf("Chat replies = %q, want %q", bodies, want)
 	}
 }
