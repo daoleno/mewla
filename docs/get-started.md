@@ -28,6 +28,9 @@ Your code, keys and agent state stay on your computer.
 
 ## 1. Install the daemon
 
+On an Apple Silicon Mac you can instead [download Mewla for Mac](mac-app.md): the app and
+the daemon in one, no terminal. Then go on at step 3.
+
 On Linux, WSL2 or macOS:
 
 ```sh
