@@ -104,7 +104,7 @@ for engine in $engines; do
       env -u BROWSER -u CHROME ENGINE="$engine" PLAYWRIGHT_CORE="$core" timeout 600 bun "$here/web.ts" "$dir" > "$dir/web.log" 2>&1
       code=$?
       grep -q "^corpus web $engine: ok " "$dir/web.log" && break
-      [[ $attempt == 1 ]] && { log "$engine failed ($(grep -m1 -E '^error:|^corpus web .*FAIL' "$dir/web.log" || echo "exit $code")); trying once more"; cp "$dir/web.log" "$dir/web-attempt1.log"; }
+      [[ $attempt == 1 ]] && { log "$engine failed ($(grep -m1 -E '^error:|^corpus web .*FAIL' "$dir/web.log" || echo "exit $code")); trying once more"; cp "$dir/web.log" "$dir/web-attempt1.log"; tail -12 "$dir/web.log" | grep -v '^[0-9]* |' >&2; }
     done
     set -e
     # bun can crash as it exits after a Playwright run: the verdict is web.ts's own line, not the exit code alone.
