@@ -53,9 +53,15 @@ notarize() {
   [[ -n "$key" ]] || { echo "no --key: $1 is signed, not notarized"; return 0; }
   local auth=(--key "$key" --key-id "$key_id")
   [[ -n "$issuer" ]] && auth+=(--issuer "$issuer")
-  local result
-  result=$(xcrun notarytool submit "$1" "${auth[@]}" --wait --output-format json)
+  local result rc=0
+  # A refusal (an account that cannot submit) comes back on stdout or stderr: both are shown before the script ends on it.
+  result=$(xcrun notarytool submit "$1" "${auth[@]}" --wait --output-format json 2>"$work/notary.err") || rc=$?
   echo "$result"
+  [[ ! -s "$work/notary.err" ]] || cat "$work/notary.err" >&2
+  if [[ $rc -ne 0 && "$result" != *'"status"'* ]]; then
+    echo "notarytool submit of $1 failed (exit $rc) without a result: see the output above" >&2
+    return 1
+  fi
   local status submission
   status=$(python3 -I -c 'import json,sys; print(json.loads(sys.argv[1]).get("status",""))' "$result")
   submission=$(python3 -I -c 'import json,sys; print(json.loads(sys.argv[1]).get("id",""))' "$result")
