@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { answering, pressUntil } from "../testing/fixtures";
+import { answering, expoTokenService, item, paired, phoneHost, pressUntil } from "../testing/fixtures";
 
 const HARNESS = "./testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -268,4 +268,31 @@ describe("The computer page", () => {
     // Friends is a phone Lab.
     expect(app.shows("id:computer-friends")).toBe(false);
   });
+});
+
+describe("Calendar on the computer page", () => {
+  const APP = "../FakeDaemonApp.tsx";
+  const row = async (daemon: Record<string, unknown>) => {
+    const app = await open(APP, { platform: "android", storage: paired, network: expoTokenService, host: phoneHost({ brain: {}, ...daemon }) });
+    await app.waitFor("id:home-cat", { timeout: 10_000 });
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-page");
+    return app;
+  };
+
+  test("is the first of the rare places with nothing on today's date, says no count, and opens Calendar", async () => {
+    const app = await row({ calendar_items: [] });
+    await app.waitFor("id:computer-calendar");
+    expect(app.texts()).toContain("Calendar");
+    await app.press("id:computer-calendar");
+    await app.waitFor("id:calendar-page");
+  }, 30_000);
+
+  test("says how many items are today, and opens Calendar", async () => {
+    const app = await row({ calendar_items: [item("Call the bank", 0.01), item("Water the plants", 0.02)] });
+    await app.waitFor("id:computer-calendar");
+    await app.waitUntil(() => app.texts().includes("2"), { timeout: 10_000 });
+    await app.press("id:computer-calendar");
+    await app.waitFor("id:calendar-page");
+  }, 30_000);
 });

@@ -15,9 +15,11 @@ import { stateTextColor, tile } from "../kit/RowTile";
 import { followFriends, friendsEnabled, unread } from "../more/friends/state";
 import { flowState } from "../more/extensions/plugins";
 import type { MorePage, PageNav } from "../more/routes";
+import type { Route } from "../shell/routes";
 import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice, statusWord } from "../more/settings/computers";
 import { otherState } from "./computers";
 import { pet } from "../pets/pets";
+import { tray } from "../tray/state";
 import { connection, current, resumeConnection, servers, shownConnection, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { wide } from "../shell/layout";
@@ -37,7 +39,8 @@ const WORDS = { connected: "Connected", connecting: "Connecting…", waiting: "O
  * The rare places, each with its value (SPEC §11 Computer page row) where the phone already knows it: Extensions'
  * connected accounts once listed, Friends' unread. Screen, Stats and Resources would each need a request of their own.
  */
-const RARE: { title: string; icon: IconName; route: MorePage; lab?: boolean; value?: () => string | undefined }[] = [
+const RARE: { title: string; icon: IconName; route: MorePage | Route; lab?: boolean; value?: () => string | undefined }[] = [
+  { title: "Calendar", icon: "calendar", route: { name: "calendar" }, value: () => (tray().todayCount > 0 ? String(tray().todayCount) : undefined) },
   { title: "Screen", icon: "eye", route: { name: "screen" } },
   { title: "Extensions", icon: "plugins", route: { name: "extensions" }, value: () => (flowState().loaded && flowState().accounts.length ? String(flowState().accounts.length) : undefined) },
   { title: "Stats", icon: "stats", route: { name: "stats" } },
@@ -301,7 +304,7 @@ export function ComputerPage(props: {
       <Section>
         {/* Friends is a phone Lab: v0.3.1's web app had none. */}
         {RARE.filter((place) => !place.lab || (platform.os !== "web" && friendsEnabled())).map((place) => (
-          <Row testID={`computer-${place.route.name}`} lead={tile(place.icon)} title={place.title} value={place.value?.()} chevron onPress={() => props.nav.push(place.route)} />
+          <Row testID={`computer-${place.route.name}`} lead={tile(place.icon)} title={place.title} value={place.value?.()} chevron onPress={() => nav.push(place.route as Route)} />
         ))}
       </Section>
 
