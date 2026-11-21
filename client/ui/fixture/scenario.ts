@@ -246,9 +246,11 @@ export function scenario(): FakeDaemonState & { assets: Record<string, string> }
       // Every Session's folder is a repository (the mock's `#git/ratelimit`): the header shows its Git button.
       git_diff_status: { type: "git_diff_status", status: {
         available: true, repo_root: "/home/me/work/atlas-api", repo_name: "atlas-api", branch: "fix/rate-limit-window", has_commits: true, clean: false,
-        file_count: 2, staged_file_count: 0, unstaged_file_count: 1, untracked_file_count: 1, additions: 9, deletions: 5,
+        file_count: 4, staged_file_count: 1, unstaged_file_count: 2, untracked_file_count: 1, additions: 31, deletions: 33,
         files: [
           { path: "ratelimit/window.go", status: "modified", staged: false, unstaged: true, untracked: false, working_additions: 9, working_deletions: 5 },
+          { path: "ratelimit/clock.go", status: "added", staged: true, unstaged: false, untracked: false, staged_additions: 22 },
+          { path: "ratelimit/legacy_counter.go", status: "deleted", staged: false, unstaged: true, untracked: false, working_deletions: 28 },
           { path: "ratelimit/window_test.go", status: "untracked", staged: false, unstaged: false, untracked: true, working_additions: 42 },
         ],
       } },

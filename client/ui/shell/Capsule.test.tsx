@@ -138,6 +138,9 @@ describe("a Session's capsule header (SPEC §11)", () => {
     // The Git page reads the changes as it opens.
     expect(framesOf(app.host.posts(), "git_diff_status").at(-1)?.repository_only).toBeUndefined();
     expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla" });
+    // The review the button's status read made is the page's own: its files are listed (a review made inside the
+    // button's computed lost its groups when that re-ran, and the page said "No changes" over a coloured button).
+    await app.waitFor("id:git-row-changes:app.ts", { timeout: 10_000 });
   }, 30_000);
 
   // Owner 2026-11-22: the Git button is Git's own mark and shows by colour (its label says it) when the repository has

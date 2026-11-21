@@ -758,15 +758,16 @@ changes that the service must approve all call it.
   (`splitActivityStatusDetail` in `InterfaceTimelineActivityModel.ts`).
   Agent status rows (Failed, Blocked) follow the same rule: they start
   collapsed with their normal mark; only a running one opens by itself.
-- **Git.** Added is green and deleted is the terminal's crimson; modified and
-  renamed are ink, because amber means Warning and blue means Running.
-  A Session's Git button is Git's own mark (`git`, the diamond with its
-  branch), the same on the phone, the rail, the Mac and the web. It is ink in a
-  clean repository and the meter blue Git's modified tile uses when the folder
-  has anything the Git page would list (changed, staged, untracked); its label
-  says it ("Git, changes"), there is no count. It reads the status the app
-  already holds for the folder, read once when the Session shows and again when
-  a turn ends. A commit's refs in History sit on a line of their own under the
+- **Git.** Added is green, deleted is the terminal's crimson, modified is
+  amber (`warning`) and renamed is ink. Amber here is the same word it is
+  everywhere: this is unsettled, look before it goes on. Blue stays Running
+  only, so Git never uses it. A Session's Git button is the branch mark
+  (`git-branch`), the same on the phone, the rail, the Mac and the web. It is
+  ink in a clean repository and the same amber as the modified tile when the
+  folder has anything the Git page would list (changed, staged, untracked); its
+  label says it ("Git, changes"), there is no count. It reads the status the
+  app already holds for the folder, read once when the Session shows and again
+  when a turn ends. A commit's refs in History sit on a line of their own under the
   text (`RefChips`): HEAD a small ink marker, branches and tags chips, remote
   branches outlined and quieter, a long name cut in the middle, never beside
   the title.
