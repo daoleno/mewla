@@ -125,7 +125,7 @@ function Fitted(props: { pinned: JSX.Element; children: JSX.Element }) {
   const pinned = signal(0);
   return (
     <View>
-      <Scroll testID="whats-new-scroll" style={{ maxHeight: scrollBesidePinned(room(), pinned(), Number.MAX_SAFE_INTEGER) }}>{props.children}</Scroll>
+      <Scroll testID="whats-new-scroll" keyboardShouldPersistTaps="handled" style={{ maxHeight: scrollBesidePinned(room(), pinned(), Number.MAX_SAFE_INTEGER) }}>{props.children}</Scroll>
       <View style={{ paddingBottom: BODY_FOOT }} onLayout={({ bounds }) => pinned.set(bounds.size.height)}>{props.pinned}</View>
     </View>
   );

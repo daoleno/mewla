@@ -6,7 +6,7 @@ import { Scene } from "../scenes";
 const NAMES = ["share-in", "git-button", "work-closes"];
 
 mount(() => (
-  <Scroll class="flex-1 bg-sheet" contentClass="gap-4 px-5 py-6">
+  <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-sheet" contentClass="gap-4 px-5 py-6">
     {NAMES.map((name) => (
       <View class="gap-1.5">
         <Text class="text-caption font-semibold text-muted-foreground">{name}</Text>
