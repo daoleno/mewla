@@ -92,9 +92,15 @@ for engine in $engines; do
     verdict="FAIL $engine: the browser could not be installed (see $dir/install.log)"
   else
     # BROWSER and CHROME name one binary: left over from another job they would launch the wrong engine.
+    # One more try for a run that died in the browser itself: Firefox on a CI runner once ended in Playwright's "Serialized
+    # error must have either an error or a value" and passed on the rerun (11-21). A renderer fault fails both tries.
     set +e
-    env -u BROWSER -u CHROME ENGINE="$engine" PLAYWRIGHT_CORE="$core" timeout 600 bun "$here/web.ts" "$dir" > "$dir/web.log" 2>&1
-    code=$?
+    for attempt in 1 2; do
+      env -u BROWSER -u CHROME ENGINE="$engine" PLAYWRIGHT_CORE="$core" timeout 600 bun "$here/web.ts" "$dir" > "$dir/web.log" 2>&1
+      code=$?
+      grep -q "^corpus web $engine: ok " "$dir/web.log" && break
+      [[ $attempt == 1 ]] && { log "$engine failed ($(grep -m1 -E '^error:|^corpus web .*FAIL' "$dir/web.log" || echo "exit $code")); trying once more"; cp "$dir/web.log" "$dir/web-attempt1.log"; }
+    done
     set -e
     # bun can crash as it exits after a Playwright run: the verdict is web.ts's own line, not the exit code alone.
     if ! grep -q "^corpus web $engine: ok " "$dir/web.log"; then
@@ -108,7 +114,7 @@ for engine in $engines; do
   if [[ "$verdict" != PASS* ]]; then
     failed=1
     # On a runner the scratch directory is gone with the job: what failed is printed here, not only named.
-    for f in "$dir/install.log" "$dir/web.log" "$dir/check.log"; do
+    for f in "$dir/install.log" "$dir/web-attempt1.log" "$dir/web.log" "$dir/check.log"; do
       [[ -s "$f" ]] && { echo "::group::$engine: $(basename "$f")"; tail -60 "$f"; echo "::endgroup::"; } >&2
     done
   fi
