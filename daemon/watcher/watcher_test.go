@@ -2414,3 +2414,54 @@ func TestZshNewUserPromptIsRecognisedAndOnlyThatPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestPinFallbackStartKeepsTheFirstObservedStart(t *testing.T) {
+	first := time.Date(2026, 11, 22, 7, 0, 0, 0, time.UTC)
+	pins := map[string]startPin{}
+	for i := 0; i < 5; i++ {
+		got := pinFallbackStart(pins, "s1", true, "claude", 100, 100, first.Add(time.Duration(i)*time.Second))
+		if !got.Equal(first) {
+			t.Fatalf("poll %d start = %s, want the first observed %s", i, got, first)
+		}
+	}
+	// A new launch in the same pane (new foreground group), another pid or
+	// another agent is a new start.
+	later := first.Add(time.Minute)
+	for name, args := range map[string][3]any{
+		"new group": {"claude", 100, 200},
+		"new pid":   {"claude", 101, 200},
+		"new agent": {"codex", 101, 200},
+	} {
+		got := pinFallbackStart(pins, "s1", true, args[0].(string), args[1].(int), args[2].(int), later)
+		if !got.Equal(later) {
+			t.Fatalf("%s start = %s, want %s", name, got, later)
+		}
+		later = later.Add(time.Minute)
+	}
+	// A start the scan read is returned as read and forgets the pin.
+	read := first.Add(time.Hour)
+	if got := pinFallbackStart(pins, "s1", false, "claude", 100, 100, read); !got.Equal(read) {
+		t.Fatalf("read start = %s, want %s", got, read)
+	}
+	if _, ok := pins["s1"]; ok {
+		t.Fatalf("a read start kept its pin")
+	}
+}
+
+func TestDetectWorkerProcessStartSaysWhenItFellBack(t *testing.T) {
+	snapshot := time.Date(2026, 11, 22, 7, 0, 5, 0, time.UTC)
+	started := snapshot.Add(-time.Hour)
+	unbound := map[int]processInfo{10: {pid: 10, ppid: 1, tpgid: 10, startedAt: started, comm: "zsh", args: "zsh"}}
+	command, got, pid, fellBack := detectWorkerProcessStart("claude", 10, unbound, snapshot)
+	if command != "claude" || !got.Equal(snapshot) || pid != 10 || !fellBack {
+		t.Fatalf("unbound = (%q, %s, %d, %t), want the snapshot time and fellBack", command, got, pid, fellBack)
+	}
+	bound := map[int]processInfo{
+		10: {pid: 10, ppid: 1, tpgid: 20, startedAt: started, comm: "zsh", args: "zsh"},
+		20: {pid: 20, ppid: 10, pgid: 20, startedAt: started.Add(time.Minute), comm: "claude", args: "claude"},
+	}
+	_, got, pid, fellBack = detectWorkerProcessStart("claude", 10, bound, snapshot)
+	if !got.Equal(started.Add(time.Minute)) || pid != 20 || fellBack {
+		t.Fatalf("bound = (%s, %d, %t), want the process start and no fallback", got, pid, fellBack)
+	}
+}
