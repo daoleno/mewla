@@ -10,8 +10,10 @@ internal data class ShareSource(
   val type: String?,
   /** An ACTION_VIEW's data, as the string it came in. */
   val data: String?,
-  /** EXTRA_STREAM and ClipData URIs, in order, as strings. */
+  /** EXTRA_STREAM, in order, as strings. */
   val streams: List<String>,
+  /** The ClipData's URIs: what a sender puts there to grant them, or a preview picture of its text. */
+  val clip: List<String>,
   /** EXTRA_TEXT (several of them for SEND_MULTIPLE) or the ClipData's text. */
   val texts: List<String>,
   val subject: String?,
@@ -34,11 +36,18 @@ internal object ShareRules {
     else -> false
   }
 
-  /** The files of a share: a VIEW's data, then the streams, each once. */
-  fun files(source: ShareSource): List<String> =
-    ((if (source.action == VIEW) listOfNotNull(source.data) else emptyList()) + source.streams)
+  /**
+   * The files of a share: a VIEW's data, then the streams, each once. The clip is only a share's own list when it
+   * is all there is: with a text it is the preview picture a browser attaches to a link (never a file the person
+   * shared), and beside EXTRA_STREAM it only repeats the grant.
+   */
+  fun files(source: ShareSource): List<String> {
+    val data = if (source.action == VIEW) listOfNotNull(source.data) else emptyList()
+    val clipOnly = data.isEmpty() && source.streams.isEmpty() && text(source).isEmpty()
+    return (data + source.streams + (if (clipOnly) source.clip else emptyList()))
       .filter { it.isNotBlank() }
       .distinct()
+  }
 
   /** The text of a share, after its subject when that adds something: a page's title above its link. */
   fun text(source: ShareSource): String {

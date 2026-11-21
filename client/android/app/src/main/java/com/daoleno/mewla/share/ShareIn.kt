@@ -167,7 +167,7 @@ class ShareIn(private val activity: ComponentActivity, private val nsh: NshView)
       IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let { streams.add(it.toString()) }
     }
     val clip = intent.clipData
-    clip?.let { (0 until it.itemCount).forEach { i -> it.getItemAt(i).uri?.let { uri -> streams.add(uri.toString()) } } }
+    val clipUris = clip?.let { c -> (0 until c.itemCount).mapNotNull { i -> c.getItemAt(i).uri?.toString() } }.orEmpty()
     val texts = mutableListOf<String>()
     if (action == Intent.ACTION_SEND_MULTIPLE) {
       intent.getCharSequenceArrayListExtra(Intent.EXTRA_TEXT)?.forEach { texts.add(it.toString()) }
@@ -175,12 +175,12 @@ class ShareIn(private val activity: ComponentActivity, private val nsh: NshView)
       intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.let { texts.add(it.toString()) }
     }
     // A sender that only fills the clip with text.
-    if (texts.isEmpty() && streams.isEmpty() && clip != null) {
+    if (texts.isEmpty() && streams.isEmpty() && clipUris.isEmpty() && clip != null) {
       (0 until clip.itemCount).forEach { i -> clip.getItemAt(i).text?.let { texts.add(it.toString()) } }
     }
     val subject = intent.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString() ?: intent.getCharSequenceExtra(Intent.EXTRA_TITLE)?.toString()
     // The VIEW's own data is what is opened; a SEND's `type` says what the streams are.
-    return ShareSource(action, intent.type, intent.data?.toString().takeIf { action == Intent.ACTION_VIEW }, streams.toList(), texts, subject)
+    return ShareSource(action, intent.type, intent.data?.toString().takeIf { action == Intent.ACTION_VIEW }, streams.toList(), clipUris, texts, subject)
   }
 
   /** The app's own folders (internal, device-protected, external app-specific): never read from a sender's URI. */

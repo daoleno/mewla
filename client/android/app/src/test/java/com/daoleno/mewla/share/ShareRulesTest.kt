@@ -8,8 +8,8 @@ import org.junit.Test
 class ShareRulesTest {
   private fun source(
     action: String = ShareRules.SEND, type: String? = "*/*", data: String? = null,
-    streams: List<String> = emptyList(), texts: List<String> = emptyList(), subject: String? = null,
-  ) = ShareSource(action, type, data, streams, texts, subject)
+    streams: List<String> = emptyList(), clip: List<String> = emptyList(), texts: List<String> = emptyList(), subject: String? = null,
+  ) = ShareSource(action, type, data, streams, clip, texts, subject)
 
   @Test fun sharesAreSendAndOpenWithOfAFile_notLinks() {
     assertTrue(ShareRules.isShare(ShareRules.SEND, null))
@@ -26,6 +26,28 @@ class ShareRulesTest {
     assertEquals(listOf(uri), ShareRules.files(source(ShareRules.VIEW, "application/pdf", uri, listOf(uri))))
     assertEquals(listOf("content://a/1", "content://a/2"), ShareRules.files(source(ShareRules.SEND_MULTIPLE, streams = listOf("content://a/1", "content://a/2", "content://a/1"))))
     assertEquals(emptyList<String>(), ShareRules.files(source(texts = listOf("hi"))))
+  }
+
+  @Test fun aLinksPreviewPictureInTheClipIsNotAFile() {
+    // Chrome: the page's title and link, and a thumbnail it only puts in the ClipData.
+    val shared = source(type = "text/plain", texts = listOf("https://example.com/a"), subject = "Title", clip = listOf("content://com.android.chrome.FileProvider/share/preview.png"))
+    assertEquals(emptyList<String>(), ShareRules.files(shared))
+  }
+
+  @Test fun theClipThatRepeatsTheStreamIsOneFile() {
+    // Files: EXTRA_STREAM, and the same URI in the ClipData for its grant.
+    val shared = source(streams = listOf("content://docs/report.pdf"), clip = listOf("content://docs/report.pdf"))
+    assertEquals(listOf("content://docs/report.pdf"), ShareRules.files(shared))
+  }
+
+  @Test fun aClipWithFilesAndNoTextIsTheShare() {
+    val shared = source(clip = listOf("content://a/1", "content://a/2"))
+    assertEquals(listOf("content://a/1", "content://a/2"), ShareRules.files(shared))
+  }
+
+  @Test fun aStreamAlongsideTextStaysAFile() {
+    val shared = source(streams = listOf("content://a/1"), clip = listOf("content://a/1", "content://a/preview"), texts = listOf("see this"))
+    assertEquals(listOf("content://a/1"), ShareRules.files(shared))
   }
 
   @Test fun aSendsDataIsNotAFile() {
