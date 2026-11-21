@@ -45,7 +45,10 @@ func TestMissingAgentFor(t *testing.T) {
 	if message := MissingAgentFor("pi").Message(); message != "Pi (pi) is not installed on this computer." {
 		t.Fatalf("an agent Mewla has no installer for: %q", message)
 	}
-	if message := MissingAgentFor("agy").Message(); !strings.Contains(message, "Install it with: ") {
+	if message := MissingAgentFor("agy").Message(); strings.Contains(message, "curl") || strings.Contains(message, "http") {
+		t.Fatalf("the plain sentence carries the install command: %q", message)
+	}
+	if message := MissingAgentFor("agy").MessageWithInstall(); !strings.Contains(message, "Install it with: ") {
 		t.Fatalf("agy: %q", message)
 	}
 }

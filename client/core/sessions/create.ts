@@ -17,7 +17,7 @@ export type CreateSessionOptions = {
 };
 
 /** `firstMessage: "pending"`: the computer holds `text` (WIRE §11); absent, a computer from before it ignored the text. */
-export type CreatedSession = CreateSessionReconciliation & { workerSession?: Record<string, unknown>; firstMessage?: "pending" };
+export type CreatedSession = CreateSessionReconciliation & { workerSession?: Record<string, unknown>; firstMessage?: "pending"; missingAgent?: string };
 
 /**
  * `create_session`, settled as the Expo app settled it: the new Session's id
@@ -43,7 +43,11 @@ export async function createSession(transport: Transport, options: CreateSession
     const code = (error as { code?: unknown }).code;
     // The computer refused before it made anything (the agent is not installed): a failure with its cause, not an
     // unknown outcome, so the person picks another agent and starts at once.
-    if (code === "agent_not_installed") return { kind: "failed", message: (error as Error).message, requiresReconcileBeforeCreate: false };
+    if (code === "agent_not_installed") {
+      // The agent's product name rides in its own field; the install command (also its own) is for the CLI, never the app.
+      const agent = (error as { frame?: Frame }).frame?.agent;
+      return { kind: "failed", message: (error as Error).message, requiresReconcileBeforeCreate: false, ...(typeof agent === "string" && agent ? { missingAgent: agent } : {}) };
+    }
     const known = typeof code === "string" && code ? providerErrorFromPayload({ code, message: (error as Error).message }) : error;
     return reconcileCreateSessionFailure(known, true);
   }

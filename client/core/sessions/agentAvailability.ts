@@ -21,5 +21,10 @@ export function agentInstalled(
   return runners.some((executor) => states[executor.id]?.installed);
 }
 
-/** The line that says some agents are not here and where to get them (the Brain host picker's). */
+/** The refusal of a launch on an agent the computer lacks, in one plain sentence naming the computer as the header does. */
+export function missingAgentSentence(agent: string, computer: string | undefined): string {
+  return `${agent} is not installed on ${computer?.trim() || "this computer"}.`;
+}
+
+/** The Brain host picker's line that says more agents can be installed (the New session sheet shows none). */
 export const INSTALL_MORE_LINE = "Install more with mewla deps";

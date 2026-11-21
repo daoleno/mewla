@@ -1032,9 +1032,10 @@ function comingMs(bytes: unknown): number {
 }
 
 /** A daemon error reply as an Error that keeps its `code` (`answer_choice_gone`, `input_uncertain`, …). */
-export function requestError(frame: Frame, fallback: string): Error & { code?: string } {
-  const error: Error & { code?: string } = new Error(String(frame.message || fallback));
+export function requestError(frame: Frame, fallback: string): Error & { code?: string; frame?: Frame } {
+  const error: Error & { code?: string; frame?: Frame } = new Error(String(frame.message || fallback));
   if (typeof frame.code === "string") error.code = frame.code;
+  error.frame = frame;
   return error;
 }
 

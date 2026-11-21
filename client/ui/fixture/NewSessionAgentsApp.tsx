@@ -22,7 +22,7 @@ const daemon = new FakeDaemon({
     ],
     executor_states: found("claude", "codex", "grok", "opencode", "dsh"),
   },
-  missing_agents: { agy: "Antigravity (agy) is not installed on this computer. Install it with: curl -fsSL https://antigravity.google/cli/install.sh | bash" },
+  missing_agents: { agy: { agent: "Antigravity", install: "curl -fsSL https://antigravity.google/cli/install.sh | bash" } },
 });
 installPlatform({ ...platform(), openSocket: () => daemon.open() });
 host.on<Record<string, unknown>>("app.daemonPush", (frame) => daemon.push(frame as { type: string }));

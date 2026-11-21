@@ -3,7 +3,6 @@ package server
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/work"
@@ -32,11 +31,11 @@ func TestCreateSessionRefusesAMissingAgentBeforeAnythingIsMade(t *testing.T) {
 	defer onlyOnThisComputer("codex")()
 	c := newFirstMessageClient(t)
 	folder := t.TempDir()
-	for _, tc := range []struct{ id, command, text, want string }{
-		{"r-claude", "claude --permission-mode bypassPermissions", "", "Claude Code (claude) is not installed on this computer. Install it with: curl -fsSL https://claude.ai/install.sh | bash"},
+	for _, tc := range []struct{ id, command, text, want, agent, program, install string }{
+		{"r-claude", "claude --permission-mode bypassPermissions", "", "Claude Code (claude) is not installed on this computer.", "Claude Code", "claude", "curl -fsSL https://claude.ai/install.sh | bash"},
 		// A first message does not change the answer: the agent is the reason.
-		{"r-agy", "agy --dangerously-skip-permissions", "Fix it", "Antigravity (agy) is not installed on this computer."},
-		{"r-cursor", "cursor-agent --force --sandbox disabled", "", "Cursor Agent (cursor-agent) is not installed on this computer."},
+		{"r-agy", "agy --dangerously-skip-permissions", "Fix it", "Antigravity (agy) is not installed on this computer.", "Antigravity", "agy", "curl -fsSL https://antigravity.google/cli/install.sh | bash"},
+		{"r-cursor", "cursor-agent --force --sandbox disabled", "", "Cursor Agent (cursor-agent) is not installed on this computer.", "Cursor Agent", "cursor-agent", ""},
 	} {
 		frame := map[string]any{"type": "create_session", "request_id": tc.id, "cwd": folder, "command": tc.command}
 		if tc.text != "" {
@@ -45,8 +44,13 @@ func TestCreateSessionRefusesAMissingAgentBeforeAnythingIsMade(t *testing.T) {
 		c.send(frame)
 		reply := c.next(byRequest(tc.id))
 		message, _ := reply["message"].(string)
-		if reply["type"] != "error" || reply["code"] != "agent_not_installed" || !strings.HasPrefix(message, tc.want) {
+		if reply["type"] != "error" || reply["code"] != "agent_not_installed" || message != tc.want {
 			t.Fatalf("%s: reply = %#v", tc.id, reply)
+		}
+		// The command is its own field (CLI, a later Install action); the sentence never carries it.
+		install, _ := reply["install"].(string)
+		if reply["agent"] != tc.agent || reply["program"] != tc.program || install != tc.install {
+			t.Fatalf("%s: fields = %#v", tc.id, reply)
 		}
 	}
 	if workers := c.srv.watcher.Workers(); len(workers) != 0 {
