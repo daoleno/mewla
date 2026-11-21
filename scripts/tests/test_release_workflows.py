@@ -102,10 +102,10 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         self.assertIn("daemon:", RELEASE)
         self.assertIn("android:", RELEASE)
         gate = between(RELEASE, "  release-ready:\n", "\n  publish:\n    name:")
-        self.assertIn("needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]", gate)
+        self.assertIn("needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, mac-app, stage]", gate)
         self.assertIn("if: always()", gate)
         # Cancelled or skipped is not passed; only a candidate's unsigned stage may be skipped.
-        self.assertIn('ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate")', gate)
+        self.assertIn('ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate") or (job == "mac-app" and result == "skipped" and mode == "release" and beta)', gate)
         publish = between(RELEASE, "\n  publish:\n    name:", "  ios-testflight:\n")
         self.assertIn("needs: [validate, release-ready]\n    if: needs.validate.outputs.publish == 'true'\n", publish)
         # Nothing lets publication run past a red or missing gate.
@@ -130,6 +130,28 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         self.assertIn('if [[ "$TAG" == *-beta.* ]]; then', publish)
         for gone in ("desktop-stage:", "desktop-publish:", "complete-stage:", "android-attach:"):
             self.assertNotIn(gone, RELEASE)
+
+    def test_mewla_for_mac_is_part_of_every_stable_release(self):
+        # The signed Mac files are built by macos-release.yml inside this run, before anything is published.
+        mac = between(RELEASE, "  mac-app:\n", "  stage:\n")
+        self.assertIn("uses: ./.github/workflows/macos-release.yml", mac)
+        self.assertNotIn("contents: write", mac)
+        self.assertIn("if: needs.validate.outputs.mode == 'candidate' || !contains(needs.validate.outputs.tag, '-beta.')", mac)
+        # A candidate builds and signs it as a release does; only a beta tag skips it.
+        gate = between(RELEASE, "  release-ready:\n", "\n  publish:\n    name:")
+        self.assertIn("mac-app,", gate)
+        # publish takes the files from this run, checks each, and uploads them with everything else as one draft.
+        publish = between(RELEASE, "\n  publish:\n    name:", "  ios-testflight:\n")
+        self.assertIn("name: mewla-macos-release-${{ needs.validate.outputs.tag }}", publish)
+        self.assertIn('assets+=("${mac[@]}")', publish)
+        self.assertIn('test -s "stage-mac/$f"', publish)
+        self.assertLess(publish.index('assets+=("${mac[@]}")'), publish.index('gh release create "$TAG" --verify-tag --draft'))
+        macos = read(".github/workflows/macos-release.yml")
+        # No job of it holds a write token (the certificate's jobs never do): only publish uploads.
+        self.assertIn("workflow_call:", macos)
+        self.assertNotIn("contents: write", macos)
+        self.assertNotIn("GITHUB_TOKEN", macos)
+        self.assertNotIn("gh release upload", macos)
 
     def test_the_release_launches_the_exact_apk_and_runs_no_suite(self):
         launch = between(RELEASE, "  android-launch:\n", "  stage:\n")
