@@ -43,6 +43,48 @@ export type BrainHostProblem = {
   installed_executors: string[];
 };
 
+/** An agent family whose model provider is refusing requests now (daemon watcher.ProviderOutage). */
+export type BrainProviderOutage = {
+  /** claude, codex, pi, opencode, … */
+  provider: string;
+  /** RFC 3339: when the first refused request of this outage settled. */
+  since: string;
+  /** The newest refusal in the provider's own words (for the log, not the line). */
+  cause?: string;
+  /** rate limit, overloaded, server error, timeout or connection lost. */
+  kind?: string;
+};
+
+const PROVIDER_NAMES: Record<string, string> = { claude: "Claude", codex: "Codex", pi: "Pi", opencode: "OpenCode", "cursor-agent": "Cursor", grok: "Grok" };
+
+function providerName(provider: string): string {
+  return PROVIDER_NAMES[provider] ?? (provider ? provider[0]!.toUpperCase() + provider.slice(1) : "The model provider");
+}
+
+function clock(at: Date, now: Date): string {
+  const time = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+  if (now.getTime() - at.getTime() < 20 * 60 * 60 * 1000) return time;
+  return `${at.toLocaleString("en-US", { month: "short" })} ${at.getDate()} ${time}`;
+}
+
+/**
+ * The one line Brain's Chat shows while a model provider refuses requests, null otherwise: what is
+ * unavailable, since when, and that work is held, not lost. "Claude hasn't answered since 07:03
+ * (rate limit). Work is held, not lost." It clears by itself when the computer's snapshot no
+ * longer lists an outage.
+ */
+export function providerOutageLine(snapshot: BrainSnapshot | null | undefined, now: Date = new Date()): string | null {
+  const outages = (snapshot?.provider_outages ?? []).filter((outage) => outage.provider || outage.since);
+  if (outages.length === 0) return null;
+  const sorted = [...outages].sort((a, b) => Date.parse(a.since) - Date.parse(b.since));
+  const names = [...new Set(sorted.map((outage) => providerName(outage.provider)))];
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const since = new Date(sorted[0]!.since);
+  const when = Number.isNaN(since.getTime()) ? "" : ` since ${clock(since, now)}`;
+  const kind = sorted[0]!.kind ? ` (${sorted[0]!.kind})` : "";
+  return `${who} ${names.length === 1 ? "hasn't" : "haven't"} answered${when}${kind}. Work is held, not lost.`;
+}
+
 /** An agent the computer installs for Brain while it has none (daemon brain.AgentInstall): `command` runs as a terminal
  * Session there (the computer's own `mewla deps -agent`), which installs it, signs in and moves Brain to it. */
 export type BrainAgentInstall = { id: string; name: string; command: string };
@@ -60,6 +102,8 @@ export type BrainSnapshot = {
   executors?: BrainExecutorRef[];
   executor_states?: Record<string, BrainExecutorState>;
   agent_installs?: BrainAgentInstall[];
+  /** Agent families whose provider refuses requests now; Brain's Chat shows providerOutageLine. */
+  provider_outages?: BrainProviderOutage[];
   chat_thread_id?: string;
   current_work?: unknown[];
   open_work?: unknown[];

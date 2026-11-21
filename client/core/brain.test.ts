@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { brainAgentInstalls, brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface, isBrainThreadCacheKey } from "./brain";
+import { brainAgentInstalls, brainChatState, brainChatUnavailable, brainComposerBlock, brainSurface, isBrainThreadCacheKey, providerOutageLine } from "./brain";
 
 describe("brainSurface", () => {
   const host = { id: "h1", name: "Brain", status: "running" };
@@ -72,5 +72,31 @@ describe("brainAgentInstalls (DESIGN-MAC.md §2.4, m-noagent)", () => {
     expect(brainAgentInstalls({ agent_installs: installs })).toEqual([]);
     expect(brainAgentInstalls({ host_problem: problem })).toEqual([]);
     expect(brainAgentInstalls(null)).toEqual([]);
+  });
+});
+
+describe("providerOutageLine", () => {
+  const at = (h: number, m: number) => new Date(2026, 10, 21, h, m);
+  test("one plain line while a provider refuses requests: what, since when, held not lost", () => {
+    const snapshot = { provider_outages: [{ provider: "claude", since: at(7, 3).toISOString(), kind: "rate limit", cause: "rate_limit, HTTP 429: Request rejected (429) · cooling down" }] };
+    expect(providerOutageLine(snapshot, at(8, 0))).toBe("Claude hasn't answered since 07:03 (rate limit). Work is held, not lost.");
+  });
+  test("clears by itself when the computer lists no outage", () => {
+    expect(providerOutageLine({}, at(8, 0))).toBeNull();
+    expect(providerOutageLine({ provider_outages: [] }, at(8, 0))).toBeNull();
+    expect(providerOutageLine(null)).toBeNull();
+  });
+  test("several families share the line, from the earliest refusal", () => {
+    const snapshot = {
+      provider_outages: [
+        { provider: "codex", since: at(7, 30).toISOString(), kind: "server error" },
+        { provider: "claude", since: at(7, 3).toISOString(), kind: "rate limit" },
+      ],
+    };
+    expect(providerOutageLine(snapshot, at(8, 0))).toBe("Claude and Codex haven't answered since 07:03 (rate limit). Work is held, not lost.");
+  });
+  test("an outage from another day names the day", () => {
+    const snapshot = { provider_outages: [{ provider: "pi", since: new Date(2026, 10, 19, 22, 5).toISOString(), kind: "overloaded" }] };
+    expect(providerOutageLine(snapshot, at(8, 0))).toBe("Pi hasn't answered since Nov 19 22:05 (overloaded). Work is held, not lost.");
   });
 });
