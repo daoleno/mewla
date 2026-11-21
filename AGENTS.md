@@ -28,12 +28,12 @@ Read the relevant code and directory instructions before editing. Complete autho
 Pick the cheapest lane that shows what the change touches (details: client/README.md, "Proving a change"):
 
 1. UI change: `client/scripts/shots.sh` (one image: phone 390 light and dark, desktop 1280) plus `nsh test` of the touched files. No device.
-2. The warm phone only for the Kotlin/Swift host, a manifest or intent filter, a permission, a notification, the keyboard or insets, the app lifecycle or the camera: `client/scripts/phone.sh`, minutes under the heavy lock, then let go. Never a new AVD, never a clean release build.
+2. The warm phone only for the Kotlin/Swift host, a manifest or intent filter, a permission, a notification, the keyboard or insets, the app lifecycle or the camera: `client/scripts/phone.sh`, minutes, then `down`. Never a new AVD, never a clean release build.
 3. A fault the owner found gets its test in the fixing commit: headless if it can be, a `scripts/shots/` scene if it is layout, a `phone.sh` flow if only Android shows it.
 4. Do not ask for, or run per change, "exact release build, fresh install, first run, real QR": that is the release gate, once per release, run by CI. No emulator per task, no screenshot per tap.
 5. The report carries one composed image and the command that made it, not a gallery.
 6. Do not wait on remote CI during work; one green run before main or a release.
-7. Anything that takes the heavy lock does so for minutes, by script, and lets go.
+7. Anything that takes the heavy lock (Gradle builds, not the phone lane) does so for minutes, by script, and lets go. The phone lane has its own lock and a memory check.
 8. A new journey is written as a file (a `shots` scene, a `phone.sh` flow), not performed by hand and photographed.
 
 ## Style And Delivery

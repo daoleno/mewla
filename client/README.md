@@ -48,7 +48,7 @@ APK, or walks first run and pairing by hand to prove a change: that is the relea
 |---|---|---|
 | Logic, state, protocol (`core/`, `ui/` behaviour, the daemon) | `bun test core`, `cd client/ui && nsh check && nsh test <touched files>` (whole `nsh test` before main), `go test` for the daemon | seconds; 0 model tokens |
 | What a screen looks like (layout, copy, dark mode, a narrow or short window) | `client/scripts/shots.sh`: the app on its fixture computer in headless Chrome, no device | 3 s a picture |
-| What only Android shows (intent filters and the share sheet, permissions, notifications, keyboard and insets, lifecycle, the camera) | one shared emulator, see below | minutes under the heavy lock |
+| What only Android shows (intent filters and the share sheet, permissions, notifications, keyboard and insets, lifecycle, the camera) | one shared emulator, see below | minutes; no queue unless another lane emulator runs |
 | Install, first run, every pairing route including the scanned QR, upgrade from the last release | the release gate (`client.yml`, `release-artifacts.yml`, the daily upgrade test): CI, on the exact artifact | not per change |
 
 **Lane 1, `client/scripts/shots.sh`.** `client/scripts/shots.sh` runs the tour in `client/scripts/shots/tour.js` (Brain,
@@ -60,11 +60,14 @@ a gallery. It is not a phone: no status bar, navigation bar or keyboard, the bro
 
 **Lane 2, the warm phone, `client/scripts/phone.sh`.** One AVD, `mewla-lane`, with the Dev app paired to an isolated
 test daemon of its own and saved as a snapshot; never create another AVD and never use the live daemon or the port of
-the owner's dev server (8790). It takes `/home/daoleno/.mewla/t/0g-heavy.lock` only while the emulator runs and lets go
-at `down`. `client/scripts/phone.sh -h` lists the verbs: `reset` (back to the snapshot, paired, Brain open: 11.8 s), `shot`, `tap`, `shows`,
-`share-file` / `share-text` (a share from another app, about 1 s), `install` (incremental debug build), `run VERB -- VERB...`
-(up, the verbs, down). Waiting for the heavy lock is not in those numbers: other jobs hold it, and a start waited 19 min for it once.
-`phone.sh flow all` runs the journeys in `client/scripts/flows/` (send a message, open Calendar, share a picture in), each after a `reset`. **Known:** a `reset` took 11.8 s ten times in a row on one emulator and 137–168 s three times on another, always waiting for the app to show Brain after the snapshot restore; the cause is not found (the daemon logs an `app_crash` for a font asset read 135 s after the app comes to the front), so treat a slow reset as this fault, not as a failure of your change. `open-with` is untested. adb must stay the shell user: a share started as root is refused ("Cannot read this file"), and the script stops with that message.
+the owner's dev server (8790). It has its own lock (`~/.mewla/lane/emulator.lock`: one lane emulator at a time) and does
+not use the heavy lock; `up` refuses with one line when less than 8 GiB of memory is available or a lane emulator already
+runs, and `down` (or the 30-minute cap) stops it. Only the Gradle build of `phone.sh install` takes the heavy lock.
+`client/scripts/phone.sh -h` lists the verbs: `reset` (the app stopped and started again, Brain open and connected: 6–10 s), `restore` (the phone back to the snapshot: 11–14 s, but about 1 in 20 takes 50–150 s waiting for the app to show Brain after the restore, cause not found, so `reset` is the default), `shot`, `tap`,
+`dump` (the screen as text), `type`, `shows`, `share-file` / `share-text` (a share from another app, about 1 s), `install`
+(incremental debug build), `run VERB -- VERB...` (up, the verbs, down). `reset` does not put the phone back (drafts, files and the lane daemon's message thread stay), so a flow sends fresh text and names. `phone.sh flow all` runs the journeys in `client/scripts/flows/` (send a
+message, open Calendar, share a picture in), each after a `reset`; they are the local phone lane and part of the release
+gate, not a per-push CI job. `open-with` is untested. adb must stay the shell user: a share started as root is refused ("Cannot read this file"), and the script stops with that message.
 
 A fault the owner found gets its test in the fixing commit: headless if it can be, a scene in `scripts/shots/` if it is
 layout, a `phone.sh` flow if only Android shows it. What no lane sees (terminal drawing, Screen, the QR camera, the Chrome
