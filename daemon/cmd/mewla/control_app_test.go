@@ -2392,3 +2392,63 @@ func TestPlainSendToAReclaimedSessionSaysMewlaClosedIt(t *testing.T) {
 		t.Fatalf("an unlisted Session Mewla did not close lost raw input: %+v sent=%+v", response, fw.sent)
 	}
 }
+
+// blockedAtLaunchWatcher is a computer where the spawned agent is up but stopped
+// at a screen that waits for a person, so the first prompt cannot land.
+type blockedAtLaunchWatcher struct {
+	*fakeControlWatcher
+	screen string
+}
+
+func (w blockedAtLaunchWatcher) CreateSession(name string, opts watcher.CreateSessionOptions) (string, error) {
+	id, err := w.fakeControlWatcher.CreateSession(name, opts)
+	if err == nil {
+		w.captures[id] = w.screen
+	}
+	return id, err
+}
+
+// `worker spawn` on a Session that is Blocked at launch used to end
+// "agent input not ready" and name no cause (agy on a fresh Windows computer
+// sat at its first-run screen). The Session's own summary is carried, for every
+// agent, and the failure is still the not-submitted one.
+func TestControlAppWorkerSpawnNamesWhatABlockedSessionWaitsFor(t *testing.T) {
+	for _, tc := range []struct{ executor, command, screen string }{
+		{"agy", "agy", "Welcome to Antigravity CLI!\n\nChoose your color scheme:\n  > terminal\n    light\n    [Next]\n  ↑/↓ Navigate · enter Confirm\n"},
+		{"agy", "agy", "Welcome to the Antigravity CLI. You are currently not signed in.\n Select login method:\n > 1. Google OAuth\n   2. Use a Google Cloud project\n"},
+		{"claude", "claude", " Select login method:\n\n > 1. Claude account with subscription\n   2. Anthropic Console account\n\n"},
+		{"claude", "claude", "Do you want to create hello.txt?\n❯ 1. Yes\n  2. No\n"},
+	} {
+		want, summary := classifier.Classify(true, strings.Split(tc.screen, "\n"), tc.command)
+		if want != classifier.StateBlocked || summary == "" {
+			t.Fatalf("%s fixture is not a Blocked screen: %s %q", tc.executor, want, summary)
+		}
+		fw := newFakeControlWatcher()
+		fw.sendErr = fmt.Errorf("%w for %q", watcher.ErrWorkerInputNotReady, tc.command)
+		app := &controlApp{
+			watcher:    blockedAtLaunchWatcher{fw, tc.screen},
+			brainStore: newControlBrainStore(t),
+			execs: work.NewExecutorConfig(map[string]work.Executor{
+				tc.executor: {Name: tc.executor, Command: tc.command},
+			}),
+		}
+		resp := app.HandleControlRequest(control.Request{Type: "worker_spawn", Name: "Blocked", Executor: tc.executor, Cwd: "/repo/mewla", Prompt: "hi"})
+		if resp.OK || resp.Error == nil || resp.Error.Code != "send_prompt_failed" ||
+			!strings.Contains(resp.Error.Message, "agent input not ready") ||
+			!strings.Contains(resp.Error.Message, "waiting on its screen: "+summary) {
+			t.Fatalf("%s %q: response = %#v", tc.executor, summary, resp.Error)
+		}
+	}
+	// A screen that waits for nobody has nothing to add.
+	fw := newFakeControlWatcher()
+	fw.sendErr = fmt.Errorf("%w for %q", watcher.ErrWorkerInputNotReady, "codex")
+	app := &controlApp{
+		watcher:    blockedAtLaunchWatcher{fw, "Starting codex...\n"},
+		brainStore: newControlBrainStore(t),
+		execs:      work.NewExecutorConfig(map[string]work.Executor{"codex": {Name: "codex", Command: "codex"}}),
+	}
+	resp := app.HandleControlRequest(control.Request{Type: "worker_spawn", Name: "Slow", Executor: "codex", Cwd: "/repo/mewla", Prompt: "hi"})
+	if resp.OK || resp.Error == nil || strings.Contains(resp.Error.Message, "waiting on its screen") {
+		t.Fatalf("plain screen: response = %#v", resp.Error)
+	}
+}
