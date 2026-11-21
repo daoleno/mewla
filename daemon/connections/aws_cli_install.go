@@ -242,7 +242,7 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 		}
 		out, e := a.run(ctx, filepath.Join(downloads, "aws", "install"), []string{"--install-dir", filepath.Join(generation, "aws-cli"), "--bin-dir", filepath.Join(generation, "bin")}, env)
 		if e != nil || out.ExitCode != 0 {
-			return errAWSInstall
+			return cloudStepFailure("AWS CLI installation didn't finish", out, e)
 		}
 	} else {
 		pkg := filepath.Join(downloads, "AWSCLIV2.pkg")
@@ -263,7 +263,7 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 		}
 		out, e := a.run(ctx, "/usr/sbin/installer", []string{"-pkg", pkg, "-target", "CurrentUserHomeDirectory", "-applyChoiceChangesXML", choices}, env)
 		if e != nil || out.ExitCode != 0 {
-			return errAWSInstall
+			return cloudStepFailure("AWS CLI installation didn't finish", out, e)
 		}
 	}
 	installed := filepath.Join(generation, "aws-cli", "v2", "current", "bin", "aws")

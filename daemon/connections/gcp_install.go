@@ -18,13 +18,13 @@ type gcpArchive struct{ name, digest string }
 
 // Bootstrap pins are refreshed in the Mewla release checklist; the official
 // SDK component updater supplies current releases independently of these pins.
-const gcpBootstrapVersion = "591.0.0"
+const gcpBootstrapVersion = "594.0.0"
 
 var gcpArchives = map[string]gcpArchive{
-	"linux/amd64":  {"linux-x86_64", "78c570f5fcfe58a9311bd98c06b75530595e3cae6277aad75a676a39e6ee7b63"},
-	"linux/arm64":  {"linux-arm", "f5e5df0433f77c0e7f5df9fd4bce2e46c7b7967e79cf66e31b1164d3d4c86546"},
-	"darwin/amd64": {"darwin-x86_64", "89c3ca942eb609293dff5b549ec6bae5d9ec41633a132aeb8dd8087a915ab3a0"},
-	"darwin/arm64": {"darwin-arm", "85cb726919838faff48bfba7cf676b691b0202bec7c25aabdc116649c6843242"},
+	"linux/amd64":  {"linux-x86_64", "1f7233537c26bba94a3ea3f9085a60396745eaf44b21b8454fc6fdd15bb6fcde"},
+	"linux/arm64":  {"linux-arm", "e58fb86fff3dfd7101e1ff138f06bd4e338c7bf12a7508a7871985e7ea886275"},
+	"darwin/amd64": {"darwin-x86_64", "f8c788cb2ce0af3bd03f236d67c825afe810908f4cd1ade435eb7b5bfb4173c7"},
+	"darwin/arm64": {"darwin-arm", "45fbcc5a2caf9ec43847383d2f9fe4720eb8a650349be8d9bd271bdfb6912b55"},
 }
 
 const gcpInstallDocs = "https://docs.cloud.google.com/sdk/docs/install-sdk"
@@ -149,15 +149,15 @@ func installGCPArchive(ctx context.Context, dir string, pkg gcpArchive, client *
 	}
 	out, err := run(ctx, "tar", []string{"-xzf", archive, "-C", scratch, "--no-same-owner"}, env)
 	if err != nil || out.ExitCode != 0 {
-		return failed()
+		return cloudStepFailure("Could not unpack gcloud", out, err)
 	}
 	staged := filepath.Join(scratch, "google-cloud-sdk")
 	out, err = run(ctx, filepath.Join(staged, "install.sh"), []string{"--quiet", "--usage-reporting=false", "--path-update=false", "--command-completion=false", "--install-python=false", "--no-compile-python"}, env)
 	if err != nil || out.ExitCode != 0 {
-		return failed()
+		return cloudStepFailure("gcloud's installer failed", out, err)
 	}
 	if !ready(staged) {
-		return failed()
+		return errors.New("gcloud was installed but does not start on this computer")
 	}
 	if err = os.Rename(staged, sdk); err != nil {
 		return failed()

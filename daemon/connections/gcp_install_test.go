@@ -26,7 +26,7 @@ func TestGCPInstallFailureCleanupAndRetry(t *testing.T) {
 			pkg := gcpArchive{"linux-x86_64", hex.EncodeToString(sum[:])}
 			mode := fault
 			client := &http.Client{Transport: gcpInstallTransport(func(req *http.Request) (*http.Response, error) {
-				if req.URL.Host != "dl.google.com" || !strings.Contains(req.URL.Path, "591.0.0") {
+				if req.URL.Host != "dl.google.com" || !strings.Contains(req.URL.Path, gcpBootstrapVersion) {
 					t.Fatal("not pinned official download")
 				}
 				if mode == "offline" {
@@ -184,5 +184,33 @@ func TestCloudInstallRetryAndManualCheckWithoutRestart(t *testing.T) {
 				t.Fatal("retry/check did not advance directly into remote login", result)
 			}
 		})
+	}
+}
+
+// A bootstrap step that fails says what the tool said, so the card, the sign-in and the command show a cause.
+func TestGCPInstallStepFailureNamesTheTool(t *testing.T) {
+	payload := "verified fixture archive"
+	sum := sha256.Sum256([]byte(payload))
+	pkg := gcpArchive{"linux-x86_64", hex.EncodeToString(sum[:])}
+	client := &http.Client{Transport: gcpInstallTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(payload)), Header: http.Header{}}, nil
+	})}
+	for _, step := range []string{"tar", "install.sh"} {
+		run := func(_ context.Context, binary string, args, _ []string) (cloudOutput, error) {
+			if filepath.Base(binary) == "tar" && step == "install.sh" {
+				stage := filepath.Join(args[3], "google-cloud-sdk")
+				os.MkdirAll(filepath.Join(stage, "bin"), 0700)
+				return cloudOutput{}, nil
+			}
+			if filepath.Base(binary) == step {
+				return cloudOutput{ExitCode: 1, Stderr: "noise\nERROR: no usable Python was found\n"}, nil
+			}
+			t.Fatalf("unexpected process %s", binary)
+			return cloudOutput{}, nil
+		}
+		err := installGCPArchive(context.Background(), t.TempDir(), pkg, client, run)
+		if err == nil || !strings.Contains(err.Error(), "no usable Python was found") {
+			t.Fatalf("%s: the failure does not name the tool's last line: %v", step, err)
+		}
 	}
 }
