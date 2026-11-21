@@ -66,3 +66,23 @@ func TestClassifyAntigravitySignInAndTrustWaitForAPerson(t *testing.T) {
 		t.Fatalf("quoted text must not fail another agent")
 	}
 }
+
+// agy 1.5.14, toolPermission "strict", captured 2026-11-22: the permission dialog.
+func TestClassifyAntigravityPermissionDialogIsBlocked(t *testing.T) {
+	screen := antigravityScreen(
+		"> Run the shell command: echo approval-test",
+		"● Ran (echo approval-test) (ctrl+o to expand)",
+		"Command",
+		antigravityRule,
+		"Requesting permission for:",
+		"   echo approval-test",
+		"Run this command?",
+		"> 1. Yes, run command",
+		"  2. No, cancel",
+		"  ↑/↓ Navigate · tab Amend · ctrl+g edit/expand command",
+		"esc to cancel                                                       Gemini 4 Neon · low",
+	)
+	if state, _ := Classify(true, screen, "agy"); state != StateBlocked {
+		t.Fatalf("permission dialog state = %s", state)
+	}
+}

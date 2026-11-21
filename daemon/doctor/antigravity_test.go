@@ -21,6 +21,14 @@ func TestParseAntigravityAuth(t *testing.T) {
 	if got := parseAntigravityAuth(list, nil); got != AuthAuthenticated {
 		t.Fatalf("model list = %v", got)
 	}
+	// The list is the account's own: other vendors' ids are rows too.
+	other := []byte("Fetching available models...\nclaude-sonnet-5-5\tClaude Sonnet 5.5\ngpt-oss-120b\tGPT-OSS 120B\n")
+	if got := parseAntigravityAuth(other, nil); got != AuthAuthenticated {
+		t.Fatalf("non-Google ids = %v", got)
+	}
+	if got := parseAntigravityAuth([]byte("Fetching available models...\n"), nil); got != AuthUnknown {
+		t.Fatalf("no models = %v", got)
+	}
 	// No network, a timeout, an unknown message: never a guess.
 	if got := parseAntigravityAuth([]byte("dial tcp: i/o timeout"), exit1); got != AuthUnknown {
 		t.Fatalf("other failure = %v", got)
