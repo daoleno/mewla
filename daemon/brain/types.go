@@ -3,6 +3,7 @@ package brain
 import (
 	"time"
 
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -89,10 +90,15 @@ type Snapshot struct {
 	// AgentInstalls are the agents this computer can install for Brain, while
 	// Brain can't start because no agent is installed here.
 	AgentInstalls []AgentInstall `json:"agent_installs,omitempty"`
-	ChatThreadID  string         `json:"chat_thread_id,omitempty"`
-	Workspace     string         `json:"workspace,omitempty"`
-	WorklogPath   string         `json:"worklog_path,omitempty"`
-	GeneratedAt   time.Time      `json:"generated_at"`
+	// ProviderOutages are the agent families whose model provider is refusing
+	// requests right now (a rate limit, an overload, a dropped network). While
+	// one lasts Mewla holds the work that depends on it instead of failing it;
+	// a client says so in one line in Brain's Chat, and it clears by itself.
+	ProviderOutages []watcher.ProviderOutage `json:"provider_outages,omitempty"`
+	ChatThreadID    string                   `json:"chat_thread_id,omitempty"`
+	Workspace       string                   `json:"workspace,omitempty"`
+	WorklogPath     string                   `json:"worklog_path,omitempty"`
+	GeneratedAt     time.Time                `json:"generated_at"`
 }
 
 type BrainContext struct {

@@ -29,7 +29,10 @@ import (
 //     as a close by actor "runtime", which Brain's next action reopens.
 //
 // There are no per-result-kind rules and no fallback verdict: a Work whose
-// judgment is unavailable or fails simply stays visible.
+// judgment fails (the model route refuses, rate limits, times out, or answers
+// with something that is not a verdict) simply stays visible and is judged
+// again later. A failed judgment is not a decision. Only a Host agent that has
+// no judge at all (ErrNoJudge) keeps AGENTS.md's promise without one.
 const (
 	// settleDebounce keeps a Work Brain just created or just answered from
 	// being judged before its next step starts. It is plumbing, not a decision.
@@ -74,7 +77,7 @@ type settler struct {
 	// unavailableUntil and cause are the newest judge failure, which stands
 	// for every Work until the retry.
 	unavailableUntil time.Time
-	cause            string
+	cause            error
 }
 
 // HostExecutor is the agent Brain's Host runs on.
@@ -272,9 +275,9 @@ func (s *Service) judgeOne(candidate settleItem) {
 	if err != nil {
 		log.Printf("brain closure judge could not answer (Work %s; next try in %s): %v", item.ID, judgeRetryAfter, err)
 		s.settle.mu.Lock()
-		s.settle.unavailableUntil, s.settle.cause = s.nowUTC().Add(judgeRetryAfter), err.Error()
+		s.settle.unavailableUntil, s.settle.cause = s.nowUTC().Add(judgeRetryAfter), err
 		s.settle.mu.Unlock()
-		s.settleWithoutJudge(candidate, err.Error())
+		s.settleWithoutJudge(candidate, err)
 		return
 	}
 	reason := strings.TrimSpace(verdict.Reason)
@@ -297,16 +300,21 @@ func (s *Service) judgeOne(candidate settleItem) {
 	}
 }
 
-// settleWithoutJudge keeps AGENTS.md's promise when the judge cannot answer:
-// a result Brain read, with no Worker turn, wait, question or prompt left,
-// is accepted. Any other Work, a Work the judge kept, and a Work Brain named
-// a later step for after that result stay as they are and show in Brain's
-// stale list.
-func (s *Service) settleWithoutJudge(candidate settleItem, cause string) {
+// settleWithoutJudge keeps AGENTS.md's promise only when the Host agent has no
+// judge at all (ErrNoJudge): a result Brain read, with no Worker turn, wait,
+// question or prompt left, is accepted. A judge that exists but failed (the
+// provider refused or rate limited it, it timed out or was killed, its reply
+// was not a verdict) decides nothing: every Work stays as it is, shows in
+// Brain's stale list, and is judged again after judgeRetryAfter. A provider
+// outage therefore never closes Work or reclaims its Sessions.
+func (s *Service) settleWithoutJudge(candidate settleItem, cause error) {
+	if !errors.Is(cause, ErrNoJudge) {
+		return
+	}
 	if !candidate.readResult || candidate.work.Kept != nil || candidate.namedWaitSince {
 		return
 	}
-	s.closeSettled(candidate.work, WorkDone, "Brain read the result and left nothing pending; the closure judge could not answer ("+judgeClip(cause, 300)+").")
+	s.closeSettled(candidate.work, WorkDone, "Brain read the result and left nothing pending; "+judgeClip(cause.Error(), 300)+".")
 }
 
 // closeSettled applies a runtime settlement. The revision check discards it

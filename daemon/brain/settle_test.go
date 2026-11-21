@@ -3,6 +3,7 @@ package brain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -292,40 +293,55 @@ func TestAnOpenPageOnAWorkersDisplayKeepsTheWorkFromTheJudge(t *testing.T) {
 	}
 }
 
-func TestJudgeFailureClosesAResultBrainRead(t *testing.T) {
-	// The judge cannot answer (an upstream 403, a kill, a rate limit): the
-	// promise in AGENTS.md holds instead. Brain read the result and left no
-	// turn, wait, question or prompt, so the Work closes, reopenably.
-	judge := &fakeJudge{err: errors.New("headless judge: the model route http://127.0.0.1:3427 answered HTTP 403: Insufficient account balance")}
+func TestJudgeFailureNeverClosesAResultBrainRead(t *testing.T) {
+	// 2026-11-21: a provider rate limit refused the judge, and the old fallback
+	// closed every Work whose result Brain "read" and reclaimed its Sessions. A
+	// failed judgment decides nothing: the Work stays as it is and is judged
+	// again after the retry.
+	for _, cause := range []string{
+		"headless judge: the model route http://127.0.0.1:3427 answered HTTP 429: Request rejected (429) · rate_limit_error",
+		"headless judge: the model route http://127.0.0.1:3427 answered HTTP 403: Insufficient account balance",
+		"headless judge timed out after 1m30s",
+		"judge reply is not a verdict: invalid character",
+	} {
+		judge := &fakeJudge{err: errors.New(cause)}
+		store, service, item := endedHandlingFixture(t, judge)
+		runSettle(t, service)
+		got, err := store.Work(item.ID)
+		if err != nil || got.Status == WorkDone || got.Status == WorkCancelled || closedByRuntime(t, store, item.ID) {
+			t.Fatalf("a judge failure (%s) closed the Work: %+v err=%v", cause, got, err)
+		}
+		judge.err, judge.verdict = nil, JudgeVerdict{Outcome: VerdictDone, Reason: "the result was delivered"}
+		later := service.nowUTC().Add(judgeRetryAfter + time.Minute)
+		service.now = func() time.Time { return later }
+		runSettle(t, service)
+		if got, _ := store.Work(item.ID); got.Status != WorkDone || len(judge.briefs) != 2 {
+			t.Fatalf("the judge was not asked again after the retry (%d calls): %+v", len(judge.briefs), got)
+		}
+	}
+}
+
+func TestAHostWithoutAJudgeStillClosesAResultBrainRead(t *testing.T) {
+	// A Host agent the headless judge does not support (codex, pi) has no judge
+	// at all: AGENTS.md's promise holds without one, reopenably.
+	judge := &fakeJudge{err: fmt.Errorf("%w: the headless judge supports Claude Code; Brain runs %q", ErrNoJudge, "codex")}
 	store, service, item := endedHandlingFixture(t, judge)
 	runSettle(t, service)
 	got, err := store.Work(item.ID)
 	if err != nil || got.Status != WorkDone || !closedByRuntime(t, store, item.ID) {
-		t.Fatalf("a read result stayed open when the judge failed: %+v err=%v", got, err)
-	}
-	reason := ""
-	for _, event := range mustWorkEvents(t, store, item.ID) {
-		if event.Kind == "brain.work_closed" {
-			reason = event.Summary
-		}
-	}
-	if !strings.Contains(reason, "could not answer") || !strings.Contains(reason, "403") {
-		t.Fatalf("the close does not say why the judge was not used: %q", reason)
+		t.Fatalf("a read result stayed open on a Host without a judge: %+v err=%v", got, err)
 	}
 	if reopened, err := store.ReopenSettledWork(item.ID, "Brain updated the Work."); err != nil || !reopened {
-		t.Fatalf("a fallback close is not undoable: %v %v", reopened, err)
+		t.Fatalf("a close without a judge is not undoable: %v %v", reopened, err)
 	}
 }
 
 func TestOneJudgeFailureStandsForEveryWorkUntilTheRetry(t *testing.T) {
 	judge := &fakeJudge{err: errors.New("signal: killed")}
-	store, service, item := endedHandlingFixture(t, judge)
+	_, service, _ := endedHandlingFixture(t, judge)
 	runSettle(t, service)
 	if len(judge.briefs) != 1 {
 		t.Fatalf("judge calls = %d, want 1", len(judge.briefs))
-	}
-	if reopened, err := store.ReopenSettledWork(item.ID, "Brain updated the Work."); err != nil || !reopened {
-		t.Fatalf("reopen: %v %v", reopened, err)
 	}
 	later := service.nowUTC().Add(settleDebounce + time.Minute)
 	service.now = func() time.Time { return later }

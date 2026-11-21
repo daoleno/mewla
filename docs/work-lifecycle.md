@@ -105,12 +105,39 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | Shape | Action |
 | --- | --- |
 | Transient error by the provider's own code or HTTP status: dropped connection or stream, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
-| Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
+| Five resumes in one episode, the Turn still dropping (a transient error) | Held, never escalated: one more continuation after each further 10 min while the provider seems available; while it is unavailable (see Provider outages below), only the family's probe continues it |
 | Persistent error by code or status: login, billing, unknown model, invalid request, 4xx | One stall escalation after 30 s (`provider_error`); never resumed |
 | Claude: a request too large to send (HTTP 413, "Request too large … Run /compact") | Once the stall is seen (under a minute after the error), Mewla compacts the conversation and continues (see Compaction below); one stall escalation (`compaction_failed`) if that fails |
 | An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) |
 | Stopped with no error and no terminal report, the pane idle at its prompt or the agent's own hook saying its turn ended | One stall escalation after 90 s (`stopped`, "Worker's turn ended without a progress report; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents or the screen shows the agent working |
 | Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
+
+**Provider outages.** A transient error is not an outcome. When two requests of
+one agent family (claude, codex, pi, opencode, …) settle with a transient error,
+from the agents' own records (`ProviderActivity.error`), and no request is answered
+between them, that family's provider is **unavailable**
+(`daemon/watcher/provider_availability.go`). A refusal older than 30 minutes does
+not start one. While the outage lasts:
+
+- No Worker Turn cut off by it is escalated or reported lost, so its Work is not
+  closed and its Session (with its TMPDIR scratch and background watchers) is not
+  reclaimed. The ordinary backoff does not run. One request per probe interval
+  goes out for the whole family (5, 10, 20, then every 30 min): a held Turn's
+  continuation, a Brain delivery, or a held scheduled action.
+- Brain's Host lane delivers nothing except that probe. A result whose Host turn
+  the provider refused was never read: its handling ends without counting as
+  handled, and the same review is delivered again (lifecycle
+  `ReplayInterruptedReview`). This is the one case where delivered input is
+  delivered again. The person's own messages are never held.
+- `brain_snapshot.provider_outages` lists it, and Brain's Chat shows one line:
+  "Claude hasn't answered since 07:03 (rate limit). Work is held, not lost." The
+  log names the provider's own error.
+
+The first Activity of that family that settles without an error ends the outage
+at once: the line clears, the lane delivers what it held, and every held Turn is
+continued in its own Session on the next poll. Persistent errors (sign-in,
+billing, a bad request) are not an outage, and an unclassified error keeps the
+rows above.
 
 A Turn that carries its identity in the prompt (a signal Turn) is settled only by
 the Worker's own `worker progress --status done|failed`. The provider's own
@@ -419,13 +446,17 @@ judged again once a day. No timer ever closes a kept Work; Brain closes or
 continues it from the stale list below.
 
 **When the judge cannot answer** (the route refuses it, it is killed, rate
-limited or times out, or its reply is not a verdict), AGENTS.md's promise
-holds: a Work whose result Brain read (its handling of a delivered result
+limited or times out, or its reply is not a verdict), nothing is decided: every
+Work stays as it is, shows in the stale list below, and is judged again after
+the retry. A failed judgment is not a verdict, and before 11-21 this fallback
+closed every Work whose result Brain "read" during a provider outage, and
+reclaimed their Sessions. Only a Host agent with no judge at all (the headless
+judge runs Claude Code; a codex or pi Host has none) keeps AGENTS.md's promise
+without one: a Work whose result Brain read (its handling of a delivered result
 ended) with no Attempt, wait, question or prompt left closes as actor
-`runtime`, and its Sessions are reclaimed. A follow-up or `work update`
-reopens it. A Work with no read result, one the judge kept, and one where
-Brain named a later step with `-wait-for` after that result (even if the wait
-was since released) stay as they are. One failure stands for every Work for 10 minutes, so a route that refuses
+`runtime`, and its Sessions are reclaimed; a follow-up or `work update`
+reopens it, and a Work Brain named a later step for with `-wait-for` after that
+result stays. One failure stands for every Work for 10 minutes, so a route that refuses
 is asked once, not once per Work. The log line names the route the judge's
 headless Claude used (the base URL from the user's Claude settings, which is
 Mewla's gateway when the Claude takeover is on, else the daemon's environment)
