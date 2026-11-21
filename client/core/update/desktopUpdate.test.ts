@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AUTO_CHECK_INTERVAL_MS, appUpdatePending, appUpdateRow, type AppUpdateState } from "./appUpdate";
-import { DesktopUpdateController, type DesktopUpdateFound, type DesktopUpdater } from "./desktopUpdate";
+import { DesktopUpdateController, isNoMacFiles, type DesktopUpdateFound, type DesktopUpdater } from "./desktopUpdate";
 
 class FakeUpdater implements DesktopUpdater {
   installed: string | null = "0.4.17";
@@ -130,19 +130,42 @@ describe("Mewla for Mac's update", () => {
     expect(controller.state.kind).toBe("available");
   });
 
-  test("a release with no manifest yet is a failed check, logged, and a tap checks again", async () => {
+  // NSH rejects a manifest the release does not have as "<url>: HTTP 404".
+  const NO_MANIFEST = "https://github.com/daoleno/mewla/releases/latest/download/latest.json: HTTP 404";
+
+  test("a latest release without Mac files is no update: up to date, nothing logged, no dot", async () => {
     const updater = new FakeUpdater();
-    updater.checkError = new Error("HTTP 404");
+    updater.checkError = new Error(NO_MANIFEST);
     const controller = new DesktopUpdateController(updater);
     await controller.start();
-    expect(controller.state.kind).toBe("checkFailed");
-    expect(updater.logged).toEqual(["[app-update] check failed"]);
-    expect(appUpdatePending(controller.state)).toBe(false);
-    updater.checkError = null;
-    updater.time += 10_000;
-    await controller.press();
-    expect(updater.checks).toBe(2);
     expect(controller.state.kind).toBe("current");
+    expect(updater.logged).toEqual([]);
+    expect(appUpdatePending(controller.state)).toBe(false);
+    expect(appUpdateRow(controller.state)).toMatchObject({ title: "Check for updates", value: "Up to date" });
+  });
+
+  test("only a missing manifest is no update: a missing signature, a bad manifest and no network stay failed checks, logged, and a tap checks again", async () => {
+    for (const message of ["https://github.com/daoleno/mewla/releases/latest/download/latest.json.sig: HTTP 404", "https://x/latest.json: HTTP 500", "the manifest does not verify", "offline"]) {
+      const updater = new FakeUpdater();
+      updater.checkError = new Error(message);
+      const controller = new DesktopUpdateController(updater);
+      await controller.start();
+      expect(controller.state.kind).toBe("checkFailed");
+      expect(updater.logged).toEqual(["[app-update] check failed"]);
+      expect(appUpdatePending(controller.state)).toBe(false);
+      updater.checkError = null;
+      updater.time += 10_000;
+      await controller.press();
+      expect(updater.checks).toBe(2);
+      expect(controller.state.kind).toBe("current");
+    }
+  });
+
+  test("isNoMacFiles reads NSH's rejection", () => {
+    expect(isNoMacFiles(new Error(NO_MANIFEST))).toBe(true);
+    expect(isNoMacFiles(NO_MANIFEST)).toBe(true);
+    expect(isNoMacFiles(new Error("HTTP 404"))).toBe(false);
+    expect(isNoMacFiles(new Error("https://x/latest.json.sig: HTTP 404"))).toBe(false);
   });
 
   test("returning to the foreground checks at most every six hours", async () => {

@@ -2,6 +2,7 @@ import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View } from "
 import { Button } from "nsh/base";
 import { Window } from "nsh/desktop";
 import { getAgentUse, changeAgentUse, type AgentUseStatus } from "../../core/settings/computer";
+import { chromeAccess, type ChromeAccess } from "../../core/settings/computerModel";
 import { screenRequest, type ScreenPermission } from "../../core/screen/screen";
 import { BrainHostPanel } from "../brain/BrainHostSheet";
 import { Icon, type IconName } from "../kit/Icon";
@@ -189,6 +190,18 @@ function Grant(props: { title: string; granted: boolean | null; allowedWord?: st
   );
 }
 
+/** Chrome: the extension on, the one button that fixes it, or the plain state (see chromeAccess). */
+function ChromeRow(props: { access: ChromeAccess | null; fix: () => void }) {
+  return (
+    <Row testID="mac-access-chrome" title="Chrome"
+      trailing={<If when={props.access}>{(access) =>
+        <If when={access().kind === "action"} else={<StateLine testID="mac-access-chrome-state" tone={access().kind === "on" ? "ok" : "off"} label={access().label} />}>
+          <RowButton testID="mac-access-chrome-fix" label={access().label} accessibilityLabel={`${access().label} for Chrome`} onPress={props.fix} />
+        </If>}
+      </If>} />
+  );
+}
+
 function Access() {
   const permissions = signal<ScreenPermission[] | null>(null);
   const agentUse = signal<AgentUseStatus | null>(null);
@@ -220,10 +233,9 @@ function Access() {
     const server = untracked(current);
     if (server) void screenRequest(server, { action: "restart" }).then(read).catch((error) => console.warn("restart:", error));
   };
-  const browser = () => agentUse()?.browser ?? null;
   const fixBrowser = () => {
     const server = untracked(current);
-    const fix = untracked(browser)?.fix;
+    const fix = untracked(agentUse)?.browser.fix;
     if (server && fix) void changeAgentUse(server, { fix }).then((next) => agentUse.set(next)).catch((error) => console.warn("chrome:", error));
   };
   return (
@@ -234,8 +246,7 @@ function Access() {
       <Section title="What agents may use on this Mac">
         <Grant testID="mac-access-screen" title="Screen recording" granted={grant("screen_recording")} onAllow={() => open("screen_recording")} restart={restartRequired("screen_recording")} onRestart={restart} />
         <Grant testID="mac-access-accessibility" title="Accessibility (click and type)" granted={grant("accessibility")} onAllow={() => open("accessibility")} restart={restartRequired("accessibility")} onRestart={restart} />
-        <Grant testID="mac-access-chrome" title="Chrome" allowedWord="Extension on" granted={browser() ? browser()!.state === "ready" : null}
-          onAllow={browser()?.fix ? fixBrowser : undefined} />
+        <ChromeRow access={chromeAccess(agentUse())} fix={fixBrowser} />
       </Section>
       <Section title="New devices">
         <Row testID="mac-access-devices" title="A new phone or browser" value="Asks you first" />
