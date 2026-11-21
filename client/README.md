@@ -39,6 +39,36 @@ cd client/ui && nsh check && nsh test
   the Live Activity / widget extension (`<id>.live`) and the App Group (`group.<id>`).
 - **Web:** `nsh dev --target web client/ui`.
 
+## Proving a change
+
+Pick the cheapest lane that can show what the change touches. Nobody starts an emulator of their own, builds a release
+APK, or walks first run and pairing by hand to prove a change: that is the release gate, once per release, run by CI.
+
+| The change touches | Prove it with | Cost |
+|---|---|---|
+| Logic, state, protocol (`core/`, `ui/` behaviour, the daemon) | `bun test core`, `cd client/ui && nsh check && nsh test <touched files>` (whole `nsh test` before main), `go test` for the daemon | seconds; 0 model tokens |
+| What a screen looks like (layout, copy, dark mode, a narrow or short window) | `client/scripts/shots.sh`: the app on its fixture computer in headless Chrome, no device | 3 s a picture |
+| What only Android shows (intent filters and the share sheet, permissions, notifications, keyboard and insets, lifecycle, the camera) | one shared emulator, see below | minutes under the heavy lock |
+| Install, first run, every pairing route including the scanned QR, upgrade from the last release | the release gate (`client.yml`, `release-artifacts.yml`, the daily upgrade test): CI, on the exact artifact | not per change |
+
+**Lane 1, `client/scripts/shots.sh`.** `client/scripts/shots.sh` runs the tour in `client/scripts/shots/tour.js` (Brain,
+the computer page, Calendar) and prints a directory holding one PNG per scene: phone 390 wide light, the same dark and
+desktop 1280 wide, side by side in one image. Your own scenes are plain `nsh test` steps in a file
+(`client/scripts/shots.sh my.js`) or inline (`-e 'await app.press("id:home-cat"); await shot("computer")'`; `snap(name)`
+takes the current viewport only, `app.setViewport(390, 520)` makes a short window). Put that one image in your report, not
+a gallery. It is not a phone: no status bar, navigation bar or keyboard, the browser's fonts, `platform.os` is "web".
+
+**Lane 2, the warm phone, `client/scripts/phone.sh`.** One AVD, `mewla-lane`, with the Dev app paired to an isolated
+test daemon of its own and saved as a snapshot; never create another AVD and never use the live daemon or the port of
+the owner's dev server (8790). It takes `/home/daoleno/.mewla/t/0g-heavy.lock` only while the emulator runs and lets go
+at `down`. `client/scripts/phone.sh -h` lists the verbs. **Not promoted yet:** `phone.sh share-file` is not reliable and a
+`reset` was once slow, so use `phone.sh` for the verbs that work (`reset`, `shot`, `tap`, `shows`, `install`) and say in
+your report when a share check failed for that reason. This note goes when the fix has landed.
+
+A fault the owner found gets its test in the fixing commit: headless if it can be, a scene in `scripts/shots/` if it is
+layout, a `phone.sh` flow if only Android shows it. What no lane sees (terminal drawing, Screen, the QR camera, the Chrome
+extension) has its own checks, see AGENTS.md.
+
 ## A call into JS has 2 s
 
 NSH cuts off a call into JS that runs past 2 s (`Error: interrupted`). A `computed` whose run is cut off, or
