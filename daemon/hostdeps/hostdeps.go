@@ -112,6 +112,17 @@ func AgentCommand(id string) string {
 	return id
 }
 
+// choiceOnlyHosts are agents Mewla never picks as Brain's host by itself, not
+// even when one is the only agent ready: the person runs Brain on one knowingly
+// with `mewla brain use <id>`. It is not offered in the app's Brain picker.
+var choiceOnlyHosts = map[string]bool{"agy": true}
+
+// HostAgentOrder is AgentOrder without the agents Mewla never picks for Brain
+// by itself. Every place that chooses, suggests or offers a Brain host uses it.
+func HostAgentOrder() []string {
+	return slices.DeleteFunc(slices.Clone(agentOrder), func(id string) bool { return choiceOnlyHosts[id] })
+}
+
 // AgentOrder returns the executor ids in Mewla's preference order.
 func AgentOrder() []string {
 	return slices.Clone(agentOrder)

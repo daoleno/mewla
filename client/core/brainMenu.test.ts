@@ -47,12 +47,15 @@ describe("Switch executor", () => {
     expect(canSwitchBrainExecutor(snapshot)).toBe(true);
   });
 
-  test("Antigravity is a choice like any installed agent, after the signed-in ones in order", () => {
-    const agy = { id: "agy", name: "agy", provider: "antigravity" };
+  test("an agent Mewla leaves to `mewla brain use` is never a choice and never counts as more to install", () => {
+    const agy = { id: "agy", name: "agy", provider: "antigravity", host_by_choice_only: true };
     const states = { ...snapshot.executor_states!, agy: { installed: true, signed_in: true } };
-    const { choices } = brainExecutorChoices([...snapshot.executors!, agy], states);
-    expect(choices.map((e) => e.id)).toEqual(["claude", "agy", "codex"]);
+    const { choices, moreToInstall } = brainExecutorChoices([...snapshot.executors!, agy], states);
+    expect(choices.map((e) => e.id)).toEqual(["claude", "codex"]);
+    expect(moreToInstall).toBe(true);
     expect(brainExecutorLabel(agy)).toBe("Antigravity");
+    const onlyAgy = brainExecutorChoices([agy], { agy: { installed: true, signed_in: true } });
+    expect(onlyAgy).toEqual({ choices: [], moreToInstall: false });
   });
 
   test("one line per agent: its product name, no runtime; a second line only to tell rows apart or ask for a sign-in", () => {

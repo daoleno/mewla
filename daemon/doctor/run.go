@@ -989,7 +989,7 @@ func recommendHost(usable []ExecutorCheck) string {
 	if len(usable) == 0 {
 		return ""
 	}
-	order := hostdeps.AgentOrder()
+	order := hostdeps.HostAgentOrder()
 	for _, id := range order {
 		for _, item := range usable {
 			if item.ID == id {
@@ -1005,7 +1005,12 @@ func recommendHost(usable []ExecutorCheck) string {
 			}
 		}
 	}
-	return usable[0].ID
+	for _, item := range usable {
+		if !work.HostByChoiceOnly(item.Provider) {
+			return item.ID
+		}
+	}
+	return ""
 }
 
 // agentProviders maps hostdeps.AgentOrder ids to their worker provider.

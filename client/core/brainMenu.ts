@@ -76,10 +76,11 @@ export function brainExecutorChoices(
   executors: readonly BrainExecutorRef[],
   states: Readonly<Record<string, BrainExecutorState>> | undefined,
 ): { choices: BrainExecutorRef[]; moreToInstall: boolean } {
-  const installed = executors.filter((executor) => states?.[executor.id]?.installed);
+  const offered = executors.filter((executor) => !executor.host_by_choice_only);
+  const installed = offered.filter((executor) => states?.[executor.id]?.installed);
   const signedIn = installed.filter((executor) => states?.[executor.id]?.signed_in);
   const others = installed.filter((executor) => !states?.[executor.id]?.signed_in);
-  return { choices: [...signedIn, ...others], moreToInstall: installed.length < executors.length };
+  return { choices: [...signedIn, ...others], moreToInstall: installed.length < offered.length };
 }
 
 /** Switching needs an installed executor other than the one Brain runs on. */
