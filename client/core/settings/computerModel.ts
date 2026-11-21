@@ -109,6 +109,45 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
   return problems;
 }
 
+/**
+ * What Privacy & access says of Chrome on this Mac: always one thing, never a blank row. The extension on, or
+ * the one action that fixes it (add the extension, open it, try again), or the plain state when nothing can be
+ * done from here (Chrome missing, no desktop session, the tools still getting ready). `null` only until the
+ * computer has answered.
+ */
+export type ChromeAccess =
+  | { kind: "on"; label: string }
+  | { kind: "action"; label: string; fix: AgentUseFix }
+  | { kind: "state"; label: string };
+
+export function chromeAccess(status: AgentUseStatus | null): ChromeAccess | null {
+  if (!status) return null;
+  if (!status.enabled) return { kind: "state", label: "Agents off" };
+  const browser = status.browser;
+  if (browser.state === "ready") return { kind: "on", label: "Extension on" };
+  const fix = browser.fix;
+  if (fix === "install_extension") return { kind: "action", label: "Add extension", fix };
+  if (fix === "open_extension") return { kind: "action", label: "Open it", fix };
+  if (fix === "retry") return { kind: "action", label: "Try again", fix };
+  switch (browser.state) {
+    case "off":
+      return { kind: "state", label: "Off" };
+    case "no_chrome":
+      return { kind: "state", label: "Chrome isn't installed" };
+    case "no_desktop":
+      return { kind: "state", label: "No desktop session" };
+    case "no_node":
+      return { kind: "state", label: "Needs Node.js" };
+    case "preparing":
+      return { kind: "state", label: "Getting ready…" };
+    case "failed":
+      return { kind: "state", label: "Couldn't start" };
+    default:
+      // no_extension / no_key without a fix: the computer's own line says what is missing.
+      return { kind: "state", label: "Not set up" };
+  }
+}
+
 /** Whether anything shown can change while the page is open. */
 export function computerProblemsMayChange(status: AgentUseStatus | null): boolean {
   if (!status) return false;

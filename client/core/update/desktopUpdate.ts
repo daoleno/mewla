@@ -40,6 +40,16 @@ export function desktopArtifact(version: string, url = ""): AndroidUpdateArtifac
 }
 
 /**
+ * The updater reads `releases/latest/download/latest.json`; a release published without the Mac files answers that with
+ * `HTTP 404`, and NSH rejects as "<manifest url>: HTTP 404". That is "no update here", not a failed check (a manifest
+ * without its signature, `latest.json.sig: HTTP 404`, is a broken release and stays one).
+ */
+export function isNoMacFiles(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\/latest\.json: HTTP 404\b/.test(message);
+}
+
+/**
  * The same owner the app has on Android (`AppUpdateController`): checks at launch and on return to the foreground, at
  * most every six hours, and on a tap of the row; one tap on an update downloads it and restarts into it.
  */
@@ -104,7 +114,13 @@ export class DesktopUpdateController {
       this.found = found;
       this.set(found && isNewerVersion(found.version, this.installed) ? { kind: "available", update: desktopArtifact(found.version, found.url) } : { kind: "current" });
     } catch (error) {
-      // No release carries the manifest yet, or no network: said in the log, and the row offers to try again.
+      // The latest release has no Mac files (no manifest to read): that is no update, not a fault.
+      if (isNoMacFiles(error)) {
+        this.found = null;
+        this.set({ kind: "current" });
+        return;
+      }
+      // No network, or a manifest that is not acceptable: said in the log, and the row offers to try again.
       this.warn("check failed", error);
       this.set({ kind: "checkFailed" });
     }

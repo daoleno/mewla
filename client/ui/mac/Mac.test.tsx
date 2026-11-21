@@ -105,6 +105,44 @@ describe("Mewla for Mac", () => {
     expect(app.shows("id:mac-settings >> id:this-mac-devices")).toBe(false);
   }, 30_000);
 
+  // What Privacy & access says of Chrome (core/settings/computerModel chromeAccess): never a blank row.
+  const chromeSettings = async (browser: Record<string, unknown>, post?: (request: { body?: string | null }) => { status: number; headers: Record<string, string>; body: string }) => {
+    const base = macHost({ settings: "access" });
+    const status = { enabled: true, browser: { summary: "x", ...browser } };
+    const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const app = await open(APP, {
+      platform: "macos", width: 1280, height: 800, storage: paired, host: base,
+      network: { "GET http://127.0.0.1:1/agent-use": json(status), ...(post ? { "POST http://127.0.0.1:1/agent-use": post } : {}) },
+    });
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
+    await app.waitFor("id:mac-settings >> id:mac-access-chrome");
+    return app;
+  };
+
+  test("Settings › Privacy & access: Chrome says it is not installed instead of staying blank", async () => {
+    const app = await chromeSettings({ state: "no_chrome" });
+    await app.waitFor("id:mac-access-chrome >> text:Chrome isn't installed", { timeout: 10_000 });
+    expect(app.shows("id:mac-access-chrome >> id:mac-access-chrome-fix")).toBe(false);
+  }, 30_000);
+
+  test("Settings › Privacy & access: Chrome without the extension carries the one button that adds it, and it asks the computer", async () => {
+    let asked = "";
+    const app = await chromeSettings({ state: "no_extension", fix: "install_extension" }, (request) => {
+      asked = request.body ?? "";
+      return { status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: true, browser: { state: "preparing", summary: "x" } }) };
+    });
+    await app.waitFor("id:mac-access-chrome >> id:mac-access-chrome-fix", { timeout: 10_000 });
+    expect(app.shows("id:mac-access-chrome >> text:Add extension")).toBe(true);
+    await app.press("id:mac-access-chrome >> id:mac-access-chrome-fix");
+    await app.waitUntil(() => asked.includes("install_extension"), { timeout: 5_000 });
+    await app.waitFor("id:mac-access-chrome >> text:Getting ready…", { timeout: 10_000 });
+  }, 30_000);
+
+  test("Settings › Privacy & access: Chrome with the extension on says so", async () => {
+    const app = await chromeSettings({ state: "ready" });
+    await app.waitFor("id:mac-access-chrome >> text:Extension on", { timeout: 10_000 });
+  }, 30_000);
+
   test("Settings › General carries this app's update beside its version: Update to X, and the tap goes to the update", async () => {
     const update = { kind: "available", update: { version: "0.4.18", versionCode: 0, fileName: "", url: "", sha256: "", size: 0 } };
     const base = phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => pairing, "app.appUpdatePressed": () => undefined });

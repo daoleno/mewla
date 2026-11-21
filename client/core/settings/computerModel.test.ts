@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentUseStatus } from "./computer";
-import { computerProblems, computerProblemsMayChange, computerStatusWord, computerUpdateProblem } from "./computerModel";
+import { chromeAccess, computerProblems, computerProblemsMayChange, computerStatusWord, computerUpdateProblem } from "./computerModel";
 
 const macMissingExtension: AgentUseStatus = {
   enabled: true,
@@ -135,5 +135,47 @@ describe("computerUpdateProblem", () => {
     expect(
       computerUpdateProblem({ version: "0.2.88", supported: true, error: "Mewla 0.2.89 did not start; still on 0.2.88" }, min)?.text,
     ).toBe("Mewla 0.2.89 did not start; still on 0.2.88");
+  });
+});
+
+// Privacy & access on the Mac: the Chrome row always says something once the computer has answered.
+describe("chromeAccess", () => {
+  const browser = (state: AgentUseStatus["browser"]["state"], fix?: AgentUseStatus["browser"]["fix"]): AgentUseStatus => ({
+    enabled: true,
+    browser: { state, summary: "x", ...(fix ? { fix } : {}) },
+  });
+
+  test("nothing until the computer answered", () => {
+    expect(chromeAccess(null)).toBeNull();
+  });
+
+  test("ready is the extension on", () => {
+    expect(chromeAccess(browser("ready"))).toEqual({ kind: "on", label: "Extension on" });
+  });
+
+  test("a state with a fix is that fix as the row's one button", () => {
+    expect(chromeAccess(browser("no_extension", "install_extension"))).toEqual({ kind: "action", label: "Add extension", fix: "install_extension" });
+    expect(chromeAccess(browser("no_key", "open_extension"))).toEqual({ kind: "action", label: "Open it", fix: "open_extension" });
+    expect(chromeAccess(browser("failed", "retry"))).toEqual({ kind: "action", label: "Try again", fix: "retry" });
+  });
+
+  test("a state nothing can fix from here says what it is", () => {
+    expect(chromeAccess(browser("no_chrome"))).toEqual({ kind: "state", label: "Chrome isn't installed" });
+    expect(chromeAccess(browser("no_desktop"))).toEqual({ kind: "state", label: "No desktop session" });
+    expect(chromeAccess(browser("no_node"))).toEqual({ kind: "state", label: "Needs Node.js" });
+    expect(chromeAccess(browser("preparing"))).toEqual({ kind: "state", label: "Getting ready…" });
+    expect(chromeAccess(browser("failed"))).toEqual({ kind: "state", label: "Couldn't start" });
+    expect(chromeAccess(browser("off"))).toEqual({ kind: "state", label: "Off" });
+    expect(chromeAccess(browser("no_extension"))).toEqual({ kind: "state", label: "Not set up" });
+  });
+
+  test("agents switched off is said, whatever Chrome is", () => {
+    expect(chromeAccess({ ...browser("ready"), enabled: false })).toEqual({ kind: "state", label: "Agents off" });
+  });
+
+  test("every browser state has a label", () => {
+    for (const state of ["ready", "off", "no_chrome", "no_extension", "no_key", "no_node", "no_desktop", "preparing", "failed"] as const) {
+      expect(chromeAccess(browser(state))?.label).toBeTruthy();
+    }
   });
 });
