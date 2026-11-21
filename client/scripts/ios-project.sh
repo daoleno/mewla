@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generates client/ios/Mewla.xcodeproj (xcodegen). --dev links NativeShellDev, which can load
-# from `nsh dev`: then `xcrun simctl launch booted com.daoleno.mewla -devServer ws://127.0.0.1:8790/ws`.
+# from `nsh dev`: then `xcrun simctl launch booted ai.mewla.app -devServer ws://127.0.0.1:8790/ws`.
 set -euo pipefail
 ios="$(cd "$(dirname "$0")/../ios" && pwd)"
 framework=NativeShell

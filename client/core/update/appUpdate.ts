@@ -15,7 +15,7 @@ export type DistributionChannel = "github-apk" | "play-store" | "app-store" | "t
 
 const CHANNELS: readonly DistributionChannel[] = ["github-apk", "play-store", "app-store", "testflight", "none"];
 
-export const ANDROID_PACKAGE = "com.daoleno.mewla";
+export const ANDROID_PACKAGE = "ai.mewla.app";
 export const ANDROID_UPDATE_ABI = "arm64-v8a";
 export const RELEASES_URL = "https://github.com/daoleno/mewla/releases";
 export const LATEST_MANIFEST_URL = `${RELEASES_URL}/latest/download/release-manifest.json`;
@@ -63,7 +63,7 @@ export { compareVersions, isNewerVersion, parseVersion } from "./version";
 export interface AndroidUpdateArtifact {
   /**
    * The app this APK installs as. A release made for another application id than the running app's
-   * (the move of 11-21: com.daoleno.mewla to ai.mewla.app) installs beside it as a new app; `moves` says so.
+   * (the move of 11-21) installs beside it as a new app; `moves` says so.
    */
   applicationId: string;
   moves: boolean;

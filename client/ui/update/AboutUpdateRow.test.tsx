@@ -42,12 +42,12 @@ function release(version: string, application_id?: string) {
     schema_version: 2,
     product: "mewla",
     version,
-    android: { package: "com.daoleno.mewla", ...(application_id ? { application_id } : {}), version_name: version, version_code: 30100 },
+    android: { package: "ai.mewla.app", ...(application_id ? { application_id } : {}), version_name: version, version_code: 30100 },
     artifacts: [{ path: `mewla-android-arm64-v${version}.apk`, role: "android_sideload_apk", sha256: "c".repeat(64), size: 1000, abi: "arm64-v8a" }],
   });
 }
 
-const apk = { distribution: "github-apk", appId: "com.daoleno.mewla", version: "0.3.0", build: "30000", arm64: true };
+const apk = { distribution: "github-apk", appId: "ai.mewla.app", version: "0.3.0", build: "30000", arm64: true };
 const artifact = { version: "0.3.1", versionCode: 30100, fileName: APK, url: `https://github.com/daoleno/mewla/releases/download/v0.3.1/${APK}`, sha256: "c".repeat(64), size: 1000 };
 
 /**
@@ -125,7 +125,7 @@ describe("About update row on the GitHub APK", () => {
       "mewla.device.v3.seed": "a".repeat(64),
       "mewla.device.v3.public-key": "b".repeat(64),
     };
-    const { options } = android("0.3.1", { application_id: "ai.mewla.app", secure, storage: paired });
+    const { options } = android("0.3.1", { application_id: "ai.mewla.next", secure, storage: paired });
     const app = await open(HARNESS, options);
     await app.waitFor("text:New Mewla available");
     expect(app.texts()).toContain("Install");
@@ -174,7 +174,7 @@ describe("About update row on the GitHub APK", () => {
   });
 
   test("no row where the build cannot update itself", async () => {
-    for (const info of [{ ...apk, arm64: false }, { ...apk, appId: "com.daoleno.mewla.preview" }]) {
+    for (const info of [{ ...apk, arm64: false }, { ...apk, appId: "ai.mewla.app.preview" }]) {
       const { options } = android("0.3.1", { info });
       const app = await open(HARNESS, options);
       await app.wait(50);
@@ -273,7 +273,7 @@ describe("About update row on iOS", () => {
   test("an App Store build, or one whose host has no update.*, shows nothing", async () => {
     const store = await open(HARNESS, {
       platform: "ios",
-      host: { handlers: { "update.info": { distribution: "app-store", appId: "com.daoleno.mewla", version: "0.3.0", build: "140" }, "test.fetch": server({}) } },
+      host: { handlers: { "update.info": { distribution: "app-store", appId: "ai.mewla.app", version: "0.3.0", build: "140" }, "test.fetch": server({}) } },
     });
     await store.wait(50);
     expect(store.count("id:app-update")).toBe(0);

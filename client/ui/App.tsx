@@ -14,6 +14,7 @@ import { startShareIn } from "./more/files/shareIn";
 import { goHome } from "./shell/nav";
 import { tray } from "./tray/state";
 import { startAppUpdate } from "./update/update";
+import { takeHandover } from "./update/moveIn";
 import { startMac } from "./mac/mac";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
@@ -21,6 +22,8 @@ import "./kit/monoFont";
 async function start(): Promise<void> {
   // Where chats were read to before this start (a reload while reading), before any chat opens.
   await loadReadingPlaces();
+  // The new app of a move (11-21) takes what the old one staged before it reads its computers.
+  await takeHandover();
   await loadSession();
   void loadCrashReports();
   // A browser opened with `mewla pair`'s link (`<origin>/#pair=<link>`): pair with it, once.

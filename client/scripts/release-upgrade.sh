@@ -11,9 +11,16 @@
 # upgrade.yml runs it on main's schedule, from the latest release. Inputs: OLD_APK, NEW_APK, MEWLA (daemon
 # binary), OUT (evidence directory); MEWLA_UPGRADE_SAME_VERSION_OK=1 accepts an equal versionCode (a
 # build-only candidate). Exit 0 only if all of it holds.
+# When the two APKs are different apps (the move of 11-21: com.daoleno.mewla to ai.mewla.app) there is no upgrade in
+# place: the check then proves what the move needs of the system: the new app installs beside the old one, starts,
+# and the old app's handover provider answers nobody who is not signed with the release key. The handover itself
+# (the update row staging, the new app taking it) is covered by the headless tests; see docs/identifiers.md.
 set -euo pipefail
 : "${OLD_APK:?}" "${NEW_APK:?}" "${MEWLA:?}" "${OUT:?}"
-PKG=com.daoleno.mewla
+aapt2() { "$(ls "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"/build-tools/*/aapt2 | sort -V | tail -1)" "$@"; }
+OLD_PKG="$(aapt2 dump packagename "$OLD_APK")"
+NEW_PKG="$(aapt2 dump packagename "$NEW_APK")"
+PKG="$OLD_PKG"
 PORT="${PORT:-9942}"
 DRAFT="release upgrade draft"
 mkdir -p "$OUT"
@@ -150,6 +157,27 @@ sleep 3 # the draft is written 400 ms after typing stops
 shot 1-draft
 adb shell am force-stop "$PKG"
 sleep 2
+
+if [[ "$OLD_PKG" != "$NEW_PKG" ]]; then
+  log "2. this release is another app ($OLD_PKG -> $NEW_PKG): it installs beside the previous one"
+  install=$(adb install "$NEW_APK" 2>&1 | tail -1 || true)
+  log "install: $install"
+  [[ "$install" == Success* ]] || fail "the new app did not install beside the old one"
+  packages=$(adb shell pm list packages | tr -d '\r')
+  grep -qx "package:$OLD_PKG" <<<"$packages" && grep -qx "package:$NEW_PKG" <<<"$packages" || fail "the two apps are not both installed"
+  adb shell monkey -p "$NEW_PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+  sleep 10
+  shot 2-new-app
+  [[ -n "$(adb shell pidof "$NEW_PKG" | tr -d '\r')" ]] || { adb logcat -d -b crash > "$OUT/new-app-crash.txt"; fail "the new app died on its first start (new-app-crash.txt)"; }
+  # Nothing is staged (the old app never moved), so the new app starts unpaired: it asks to pair.
+  shows "Pair a computer" 30 || fail "the new app does not offer to pair"
+  # The shell is not signed with the release key: the old app's handover provider (a bridge build has one) refuses it.
+  answer=$(adb shell content call --uri "content://$OLD_PKG.handover" --method get 2>&1 || true)
+  log "handover provider asked from the shell: $(head -c 160 <<<"$answer" | tr '\n' ' ')"
+  grep -q '"version"' <<<"$answer" && fail "the handover provider answered a caller without the release key"
+  log "PASS (another app: installed beside, started, handover closed to the shell)"
+  exit 0
+fi
 
 log "2. this release installs over it"
 install=$(adb install -r "$NEW_APK" 2>&1 | tail -1 || true)

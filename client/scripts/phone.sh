@@ -2,7 +2,7 @@
 # Lane 2, one warm Android phone for everything only Android shows
 # (share sheet and intent filters, permissions, notifications, keyboard and insets, lifecycle).
 #
-# The phone is the AVD `mewla-lane` (API 35, 2.5 GB RAM) with the Dev app (preview debug) installed, paired to an
+# The phone is the AVD `mewla-lane` (API 35, 2.5 GB RAM) with the Dev app (production debug, ai.mewla.app.dev) installed, paired to an
 # isolated test daemon of its own (fixed state dir, loopback port, inert Brain host, never the live daemon) and saved as
 # the snapshot `ready`. UI changes reach it by hot reload (an `nsh dev --release` server on this host), a Kotlin
 # change by `phone.sh install` (incremental Gradle, no clean build). Its own lock ($MEWLA_LANE_HOME/emulator.lock)
@@ -49,8 +49,8 @@ dev_port="${DEV_PORT:-8899}"
 snapshot="ready"
 emulator="${ANDROID_HOME:-$HOME/Android/Sdk}/emulator/emulator"
 nsh_home="${NSH_HOME:-$HOME/.nsh}"
-pkg="com.daoleno.mewla.preview.debug"
-apk="$client/android/app/build/outputs/apk/preview/debug/app-preview-debug.apk"
+pkg="ai.mewla.app.dev"
+apk="$client/android/app/build/outputs/apk/production/debug/app-production-debug.apk"
 # PHONE_EXTERNAL=1: the phone, the app and the test daemon are the caller's (the release gate's emulator and the exact signed APK,
 # release-flows.sh): PHONE_PKG is the app's package, ANDROID_SERIAL its device, and only the verbs that act on a booted, paired app
 # work (reset, wait-connected, shot, tap, shows, dump, type, flow, share-file, share-text, open-with).
@@ -265,7 +265,7 @@ install_app() {
   # Incremental: Gradle's own up-to-date checks; never `clean`. --no-daemon and a memory cap: the host is shared.
   (cd "$client/android" && JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk}" NSH_HOME="$nsh_home" PATH="$nsh_home/bin:$PATH" \
     flock -w 3600 "$heavy_lock" systemd-run --user --scope -q -p MemoryMax=6G -p CPUQuota=800% \
-    ./gradlew --no-daemon -q assemblePreviewDebug -Pmewla.abis=x86_64) >&2
+    ./gradlew --no-daemon -q assembleProductionDebug -Pmewla.abis=x86_64) >&2
   [[ -f "$apk" ]] || die "no APK at $apk"
 }
 install_on_device() { adb -s "$serial" install -r -g "$apk" 2>&1 | tail -1 >&2; }

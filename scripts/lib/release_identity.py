@@ -55,9 +55,27 @@ VERSION_RE = re.compile(
 )
 RELEASE_SUFFIX = 99
 MAX_BETA = 98
-# The shipped app's identity; the client must keep it (it upgrades the Expo app in place).
-PACKAGE = "com.daoleno.mewla"
-IOS_BUNDLE_IDS = {"production": "com.daoleno.mewla", "preview": "com.daoleno.mewla.preview"}
+# Mewla's identifiers (docs/identifiers.md): the reverse of the site's domain, mewla.ai. One app id for Android, iOS
+# and the Mac; the rest of what names the product to a system derives from it or sits beside it. Every other copy in
+# the repo (gradle, nsh.json, appUpdate.ts, macapp.go, boot_launchd.go, agent.rs, package.sh, project.yml) is checked
+# against these by scripts/verify-release-identity.sh.
+PACKAGE = "ai.mewla.app"
+# Mewla Dev (the Android debug build, the Mac's `package.sh --dev`): beside the app, never in place of it.
+DEV_PACKAGE = PACKAGE + ".dev"
+# The Live Activity / widget extension and the App Group the iOS app shares with it.
+IOS_LIVE_BUNDLE_ID = PACKAGE + ".live"
+APP_GROUP = "group." + PACKAGE
+# The Mac's daemon: the LaunchAgent label (and what the app registers with SMAppService).
+DAEMON_LABEL = "ai.mewla.daemon"
+# Chrome's native messaging host name, for Mewla's extension.
+NATIVE_HOST = "ai.mewla.browser"
+# What every build before the move of 11-21 was called: the id they look for in the release manifest
+# (`android.package`), and the labels and names a daemon replaces when it updates.
+LEGACY_PACKAGE = "com.daoleno.mewla"
+LEGACY_DAEMON_LABEL = "com.daoleno.mewla.daemon"
+LEGACY_NATIVE_HOST = "com.mewla.browser"
+# The TestFlight app of the old team keeps its own bundle id until the new Apple team ships (docs/ios-ci-release.md).
+IOS_BUNDLE_IDS = {"production": PACKAGE, "preview": "com.daoleno.mewla.preview"}
 
 
 class IdentityError(ValueError):
@@ -161,7 +179,13 @@ def identity(version: str, train: str | None = None) -> dict[str, object]:
         "version_code": code,
         "ios_build_number": code,
         "package": PACKAGE,
+        "legacy_package": LEGACY_PACKAGE,
+        "dev_package": DEV_PACKAGE,
+        "daemon_label": DAEMON_LABEL,
+        "native_host": NATIVE_HOST,
+        "app_group": APP_GROUP,
         "ios_bundle_id": IOS_BUNDLE_IDS["production"],
+        "ios_live_bundle_id": IOS_LIVE_BUNDLE_ID,
         "ios_preview_bundle_id": IOS_BUNDLE_IDS["preview"],
         "source": SOURCE,
     }

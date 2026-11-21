@@ -282,7 +282,9 @@ describe("download and install", () => {
 });
 
 describe("a release of another application id", () => {
-  const moved = { package: ANDROID_PACKAGE, application_id: "ai.mewla.app" };
+  // The release is another app than the running one (as it was for the builds before 11-21, com.daoleno.mewla).
+  const next = "ai.mewla.next";
+  const moved = { package: ANDROID_PACKAGE, application_id: next };
 
   test("the pairing is staged for the new app just before the installer opens, and only then", async () => {
     const calls: string[] = [];
@@ -295,7 +297,7 @@ describe("a release of another application id", () => {
     };
     const s = setup({ latest: "0.3.1", android: moved, installer, handover: { stage: async () => void calls.push("stage") } });
     await s.controller.start();
-    expect(s.controller.state).toMatchObject({ kind: "available", update: { moves: true, applicationId: "ai.mewla.app" } });
+    expect(s.controller.state).toMatchObject({ kind: "available", update: { moves: true, applicationId: next } });
     const pressed = s.controller.press();
     s.installer.complete();
     await pressed;

@@ -8,7 +8,7 @@
 # Inputs: PREVIEW_APK, OUT (evidence directory); PREV_APK may be empty or missing (none kept).
 set -euo pipefail
 : "${PREVIEW_APK:?}" "${OUT:?}"
-PKG=com.daoleno.mewla.preview
+PKG=ai.mewla.app.preview
 HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT"
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/preview.log"; }

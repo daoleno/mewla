@@ -31,7 +31,7 @@ function manifestText(overrides: Record<string, unknown> = {}, artifact: Record<
     schema_version: 2,
     product: "mewla",
     version: "0.2.9",
-    android: { package: "com.daoleno.mewla", version_name: "0.2.9", version_code: 49 },
+    android: { package: ANDROID_PACKAGE, version_name: "0.2.9", version_code: 49 },
     artifacts: [
       { path: "mewla-linux-amd64.tar.gz", role: "daemon_archive", sha256: "a".repeat(64), size: 10 },
       {
@@ -85,8 +85,10 @@ describe("app version precedence", () => {
 
 describe("signed release manifest", () => {
   test("verifies the real v0.2.8 release with the daemon's update key", async () => {
-    expect(await verifyAndroidUpdateManifest(realManifest, realSignature)).toEqual({
-      applicationId: "com.daoleno.mewla",
+    // Made for the app before the move (com.daoleno.mewla): the one that reads it as its own.
+    const before = "com.daoleno.mewla";
+    expect(await verifyAndroidUpdateManifest(realManifest, realSignature, undefined, before)).toEqual({
+      applicationId: before,
       moves: false,
       version: "0.2.8",
       versionCode: 48,
@@ -109,7 +111,7 @@ describe("signed release manifest", () => {
     const other = nacl.sign.keyPair();
     const signature = nacl.sign.detached(realManifest, other.secretKey);
     await expect(verifyAndroidUpdateManifest(realManifest, signature)).rejects.toThrow("signature");
-    expect((await verifyAndroidUpdateManifest(realManifest, signature, other.publicKey))?.version).toBe("0.2.8");
+    expect((await verifyAndroidUpdateManifest(realManifest, signature, other.publicKey, "com.daoleno.mewla"))?.version).toBe("0.2.8");
   });
 
   test("reads the Ed25519 key out of its PKIX wrapper only", () => {
@@ -142,11 +144,11 @@ describe("signed release manifest", () => {
       "this app",
     );
     rejects(
-      manifestText({ android: { package: "com.daoleno.mewla", version_name: "0.2.8", version_code: 49 } }),
+      manifestText({ android: { package: ANDROID_PACKAGE, version_name: "0.2.8", version_code: 49 } }),
       "this app",
     );
     rejects(
-      manifestText({ android: { package: "com.daoleno.mewla", version_name: "0.2.9", version_code: 0 } }),
+      manifestText({ android: { package: ANDROID_PACKAGE, version_name: "0.2.9", version_code: 0 } }),
       "version code",
     );
     // No arm64 sideload APK for this exact version: not an update, not an error.
@@ -163,14 +165,17 @@ describe("signed release manifest", () => {
 
 describe("a release of another application id", () => {
   const OLD = "com.daoleno.mewla";
-  const NEW = "ai.mewla.app";
+  const NEW = ANDROID_PACKAGE;
   const moved = (android: Record<string, unknown> = {}) =>
     manifestText({ android: { package: OLD, application_id: NEW, version_name: "0.2.9", version_code: 49, ...android } });
 
   test("a build that knows only `package` takes it as the one it asks for; one that knows both sees a move", () => {
     expect(parseAndroidUpdateManifest(moved(), OLD)).toMatchObject({ applicationId: NEW, moves: true });
     expect(parseAndroidUpdateManifest(moved(), NEW)).toMatchObject({ applicationId: NEW, moves: false });
-    expect(parseAndroidUpdateManifest(manifestText(), OLD)).toMatchObject({ applicationId: OLD, moves: false });
+    // A release made before the move names only the old id: it is that app's update, and nobody else's.
+    const before = manifestText({ android: { package: OLD, version_name: "0.2.9", version_code: 49 } });
+    expect(parseAndroidUpdateManifest(before, OLD)).toMatchObject({ applicationId: OLD, moves: false });
+    expect(() => parseAndroidUpdateManifest(before, NEW)).toThrow("doesn't describe this app");
   });
 
   test("a release that names neither this app's id is not for it", () => {

@@ -1,6 +1,6 @@
 {
   "name": "Mewla Phone use tests",
-  "id": "com.daoleno.mewla.phonetests",
+  "id": "ai.mewla.app.tests.phone",
   "version": "0.0.0",
   "appearance": "system",
   "capabilities": {

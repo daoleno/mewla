@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DEVICE_SECURE_KEYS } from "../auth";
 import type { KeyValueStore } from "../platform";
 import { SERVER_KEYS } from "../servers";
-import { collectHandover, parseHandover } from "./handover";
+import { collectHandover, importHandover, parseHandover } from "./handover";
 
 const memory = (entries: Record<string, string>): KeyValueStore => ({
   getItem: async (key) => entries[key] ?? null,
@@ -42,5 +42,21 @@ describe("moving to another app", () => {
     const parsed = parseHandover(text)!;
     expect(Object.keys(parsed.secure).sort()).toEqual([...DEVICE_SECURE_KEYS].sort());
     expect(parsed.storage["mewla:drafts"]).toBeUndefined();
+  });
+
+  test("the new app takes it into an empty store, and only there", async () => {
+    const bundle = (await collectHandover(memory(device), memory(paired)))!;
+    const secure = memory({});
+    const storage = memory({});
+    expect(await importHandover(bundle, secure, storage)).toBe("imported");
+    expect(await collectHandover(secure, storage)).toEqual(bundle);
+
+    // Scanned first: what is there stays.
+    const other = memory({ ...device, [DEVICE_SECURE_KEYS[0]]: "device-2" });
+    expect(await importHandover(bundle, other, memory({}))).toBe("kept");
+    expect(await other.getItem(DEVICE_SECURE_KEYS[0])).toBe("device-2");
+    const servers = memory({ [SERVER_KEYS.servers]: "[]" });
+    expect(await importHandover(bundle, memory({}), servers)).toBe("kept");
+    expect(await servers.getItem(SERVER_KEYS.servers)).toBe("[]");
   });
 });

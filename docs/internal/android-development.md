@@ -65,8 +65,8 @@ Wiring (source of truth for packaging):
 
 ## Day-to-day workflow
 
-- **Hot reload:** `client/scripts/dev-android.sh` builds the preview debug build with this host's `nsh dev` server (`-Pmewla.devServer`, from `DEV_HOST` or else the private LAN address `client/scripts/lan-address.sh` picks and prints: tunnels, bridges and virtual interfaces are skipped, so a proxy's TUN is never taken, and with no LAN address it stops before building; no address is in the source), installs it on the one device `adb` sees and serves client/. Mewla Dev is live from its icon: the first open on a server asks once (Load) and remembers it; later opens connect straight away when the server answers within two seconds, else start on the built-in bundle without a dialog and reopen on the server when the app comes to the front and it answers. The start link `mewla-dev://start?server=ws://…` points it at another server on this network, always confirmed first, and is remembered the same way. Release builds have none of this (src/debug only; `scripts/tests/test_android_dev_start_link.py`).
-- **A build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`. The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app.
+- **Hot reload:** `client/scripts/dev-android.sh` builds the Dev app (production debug, `ai.mewla.app.dev`) with this host's `nsh dev` server (`-Pmewla.devServer`, from `DEV_HOST` or else the private LAN address `client/scripts/lan-address.sh` picks and prints: tunnels, bridges and virtual interfaces are skipped, so a proxy's TUN is never taken, and with no LAN address it stops before building; no address is in the source), installs it on the one device `adb` sees and serves client/. Mewla Dev is live from its icon: the first open on a server asks once (Load) and remembers it; later opens connect straight away when the server answers within two seconds, else start on the built-in bundle without a dialog and reopen on the server when the app comes to the front and it answers. The start link `mewla-dev://start?server=ws://…` points it at another server on this network, always confirmed first, and is remembered the same way. Release builds have none of this (src/debug only; `scripts/tests/test_android_dev_start_link.py`).
+- **A build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`. The preview identity (`ai.mewla.app.preview`, "Mewla Preview") installs beside the app.
 - **Checks:** `cd client && bun test core`, then `cd client/ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test`.
 
 ## Pairing on device
@@ -78,7 +78,7 @@ Wiring (source of truth for packaging):
 
 The app allows cleartext HTTP (`usesCleartextTraffic` in `client/android/app/src/main/AndroidManifest.xml`) so dynamic LAN and Tailscale IPs work. Keeping `http://` to private addresses is the daemon address book's job (`addressbook.Normalize`). Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
 
-Remote push works in official builds: `client/android/app/google-services.json` is the public Firebase client config for `com.daoleno.mewla`, which `build.gradle.kts` turns into the resources Firebase reads. FCM delivery needs the FCM V1 key uploaded to Mewla's Expo project (see [Notifications](../notifications.md)). A variant whose package has no entry in the file builds without push (the preview identity); a production release build without its entry fails (`checkProductionReleasePush`). A fork with its own package replaces `google-services.json` and uploads its own key.
+Remote push works in official builds: `client/android/app/google-services.json` is the public Firebase client config for `ai.mewla.app` (and `ai.mewla.app.dev`; the owner adds both in the Firebase console, a production release fails until the file has the first), which `build.gradle.kts` turns into the resources Firebase reads. FCM delivery needs the FCM V1 key uploaded to Mewla's Expo project (see [Notifications](../notifications.md)). A variant whose package has no entry in the file builds without push (the preview identity); a production release build without its entry fails (`checkProductionReleasePush`). A fork with its own package replaces `google-services.json` and uploads its own key.
 
 ## Native terminal library
 
@@ -156,7 +156,7 @@ export MEWLA_ANDROID_KEY_PASSWORD='…'
 
 ## Package identity
 
-The version is `client/ui/nsh.json`'s; `scripts/lib/release_identity.py` derives the version code from it (X·1 000 000 + Y·10 000 + Z·100 + 99, or + N for beta.N). The package is `com.daoleno.mewla`, the one already installed from the store, so an update replaces it in place.
+The version is `client/ui/nsh.json`'s; `scripts/lib/release_identity.py` derives the version code from it (X·1 000 000 + Y·10 000 + Z·100 + 99, or + N for beta.N). The package is `ai.mewla.app`. The builds before 11-21 were another app (the old id, `docs/identifiers.md`): the release manifest still carries that id as `android.package` so they find the release, the new one installs beside them, and takes their pairing (docs/identifiers.md).
 
 Verify with `./scripts/verify-release-identity.sh` (also `bun run release:identity`).
 

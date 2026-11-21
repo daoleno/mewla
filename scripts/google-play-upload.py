@@ -10,7 +10,7 @@ The service account JSON key is read from a file (CI writes it mode 0600 from
 a secret); its private key is never printed. The JWT is signed with openssl.
 
 Usage:
-  ./scripts/google-play-upload.py --aab app.aab --package com.daoleno.mewla \\
+  ./scripts/google-play-upload.py --aab app.aab --package ai.mewla.app \\
     --version-code 54 --track internal --service-account key.json [--dry-run]
 """
 

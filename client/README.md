@@ -23,19 +23,19 @@ cd client/ui && nsh check && nsh test
 
 ## Run it
 
-- **Android, hot reload:** `client/scripts/dev-android.sh` builds the Dev app (preview debug) with this host's `nsh dev`
+- **Android, hot reload:** `client/scripts/dev-android.sh` builds the Dev app (production debug, `ai.mewla.app.dev`) with this host's `nsh dev`
   server (`-Pmewla.devServer=ws://<LAN address>:8790/ws`: `DEV_HOST`, or the private LAN address `lan-address.sh` picks and prints,
   never a proxy's or VPN's tunnel; with none it stops before building), installs it on the one device `adb` sees and serves client/.
   Mewla Dev opens on that server from its icon, asking once (Load); every save reloads it. When the server does not
   answer within two seconds, it starts on its built-in bundle and reopens on the server once it answers and the app
   comes to the front. `mewla-dev://start?server=ws://…` points it at another server, confirmed first.
 - **Android, a build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`.
-  The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app. A local
+  The preview identity (`ai.mewla.app.preview`, "Mewla Preview"; CI and the owner's phone, never distributed) installs beside the app. A local
   build is signed with your debug key; the Preview `client.yml` keeps on dispatch carries the release key
   (`client/scripts/preview-signer.sh`), so each one installs over the last, and its upgrade gate proves it.
 - **iOS:** `client/scripts/fetch-nsh.sh --ios && client/scripts/ios-project.sh` (`--dev` links NativeShellDev), then
   open `client/ios/Mewla.xcodeproj`. With `--dev`, launch with `-devServer ws://127.0.0.1:8790/ws` and run
-  `nsh dev --server-only client/ui`. Preview builds pass `MEWLA_APP_ID=com.daoleno.mewla.preview`, which also names
+  `nsh dev --server-only client/ui`. Preview builds pass `MEWLA_APP_ID=com.daoleno.mewla.preview` (the old Apple team's TestFlight app, until the new team ships), which also names
   the Live Activity / widget extension (`<id>.live`) and the App Group (`group.<id>`).
 - **Web:** `nsh dev --target web client/ui`.
 

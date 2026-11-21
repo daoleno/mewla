@@ -40,10 +40,12 @@ for (abi in abis) {
 }
 
 android {
+  // The source packages (and so the namespace) are not an identifier: nothing outside the code names them.
   namespace = "com.daoleno.mewla"
   compileSdk = 36
   defaultConfig {
-    applicationId = "com.daoleno.mewla"
+    // The id of scripts/lib/release_identity.py (PACKAGE); scripts/verify-release-identity.sh keeps them equal.
+    applicationId = "ai.mewla.app"
     minSdk = 28
     targetSdk = 36
     versionCode = mewlaVersionCode
@@ -56,7 +58,7 @@ android {
   flavorDimensions += "identity"
   productFlavors {
     create("production") { dimension = "identity"; resValue("string", "app_name", "Mewla") }
-    // Installs beside the store app: the preview builds of the NSH client.
+    // Installs beside the app: the preview builds of the NSH client (CI and the owner's phone; never distributed).
     create("preview") { dimension = "identity"; applicationIdSuffix = ".preview"; resValue("string", "app_name", "Mewla Preview") }
   }
   signingConfigs {
@@ -68,11 +70,11 @@ android {
     }
   }
   buildTypes {
-    // The dev build (hot reload) sits beside the Preview under its own name.
+    // The dev build (hot reload) sits beside the app and the Preview under its own name (ai.mewla.app.dev).
     // -Pmewla.devServer=ws://<host>:<port>/ws: the `nsh dev` server the Dev app opens on (client/scripts/dev-android.sh
     // passes the building host's), so no address is in the source; release builds have no such field.
     getByName("debug") {
-      applicationIdSuffix = ".debug"
+      applicationIdSuffix = ".dev"
       resValue("string", "app_name", "Mewla Dev")
       buildConfigField("String", "DEV_SERVER", "\"$devServer\"")
     }
@@ -183,6 +185,12 @@ androidComponents {
   onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleUi, BundleUi::assets)
     variant.sources.assets?.addGeneratedSourceDirectory(ghosttyNotice, GhosttyNotice::assets)
+    // The app this one replaces: before 11-21 the id was com.daoleno.mewla (+ .preview, + .debug). It stages what pairs
+    // the phone with its computers (update/handover.ts), and this reads it once (the appupdate module's manifest
+    // names its provider and permission by this id).
+    val legacyId = "com.daoleno.mewla" + (if (variant.flavorName == "preview") ".preview" else "") + (if (variant.buildType == "debug") ".debug" else "")
+    variant.manifestPlaceholders.put("legacyAppId", legacyId)
+    variant.buildConfigFields?.put("LEGACY_APP_ID", com.android.build.api.variant.BuildConfigField("String", "\"$legacyId\"", null))
     val firebase = firebaseEntry(variant.applicationId.get())
     firebase?.forEach { (name, value) ->
       variant.resValues.put(variant.makeResValueKey("string", name), com.android.build.api.variant.ResValue(value, null))

@@ -20,7 +20,7 @@ def manifest(permissions=(), providers=(), target="36", version_code="54"):
     )
     return (
         '<manifest xmlns:android="http://schemas.android.com/apk/res/android" '
-        f'package="com.daoleno.mewla" android:versionName="0.2.14" android:versionCode="{version_code}">'
+        f'package="ai.mewla.app" android:versionName="0.2.14" android:versionCode="{version_code}">'
         f'<uses-sdk android:minSdkVersion="24" android:targetSdkVersion="{target}"/>{items}'
         f"<application>{provs}</application></manifest>"
     )
@@ -50,7 +50,7 @@ def bundle(entries):
 
 class PlayManifestTests(unittest.TestCase):
     def check(self, xml):
-        return verify_aab.check_manifest(xml, "com.daoleno.mewla", "0.2.14", 54)
+        return verify_aab.check_manifest(xml, "ai.mewla.app", "0.2.14", 54)
 
     def test_clean_play_manifest_passes(self):
         self.assertEqual(self.check(manifest(["android.permission.CAMERA"])), [])
@@ -96,7 +96,7 @@ class PlayChannelTests(unittest.TestCase):
 
     def check(self, application, permissions=()):
         xml = manifest(permissions).replace("<application></application>", f"<application>{application}</application>")
-        return verify_aab.check_manifest(xml, "com.daoleno.mewla", "0.2.14", 54)
+        return verify_aab.check_manifest(xml, "ai.mewla.app", "0.2.14", 54)
 
     def test_accepts_the_shared_components(self):
         self.assertEqual(self.check(

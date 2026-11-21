@@ -53,6 +53,7 @@ fi
 IDENTITY="$ROOT/scripts/lib/release_identity.py"
 VERSION="$(python3 "$IDENTITY" version)"
 PACKAGE="$(python3 "$IDENTITY" package)"
+LEGACY_PACKAGE="$(python3 "$IDENTITY" legacy_package)"
 VERSION_CODE="$(python3 "$IDENTITY" version_code)"
 CANONICAL_CONFIG="$(python3 "$IDENTITY" source)"
 
@@ -235,11 +236,11 @@ SUMS="$STAGE_DIR/SHA256SUMS"
   done | LC_ALL=C sort -k2
 ) > "$SUMS"
 
-python3 - "$STAGE_DIR" "$VERSION" "$PACKAGE" "$VERSION_CODE" "${STAGED_APK:-}" "$BUILD_TMP" "$CANONICAL_CONFIG" <<'PY'
+python3 - "$STAGE_DIR" "$VERSION" "$PACKAGE" "$LEGACY_PACKAGE" "$VERSION_CODE" "${STAGED_APK:-}" "$BUILD_TMP" "$CANONICAL_CONFIG" <<'PY'
 import hashlib, json, sys
 from pathlib import Path
 
-stage, version, package, version_code, staged_apk, build_tmp, canonical_config = sys.argv[1:8]
+stage, version, package, legacy_package, version_code, staged_apk, build_tmp, canonical_config = sys.argv[1:9]
 stage_p = Path(stage)
 build_p = Path(build_tmp)
 
@@ -287,9 +288,10 @@ identity = {
     "product": "mewla",
     "version": version,
     "android": {
-        "package": package,
-        # The app the APK is: the same as package until a release is another app, when package stays the id the
-        # shipped builds look for and this is the app they install (client/core/update/appUpdate.ts).
+        # What the builds before the move of 11-21 look for (they take a release only when this is the id they are), and
+        # the app they then install is application_id: the new app, which installs beside them
+        # (client/core/update/appUpdate.ts). Drop it once nobody runs a build older than the bridge release.
+        "package": legacy_package,
         "application_id": package,
         "version_name": version,
         "version_code": int(version_code),

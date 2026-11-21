@@ -446,7 +446,7 @@ jobs:
           test -s "$OUT"
           stat -c '%a %n' "$OUT"
 
-      # The NSH client (client/android): production identity com.daoleno.mewla,
+      # The NSH client (client/android): production identity ai.mewla.app,
       # GitHub channel (Phone use, in-app update), arm64-v8a, versionCode from
       # client/ui/nsh.json by scripts/lib/release_identity.py.
       - name: Build signed Android arm64 release APK

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every Preview APK (com.daoleno.mewla.preview) is signed with Mewla's release key, so each Preview
+# Every Preview APK (ai.mewla.app.preview) is signed with Mewla's release key, so each Preview
 # installs over the last one in place and keeps its pairing. Until 11-12 a dispatched Preview was signed
 # with the CI runner's own debug key, a new one per run, and no Preview could upgrade another.
 #

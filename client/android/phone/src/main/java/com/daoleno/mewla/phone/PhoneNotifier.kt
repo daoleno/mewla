@@ -24,13 +24,13 @@ internal object PhoneNotifier {
     const val ID_HANDOFF = 7102
     const val ID_PAIRING = 7103
 
-    const val ACTION_STOP = "com.daoleno.mewla.phone.STOP"
+    const val ACTION_STOP = "ai.mewla.app.phone.STOP"
     /** Carried by the intent that opens the Phone page when the person tapped Take over. */
-    const val EXTRA_TAKE_OVER = "com.daoleno.mewla.phone.take_over"
-    const val ACTION_RESUME = "com.daoleno.mewla.phone.RESUME"
-    const val ACTION_DONE = "com.daoleno.mewla.phone.DONE"
-    const val ACTION_CODE = "com.daoleno.mewla.phone.CODE"
-    const val ACTION_CODE_GONE = "com.daoleno.mewla.phone.CODE_GONE"
+    const val EXTRA_TAKE_OVER = "ai.mewla.app.phone.take_over"
+    const val ACTION_RESUME = "ai.mewla.app.phone.RESUME"
+    const val ACTION_DONE = "ai.mewla.app.phone.DONE"
+    const val ACTION_CODE = "ai.mewla.app.phone.CODE"
+    const val ACTION_CODE_GONE = "ai.mewla.app.phone.CODE_GONE"
     const val KEY_CODE = "pairing_code"
 
     fun canNotify(context: Context): Boolean {
