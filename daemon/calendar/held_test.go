@@ -207,7 +207,7 @@ func (w *heldWatcher) HasSession(string) bool { return true }
 func (w *heldWatcher) ProbeProviderEvidence(string) (watcher.ProviderActivityObservation, bool, error) {
 	return w.observation, true, nil
 }
-func (w *heldWatcher) SendInputWhenReady(_, _, text string) error {
+func (w *heldWatcher) SendInput(_, text string) error {
 	w.typed = append(w.typed, text)
 	return nil
 }
@@ -228,7 +228,9 @@ func TestWorkRunnerReadsARefusalFromTheAgentsOwnProviderRecord(t *testing.T) {
 	if !runner.ProviderMayAnswer("claude", time.Now()) {
 		t.Fatal("a watcher with no availability state must not hold the run")
 	}
-	if err := runner.ContinueScheduledAction(Item{}, run); err != nil || len(w.typed) != 1 || w.typed[0] != watcher.TurnContinuationPrompt {
+	// Submitted, not only typed: the 2026-11-21 e2e left the prompt sitting
+	// in the composer when it went without the trailing newline.
+	if err := runner.ContinueScheduledAction(Item{}, run); err != nil || len(w.typed) != 1 || w.typed[0] != watcher.TurnContinuationPrompt+"\n" {
 		t.Fatalf("continuation typed %q err %v", w.typed, err)
 	}
 	w.observation.Error = &watcher.ProviderActivityError{Code: "authentication_error", HTTPStatus: 401}
