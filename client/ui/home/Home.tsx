@@ -387,9 +387,9 @@ function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
  * Elsewhere the page's own column holds them.
  */
 function ThreadColumn(props: { on: boolean; children: JSX.Element }) {
-  return <If when={props.on} else={<>{props.children}</>}>
-    <View testID="mac-thread-column" class="w-full flex-1 self-center px-2" style={{ maxWidth: 700 }}>{props.children}</View>
-  </If>;
+  // Off the Mac the children are the page's own, untouched (no view, no branch around them).
+  if (!props.on) return props.children;
+  return <View testID="mac-thread-column" class="w-full flex-1 self-center px-2" style={{ maxWidth: 700 }}>{props.children}</View>;
 }
 
 /** Brain's Brain host sheet (the tray's Switch executor, the computer page's Switch). */
