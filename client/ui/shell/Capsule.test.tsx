@@ -115,8 +115,11 @@ describe("a Session's capsule header (SPEC §11)", () => {
   test("a Session in a Git repository has a Git button beside the view button: it fades with it, and it opens the Session's Git review; ⋯ no longer lists Changes", async () => {
     const app = await gitSession(repoStatus);
     await app.waitFor("id:capsule >> id:session-git");
-    expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla", repository_only: true });
-    expect(app.shows("label:Git changes")).toBe(true);
+    // Whether it is a repository first (no file list), then the one status read of the folder that colours the button.
+    expect(framesOf(app.host.posts(), "git_diff_status")[0]).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla", repository_only: true });
+    await app.waitUntil(() => framesOf(app.host.posts(), "git_diff_status").length >= 2, { timeout: 10_000 });
+    expect(framesOf(app.host.posts(), "git_diff_status")[1]?.repository_only).toBeUndefined();
+    expect(app.shows("label:Git, changes")).toBe(true);
     // Collapsed while the person reads, it goes with the view button and ⋯, and comes back with them.
     await app.scroll("id:session-chat", -300);
     await app.waitFor("id:capsule-collapsed");
@@ -132,10 +135,29 @@ describe("a Session's capsule header (SPEC §11)", () => {
     expect(app.dialogs().at(-1)!.buttons).not.toContain("Changes");
     await app.press("id:session-git");
     await app.waitFor("id:git-page");
-    // The Session asked only whether it is a repository; the Git page reads the changes as it opens.
+    // The Git page reads the changes as it opens.
     expect(framesOf(app.host.posts(), "git_diff_status").at(-1)?.repository_only).toBeUndefined();
     expect(framesOf(app.host.posts(), "git_diff_status").at(-1)).toMatchObject({ target_id: "w1", cwd: "/home/me/mewla" });
   }, 30_000);
+
+  // Owner 2026-11-22: the Git button is Git's own mark and shows by colour (its label says it) when the repository has
+  // anything the Git page would list: changed, staged or untracked. One status read per folder, none on a timer.
+  test("a clean repository's Git button says Git; changed, staged or only untracked files make it say Git, changes", async () => {
+    const clean = { ...repoStatus, clean: true, file_count: 0, unstaged_file_count: 0, additions: 0, deletions: 0, files: [] };
+    const first = await gitSession(clean);
+    await first.waitFor("id:capsule >> id:session-git");
+    expect(first.shows("label:Git")).toBe(true);
+    expect(first.shows("label:Git, changes")).toBe(false);
+    for (const [, status] of [
+      ["staged", { ...repoStatus, staged_file_count: 1, unstaged_file_count: 0 }],
+      ["untracked", { ...repoStatus, unstaged_file_count: 0, untracked_file_count: 1, files: [{ path: "new.ts", staged: false, unstaged: false, untracked: true, additions: 0, deletions: 0 }] }],
+    ] as const) {
+      const app = await gitSession(status);
+      await app.waitFor("id:capsule >> id:session-git");
+      await app.waitFor("label:Git, changes");
+      expect(app.shows("label:Git, changes")).toBe(true);
+    }
+  }, 60_000);
 
   test("a Session whose folder is not a Git repository has no Git button, and the status is read once, not per render", async () => {
     const app = await gitSession({ available: false, reason: "not_git_repo", clean: true, file_count: 0, staged_file_count: 0, unstaged_file_count: 0, untracked_file_count: 0, additions: 0, deletions: 0, files: [] });

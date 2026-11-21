@@ -700,6 +700,10 @@ export const MEWLA_GLYPHS = {
       "M3,17.25L4.75,12.4A2.75,2.75 0 0 1 7.35,10.5H20.1a1.5,1.5 0 0 1 1.43,1.95L19.85,18a3.5,3.5 0 0 1 -3.35,2.5H6.25A3.25,3.25 0 0 1 3,17.25Z",
     ],
   },
+  // Git's own mark: its diamond with the two commits on one line and the branch that leaves it (the same drawing as icons/glyphs.ts).
+  git: {
+    strokes: ["M12,2.5L21.5,12L12,21.5L2.5,12Z", circle(10.5, 8.3, 1.25), circle(10.5, 15.7, 1.25), circle(15.4, 12.6, 1.25), "M10.5,9.55V14.45", "M10.5,10.6L14.25,12.1"],
+  },
   "git-branch": {
     strokes: [circle(6.25, 5.25, 2.25), circle(6.25, 18.75, 2.25), circle(17.75, 5.25, 2.25), "M6.25,7.5V16.5", "M17.75,7.5v.75a4,4 0 0 1 -4,4h-3.5a4,4 0 0 0 -4,4"],
   },

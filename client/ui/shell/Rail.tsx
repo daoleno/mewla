@@ -102,7 +102,7 @@ function Item(props: { item: () => Pressable }) {
     );
   }
   // The glyph is made once with its button; only its name follows the item.
-  return <RailButton item={props.item}><Icon name={props.item().icon ?? "dot"} size={RAIL.glyph} tone="ink" /></RailButton>;
+  return <RailButton item={props.item}><Icon name={props.item().icon ?? "dot"} size={RAIL.glyph} tone={props.item().tone ?? "ink"} /></RailButton>;
 }
 
 /** The rail's buttons in order, each made once per id and kept while its id stays. */

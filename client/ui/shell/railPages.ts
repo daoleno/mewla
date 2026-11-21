@@ -5,6 +5,8 @@ import type { IconName } from "../kit/Icon";
 export type RailAction = {
   id: string;
   icon: IconName;
+  /** The glyph's colour when it carries state (Git with changes); ink without. */
+  tone?: "meter";
   label: string;
   onPress: () => void;
   /** Shown only while this holds (Stop while a turn runs, Git only in a repository). */
@@ -18,7 +20,7 @@ export type RailAction = {
   transient?: boolean;
 };
 
-export type RailPressable = { id: string; label: string; icon?: IconName; onPress: () => void; disabled?: () => boolean; ref?: (node: ViewRef) => void };
+export type RailPressable = { id: string; label: string; icon?: IconName; tone?: "meter"; onPress: () => void; disabled?: () => boolean; ref?: (node: ViewRef) => void };
 
 /**
  * The pages in the stack, oldest first, each with its rail controls: a page joins as it is made and leaves as it
