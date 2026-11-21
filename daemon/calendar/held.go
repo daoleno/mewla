@@ -245,7 +245,7 @@ type providerAvailability interface {
 }
 
 type sessionInput interface {
-	SendInputWhenReady(sessionID, command, text string) error
+	SendInput(sessionID, text string) error
 }
 
 // ScheduledActionRefused implements ActionHolder from the agent's own
@@ -294,7 +294,8 @@ func (r *WorkRunner) ProviderMayAnswer(provider string, now time.Time) bool {
 }
 
 // ContinueScheduledAction implements ActionHolder: the agent's own
-// continuation prompt, typed into its Session.
+// continuation prompt, submitted in its live Session (the trailing newline is
+// the submit; without it the prompt is only typed).
 func (r *WorkRunner) ContinueScheduledAction(_ Item, run Run) error {
 	session := strings.TrimSpace(run.WorkerSession)
 	input, ok := r.Watcher.(sessionInput)
@@ -305,5 +306,5 @@ func (r *WorkRunner) ContinueScheduledAction(_ Item, run Run) error {
 	if worker == nil {
 		return fmt.Errorf("Session %s is gone", session)
 	}
-	return input.SendInputWhenReady(session, worker.Command, watcher.TurnContinuationPrompt)
+	return input.SendInput(session, watcher.TurnContinuationPrompt+"\n")
 }
