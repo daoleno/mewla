@@ -23,6 +23,19 @@ Read the relevant code and directory instructions before editing. Complete autho
 - Before pushing to main, run `scripts/ci-local.py` (the jobs your diff touches; `--all` for everything). It runs the commands of .github/workflows/ci.yml, so it also fails on a stale client/ui/more/settings/licenses/licenses.json or Screen viewer bundle, or a node_modules that differs from bun.lock (bun install does not prune; delete the listed directories from node_modules). After pushing, wait for the CI run on your commit to go green before calling the work done. If main is already red from someone else's commit, say so and do not pile on.
 - Test changed behavior and required repository gates. Broaden or repeat only after edits, failures or unresolved concerns. Use device/UI evidence for visible changes; report platform limitations.
 
+## Proving A Change
+
+Pick the cheapest lane that shows what the change touches (details: client/README.md, "Proving a change"):
+
+1. UI change: `client/scripts/shots.sh` (one image: phone 390 light and dark, desktop 1280) plus `nsh test` of the touched files. No device.
+2. The warm phone only for the Kotlin/Swift host, a manifest or intent filter, a permission, a notification, the keyboard or insets, the app lifecycle or the camera: `client/scripts/phone.sh`, minutes under the heavy lock, then let go. Never a new AVD, never a clean release build.
+3. A fault the owner found gets its test in the fixing commit: headless if it can be, a `scripts/shots/` scene if it is layout, a `phone.sh` flow if only Android shows it.
+4. Do not ask for, or run per change, "exact release build, fresh install, first run, real QR": that is the release gate, once per release, run by CI. No emulator per task, no screenshot per tap.
+5. The report carries one composed image and the command that made it, not a gallery.
+6. Do not wait on remote CI during work; one green run before main or a release.
+7. Anything that takes the heavy lock does so for minutes, by script, and lets go.
+8. A new journey is written as a file (a `shots` scene, a `phone.sh` flow), not performed by hand and photographed.
+
 ## Style And Delivery
 
 Use TypeScript, two-space indentation in TS/TSX, gofmt for Go, PascalCase components, use-prefixed hooks and camelCase functions. Keep terminal UI in client/ui/terminal and its model in client/core/terminal. Use structured APIs instead of string parsing when available.
