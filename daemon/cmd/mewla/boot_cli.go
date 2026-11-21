@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
@@ -680,17 +681,22 @@ func bootLifecycleLockPath(stateDir string) (string, error) {
 }
 
 // bootStateLockPID returns the PID actually holding the state's lifecycle
-// flock, or 0 when no live process holds it. A non-empty controlGroup
+// flock, or 0 when no process was seen holding it. A non-empty controlGroup
 // restricts the search to that systemd cgroup, which is how the installed
-// unit is bound to the state it owns. Inspection failures are returned, never
-// silently folded into "no owner"; an unknown or same-UID permission error for
-// a process already matched to the requested cgroup is unresolved ownership.
-// A zombie is skipped because it holds no descriptors. A process positively
-// owned by another UID is skipped as an observation heuristic: the owner-only
-// lock file cannot be opened by that UID, but an inherited descriptor could in
-// principle still hold the flock, so this is a scan-attribution preference,
-// not proof about who may hold the lock. Ownership admission itself remains
-// bound to the unit cgroup, the held flock and the served health identity.
+// unit is bound to the state it owns.
+//
+// Only a flock record in a readable fdinfo names a holder. A process whose
+// descriptors cannot be read (another user's, one that changed credentials or
+// entered a sandbox, one that is exiting) is passed over: it cannot be proven
+// to hold the state, and it is never reported as the owner. That is safe
+// because "no holder seen" is not "no owner": whether the state is held is
+// decided by the flock probe (bootStateLockHeld), and every caller refuses a
+// held lock whose holder was not attributed (an update says the state is owned
+// outside the unit, an uninstall retains the configuration, a verification
+// has no owner). Failing the whole scan for one unreadable process would
+// instead turn every update or boot install into an error on a computer where
+// a Worker runs in a sandbox. Errors other than "cannot read this process"
+// still fail the scan.
 func bootStateLockPID(stateDir, controlGroup string) (int, error) {
 	lockPath, err := bootLifecycleLockPath(stateDir)
 	if err != nil {
@@ -715,7 +721,7 @@ func bootStateLockPID(stateDir, controlGroup string) (int, error) {
 				continue
 			}
 		}
-		held, err := bootPIDHoldsFileLock(pid, lockPath, strict)
+		held, err := bootPIDHoldsFileLock(pid, lockPath)
 		if err != nil {
 			return 0, err
 		}
@@ -751,13 +757,13 @@ func bootPIDInCgroup(pid int, controlGroup string) (bool, error) {
 // path that actually holds the flock record. The kernel exposes that record in
 // /proc/<pid>/fdinfo: a process that merely opened the file has no `lock:`
 // line, and a blocked waiter is not recorded either, so neither can be
-// reported as the state owner. In strict mode (strict=true, a process already
-// matched to the unit cgroup) a permission error leaves ownership unknown.
-func bootPIDHoldsFileLock(pid int, path string, strict bool) (bool, error) {
+// reported as the state owner. A process that cannot be read (see
+// bootProcessUnreadable) holds nothing that can be shown: false, no error.
+func bootPIDHoldsFileLock(pid int, path string) (bool, error) {
 	directory := filepath.Join(bootProcRoot, strconv.Itoa(pid), "fd")
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		if bootSkipInspectionError(pid, err, strict) {
+		if bootProcessUnreadable(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("scan process %d file descriptors: %w", pid, err)
@@ -765,7 +771,7 @@ func bootPIDHoldsFileLock(pid int, path string, strict bool) (bool, error) {
 	for _, entry := range entries {
 		target, err := os.Readlink(filepath.Join(directory, entry.Name()))
 		if err != nil {
-			if bootSkipInspectionError(pid, err, strict) {
+			if bootProcessUnreadable(err) {
 				continue
 			}
 			return false, fmt.Errorf("read process %d descriptor: %w", pid, err)
@@ -776,7 +782,7 @@ func bootPIDHoldsFileLock(pid int, path string, strict bool) (bool, error) {
 		fdInfo := filepath.Join(bootProcRoot, strconv.Itoa(pid), "fdinfo", entry.Name())
 		held, err := bootFDLockRecord(fdInfo)
 		if err != nil {
-			if bootSkipInspectionError(pid, err, strict) {
+			if bootProcessUnreadable(err) {
 				continue
 			}
 			return false, fmt.Errorf("read process %d descriptor lock state: %w", pid, err)
@@ -811,6 +817,15 @@ func bootFDLockRecord(path string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// bootProcessUnreadable says an error reading a process's descriptors means
+// only that this process cannot be looked into: it exited (no such file or
+// process), or the kernel refuses this user its descriptors, as it does for
+// another user's process, one that changed credentials, one in a sandbox or
+// user namespace, or one that is exiting.
+func bootProcessUnreadable(err error) bool {
+	return os.IsNotExist(err) || os.IsPermission(err) || errors.Is(err, syscall.ESRCH)
 }
 
 // bootSkipInspectionError tolerates PIDs that exited during the scan, zombies
