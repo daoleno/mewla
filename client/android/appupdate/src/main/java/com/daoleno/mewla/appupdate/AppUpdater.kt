@@ -31,11 +31,15 @@ class AppUpdater(private val context: Context) {
   fun installSettingsIntent(): Intent =
     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
 
-  /** The system installer for a file [download] left. */
+  /**
+   * The system installer for a file [download] left. Not ACTION_VIEW: Mewla itself takes any file another app
+   * opens with it (share-in), so a VIEW of the APK would stop on a chooser that lists Mewla beside the installer.
+   */
+  @Suppress("DEPRECATION")
   fun installIntent(fileName: String): Intent {
     val file = downloader.downloaded(fileName)
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.appupdate", file)
-    return Intent(Intent.ACTION_VIEW)
+    return Intent(Intent.ACTION_INSTALL_PACKAGE)
       .setDataAndType(uri, APK_MIME)
       .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
   }
