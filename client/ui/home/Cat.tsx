@@ -47,13 +47,13 @@ effect(() => {
  * holds still while the person scrolls or types and while a page is pushed over home. The bleed
  * clips rise above the 40 pt box: nothing here clips them, and the header keeps its height.
  */
-export function HomeCat(props: { onPress?: () => void; /** The still's size (40) and its round target's (48); the capsule's are 32 and 44. */ size?: number; box?: number }) {
+export function HomeCat(props: { onPress?: () => void; /** The still's size (40) and its round target's (48); the capsule's are 32 and 44. */ size?: number; box?: number; /** The needs-you dot on it (default); a header that says it in words has none. */ dot?: boolean }) {
   const canMove = () => homeShown() && !scrolling() && keyboardFrame().height === 0;
   const box = props.box ?? 48;
   const mark = () => (
     <>
       <PetSprite testID="home-cat-sprite" state={catNow} size={props.size ?? 40} mode="once" canMove={canMove} delivered={delivered} />
-      <If when={catNeedsYou()} else={<If when={catUpdateHint()}><View testID="home-cat-update" accessibilityLabel="Update available" class="absolute right-1 top-1 size-3 rounded-full border-2 border-background bg-primary" /></If>}><View testID="home-cat-dot" accessibilityLabel="Needs you" class="absolute right-1 top-1 size-[14px] rounded-full border-2 border-background bg-seal" /></If>
+      <If when={props.dot !== false && catNeedsYou()} else={<If when={catUpdateHint()}><View testID="home-cat-update" accessibilityLabel="Update available" class="absolute right-1 top-1 size-3 rounded-full border-2 border-background bg-primary" /></If>}><View testID="home-cat-dot" accessibilityLabel="Needs you" class="absolute right-1 top-1 size-[14px] rounded-full border-2 border-background bg-seal" /></If>
     </>
   );
   // Without onPress it is part of a larger target (the home header's left block), not a button of its own.

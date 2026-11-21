@@ -39,6 +39,7 @@ import { isMacApp } from "../mac/app";
 import { MacNoAgent } from "../mac/NoAgent";
 import { MacReady } from "../mac/Ready";
 import { MacWaking } from "../mac/Starting";
+import { macLightsRow } from "../mac/local";
 import { StateControl } from "../tray/StateControl";
 import { ChatUpdateRow, chatUpdate } from "../update/ChatUpdateRow";
 import { ProviderOutageRow, providerOutage } from "./ProviderOutageRow";
@@ -282,6 +283,46 @@ function HomeHeader() {
   // Mewla for Mac's window: the right pane's 46 bar, "Brain" 13.5 and a 28 ⋯ (RESULT-DESIGN-PAIRS #4).
   const mac = density() !== "phone";
   const head = headerSize();
+  // The Mac's window in one column (under 1024, and the first-run window): its own header row, after the lights.
+  if (mac && isMacApp()) return <If when={wide()} else={<MacColumnHeader />}><HomeHeaderRow mac={mac} head={head} /></If>;
+  return <HomeHeaderRow mac={mac} head={head} />;
+}
+
+/**
+ * Mewla for Mac's header in one column (m-ready, m-perm, m-noagent, w-small; win.css `.rh`): 46 high, after the
+ * traffic lights (84), the 32 pet and "Brain" over this Mac's name, then the state in words (13/600, its 7 pt dot,
+ * no pill) and a 28 ⋯. The cat opens the computer page, the words the tray, ⋯ Brain's menu.
+ */
+function MacColumnHeader() {
+  const head = headerSize();
+  return (
+    <View testID="home-header" class="bg-background pr-3" style={{ paddingLeft: macLightsRow() > 0 ? 84 : 18, paddingTop: homeHeaderInset() }}>
+      <View class="h-[46px] flex-row items-center gap-2.5">
+        {/* While Brain wakes (m-waking) the row says only "Brain": the cat and the words are the page's. */}
+        <If when={surface() !== "waking"} else={<Text role="header" class="text-[13.5px] leading-[17px] font-semibold">Brain</Text>}><>
+        <Button testID="home-cat" accessibilityLabel={`Computer, ${current()?.name ?? ""}`} onPress={() => openPage({ name: "computer" })}
+          class="min-w-0 shrink flex-row items-center gap-2 active:opacity-70">
+          <HomeCat size={32} box={32} dot={false} />
+          <View class="min-w-0 shrink justify-center">
+            <Text role="header" class="text-[13.5px] leading-[17px] font-semibold line-clamp-1">Brain</Text>
+            <If when={current()?.name}><Text testID="home-computer" class="text-[12px] leading-[15px] text-muted-foreground line-clamp-1">{current()!.name}</Text></If>
+          </View>
+        </Button>
+        <View class="flex-1" />
+        <View class="shrink-0"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} capsule={{ short: () => false }} /></View>
+        <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
+          class="size-7 items-center justify-center rounded-lg hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+          <Icon name="more-horizontal" size={head.actionIcon} tone="soft" />
+        </Button>
+        </></If>
+      </View>
+    </View>
+  );
+}
+
+function HomeHeaderRow(props: { mac: boolean; head: ReturnType<typeof headerSize> }) {
+  const mac = props.mac;
+  const head = props.head;
   return (
     <View testID="home-header" class={`bg-background ${mac ? "pl-[18px] pr-3" : wide() ? "px-4" : "px-2"}`} style={{ paddingTop: homeHeaderInset() }}>
       {/* The tray hangs from this row's bottom (HOME_HEADER_HEIGHT). */}
