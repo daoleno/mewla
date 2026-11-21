@@ -2,6 +2,8 @@ package brain
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -344,5 +346,28 @@ func TestSessionConversationNamesTheLatestConversation(t *testing.T) {
 	}
 	if id, ok := store.SessionConversation("%2"); !ok || id != "host-thread" {
 		t.Fatalf("Brain host conversation = %q, %v", id, ok)
+	}
+}
+
+// An agy Worker's conversation id is stored as soon as agy has written the
+// conversation, so the Work can be reviewed and resumed by it.
+func TestResolveWorkerTranscriptBindsAnAntigravityConversation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	const id = "d03fe13b-79b6-4b0b-ab9e-62b8efbcff60"
+	worker := &classifier.Worker{ID: "s1", Name: "agy", Cwd: t.TempDir(), Command: "agy --conversation " + id}
+	if _, _, ok, err := resolveWorkerTranscript(worker); ok || err != nil {
+		t.Fatalf("before agy wrote the conversation: ok=%v err=%v", ok, err)
+	}
+	dir := filepath.Join(work.AntigravityDataDir(home), "conversations")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, id+".db"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	provider, identity, ok, err := resolveWorkerTranscript(worker)
+	if !ok || err != nil || provider != work.WorkerProviderAntigravity || identity.SessionID != id {
+		t.Fatalf("after: provider=%q identity=%+v ok=%v err=%v", provider, identity, ok, err)
 	}
 }

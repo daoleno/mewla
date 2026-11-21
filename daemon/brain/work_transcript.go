@@ -160,6 +160,10 @@ func resolveWorkerTranscript(worker *classifier.Worker) (provider string, identi
 	case work.WorkerProviderClaude, work.WorkerProviderCodex:
 		identity, ok, err = work.ResolveLiveHostTranscriptIdentity(*worker, provider)
 		return provider, identity, ok && identity.Bound(), err
+	case work.WorkerProviderAntigravity:
+		// The id agy gave the conversation, once it has stored the first turn.
+		identity = work.ResolveAntigravityWorkerTranscript(*worker)
+		return provider, identity, identity.Bound(), nil
 	case work.WorkerProviderPi:
 		path := work.PiOwnedSessionPath(worker.Command)
 		if path == "" {
