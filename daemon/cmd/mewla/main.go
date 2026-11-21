@@ -399,7 +399,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)
 	agentEvents.stop = ctx.Done()
-	w.SetProviderActivityProbe(newEventActivityProbe(eventHub, newWorkProviderActivityProbe()))
+	workProbe := newWorkProviderActivityProbe()
+	workProbe.SetProgressSource(w.SessionProgressStatus)
+	w.SetProviderActivityProbe(newEventActivityProbe(eventHub, workProbe))
 	// A Codex that Mewla started announces its thread and rollout; its
 	// conversation is read from there instead of being searched for.
 	work.CodexBoundRollout = hubBoundTranscript(eventHub)

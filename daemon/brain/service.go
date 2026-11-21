@@ -3057,6 +3057,18 @@ func (s *Service) hostBoundProviderConversation(reader *work.ProviderConversatio
 	if err != nil {
 		return work.CodexConversation{}, err
 	}
+	if identity.Provider == work.WorkerProviderAntigravity {
+		// agy's own report of its turn is the Activity (see ApplyAntigravityProgress).
+		if source, ok := s.watcher.(interface {
+			SessionProgressStatus(id string) (string, time.Time, bool)
+		}); ok {
+			if host, hostErr := s.store.HostSession(); hostErr == nil && host.ID != "" {
+				if state, at, reported := source.SessionProgressStatus(host.ID); reported {
+					work.ApplyAntigravityProgress(&conversation, state, at)
+				}
+			}
+		}
+	}
 	conversation.Events = s.suppressedHostEvents(reader, conversation)
 	return conversation, nil
 }

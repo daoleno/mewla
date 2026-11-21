@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // The reader for an agy conversation.
@@ -347,6 +348,7 @@ func projectAntigravityConversation(id, cwd, path string, updates []antigravityA
 			// agy adds are not chat rows.
 		}
 	}
+	conversation.Events = splitQueuedAntigravityInputs(conversation.Events)
 	for index := range conversation.Events {
 		event := &conversation.Events[index]
 		if event.Kind == "user_message" {
@@ -354,6 +356,68 @@ func projectAntigravityConversation(id, cwd, path string, updates []antigravityA
 		}
 	}
 	return conversation
+}
+
+// agy does not record the inputs that reached its composer while it ran a turn
+// one by one: it joins them with a newline into the one message of the next
+// turn.
+const antigravityWorkEventEnd = "</mewla_work_event>"
+
+var antigravityQueuedWorkEvents = regexp.MustCompile(`(?s)<mewla_work_event>.*?</mewla_work_event>`)
+
+// splitQueuedAntigravityInputs gives each Work event that agy joined into one
+// user message its own user message again. Mewla confirms that a message
+// reached the agent by the digest of the exact bytes it sent, and a joined
+// message matches none of the digests of the events inside it, so the delivery
+// read as "admitted bytes did not match" although every event had arrived.
+// Only a message that is nothing but two or more complete Work event blocks
+// (joined by newlines) is split; any other text is left as agy recorded it.
+func splitQueuedAntigravityInputs(events []CodexConversationEvent) []CodexConversationEvent {
+	var out []CodexConversationEvent
+	for index, event := range events {
+		pieces := queuedAntigravityWorkEvents(event)
+		if len(pieces) < 2 {
+			if out != nil {
+				out = append(out, event)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]CodexConversationEvent, 0, len(events)+len(pieces)), events[:index]...)
+		}
+		out = append(out, pieces...)
+	}
+	if out == nil {
+		return events
+	}
+	for index := range out {
+		out[index].Seq = index + 1
+	}
+	return out
+}
+
+func queuedAntigravityWorkEvents(event CodexConversationEvent) []CodexConversationEvent {
+	if event.Kind != "user_message" || strings.Count(event.Body, antigravityWorkEventEnd) < 2 {
+		return nil
+	}
+	blocks := antigravityQueuedWorkEvents.FindAllStringIndex(event.Body, -1)
+	rest := event.Body
+	for _, block := range blocks {
+		rest = strings.Replace(rest, event.Body[block[0]:block[1]], "", 1)
+	}
+	if len(blocks) < 2 || strings.TrimSpace(rest) != "" {
+		return nil
+	}
+	pieces := make([]CodexConversationEvent, 0, len(blocks))
+	for number, block := range blocks {
+		piece := event
+		piece.Body = event.Body[block[0]:block[1]]
+		if number > 0 {
+			piece.ID = fmt.Sprintf("%s.%d", event.ID, number+1)
+		}
+		pieces = append(pieces, piece)
+	}
+	return pieces
 }
 
 func antigravityChunkText(raw json.RawMessage) string {
@@ -676,12 +740,39 @@ func observeAntigravityConversation(home, id string, conversation *CodexConversa
 	return activity
 }
 
+// antigravityLaunchTime is when the agy process of a Session started, the
+// earliest a conversation it owns can have been written. The operating system's
+// start time of the process is the evidence: the Worker's StartedAt is when the
+// daemon last looked at the Session (after a daemon restart, a re-discovery
+// time), so a conversation that was written before that and is idle now was
+// never found, and the Brain host's activity read "unlocatable" and refused a
+// Worker's result. StartedAt is only the fallback, for a platform that cannot
+// say.
+func antigravityLaunchTime(worker classifier.Worker) time.Time {
+	if started, ok := workerproc.StartTime(worker.ProcessID); ok {
+		return started
+	}
+	return worker.StartedAt
+}
+
+// antigravityPin is the conversation a live agy process was found in. The
+// process keeps its conversation, so it is not looked up again while the same
+// process (and Session) is read.
+type antigravityPin struct {
+	workerID  string
+	processID int
+	id        string
+}
+
 // loadAntigravityConversationForWorker finds the conversation a live agy
 // Session is in: the id on its command line when Mewla resumed it, otherwise
-// the newest conversation in its folder written since it launched.
+// the newest conversation in its folder written since the process launched.
 func (r *ProviderConversationReader) loadAntigravityConversationForWorker(worker classifier.Worker, now time.Time) (CodexConversation, error) {
 	if token, present, err := ProviderResumeToken(WorkerProviderAntigravity, worker.Command); err == nil && present {
 		return r.loadAntigravityConversationByID(token)
+	}
+	if r.antigravityPin.id != "" && r.antigravityPin.workerID == worker.ID && worker.ProcessID > 0 && r.antigravityPin.processID == worker.ProcessID {
+		return r.loadAntigravityConversationByID(r.antigravityPin.id)
 	}
 	if strings.TrimSpace(worker.Cwd) == "" {
 		r.resetSource()
@@ -691,13 +782,16 @@ func (r *ProviderConversationReader) loadAntigravityConversationForWorker(worker
 	if err != nil {
 		return unreadableAntigravityConversation("", "", "no home directory to find agy's conversations"), nil
 	}
-	found, ok, err := FindAntigravityConversation(home, worker.Cwd, worker.StartedAt)
+	found, ok, err := FindAntigravityConversation(home, worker.Cwd, antigravityLaunchTime(worker))
 	if err != nil {
 		return unreadableAntigravityConversation("", "", "agy's conversation index could not be read: "+err.Error()), nil
 	}
 	if !ok {
 		r.resetSource()
 		return CodexConversation{Reason: "transcript_not_found", Events: []CodexConversationEvent{}}, nil
+	}
+	if worker.ProcessID > 0 {
+		r.antigravityPin = antigravityPin{workerID: worker.ID, processID: worker.ProcessID, id: found.ID}
 	}
 	return r.loadAntigravityConversationByID(found.ID)
 }
@@ -729,11 +823,59 @@ func resolveAntigravityTranscriptIdentity(worker classifier.Worker) HostTranscri
 		// agy starts a new conversation for an id it does not know.
 	}
 	if strings.TrimSpace(worker.Cwd) != "" {
-		if found, ok, err := FindAntigravityConversation(home, worker.Cwd, worker.StartedAt); err == nil && ok {
+		if found, ok, err := FindAntigravityConversation(home, worker.Cwd, antigravityLaunchTime(worker)); err == nil && ok {
 			if identity, ok := bound(found.ID); ok {
 				return identity
 			}
 		}
 	}
 	return unbound
+}
+
+// ApplyAntigravityProgress makes agy's own report of itself the Activity of the
+// conversation. agy tells its terminal over OSC 7501 when it is working, waiting
+// for an answer, done or failed, and that is the only signal that covers the
+// whole turn: its conversation_summaries.db status reads IDLE while a tool runs
+// (a 100-call turn read IDLE throughout), which made Brain think the turn was
+// over and send the next Work event into agy's queue, where agy holds it
+// unrecorded and later joins it with the others. With no report (the agent does
+// not send one, or the Session is gone) the conversation keeps the Activity it
+// had.
+func ApplyAntigravityProgress(conversation *CodexConversation, state string, at time.Time) {
+	if conversation == nil || !conversation.Available || conversation.Activity == nil || at.IsZero() {
+		return
+	}
+	activity := *conversation.Activity
+	reported := at.UTC().Format(time.RFC3339Nano)
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "working", "blocked":
+		activity.Status, activity.SettledAt = ProviderActivityRunning, ""
+	case "idle", "done":
+		activity.Status = ProviderActivityCompleted
+	case "error", "failed":
+		activity.Status = ProviderActivityFailed
+	default:
+		return
+	}
+	if activity.Status != ProviderActivityRunning {
+		// The report is when the turn ended; Mewla may first see the turn after
+		// that, and the turn cannot have settled before it was seen.
+		settled, started := at.UTC(), parseAntigravityActivityTime(activity.StartedAt)
+		if started.IsZero() || settled.Before(started) {
+			reported = activity.StartedAt
+		}
+		activity.SettledAt = reported
+	}
+	conversation.Activity = &activity
+	if activity.Status == ProviderActivityRunning {
+		if last := len(conversation.Events) - 1; last >= 0 && conversation.Events[last].Kind == "assistant_message" && !conversation.Events[last].Partial {
+			conversation.Events = withOwnEvents(*conversation).Events
+			conversation.Events[last].Partial = true
+		}
+	}
+}
+
+func parseAntigravityActivityTime(value string) time.Time {
+	parsed, _ := time.Parse(time.RFC3339Nano, value)
+	return parsed
 }

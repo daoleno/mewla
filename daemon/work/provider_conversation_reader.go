@@ -61,6 +61,9 @@ type ProviderConversationReader struct {
 	// for this subscription so a newer same-CWD session never leaks into the
 	// active agent's Interface mid-turn.
 	piPinnedSessionPath string
+
+	// antigravityPin is the conversation the bound agy process was found in.
+	antigravityPin antigravityPin
 }
 
 // ConversationStamp names the parsed transcript the last Load or LoadByIdentity

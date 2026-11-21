@@ -1942,6 +1942,26 @@ func TestWorkerCommandFromProcessRejectsShellLaunchHint(t *testing.T) {
 	}
 }
 
+// agy is a Go binary: the scan must bind its process so the Worker's start
+// time is the process start, not the moving snapshot time of each poll.
+func TestDetectWorkerProcessBindsAntigravityStart(t *testing.T) {
+	agyStarted := time.Date(2026, 11, 22, 5, 54, 6, 0, time.UTC)
+	processes := map[int]processInfo{
+		10: {pid: 10, ppid: 1, startedAt: agyStarted.Add(-time.Minute), comm: "zsh", args: "zsh"},
+		20: {pid: 20, ppid: 10, startedAt: agyStarted, comm: "agy", args: "/home/user/.local/bin/agy --model m --dangerously-skip-permissions"},
+	}
+	for _, snapshotAt := range []time.Time{agyStarted.Add(time.Second), agyStarted.Add(time.Hour)} {
+		command, startedAt, pid := detectWorkerProcess("agy", 10, processes, snapshotAt)
+		if command != "agy" || !startedAt.Equal(agyStarted) || pid != 20 {
+			t.Fatalf("detectWorkerProcess() = (%q, %s, %d), want agy start %s pid 20 whatever the snapshot time", command, startedAt, pid, agyStarted)
+		}
+	}
+	// agy is not a provider family: the foreground proof must not see it.
+	if command := workerCommandFromProcess(processes[20]); command != "" {
+		t.Fatalf("workerCommandFromProcess(agy) = %q, want none", command)
+	}
+}
+
 func TestParseProcessSnapshotUsesStableAbsoluteStartTime(t *testing.T) {
 	location := time.FixedZone("test", 8*60*60)
 	first := parseProcessSnapshot([]byte(

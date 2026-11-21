@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -18,6 +19,19 @@ import (
 type workProviderActivityProbe struct {
 	mu      sync.Mutex
 	readers map[string]*providerActivityReader
+	// lost is the last loss reported per Worker, so a source that stays lost
+	// is logged once, and logged again when it is lost for another reason.
+	lost map[string]string
+	// progress is the status a Session's program reported about itself.
+	progress func(sessionID string) (state string, at time.Time, ok bool)
+}
+
+// SetProgressSource gives the probe the Session host's program status, which is
+// the Activity of an agent that reports its own turns (agy).
+func (p *workProviderActivityProbe) SetProgressSource(progress func(sessionID string) (string, time.Time, bool)) {
+	p.mu.Lock()
+	p.progress = progress
+	p.mu.Unlock()
 }
 
 type providerActivityReader struct {
@@ -56,10 +70,12 @@ func (p *workProviderActivityProbe) ObserveProviderActivity(
 		// transcript is provably unlocatable (missing file) or unreadable
 		// (stat/open/parse/sqlite failure). "Read successfully, no new
 		// fact" is never a loss.
+		state := probeStateForConversation(work.CodexConversation{}, err)
+		p.noteLoss(worker, provider, state, err.Error())
 		return watcher.ProviderActivityObservation{
 			Structured:      true,
 			FallbackAllowed: true,
-			ProbeState:      probeStateForConversation(work.CodexConversation{}, err),
+			ProbeState:      state,
 		}
 	}
 	if !conversation.Available {
@@ -76,10 +92,22 @@ func (p *workProviderActivityProbe) ObserveProviderActivity(
 				}
 			}
 		}
+		p.noteLoss(worker, provider, state, conversation.Reason)
 		return watcher.ProviderActivityObservation{
 			Structured:      true,
 			FallbackAllowed: true,
 			ProbeState:      state,
+		}
+	}
+	p.noteLoss(worker, provider, watcher.ProbeStateOK, "")
+	if provider == work.WorkerProviderAntigravity {
+		p.mu.Lock()
+		progress := p.progress
+		p.mu.Unlock()
+		if progress != nil {
+			if state, at, ok := progress(worker.ID); ok {
+				work.ApplyAntigravityProgress(&conversation, state, at)
+			}
 		}
 	}
 	observation := watcher.ProviderActivityObservation{
@@ -148,6 +176,33 @@ func (p *workProviderActivityProbe) ObserveProviderActivity(
 		break
 	}
 	return observation
+}
+
+// noteLoss logs why a Worker's provider conversation could not be read, once
+// per change, so a delegated input that is refused for "provider activity is
+// unavailable" can be traced to the reader that said so.
+func (p *workProviderActivityProbe) noteLoss(worker classifier.Worker, provider string, state watcher.ProviderProbeState, detail string) {
+	loss := state.Loss()
+	key := ""
+	if loss {
+		key = string(state) + ": " + detail
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.lost == nil {
+		p.lost = map[string]string{}
+	}
+	previous := p.lost[worker.ID]
+	if key == previous {
+		return
+	}
+	if loss {
+		p.lost[worker.ID] = key
+		log.Printf("WARN provider activity probe: %s Worker %s (%s) is %s", provider, worker.ID, worker.Name, key)
+		return
+	}
+	delete(p.lost, worker.ID)
+	log.Printf("provider activity probe: %s Worker %s is readable again", provider, worker.ID)
 }
 
 // probeStateForConversation classifies the provider-channel health of one
