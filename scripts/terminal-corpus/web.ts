@@ -85,7 +85,9 @@ for (const name of names) {
   const page = await browser.newPage({ viewport: { width: 1200, height: 1600 }, ...(engine === "webkit" ? { deviceScaleFactor: dpr } : {}) });
   page.on("pageerror", (e: Error) => failures.push(`${name}: ${e.message}`));
   page.on("console", (m: any) => { if (m.type() === "error") failures.push(`${name}: ${m.text()}`); });
-  await page.goto(`http://127.0.0.1:${server.port}/`);
+  // Not "load": that waits for the sandboxed frame too, and Firefox on a CI runner sometimes never finished it (the page says
+  // "ready" itself, awaited below).
+  await page.goto(`http://127.0.0.1:${server.port}/`, { waitUntil: "domcontentloaded" });
   const events = () => page.evaluate(() => (window as any).__ev as any[]);
   await page.waitForFunction(() => (window as any).__ev.some((e: any) => e.type === "ready"), null, { timeout: 15000 })
     .catch(() => { throw new Error(`${name}: the page never said ready\n${failures.join("\n")}`); });
