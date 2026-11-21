@@ -86,3 +86,35 @@ func TestClassifyAntigravityPermissionDialogIsBlocked(t *testing.T) {
 		t.Fatalf("permission dialog state = %s", state)
 	}
 }
+
+// agy 1.5.14 on a fresh Windows install, captured 2026-11-22: after a sign-in it
+// asks for a colour scheme, then the terms. The scheme preview's last line is
+// "press Enter to continue", which used to become the Worker's summary.
+func TestClassifyAntigravityFirstRunChoicesAreBlockedAndSaySo(t *testing.T) {
+	theme := antigravityScreen(
+		"Welcome to Antigravity CLI!",
+		"",
+		"Choose your color scheme:        ╭──────────────────────────────╮",
+		"  > terminal                     │ > you: add a greeting function │",
+		"    light                        │   · dim: press Enter to continue │",
+		"                                 ╰──────────────────────────────╯",
+		"    [Next]",
+		"  ↑/↓ Navigate · enter Confirm",
+	)
+	terms := antigravityScreen(
+		"Terms of Service & Data Use",
+		"  > [x] Yes, I agree to help improve Antigravity CLI",
+		"[Previous]      [Done]",
+		"  ↑/↓ Navigate · enter Toggle",
+	)
+	for name, screen := range map[string][]string{"theme": theme, "terms": terms} {
+		state, summary := Classify(true, screen, "agy --dangerously-skip-permissions")
+		if state != StateBlocked || summary != "Finish Antigravity's first-run setup in the terminal" {
+			t.Fatalf("%s: state=%s summary=%q", name, state, summary)
+		}
+	}
+	// Another agent's pane quoting the same words is not agy's first run.
+	if _, summary := Classify(true, theme, "claude"); summary == "Finish Antigravity's first-run setup in the terminal" {
+		t.Fatalf("another agent's pane was classified as agy's first run")
+	}
+}
