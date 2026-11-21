@@ -12,7 +12,8 @@
 #   phone.sh reset       back to the snapshot's known state (paired, Brain open)
 #   phone.sh shot [F]    screenshot to F (default: a fresh png under $TMPDIR), prints the path
 #   phone.sh tap REGEX   tap the first node whose text, description or class matches (uiautomator), waits up to 20 s
-#   phone.sh shows REGEX exit 0 if the screen has such a node
+#   phone.sh shows REGEX [SECS]  exit 0 once the screen has such a node (waits up to SECS, default 10)
+#   phone.sh dump        the screen as text, one line per node with an id, text or description (what to read instead of a screenshot or the XML)
 #   phone.sh share-file PATH [MIME]   share a file into Mewla (ACTION_SEND of a MediaStore content:// URI; about 1 s; open-with: untested)
 #   phone.sh share-text TEXT          share text into Mewla
 #   phone.sh open-with PATH [MIME]    "Open with Mewla" a file (ACTION_VIEW)
@@ -20,6 +21,8 @@
 #   phone.sh save        save the current state as the snapshot `ready` (after: install, dev-link + tap Load, pair + tap Pair, Open Brain)
 #   phone.sh status      what is running
 #   phone.sh down        stop the emulator (releases the lock), the daemon and the dev server
+#   phone.sh type TEXT   tap the composer and type
+#   phone.sh flow [NAME..|all]   reset, then run flows/NAME.sh (a journey as a file); prints PASS or FAIL and the seconds
 #   phone.sh run VERB..  up, then the verbs (a `-- ` separates each), then down: a whole check, lock held only meanwhile
 #
 # Everything is under $MEWLA_LANE_HOME (default ~/.mewla/lane): the daemon binary (built from this checkout
@@ -161,7 +164,20 @@ dev_down() {
 
 # ---- the screen -----------------------------------------------------------------------------------------------
 screen() { adb -s "$serial" shell uiautomator dump /sdcard/lane.xml > /dev/null 2>&1; adb -s "$serial" shell cat /sdcard/lane.xml; }
-shows() { screen | grep -qiE "$1"; }
+# Waits up to SECONDS (default 10) for the screen to show REGEX: the app draws a moment after a tap, so one look right after is too early.
+shows() {
+  local deadline=$((SECONDS + ${2:-10}))
+  while ! screen | grep -qiE "$1"; do ((SECONDS < deadline)) || return 1; done
+}
+# What a screen holds, one line per node that has an id, a text or a description (a screen is 20 KB of XML; this is under 1 KB).
+dump() {
+  screen | python3 -I -c '
+import re, sys
+for n in re.findall(r"<node [^>]*>", sys.stdin.read()):
+    v = [re.search(a + "=\"([^\"]*)\"", n).group(1) for a in ("resource-id", "text", "content-desc")]
+    if any(v): print(" | ".join(x for x in v if x))
+'
+}
 tap() {
   local deadline=$((SECONDS + ${2:-20})) at
   while ((SECONDS < deadline)); do
@@ -289,6 +305,20 @@ wait_connected() {
   die "the app did not show a connected Brain within 80 s"
 }
 
+# flows/NAME.sh: a journey as a file (the phone back at the snapshot, then the file; its exit status is the verdict).
+flows() {
+  local names=("$@") f name start failed=0
+  [[ "${names[0]:-all}" != all ]] || names=($(cd "$here/flows" && ls *.sh | sed 's/\.sh$//'))
+  for name in "${names[@]}"; do
+    f="$here/flows/$name.sh"; [[ -f "$f" ]] || die "no flow $name (flows/*.sh)"
+    verb reset > /dev/null 2>&1 || { echo "FAIL $name (reset)"; failed=1; continue; }
+    start=$(date +%s)
+    if PHONE="$here/phone.sh" bash "$f" > "$lane/flow-$name.log" 2>&1; then echo "PASS $name $(( $(date +%s) - start )) s"
+    else echo "FAIL $name $(( $(date +%s) - start )) s (see $lane/flow-$name.log)"; failed=1; fi
+  done
+  return $failed
+}
+
 verb() {
   local v="$1"; shift
   case "$v" in
@@ -305,6 +335,9 @@ verb() {
     shot) shot "$@" ;;
     tap) tap "$@" || die "no node matches $1" ;;
     shows) shows "$@" ;;
+    dump) dump ;;
+    type) tap '^Tell Brain$' > /dev/null || die "no composer on the screen"; adb -s "$serial" shell input text "${1// /%s}" ;;
+    flow) flows "$@" ;;
     share-file) share_file "$@" ;;
     share-text) share_text "$@" ;;
     open-with) open_with "$@" ;;
