@@ -67,6 +67,31 @@ class ShareStoreTest {
     assertFalse(batch.dir.exists())
   }
 
+  @Test fun aWaitingShareForgetsTheFilesThatWentIn() {
+    // Two files, one chip taken and sent: a restart must not offer the sent file again.
+    val batch = share(1, files = 2)
+    store.release(listOf(batch.file(0).toURI().toString()))
+    val pending = store.pending().single()
+    val assets = pending["assets"] as List<*>
+    assertEquals(1, assets.size)
+    assertEquals(batch.file(1).toURI().toString(), (assets[0] as Map<*, *>)["uri"])
+  }
+
+  @Test fun aWaitingShareWithNothingLeftGoes() {
+    val batch = share(1, files = 1)
+    store.release(listOf(batch.file(0).toURI().toString()))
+    assertEquals(0, store.pending().size)
+    assertFalse(batch.dir.exists())
+  }
+
+  @Test fun aWaitingSharesTextStaysWhenItsFilesAreGone() {
+    val batch = share(1, text = "a link", files = 1)
+    store.release(listOf(batch.file(0).toURI().toString()))
+    val pending = store.pending().single()
+    assertEquals("a link", pending["text"])
+    assertEquals(0, (pending["assets"] as List<*>).size)
+  }
+
   @Test fun releaseOnlyTouchesSharedFiles() {
     val outside = File(root, "keep.txt").also { it.writeText("mine") }
     val inside = File(store.root, "notes").also { it.writeText("x") }

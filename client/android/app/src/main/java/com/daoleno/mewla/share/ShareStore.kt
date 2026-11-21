@@ -72,9 +72,36 @@ internal class ShareStore(val root: File) {
       val dir = file.parentFile ?: return@forEach
       if (dir.parentFile?.canonicalFile != root.canonicalFile || !file.name.all(Char::isDigit)) return@forEach
       file.delete()
+      forget(dir, file)
       dropIfEmpty(dir)
     }
   }
+
+  /**
+   * A share that waits for room still lists the files that went in: once one is gone (sent, removed), the next start
+   * must not offer it again as a chip that can only fail. A manifest with nothing left in it goes.
+   */
+  private fun forget(dir: File, gone: File) {
+    val manifest = File(dir, MANIFEST).takeIf { it.isFile } ?: return
+    val json = runCatching { JSONObject(manifest.readText()) }.getOrNull() ?: return
+    val assets = json.optJSONArray("assets") ?: return
+    val kept = JSONArray()
+    for (i in 0 until assets.length()) {
+      val asset = assets.getJSONObject(i)
+      val path = runCatching { File(URI(asset.optString("uri"))).canonicalFile }.getOrNull()
+      if (path != gone) kept.put(asset)
+    }
+    if (kept.length() == assets.length()) return
+    if (kept.length() == 0 && json.optString("text", "").isBlank() && json.isNull("problem")) {
+      manifest.delete()
+      return
+    }
+    json.put("assets", kept)
+    val temp = File(dir, "batch.json.tmp")
+    temp.writeText(json.toString())
+    temp.renameTo(manifest)
+  }
+
 
   /**
    * A start: everything but the shares still waiting goes (a chip of the last run is gone with its app), and a
