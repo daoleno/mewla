@@ -161,6 +161,7 @@ picture img{width:100%;height:auto}
 .cmd-card code.more{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%)}
 .copy{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:12px;color:var(--soft);flex:none}
 .copy.ok{color:var(--add)}
+.step-text{font-size:15px;line-height:22px;color:var(--ink)}
 .small{margin-top:10px;font-size:13px;line-height:18px;color:var(--soft)}
 .mini-term{margin:10px 0 0;border-radius:20px;background:var(--surface);overflow:hidden;color:var(--ink);font-family:var(--mono);font-size:11.5px;line-height:17px;padding:14px 12px;white-space:normal;word-wrap:break-word;overflow-wrap:break-word}
 .mini-term .ln{display:block}
