@@ -8,6 +8,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // A provider outage (a rate limit, an overload, a dropped network) makes every
@@ -177,4 +178,44 @@ func (s *Store) reviewClaimable(now time.Time) bool {
 		}
 	})
 	return claimable
+}
+
+// suppressRefusedWorkReplies keeps out of Chat the provider's refusal text
+// ("API Error: Request rejected (429) …") that ends a Host turn handed a Work
+// event, when the refusal is transient: that delivery is replayed
+// (endHostHandling), and Chat's one outage line says the provider is not
+// answering. A refused reply to the person's own message stays, since that
+// message is not replayed, and so do sign-in and other non-transient refusals,
+// which nothing else reports.
+func suppressRefusedWorkReplies(events []work.CodexConversationEvent) []work.CodexConversationEvent {
+	var out []work.CodexConversationEvent
+	answeringWork := false
+	for index, event := range events {
+		keep := true
+		switch strings.TrimSpace(event.Kind) {
+		case "user_message":
+			answeringWork = work.IsDirectWorkEventPresentationInput(event.Body)
+		case "assistant_message":
+			keep = !(answeringWork && transientRefusal(event.ProviderError))
+		}
+		if !keep {
+			if out == nil {
+				out = append(make([]work.CodexConversationEvent, 0, len(events)), events[:index]...)
+			}
+			continue
+		}
+		if out != nil {
+			out = append(out, event)
+		}
+	}
+	if out == nil {
+		return events
+	}
+	return out
+}
+
+func transientRefusal(failure *work.ProviderActivityError) bool {
+	return failure != nil && watcher.ClassifyProviderError(watcher.ProviderActivityError{
+		Code: failure.Code, HTTPStatus: failure.HTTPStatus, Message: failure.Message,
+	}) == watcher.ProviderErrorTransient
 }

@@ -566,12 +566,15 @@ func consumeClaudeLines(data []byte, firstLine int, consume func(int, []byte)) {
 }
 
 type claudeConversationBuilder struct {
-	sourceID          string
-	sessionID         string
-	cwd               string
-	supportedRecords  int
-	events            []CodexConversationEvent
-	eventByCall       map[string]int
+	sourceID         string
+	sessionID        string
+	cwd              string
+	supportedRecords int
+	events           []CodexConversationEvent
+	eventByCall      map[string]int
+	// apiError is the provider failure of the record being consumed; the
+	// events it adds carry it as ProviderError.
+	apiError          *ProviderActivityError
 	activityLifecycle providerActivityLifecycle
 	// denialKind is the toolDenialKind of the record being read: its tool
 	// results are calls that were refused.
@@ -746,15 +749,19 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 				b.activityLifecycle.start(pending.id, pending.startedAt)
 			}
 		}
-		b.consumeAssistantContent(lineNumber, recordID, timestamp, envelope.ThinkingDisplay, envelope.Message.Content)
 		if envelope.IsAPIErrorMessage {
-			// The error record ends Claude's turn whatever its stop reason.
-			b.activityLifecycle.settle("", ProviderActivityCompleted, timestamp)
-			b.activityLifecycle.recordError(timestamp, ProviderActivityError{
+			b.apiError = &ProviderActivityError{
 				Code:       envelope.Error,
 				HTTPStatus: envelope.APIErrorStatus,
 				Message:    claudeAPIErrorText(envelope.Message.Content),
-			}, true)
+			}
+		}
+		b.consumeAssistantContent(lineNumber, recordID, timestamp, envelope.ThinkingDisplay, envelope.Message.Content)
+		if apiError := b.apiError; apiError != nil {
+			b.apiError = nil
+			// The error record ends Claude's turn whatever its stop reason.
+			b.activityLifecycle.settle("", ProviderActivityCompleted, timestamp)
+			b.activityLifecycle.recordError(timestamp, *apiError, true)
 		} else if !claudeAssistantRecordContinuesTurn(
 			envelope.Message.StopReason,
 			envelope.Message.Content,
@@ -1281,6 +1288,10 @@ func (b *claudeConversationBuilder) addEvent(event CodexConversationEvent) bool 
 	}
 	if event.ID == "" {
 		event.ID = b.eventID(fmt.Sprintf("event-%d", b.evicted+len(b.events)+1), "event", 0)
+	}
+	if b.apiError != nil && event.ProviderError == nil {
+		failure := *b.apiError
+		event.ProviderError = &failure
 	}
 	b.events = append(b.events, event)
 	return true
