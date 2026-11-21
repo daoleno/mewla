@@ -179,6 +179,9 @@ func Classify(paneAlive bool, lines []string, command string) (WorkerState, stri
 	// Get the last few meaningful lines for pattern matching.
 	tail := lastNonEmpty(lines, 10)
 	if isAntigravityCommand(command) {
+		if paneAlive && antigravityFirstRunScreen(lines) {
+			return StateBlocked, "Finish Antigravity's first-run setup in the terminal"
+		}
 		tail = withoutAntigravityChrome(tail)
 	}
 	interactiveTail := linesAfterLastReadyComposer(tail)
@@ -287,6 +290,24 @@ func matchingGrokChoiceMenu(lines []string) string {
 		return ""
 	}
 	return footerLine
+}
+
+// antigravityFirstRunScreen is agy's first-run choices after a sign-in (the
+// colour scheme, then the terms and data-use choice). Both are the person's to
+// answer. Their colour-scheme preview ends in "press Enter to continue", which
+// is not the summary of anything.
+func antigravityFirstRunScreen(lines []string) bool {
+	from := 0
+	if len(lines) > 40 {
+		from = len(lines) - 40
+	}
+	for _, line := range lines[from:] {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Choose your color scheme") || strings.HasPrefix(line, "Terms of Service & Data Use") {
+			return true
+		}
+	}
+	return false
 }
 
 func isAntigravityCommand(command string) bool {
