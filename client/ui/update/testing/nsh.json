@@ -6,6 +6,8 @@
   "capabilities": {
     "host": [
       "update.*",
+      "secure.*",
+      "handover.*",
       "test.*"
     ],
     "openUrl": true

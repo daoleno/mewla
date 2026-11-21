@@ -36,7 +36,7 @@ export interface DesktopUpdater {
 
 /** The update as a row shows it: the version, and the fields an installer of another platform needs left empty. */
 export function desktopArtifact(version: string, url = ""): AndroidUpdateArtifact {
-  return { version, versionCode: 0, fileName: "", url, sha256: "", size: 0 };
+  return { applicationId: "", moves: false, version, versionCode: 0, fileName: "", url, sha256: "", size: 0 };
 }
 
 /**

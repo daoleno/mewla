@@ -61,6 +61,12 @@ export function resolveDistributionChannel(platform: string, configured: unknown
 export { compareVersions, isNewerVersion, parseVersion } from "./version";
 
 export interface AndroidUpdateArtifact {
+  /**
+   * The app this APK installs as. A release made for another application id than the running app's
+   * (the move of 11-21: com.daoleno.mewla to ai.mewla.app) installs beside it as a new app; `moves` says so.
+   */
+  applicationId: string;
+  moves: boolean;
   version: string;
   versionCode: number;
   fileName: string;
@@ -93,14 +99,20 @@ export async function verifyAndroidUpdateManifest(
   manifestBytes: Uint8Array,
   signature: Uint8Array,
   publicKey: Uint8Array = publicKeyFromPKIX(UPDATE_PUBLIC_KEY_PKIX),
+  ownId: string = ANDROID_PACKAGE,
 ): Promise<AndroidUpdateArtifact | null> {
   if (signature.length !== ED25519_SIGNATURE_BYTES || !(await ed25519Verify(manifestBytes, signature, publicKey))) {
     throw new Error("Release signature didn't verify.");
   }
-  return parseAndroidUpdateManifest(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes));
+  return parseAndroidUpdateManifest(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes), ownId);
 }
 
-export function parseAndroidUpdateManifest(text: string): AndroidUpdateArtifact | null {
+/**
+ * `android.package` is the id every shipped build looks for, and `android.application_id` the app the APK is
+ * (absent: the same one). A build takes the release when either names it, so a release of another id still
+ * reaches the builds that only know the first, and says to the builds that know both that it is a move.
+ */
+export function parseAndroidUpdateManifest(text: string, ownId: string = ANDROID_PACKAGE): AndroidUpdateArtifact | null {
   let manifest: unknown;
   try {
     manifest = JSON.parse(text);
@@ -115,7 +127,13 @@ export function parseAndroidUpdateManifest(text: string): AndroidUpdateArtifact 
     throw new Error("Release manifest has no valid version.");
   }
   const android = manifest.android;
-  if (!isRecord(android) || android.package !== ANDROID_PACKAGE || android.version_name !== version) {
+  const applicationId = isRecord(android) ? (android.application_id ?? android.package) : undefined;
+  if (
+    !isRecord(android) ||
+    typeof applicationId !== "string" ||
+    (android.package !== ownId && applicationId !== ownId) ||
+    android.version_name !== version
+  ) {
     throw new Error("Release manifest doesn't describe this app.");
   }
   const versionCode = android.version_code;
@@ -144,6 +162,8 @@ export function parseAndroidUpdateManifest(text: string): AndroidUpdateArtifact 
     throw new Error("Release APK size is invalid.");
   }
   return {
+    applicationId,
+    moves: applicationId !== ownId,
     version,
     versionCode,
     fileName,
@@ -344,7 +364,12 @@ export function appUpdateRow(state: AppUpdateState): AppUpdateRowModel | null {
     case "checkFailed":
       return { title: "Check for updates", action: "Retry", actionable: true };
     case "available":
-      return { title: "Update available", subtitle: `v${state.update.version}`, action: "Update", actionable: true };
+      return {
+        title: state.update.moves ? "New Mewla available" : "Update available",
+        subtitle: `v${state.update.version}`,
+        action: state.update.moves ? "Install" : "Update",
+        actionable: true,
+      };
     case "testflightAvailable":
       return { title: "Update available", subtitle: `v${state.update.version}`, action: "Update", actionable: true };
     case "downloading":

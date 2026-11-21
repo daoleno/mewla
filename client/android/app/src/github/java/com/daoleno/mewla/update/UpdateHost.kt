@@ -19,6 +19,7 @@ import java.util.concurrent.Executors
  */
 class UpdateHost(private val activity: Activity, private val nsh: NshView) {
   private val updater = AppUpdater(activity)
+  private val vault = AppHandoverVault(activity)
   private val worker = Executors.newSingleThreadExecutor { Thread(it, "mewla-app-update") }
   private val main = Handler(Looper.getMainLooper())
   // A cancelled download still answers; nothing may reach the NshView once the activity destroyed it.
@@ -60,6 +61,8 @@ class UpdateHost(private val activity: Activity, private val nsh: NshView) {
     nsh.handle("update.openInstallSettings") { _, reply ->
       onMain { answer(reply) { activity.startActivity(updater.installSettingsIntent()); null } }
     }
+    // A move to another app: what pairs this phone, staged for the new app to take (appupdate/Handover.kt).
+    nsh.handle("handover.stage") { data, reply -> answer(reply) { vault.stage(field(data, "json")); null } }
     nsh.handle("update.install") { data, reply ->
       onMain { answer(reply) { activity.startActivity(updater.installIntent(field(data, "fileName"))); null } }
     }

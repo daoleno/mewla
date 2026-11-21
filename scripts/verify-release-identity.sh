@@ -364,6 +364,8 @@ if stage:
             and_id = ident.get("android") or {}
             if and_id.get("package") != exp_package:
                 errors.append(f"stage identity package: got {and_id.get('package')!r}")
+            if and_id.get("application_id") != exp_package:
+                errors.append(f"stage identity application_id: got {and_id.get('application_id')!r}")
             if int(and_id.get("version_code", -1)) != exp_vc:
                 errors.append("stage identity version_code mismatch")
             if and_id.get("certificate_sha256_fingerprint") != exp_cert:

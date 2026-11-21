@@ -4,7 +4,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+  <!-- The move to another app (Handover.kt): only an app of the same release key can ask the old one for what pairs this phone. -->
+  <permission android:name="${applicationId}.permission.HANDOVER" android:protectionLevel="signature" />
+
   <application>
+    <meta-data android:name="com.daoleno.mewla.appupdate.VAULT" android:value="com.daoleno.mewla.update.AppHandoverVault" />
+    <provider
+      android:name="com.daoleno.mewla.appupdate.HandoverProvider"
+      android:authorities="${applicationId}.handover"
+      android:exported="true"
+      android:permission="${applicationId}.permission.HANDOVER" />
+
     <provider
       android:name="com.daoleno.mewla.appupdate.AppUpdateFileProvider"
       android:authorities="${applicationId}.appupdate"

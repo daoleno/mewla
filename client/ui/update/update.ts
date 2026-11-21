@@ -2,6 +2,8 @@ import { type Accessor, computed, effect, host, openUrl, platform, signal, lifec
 import { checkForUpdate, downloadUpdate, installAndRestart, shellInfo } from "nsh/updater";
 import { appUpdatePending, type AppUpdateState, type UpdateHostInfo } from "../../core/update/appUpdate";
 import { DesktopUpdateController, type DesktopUpdater } from "../../core/update/desktopUpdate";
+import { platform as corePlatform } from "../../core/platform";
+import { collectHandover } from "../../core/update/handover";
 import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type DownloadProgress, type DownloadRequest } from "../../core/update/controller";
 
 /**
@@ -13,7 +15,7 @@ import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type Downlo
  * {distribution, appId, version, build, arm64?}; Android's GitHub APK also has
  * `update.download` {url, fileName, sha256, size} → {fileName} with the event
  * `update.progress` {received, total}, `update.canInstall`, `update.openInstallSettings`,
- * `update.install` {fileName}. A failing `update.info` (the Play build, the web) hides it.
+ * `update.install` {fileName}, and `handover.stage` {json} before the installer of another app (a move). A failing `update.info` (the Play build, the web) hides it.
  *
  * Mewla for Mac updates by NSH's own updater (`nsh/updater`): the whole app, its daemon and CLI inside, is replaced
  * from the release's signed `latest.json` and starts again; the release names that source in its nsh-updater.json
@@ -60,12 +62,21 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/** A move to another app (a release of another application id): the pairing, staged for the new app (`handover.stage`). */
+const androidHandover = {
+  stage: async () => {
+    const bundle = await collectHandover(corePlatform().secure, corePlatform().storage);
+    if (bundle) await host.call("handover.stage", { json: JSON.stringify(bundle) });
+  },
+};
+
 function hostDeps(): AppUpdateDeps {
   const hosted = host.available() && (platform.os === "android" || platform.os === "ios");
   return {
     platform: platform.os,
     info: async () => (hosted ? await host.call<UpdateHostInfo>("update.info") : null),
     installer: hosted && platform.os === "android" ? androidInstaller : null,
+    handover: hosted && platform.os === "android" ? androidHandover : null,
     fetchBytes,
     openUrl: async (url) => (await openUrl(url)).opened,
     now: () => Date.now(),
