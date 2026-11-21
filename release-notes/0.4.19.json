@@ -1,0 +1,8 @@
+{
+  "version": "0.4.19",
+  "date": "2026-11-21",
+  "highlights": [],
+  "fixes": [
+    "On Android, share files, pictures and links from other apps to Mewla, or open a file with Mewla: they arrive in Brain's composer as attachments."
+  ]
+}
