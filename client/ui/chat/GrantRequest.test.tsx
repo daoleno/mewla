@@ -36,6 +36,14 @@ describe("a grant request in Brain's thread", () => {
     expect(app.shows("id:grant-request >> id:grant-request-sealed")).toBe(false);
   }, 30_000);
 
+  test("asked, on the Mac: m-perm's card (its title, the reason, Not now and Open System Settings) and it needs you", async () => {
+    const app = await card("asked");
+    expect(app.shows("id:grant-request >> text:Allow screen recording")).toBe(true);
+    // The window's header counts it, as the menu bar cat does: one thing waits for the person.
+    await app.waitFor("text:1 needs you", { timeout: 10_000 });
+    expect(app.shows("text:All quiet")).toBe(false);
+  }, 30_000);
+
   test("opened (System Settings shown): the same two buttons, the grant is still the person's to give", async () => {
     const app = await card("opened", "accessibility");
     expect(app.shows("id:grant-request >> id:grant-request-open_settings")).toBe(true);

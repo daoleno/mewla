@@ -3,7 +3,7 @@ import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
 import { historyTiming, HISTORY_FAILED, HISTORY_LOADING, type HistoryRender } from "./history";
-import { TerminalSession, type TerminalHandlers } from "./session";
+import { TerminalSession, terminalTiming, type TerminalHandlers } from "./session";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,6 +76,53 @@ const delta = (patch: Record<string, unknown>) => ({
 });
 
 describe("TerminalSession", () => {
+  test("a Session the computer does not have yet (Brain's host still starting) is asked again, and attaches once it is there", async () => {
+    const savedTiming = { ...terminalTiming };
+    Object.assign(terminalTiming, { notYetMs: 10, notYetForMs: 2000 });
+    try {
+      const transport = await connected();
+      const socket = own(transport);
+      const { log, handlers } = recorder();
+      const term = new TerminalSession(transport, "mh-new", handlers);
+      term.resize(80, 24);
+      await until(() => frames(socket, "terminal_open").length === 1);
+      socket.receive({ type: "terminal_error", message: "target is not an available Mewla-owned Session" });
+      await until(() => frames(socket, "terminal_open").length === 2);
+      socket.receive({ type: "terminal_error", message: "target is not an available Mewla-owned Session" });
+      await until(() => frames(socket, "terminal_open").length === 3);
+      socket.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
+      await until(() => log.includes("reset"));
+      expect(log.filter((l) => l.startsWith("error:"))).toEqual([]);
+      expect(frames(socket, "terminal_open").every((f) => f.target_id === "mh-new")).toBe(true);
+      term.close();
+      transport.close();
+    } finally {
+      Object.assign(terminalTiming, savedTiming);
+    }
+  });
+
+  test("a Session still missing after its time, or any other refusal, is an error at once", async () => {
+    const savedTiming = { ...terminalTiming };
+    Object.assign(terminalTiming, { notYetMs: 10, notYetForMs: 0 });
+    try {
+      const transport = await connected();
+      const socket = own(transport);
+      const { log, handlers } = recorder();
+      const term = new TerminalSession(transport, "mh-gone", handlers);
+      term.resize(80, 24);
+      await until(() => frames(socket, "terminal_open").length === 1);
+      socket.receive({ type: "terminal_error", message: "target is not an available Mewla-owned Session" });
+      await until(() => log.some((l) => l.startsWith("error:")));
+      expect(log).toContain("error:target is not an available Mewla-owned Session");
+      await wait(40);
+      expect(frames(socket, "terminal_open").length).toBe(1);
+      term.close();
+      transport.close();
+    } finally {
+      Object.assign(terminalTiming, savedTiming);
+    }
+  });
+
   test("opens once the view has a size, then carries output and input of its own attachment only", async () => {
     const transport = await connected();
     const socket = own(transport);

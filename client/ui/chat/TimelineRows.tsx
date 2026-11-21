@@ -23,7 +23,7 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { Icon as KitIcon } from "../kit/Icon";
 import { clock } from "../calendar/clock";
 import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
-import { grantPermissionName, grantRequestView, type GrantRequestTimelineItem } from "../../core/timeline/grantRequestModel";
+import { grantPermissionName, grantRequestView, grantTitle, type GrantRequestTimelineItem } from "../../core/timeline/grantRequestModel";
 import type { PluginNoticeTimelineItem } from "../../core/timeline/pluginNoticeModel";
 import { grantRequestAction, type GrantRequestAction } from "../../core/screen/grantRequest";
 import { StateLine } from "../kit/RowTile";
@@ -41,7 +41,7 @@ import { nav } from "../shell/nav";
 import { agentDisplays, displayOfWorker } from "../screenfloat/agentDisplays";
 import { isMermaidLanguage } from "../../core/mermaid/mermaid";
 import { MermaidBlock } from "../mermaid/MermaidBlock";
-import { threadType } from "../kit/density";
+import { density, requestCardSize, threadType } from "../kit/density";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -295,6 +295,9 @@ export function GrantRequestCard(props: { item: () => GrantRequestTimelineItem }
       busy.set(false);
     }
   };
+  // The Mac's card is `m-perm`'s: the seal dot and "Allow screen recording", the reason, then Not now and Open System
+  // Settings side by side, full width, at the request card's sizes. Phones keep their card.
+  if (density() !== "phone") return <MacGrantCard item={it} view={view} busy={busy} failed={failed} press={press} />;
   return (
     <View testID="grant-request" accessibilityLabel={`${grantPermissionName(it().permission)}: ${it().reason}`} class="mx-4 my-1 gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5">
       <View selectable><Text class={`text-base ${SELECTION}`}>{it().reason}</Text></View>
@@ -312,6 +315,35 @@ export function GrantRequestCard(props: { item: () => GrantRequestTimelineItem }
         </View>
       </If>
       <If when={failed()}><Text testID="grant-request-failed" class="text-sm text-muted-foreground">{failed()}</Text></If>
+    </View>
+  );
+}
+
+function MacGrantCard(props: { item: () => GrantRequestTimelineItem; view: () => ReturnType<typeof grantRequestView>; busy: () => boolean; failed: () => string; press: (action: GrantRequestAction) => Promise<void> }) {
+  const it = props.item;
+  const S = requestCardSize();
+  const type = threadType();
+  return (
+    <View testID="grant-request" accessibilityLabel={`${grantPermissionName(it().permission)}: ${it().reason}`} class={`mx-4 my-1 ${S.card}`}>
+      <View testID="grant-request-title" class="flex-row items-center gap-2">
+        <If when={!props.view().sealed}><View class="size-1.5 rounded-full bg-seal" /></If>
+        <Text class={`${type.line} font-semibold text-foreground`}>{grantTitle(it().permission)}</Text>
+      </View>
+      <View selectable><Text class={`${type.question} ${SELECTION}`}>{it().reason}</Text></View>
+      <If when={props.view().sealed}>
+        <StateLine testID="grant-request-sealed" tone={it().state === "granted" ? "ok" : "off"} label={props.view().word ?? ""} />
+      </If>
+      <If when={props.view().buttons.length > 0}>
+        <View class="flex-row items-center gap-2">
+          <Each of={props.view().buttons} key={(button) => button.id}>{(button) => (
+            <Button testID={`grant-request-${button().id}`} accessibilityLabel={button().label} disabled={props.busy()} onPress={() => void props.press(button().id)}
+              class={`${S.button} flex-1 items-center justify-center active:opacity-70 ${button().id === "not_now" ? "bg-accent" : "bg-seal"}`}>
+              <Text class={`${S.label} font-semibold ${button().id === "not_now" ? "text-foreground" : "text-seal-foreground"}`}>{button().label}</Text>
+            </Button>
+          )}</Each>
+        </View>
+      </If>
+      <If when={props.failed()}><Text testID="grant-request-failed" class={`${type.line} text-muted-foreground`}>{props.failed()}</Text></If>
     </View>
   );
 }

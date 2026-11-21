@@ -82,7 +82,11 @@ jobs:
             osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk-$theme.png\""
             sleep 2
             # Mewla Dev on this runner's daemon: a first run, then each surface on the same install.
+            # A first run opens at its first size (one column); opened again, at the size it was left.
             "$F/capture.sh" "$APP" "$OUT" $theme firstrun '{}' fresh
+            "$F/capture.sh" "$APP" "$OUT" $theme firstrun-again '{}' keep
+            # The other surfaces at the main window's default (the gallery's two-pane frames).
+            export FIDELITY_WINDOW=1280x800
             "$F/capture.sh" "$APP" "$OUT" $theme menu '{}' keep menu
             "$F/capture.sh" "$APP" "$OUT" $theme perch '{"perch":true}' keep
             "$F/capture.sh" "$APP" "$OUT" $theme pair '{"pairPhone":true}' keep
@@ -91,10 +95,11 @@ jobs:
             done
             "$F/capture.sh" "$APP" "$OUT" $theme shortcut '{"shortcutOffer":true}' keep
             "$F/capture.sh" "$APP" "$OUT" $theme terminal '{"terminal":true}' keep
-            "$F/capture.sh" "$APP" "$OUT" $theme grant '{"grant":"asked"}' keep
+            # The permission card as the gallery draws it: in the first-run window (m-perm).
+            FIDELITY_WINDOW=720x560 "$F/capture.sh" "$APP" "$OUT" $theme grant '{"grant":"asked"}' keep
             "$F/capture.sh" "$APP" "$OUT" $theme mac '{"open":"computer"}' keep
             sudo mv /usr/local/bin/claude /usr/local/bin/claude.aside
-            "$F/capture.sh" "$APP" "$OUT" $theme noagent '{}' fresh
+            FIDELITY_WINDOW= "$F/capture.sh" "$APP" "$OUT" $theme noagent '{}' fresh
             sudo mv /usr/local/bin/claude.aside /usr/local/bin/claude
             # The busy desk (the mock's scenario).
             "$F/capture.sh" "$FIX" "$OUT" $theme busy-home '{}' fresh
@@ -102,6 +107,7 @@ jobs:
             "$F/capture.sh" "$FIX" "$OUT" $theme busy-perch '{"perch":true}' keep
             "$F/capture.sh" "$FIX" "$OUT" $theme busy-cal '{"open":"calendar"}' keep
             "$F/capture.sh" "$FIX" "$OUT" $theme busy-small '{"size":[760,620]}' keep
+            unset FIDELITY_WINDOW
           done
           ls "$OUT" | head -200
       - uses: actions/upload-artifact@v4

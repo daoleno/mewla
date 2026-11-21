@@ -68,6 +68,17 @@ export function pageStatusBar(own?: StatusBar): StatusBar {
 }
 
 /**
+ * A desktop page's paper: its own `bg-*` (from its class), else the app's canvas. NSH's desktop stack puts an opaque
+ * backdrop in the system's window colour (white, or 30/30/30 in dark) inside every screen, above the screen's own
+ * background: the paper is a child of the screen, or a page that paints only its column showed that backdrop on both
+ * sides of it (the Mac window's white bands beside Brain's thread and Calendar, 11-22).
+ */
+export function paperOf(cls: string | undefined): string {
+  const own = (cls ?? "").split(/\s+/).filter((c) => c.startsWith("bg-"));
+  return own.length > 0 ? own.join(" ") : "bg-background";
+}
+
+/**
  * The page's content in its column (client/DESIGN.md): always the same view, so a page that changes
  * column (a Session between chat and terminal) or a window crossing the wide gate never makes its content
  * again; only the width changes. On a phone and a narrow window the whole width.
@@ -173,7 +184,7 @@ export function NavPage(props: AppNavPageProps) {
   return (
     <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
       header={own.header ?? <PageHeader title={props.title} titleView={own.headerTitle} left={own.headerLeft} right={own.headerRight} width={headerWidth} canGoBack={stack.canGoBack} back={stack.back} mark={mark} />}>
-      <Column width={width}>{own.children}</Column>
+      <View testID="page-paper" class={`flex-1 ${paperOf(own.class)}`}><Column width={width}>{own.children}</Column></View>
     </BaseNavPage>
   );
 }

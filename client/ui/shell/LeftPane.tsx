@@ -47,7 +47,8 @@ function PaneHeader() {
       <View class="min-w-0 flex-1">
         <Text testID="pane-computer" role="header" class={MAC ? "text-[15px] leading-[19px] font-bold line-clamp-1" : "text-title font-bold tracking-title line-clamp-1"}>{current()?.name || "Mewla"}</Text>
         <If when={line().words}><View class="flex-row items-center gap-1.5">
-            <StateDotMark dot={line().dot} small={MAC} />
+            {/* On the Mac, online is the 6 pt `ok` dot (win.css `.lp .who span i`); the other states keep theirs. */}
+            <If when={MAC && line().dot === "ink"} else={<StateDotMark dot={line().dot} small={MAC} />}><View testID="state-dot-ok" class="size-1.5 rounded-full bg-ok" /></If>
             {/* On the Mac it is this Mac: "This Mac · Online", 12 (RESULT-DESIGN-PAIRS #6). */}
             <Text testID="pane-state" class={`${MAC ? "text-[12px] leading-[16px]" : "text-sub"} line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{MAC && isThisMac(current()) ? `This Mac · ${line().words}` : line().words}</Text>
           </View></If>

@@ -53,6 +53,8 @@ export function openMacSettings(page?: MacSettingsPage): void {
     kind: "normal",
     title: "Settings",
     defaultSize: SIZE,
+    // Centred on the screen, as m-settings draws it (not at the main window's corner).
+    defaultPosition: "center",
     minSize: SIZE,
     resizable: false,
     maximizable: false,
