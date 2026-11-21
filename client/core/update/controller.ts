@@ -53,6 +53,11 @@ export interface AppUpdateDeps {
   /** Opens a URL outside the app: whether something opened it. */
   openUrl(url: string): Promise<boolean>;
   now(): number;
+  /**
+   * Android, when a release is another app (`update.moves`): what the running app is, put where the new app
+   * takes it from (client/core/update/handover.ts). Staged just before the installer opens.
+   */
+  handover?: { stage(): Promise<void> } | null;
   /** The release key; the real one unless a test signs its own manifests. */
   publicKey?: Uint8Array;
   warn?(message: string, error?: unknown): void;
@@ -154,7 +159,7 @@ export class AppUpdateController {
       this.deps.fetchBytes(LATEST_MANIFEST_URL),
       this.deps.fetchBytes(LATEST_SIGNATURE_URL),
     ]);
-    return verifyAndroidUpdateManifest(manifest, signature, this.publicKey);
+    return verifyAndroidUpdateManifest(manifest, signature, this.publicKey, this.info?.appId);
   }
 
   /** The newest TestFlight build testers can install, or null when it isn't newer than this one. */
@@ -217,10 +222,21 @@ export class AppUpdateController {
       }
       // The installer may be dismissed; the row then offers to open it again.
       this.set({ kind: "ready", update, fileName });
+      if (update.moves) await this.stageHandover();
       await installer.install(fileName);
     } catch (error) {
       this.warn("install failed", error);
       this.set({ kind: "failed", update, message: messageOf(error) });
+    }
+  }
+
+  /** A move installs a new app that starts with nothing: what pairs this device goes to where it will look. */
+  private async stageHandover(): Promise<void> {
+    try {
+      await this.deps.handover?.stage();
+    } catch (error) {
+      // The new app then asks for one scan; the move itself goes on.
+      this.warn("handover not staged", error);
     }
   }
 

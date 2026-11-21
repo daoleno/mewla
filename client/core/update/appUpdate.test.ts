@@ -86,6 +86,8 @@ describe("app version precedence", () => {
 describe("signed release manifest", () => {
   test("verifies the real v0.2.8 release with the daemon's update key", async () => {
     expect(await verifyAndroidUpdateManifest(realManifest, realSignature)).toEqual({
+      applicationId: "com.daoleno.mewla",
+      moves: false,
       version: "0.2.8",
       versionCode: 48,
       fileName: "mewla-android-arm64-v0.2.8.apk",
@@ -117,6 +119,8 @@ describe("signed release manifest", () => {
 
   test("reads the arm64 sideload APK and its checksum", () => {
     expect(parseAndroidUpdateManifest(manifestText())).toEqual({
+      applicationId: ANDROID_PACKAGE,
+      moves: false,
       version: "0.2.9",
       versionCode: 49,
       fileName: "mewla-android-arm64-v0.2.9.apk",
@@ -154,6 +158,31 @@ describe("signed release manifest", () => {
     rejects(manifestText({}, { size: 0 }), "size");
     rejects(manifestText({}, { size: "60" }), "size");
     rejects(manifestText({}, { size: 513 * 1024 * 1024 }), "size");
+  });
+});
+
+describe("a release of another application id", () => {
+  const OLD = "com.daoleno.mewla";
+  const NEW = "ai.mewla.app";
+  const moved = (android: Record<string, unknown> = {}) =>
+    manifestText({ android: { package: OLD, application_id: NEW, version_name: "0.2.9", version_code: 49, ...android } });
+
+  test("a build that knows only `package` takes it as the one it asks for; one that knows both sees a move", () => {
+    expect(parseAndroidUpdateManifest(moved(), OLD)).toMatchObject({ applicationId: NEW, moves: true });
+    expect(parseAndroidUpdateManifest(moved(), NEW)).toMatchObject({ applicationId: NEW, moves: false });
+    expect(parseAndroidUpdateManifest(manifestText(), OLD)).toMatchObject({ applicationId: OLD, moves: false });
+  });
+
+  test("a release that names neither this app's id is not for it", () => {
+    expect(() => parseAndroidUpdateManifest(moved(), "ai.mewla.app.dev")).toThrow("doesn't describe this app");
+    expect(() => parseAndroidUpdateManifest(moved({ package: "org.example.other", application_id: "org.example.other2" }), OLD)).toThrow(
+      "doesn't describe this app",
+    );
+  });
+
+  test("the row of a move says it is a new app", () => {
+    const update = parseAndroidUpdateManifest(moved(), OLD)!;
+    expect(appUpdateRow({ kind: "available", update })).toEqual({ title: "New Mewla available", subtitle: "v0.2.9", action: "Install", actionable: true });
   });
 });
 

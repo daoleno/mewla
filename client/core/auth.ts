@@ -22,6 +22,9 @@ const DEVICE_NAME_KEY = "mewla.device.v3.name";
 const DEVICE_SEED_KEY = "mewla.device.v3.seed";
 const DEVICE_PUBLIC_KEY_KEY = "mewla.device.v3.public-key";
 
+/** Everything that is this device to a computer: moving to another app takes these along (update/handover.ts). */
+export const DEVICE_SECURE_KEYS = [DEVICE_ID_KEY, DEVICE_NAME_KEY, DEVICE_SEED_KEY, DEVICE_PUBLIC_KEY_KEY] as const;
+
 export interface LocalDeviceIdentity {
   deviceId: string;
   deviceName: string;

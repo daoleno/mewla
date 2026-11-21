@@ -1,6 +1,8 @@
 import { host, mount, signal, Text, View } from "nsh";
 import type { AppUpdateState } from "../../../core/update/appUpdate";
 import nacl from "../../../core/vendor/nacl";
+import { installPlatform } from "../../../core/platform";
+import { nshPlatform } from "../../platform";
 import { Section } from "../../kit/kit";
 import { AboutUpdateRow } from "../AboutUpdateRow";
 import { type AppUpdate, createAppUpdate } from "../update";
@@ -21,6 +23,9 @@ function bytes(base64: string): Uint8Array {
   for (let index = 0; index < binary.length; index += 1) out[index] = binary.charCodeAt(index);
   return out;
 }
+
+// The update owner reads the device key and the computers when it stages a move (update.ts).
+installPlatform(nshPlatform());
 
 const initial = (host.params as { state?: AppUpdateState }).state;
 // The fixed state moves on with the event `test.state` (a download's next tick).

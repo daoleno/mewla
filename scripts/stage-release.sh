@@ -288,6 +288,9 @@ identity = {
     "version": version,
     "android": {
         "package": package,
+        # The app the APK is: the same as package until a release is another app, when package stays the id the
+        # shipped builds look for and this is the app they install (client/core/update/appUpdate.ts).
+        "application_id": package,
         "version_name": version,
         "version_code": int(version_code),
         "canonical_config": canonical_config,

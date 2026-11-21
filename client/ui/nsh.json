@@ -18,6 +18,7 @@
       "files.*",
       "share.*",
       "phone.*",
+      "handover.*",
       "update.*",
       "web.*"
     ],

@@ -15,12 +15,12 @@ import { AppUpdateController, type AppInstaller, type DownloadProgress, type Dow
 const keys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(3));
 const encode = (text: string) => new TextEncoder().encode(text);
 
-function release(version: string) {
+function release(version: string, android: Record<string, unknown> = {}) {
   return JSON.stringify({
     schema_version: 2,
     product: "mewla",
     version,
-    android: { package: ANDROID_PACKAGE, version_name: version, version_code: 30100 },
+    android: { package: ANDROID_PACKAGE, version_name: version, version_code: 30100, ...android },
     artifacts: [
       { path: `mewla-android-arm64-v${version}.apk`, role: "android_sideload_apk", sha256: "c".repeat(64), size: 1000, abi: "arm64-v8a" },
     ],
@@ -80,14 +80,24 @@ class FakeInstaller implements AppInstaller {
   }
 }
 
-function setup(options: { platform?: string; info?: UpdateHostInfo | null; latest?: string; installer?: FakeInstaller | null; testflight?: string } = {}) {
+function setup(
+  options: {
+    platform?: string;
+    info?: UpdateHostInfo | null;
+    latest?: string;
+    android?: Record<string, unknown>;
+    installer?: FakeInstaller | null;
+    testflight?: string;
+    handover?: { stage(): Promise<void> } | null;
+  } = {},
+) {
   let now = 1_000_000;
   const files: Record<string, Uint8Array | Error> = {};
   const publish = (manifestUrl: string, signatureUrl: string, text: string) => {
     files[manifestUrl] = encode(text);
     files[signatureUrl] = nacl.sign.detached(encode(text), keys.secretKey);
   };
-  if (options.latest) publish(LATEST_MANIFEST_URL, LATEST_SIGNATURE_URL, release(options.latest));
+  if (options.latest) publish(LATEST_MANIFEST_URL, LATEST_SIGNATURE_URL, release(options.latest, options.android));
   if (options.testflight) publish(TESTFLIGHT_MANIFEST_URL, TESTFLIGHT_SIGNATURE_URL, options.testflight);
   const fetched: string[] = [];
   const opened: string[] = [];
@@ -99,6 +109,7 @@ function setup(options: { platform?: string; info?: UpdateHostInfo | null; lates
     platform: options.platform ?? "android",
     info: async () => info,
     installer,
+    handover: options.handover,
     fetchBytes: async (url) => {
       fetched.push(url);
       const file = files[url];
@@ -267,6 +278,52 @@ describe("download and install", () => {
     s.installer.progress(10, 1000);
     await tick();
     expect(s.controller.state.kind).toBe("ready");
+  });
+});
+
+describe("a release of another application id", () => {
+  const moved = { package: ANDROID_PACKAGE, application_id: "ai.mewla.app" };
+
+  test("the pairing is staged for the new app just before the installer opens, and only then", async () => {
+    const calls: string[] = [];
+    const installer = new FakeInstaller();
+    installer.allowed = true;
+    const install = installer.install.bind(installer);
+    installer.install = async (fileName) => {
+      calls.push("install");
+      return install(fileName);
+    };
+    const s = setup({ latest: "0.3.1", android: moved, installer, handover: { stage: async () => void calls.push("stage") } });
+    await s.controller.start();
+    expect(s.controller.state).toMatchObject({ kind: "available", update: { moves: true, applicationId: "ai.mewla.app" } });
+    const pressed = s.controller.press();
+    s.installer.complete();
+    await pressed;
+    expect(calls).toEqual(["stage", "install"]);
+  });
+
+  test("a pairing that cannot be staged does not stop the move", async () => {
+    const installer = new FakeInstaller();
+    installer.allowed = true;
+    const s = setup({ latest: "0.3.1", android: moved, installer, handover: { stage: async () => Promise.reject(new Error("no vault")) } });
+    await s.controller.start();
+    const pressed = s.controller.press();
+    s.installer.complete();
+    await pressed;
+    expect(s.installer.installs).toEqual(["mewla-android-arm64-v0.3.1.apk"]);
+    expect(s.controller.state.kind).toBe("ready");
+  });
+
+  test("an update of the same app stages nothing", async () => {
+    let staged = 0;
+    const installer = new FakeInstaller();
+    installer.allowed = true;
+    const s = setup({ latest: "0.3.1", installer, handover: { stage: async () => void (staged += 1) } });
+    await s.controller.start();
+    const pressed = s.controller.press();
+    s.installer.complete();
+    await pressed;
+    expect(staged).toBe(0);
   });
 });
 

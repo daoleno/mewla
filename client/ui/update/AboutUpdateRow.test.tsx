@@ -1,6 +1,8 @@
 import { describe, expect, open, test } from "nsh/test";
 import nacl from "../../core/vendor/nacl";
 
+import { paired } from "../testing/fixtures";
+
 const HARNESS = "./testing/Harness.tsx";
 const ACTION = "id:app-update-action";
 const MANIFEST = "https://github.com/daoleno/mewla/releases/latest/download/release-manifest.json";
@@ -35,12 +37,12 @@ function server(files: Record<string, string>) {
   };
 }
 
-function release(version: string) {
+function release(version: string, application_id?: string) {
   return JSON.stringify({
     schema_version: 2,
     product: "mewla",
     version,
-    android: { package: "com.daoleno.mewla", version_name: version, version_code: 30100 },
+    android: { package: "com.daoleno.mewla", ...(application_id ? { application_id } : {}), version_name: version, version_code: 30100 },
     artifacts: [{ path: `mewla-android-arm64-v${version}.apk`, role: "android_sideload_apk", sha256: "c".repeat(64), size: 1000, abi: "arm64-v8a" }],
   });
 }
@@ -53,16 +55,19 @@ const artifact = { version: "0.3.1", versionCode: 30100, fileName: APK, url: `ht
  * is not, so each download answers at once: `downloads` says how, in order (true: the
  * verified file; false: it failed). Installs are allowed while `allowed`.
  */
-function android(latest: string | null, options: { allowed?: boolean; info?: unknown; downloads?: boolean[] } = {}) {
+function android(latest: string | null, options: { allowed?: boolean; info?: unknown; downloads?: boolean[]; application_id?: string; secure?: Record<string, string>; storage?: Record<string, string> } = {}) {
   const state = { allowed: options.allowed ?? true, downloads: [...(options.downloads ?? [true])] };
   return {
     state,
     options: {
       platform: "android" as const,
+      ...(options.storage ? { storage: options.storage } : {}),
       host: {
         handlers: {
           "update.info": options.info ?? apk,
-          "test.fetch": server(latest ? { [MANIFEST]: release(latest) } : {}),
+          "test.fetch": server(latest ? { [MANIFEST]: release(latest, options.application_id) } : {}),
+          "secure.get": ({ key }: { key: string }) => options.secure?.[key] ?? null,
+          "handover.stage": null,
           "update.download": (data: unknown) => {
             if (state.downloads.shift() === false) throw new Error("Download stopped early.");
             return { fileName: (data as { fileName: string }).fileName };
@@ -111,6 +116,27 @@ describe("About update row on the GitHub APK", () => {
     expect(called(app, "update.install").map((c) => c.data)).toEqual([{ fileName: APK }]);
     await app.press(ACTION);
     expect(called(app, "update.install")).toHaveLength(2);
+  });
+
+  test("a release of another application id is a new app: its pairing is staged, then the installer opens", async () => {
+    const secure = {
+      "mewla.device.v3.id": "phone-1",
+      "mewla.device.v3.name": "Pixel",
+      "mewla.device.v3.seed": "a".repeat(64),
+      "mewla.device.v3.public-key": "b".repeat(64),
+    };
+    const { options } = android("0.3.1", { application_id: "ai.mewla.app", secure, storage: paired });
+    const app = await open(HARNESS, options);
+    await app.waitFor("text:New Mewla available");
+    expect(app.texts()).toContain("Install");
+    await app.press(ACTION);
+    await app.waitFor("text:Ready to install");
+    const staged = called(app, "handover.stage").map((c) => JSON.parse((c.data as { json: string }).json));
+    expect(staged).toHaveLength(1);
+    expect(staged[0]).toMatchObject({ version: 1, secure, storage: { "mewla:v1:current_server_id": "s1" } });
+    // Staged before the installer opens.
+    const order = app.host.calls().map((c) => c.name).filter((name) => name === "handover.stage" || name === "update.install");
+    expect(order).toEqual(["handover.stage", "update.install"]);
   });
 
   test("Allow app installs: Continue opens the settings; back allowed, it installs", async () => {
