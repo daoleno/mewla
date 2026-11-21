@@ -4,8 +4,11 @@ import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import { routeComposerPick, routeComposerSend, slashMenuState, type ComposerAlert, type ComposerSendRoute } from "../../core/session/composerSlash";
 import { chatSlashCommands } from "../../core/session/sessionRequests";
 import { agentKindFromProvider } from "../../core/sessions/workerPresentation";
-import type { ComposerText } from "../chat/Composer";
+import { writeIntoDraft, type ComposerText } from "../chat/Composer";
 import { createAttachmentUploads } from "../more/files/Pages";
+import { registerShareTarget } from "../more/files/shareIn";
+import { brainDraft } from "../session";
+import { MAX_COMPOSER_ATTACHMENTS } from "../../core/files/uploads";
 import { insertSkillMention, showComposerAlert } from "../session/SlashMenu";
 import { mentionPanelOpen } from "./MentionPanel";
 import { currentBrain, type BrainSource } from "./source";
@@ -49,6 +52,13 @@ export function createBrainComposer(options: {
 
   const uploads = createAttachmentUploads();
   cleanup(() => uploads.dispose());
+  // What other apps share to Mewla lands here: the files as chips, the text in the draft (more/files/shareIn.ts).
+  cleanup(registerShareTarget({
+    room: () => MAX_COMPOSER_ATTACHMENTS - uploads.items().length,
+    addFiles: (assets) => uploads.addShared(assets),
+    addText: (added) => writeIntoDraft(untracked(brainDraft), added),
+    notice: (text) => options.onNotice?.(text),
+  }));
   const uploading = () => uploads.items().some((item) => item.status === "uploading" || item.status === "queued");
 
   // Codex's slash commands, while Brain runs on Codex.
