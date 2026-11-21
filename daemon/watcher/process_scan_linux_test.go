@@ -3,6 +3,7 @@
 package watcher
 
 import (
+	"bufio"
 	"os"
 	"os/exec"
 	"strconv"
@@ -22,15 +23,37 @@ func TestParseProcStatLineKeepsOddNamesIntact(t *testing.T) {
 	}
 }
 
-func TestSnapshotProcessTableSeesARealProcess(t *testing.T) {
-	cmd := exec.Command("sleep", "30")
+// startRunningCat starts `cat -u` and returns once cat itself has echoed a
+// line, so its exec is over and /proc shows its own comm and command line.
+// cmd.Start returns earlier: a /proc read right after it can still show the
+// forked copy of this test binary (its comm and arguments), or "cat" with an
+// empty command line while exec lays the new program out.
+func startRunningCat(t *testing.T) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("cat", "-u")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot spawn: %v", err)
 	}
-	defer func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-	}()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	if _, err := stdin.Write([]byte("ready\n")); err != nil {
+		t.Fatal(err)
+	}
+	if line, err := bufio.NewReader(stdout).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("cat echoed %q (%v)", line, err)
+	}
+	return cmd
+}
+
+func TestSnapshotProcessTableSeesARealProcess(t *testing.T) {
+	cmd := startRunningCat(t)
 	processes, err := snapshotProcessTable()
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +62,7 @@ func TestSnapshotProcessTableSeesARealProcess(t *testing.T) {
 	if !ok {
 		t.Fatalf("spawned pid %d missing from the table", cmd.Process.Pid)
 	}
-	if got.ppid != os.Getpid() || got.comm != "sleep" || got.args != "sleep 30" {
+	if got.ppid != os.Getpid() || got.comm != "cat" || got.args != "cat -u" {
 		t.Fatalf("process = %+v", got)
 	}
 	if since := time.Since(got.startedAt); since < 0 || since > time.Minute {
@@ -52,14 +75,7 @@ func TestSnapshotProcessTableSeesARealProcess(t *testing.T) {
 }
 
 func TestSnapshotProcessTableRereadsArgsAfterExecUnderTheSameName(t *testing.T) {
-	cmd := exec.Command("sleep", "30")
-	if err := cmd.Start(); err != nil {
-		t.Skipf("cannot spawn: %v", err)
-	}
-	defer func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
-	}()
+	cmd := startRunningCat(t)
 	first, err := snapshotProcessTable()
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +89,7 @@ func TestSnapshotProcessTableRereadsArgsAfterExecUnderTheSameName(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first[pid].args != "sleep 30" || second[pid].args != "sleep 30" {
+	if first[pid].args != "cat -u" || second[pid].args != "cat -u" {
 		t.Fatalf("args %q then %q", first[pid].args, second[pid].args)
 	}
 }
@@ -106,11 +122,7 @@ func selfReads(t *testing.T) (syscr, rchar uint64) {
 // a poll must cost a fraction of a full /proc walk, yet a new child under a
 // pane must still show up in the very next poll.
 func TestHotProcessScanRereadsOnlyThePaneTree(t *testing.T) {
-	pane := exec.Command("sleep", "60")
-	if err := pane.Start(); err != nil {
-		t.Skipf("cannot spawn: %v", err)
-	}
-	defer func() { _ = pane.Process.Kill(); _, _ = pane.Process.Wait() }()
+	pane := startRunningCat(t)
 	roots := []int{pane.Process.Pid}
 
 	if _, err := snapshotProcessTableHot(roots, time.Hour); err != nil {
@@ -136,20 +148,16 @@ func TestHotProcessScanRereadsOnlyThePaneTree(t *testing.T) {
 	if hotCost*4 > fullCost {
 		t.Fatalf("a hot scan took %d read syscalls against %d for a full walk", hotCost, fullCost)
 	}
-	if got := table[pane.Process.Pid]; got.comm != "sleep" || got.args != "sleep 60" {
+	if got := table[pane.Process.Pid]; got.comm != "cat" || got.args != "cat -u" {
 		t.Fatalf("pane process = %+v", got)
 	}
 
-	child := exec.Command("sleep", "61")
-	if err := child.Start(); err != nil {
-		t.Skipf("cannot spawn: %v", err)
-	}
-	defer func() { _ = child.Process.Kill(); _, _ = child.Process.Wait() }()
+	child := startRunningCat(t)
 	table, err = snapshotProcessTableHot(roots, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := table[child.Process.Pid]; !ok || got.args != "sleep 61" {
+	if got, ok := table[child.Process.Pid]; !ok || got.args != "cat -u" {
 		t.Fatalf("a process started since the last scan is missing or stale: %+v", got)
 	}
 }
