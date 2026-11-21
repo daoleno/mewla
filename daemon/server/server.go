@@ -1301,6 +1301,15 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 		// in Auto mode; Mewla has no Auto mode, so that Session starts in full
 		// authority like every other.
 		command := work.MigrateClaudeAutoMode(strings.TrimSpace(raw.Command))
+		// An agent whose program is not on this computer only ends in "exit
+		// 127" inside a Session nobody can use: refuse before anything is
+		// made (nothing is written for it, no folder is trusted), with the
+		// cause. A shell and a custom command are never refused here.
+		if missing := work.MissingAgentFor(command); missing != nil {
+			log.Printf("create_session refused: %s is not installed (command %q)", missing.Program, command)
+			s.sendErrorWithRequestID(conn, raw.RequestID, "agent_not_installed", missing.Message())
+			return
+		}
 		if work.InferWorkerProvider(command) == work.WorkerProviderDSH {
 			ensured, err := work.EnsureDSHSessionLaunchCommand(command)
 			if err != nil {

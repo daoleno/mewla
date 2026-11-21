@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -4112,8 +4111,10 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 	return work.NewWorkerExecutor("codex", work.Executor{Name: "codex", Command: "codex", Kind: "codex"})
 }
 
-// hostLookPath finds executor commands; tests replace it.
-var hostLookPath = exec.LookPath
+// hostLookPath finds executor commands; tests replace it. It is the lookup of
+// a Session launch too (work.AgentLookPath), so a client's tile for an agent
+// and the refusal of a launch on it agree.
+var hostLookPath = work.AgentLookPath
 
 // SetHostLookPath replaces how Brain finds an executor's command and returns
 // a function that restores the previous lookup. Tests of other packages use it

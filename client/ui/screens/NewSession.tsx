@@ -6,12 +6,13 @@ import { Sheet, SheetRoom } from "../kit/Sheet";
 import { agentGridColumns, composing, scrollBesidePinned, taskCaptionShows } from "../../core/shell/sheet";
 import { Field, PillButton, Row, Section } from "../kit/kit";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
+import { agentInstalled, INSTALL_MORE_LINE } from "../../core/sessions/agentAvailability";
 import { createSession } from "../../core/sessions/create";
 import { resolveLaunchSelection } from "../../core/session/providerLaunch";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import { AgentIcon } from "../icons/AgentIcon";
 import { Icon } from "../kit/Icon";
-import { canCreateSession, connection, current, currentTransport, currentWorkerSessions, workers } from "../session";
+import { brain, canCreateSession, connection, current, currentTransport, currentWorkerSessions, workers } from "../session";
 import { startedWithFirstMessage } from "./firstMessage";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { projectName } from "../../core/work/surface";
@@ -146,6 +147,13 @@ export function lastUsedPreset(list: readonly Worker[]): string {
   return LAUNCH_PRESETS.find((preset) => preset.kind === kind)?.key ?? "claude";
 }
 
+/** An agent tile the computer has no program for (its Brain snapshot says so); a shell and an unknown are not. */
+export function presetMissing(key: string): boolean {
+  const chosen = LAUNCH_PRESETS.find((preset) => preset.key === key);
+  const snapshot = brain();
+  return Boolean(chosen?.command) && !agentInstalled(chosen!.command, snapshot?.executors, snapshot?.executor_states);
+}
+
 /**
  * New session (SPEC §11 New session sheet): the agent (the last used one chosen), the folder (recent projects,
  * the last used one chosen; "Other folder…" browses), then Start. A tile only chooses; Start starts, and the new
@@ -165,6 +173,13 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   /** A folder picked with "Other folder…" or inherited from a Session, listed first when it is not a recent one. */
   const extra = signal<FolderChoice | null>(null);
 
+  /** The person chose an agent: the sheet no longer moves the choice off a missing one by itself. */
+  const chose = signal(false);
+  const choose = (key: string) => {
+    chose.set(true);
+    preset.set(key);
+  };
+
   const reset = () => {
     // From a Session, its folder (the Expo app's New Terminal did so; parity #40); an empty one means that pane's current folder.
     const target = untracked(newSessionTarget);
@@ -174,6 +189,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     cwd.set(inherited);
     extra.set(recent.some((folder) => folder.path === inherited) ? null : { path: inherited, name: inherited ? projectName(inherited) || inherited : target ? "This Session's folder" : "Home" });
     preset.set(lastUsedPreset(list));
+    chose.set(false);
     command.set("");
     name.set("");
     task.set("");
@@ -186,6 +202,14 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     if (newSessionOpen()) untracked(reset);
     else newSessionTarget.set("");
   });
+
+  // The last used agent (or Claude) is not on this computer: the first one that is, until the person picks.
+  effect(() => {
+    if (!newSessionOpen() || chose() || !presetMissing(preset())) return;
+    const first = LAUNCH_PRESETS.find((item) => item.command && !presetMissing(item.key));
+    if (first) untracked(() => preset.set(first.key));
+  });
+  const someMissing = () => LAUNCH_PRESETS.some((item) => presetMissing(item.key));
 
   const folders = (): FolderChoice[] => {
     const recent = recentFolders(workers());
@@ -271,14 +295,15 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
                   <View class="flex-row flex-wrap px-2 py-2" onLayout={({ bounds }) => gridWidth.set(bounds.size.width - 16)}>
                     {LAUNCH_PRESETS.map((item) => (
                       <View class="p-1" style={{ width: `${100 / agentGridColumns(gridWidth(), LAUNCH_PRESETS.length)}%` }}>
-                        <Button testID={`preset-${item.key}`} accessibilityLabel={preset() === item.key ? `${item.label}, chosen` : item.label} onPress={() => preset.set(item.key)} disabled={busy()}
-                          class={`min-h-[92px] items-center justify-center gap-2 rounded-(--radius-group) border-2 bg-background px-2 py-3 active:opacity-70 disabled:opacity-40 ${preset() === item.key ? "border-foreground" : "border-transparent"}`}>
+                        <Button testID={`preset-${item.key}`} accessibilityLabel={`${item.label}${presetMissing(item.key) ? ", not installed" : ""}${preset() === item.key ? ", chosen" : ""}`} onPress={() => choose(item.key)} disabled={busy()}
+                          class={`min-h-[92px] items-center justify-center gap-2 rounded-(--radius-group) border-2 bg-background px-2 py-3 active:opacity-70 disabled:opacity-40 ${presetMissing(item.key) ? "opacity-40" : ""} ${preset() === item.key ? "border-foreground" : "border-transparent"}`}>
                           <AgentIcon kind={item.kind} size={32} />
                           <Text class="text-sub font-semibold text-foreground line-clamp-1">{item.label}</Text>
                         </Button>
                       </View>
                     ))}
                   </View>
+                  <If when={someMissing()}><View class="px-4 pb-3"><Text testID="new-agents-install" class="text-sub text-muted-foreground">{INSTALL_MORE_LINE}</Text></View></If>
                   <Row testID="new-advanced" icon="terminal" title="Custom command" chevron onPress={() => advanced.set(true)} />
                 </Section></If>
               <Section sheet title="Folder" testID="new-cwd">
