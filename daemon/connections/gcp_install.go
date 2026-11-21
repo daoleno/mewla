@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -61,6 +62,30 @@ func (gcloudCLI) install(ctx context.Context, dir string) error {
 		return errors.New(message)
 	}
 	return updateGCPSDK(ctx, dir, pkg, &http.Client{Timeout: 90 * time.Second}, runCloudInstallProcess)
+}
+
+// gcpHostOS is runtime.GOOS; a test sets it to look at the other platform's path.
+var gcpHostOS = runtime.GOOS
+
+// gcpOldPython names the Python version when the macOS installer, which carries no Python of its own, ran on one older
+// than 3.10 (Apple's is 3.9; its failure there is a TypeError nobody can act on). Empty when the Python is new enough,
+// cannot be read, or the archive carries its own (Linux).
+func gcpOldPython(ctx context.Context, run func(context.Context, string, []string, []string) (cloudOutput, error), env []string) string {
+	if gcpHostOS != "darwin" {
+		return ""
+	}
+	probe, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := run(probe, "python3", []string{"-c", "import sys; print('%d.%d' % sys.version_info[:2])"}, env)
+	if err != nil || out.ExitCode != 0 {
+		return ""
+	}
+	version := strings.TrimSpace(out.Stdout)
+	var major, minor int
+	if n, _ := fmt.Sscanf(version, "%d.%d", &major, &minor); n != 2 || major > 3 || major == 3 && minor >= 10 {
+		return ""
+	}
+	return version
 }
 
 // Network and process boundaries are injectable for fault tests; the real
@@ -158,6 +183,9 @@ func installGCPArchive(ctx context.Context, dir string, pkg gcpArchive, client *
 	staged := filepath.Join(scratch, "google-cloud-sdk")
 	out, err = run(ctx, filepath.Join(staged, "install.sh"), []string{"--quiet", "--usage-reporting=false", "--path-update=false", "--command-completion=false", "--install-python=false", "--no-compile-python"}, env)
 	if err != nil || out.ExitCode != 0 {
+		if old := gcpOldPython(ctx, run, env); old != "" {
+			return errors.New("Google Cloud CLI needs Python 3.10 or newer on this Mac, and the one it found is " + old + ". Install one (for example brew install python), then choose Check again.")
+		}
 		return cloudStepFailure("gcloud's installer failed", out, err)
 	}
 	if !ready(staged) {

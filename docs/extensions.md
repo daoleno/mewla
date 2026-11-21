@@ -347,8 +347,11 @@ Mewla installs and updates its own official CLI inside its state directory,
 without sudo or changing your system installation. A cloud's CLI is set up the
 first time you use that cloud (an account turned on, a sign-in started, a
 `mewla aws`, `mewla gcloud` or `mewla gws` command), never at start and never
-for a cloud you have not used. If that install fails, the sign-in and the
-command say why. It checks at most daily,
+for a cloud you have not used. If that install fails, the card, the sign-in and the
+command say why (what the installer said, or what to install on a computer Mewla
+has no installer for: Windows installs none of the three, so there it uses the
+AWS CLI, the Google Cloud CLI or `gws` you install yourself, found on PATH or in
+the vendor's usual folder within seconds of installing). It checks at most daily,
 updates in the background, and waits for a check before the first command or
 after seven days without a successful check. Running commands keep their
 original installation. Mewla keeps the active and previous installation; older
@@ -418,7 +421,8 @@ version details match AWS. Offline or unsupported hosts can use a local gcloud
 400.0.0 or later, including installations in `~/google-cloud-sdk`.
 
 Automatic installation supports Linux/macOS x86_64 and Arm64; macOS needs
-Python 3.10–3.15. `mewla gcloud --version` shows the selected executable's version.
+Python 3.10–3.15 (Apple's own 3.9 is not always enough: when the installer fails on it, the
+card says to install a newer one). `mewla gcloud --version` shows the selected executable's version.
 Accounts and configurations refresh in the background and update open pages
 without blocking the service list.
 
