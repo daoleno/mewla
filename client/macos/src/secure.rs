@@ -1,6 +1,6 @@
 //! The app's secrets (`secure.*`: the device key the daemon knows this app by).
 //!
-//! The release (com.daoleno.mewla), once Developer ID signed, keeps them in the login Keychain as generic passwords under its
+//! The release (ai.mewla.app), once Developer ID signed, keeps them in the login Keychain as generic passwords under its
 //! own service, as the iOS host does: the item trusts the app's designated requirement, so an update signed the same
 //! way reads it with no prompt. Mewla Dev keeps them in `secure.json` (0600) in its scratch data directory: an ad hoc
 //! signed build that changes with every build would get a Keychain prompt each time. A release that finds a secret
@@ -147,7 +147,7 @@ mod tests {
             return;
         }
         let dir = std::env::temp_dir().join(format!("mewla-keychain-test-{}", std::process::id()));
-        let service = format!("com.daoleno.mewla.test.{}", std::process::id());
+        let service = format!("ai.mewla.app.test.{}", std::process::id());
         // An older build's file holds one secret.
         let file = Store::open(Some(dir.clone()), None);
         file.set("old", "from the file").unwrap();

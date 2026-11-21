@@ -99,7 +99,7 @@ func TestSignerUnlocksTheKeychain(t *testing.T) {
 		t.Fatal(err)
 	}
 	unlock := "security unlock-keychain -p pw /k.keychain-db"
-	sign := "codesign --force --sign ABC --identifier com.daoleno.mewla --keychain /k.keychain-db " + bundle + ".new"
+	sign := "codesign --force --sign ABC --identifier ai.mewla.app --keychain /k.keychain-db " + bundle + ".new"
 	if len(codesign.calls) < 2 || codesign.calls[len(codesign.calls)-2] != unlock || codesign.calls[len(codesign.calls)-1] != sign {
 		t.Fatalf("calls = %q", codesign.calls)
 	}

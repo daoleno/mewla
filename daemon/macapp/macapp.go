@@ -19,10 +19,14 @@ import (
 )
 
 const (
-	BundleID   = "com.daoleno.mewla"
-	Name       = "Mewla"
-	executable = "mewla"
-	iconName   = "Mewla"
+	// BundleID is the app's identity on a Mac, scripts/lib/release_identity.py's PACKAGE: macOS ties its privacy
+	// grants to it, and Mewla for Mac keeps it, so a Mac that moves from this bundle to the app keeps them.
+	BundleID = "ai.mewla.app"
+	// LegacyBundleID is what the bundle was called before 11-21 (com.daoleno.mewla): its grants do not follow.
+	LegacyBundleID = "com.daoleno.mewla"
+	Name           = "Mewla"
+	executable     = "mewla"
+	iconName       = "Mewla"
 	// managedKey marks a bundle this package created; anything else at the
 	// same path is never replaced or removed.
 	managedKey = "MewlaManagedBundle"

@@ -33,12 +33,20 @@ import (
 //
 // The job runs a copy of the binary inside ~/Applications/Mewla.app, so
 // privacy settings, permission prompts and dialogs show Mewla's name and icon
-// and grant permissions to com.daoleno.mewla. Install refreshes the copy from
+// and grant permissions to ai.mewla.app. Install refreshes the copy from
 // the installing binary and restarts the job when it changed.
+//
+// Until 11-21 the job was com.daoleno.mewla.daemon. An install finds that one,
+// boots it out so the state is free, and removes its files once the new job
+// owns the state; when the new one cannot start, the old one is bootstrapped
+// again, so the Mac never ends up without a daemon.
 
 const (
-	bootLaunchdLabel  = "com.daoleno.mewla.daemon"
-	bootLaunchdMarker = "<!-- Managed by mewla boot install -->"
+	// bootLaunchdLabel is scripts/lib/release_identity.py's DAEMON_LABEL.
+	bootLaunchdLabel = "ai.mewla.daemon"
+	// bootLaunchdLegacyLabel is what the job was called before 11-21.
+	bootLaunchdLegacyLabel = "com.daoleno.mewla.daemon"
+	bootLaunchdMarker      = "<!-- Managed by mewla boot install -->"
 	// launchctl exits 113 when the domain has no such service.
 	bootLaunchdNotLoaded = 113
 )
@@ -384,7 +392,100 @@ func bootLaunchdVerify(config bootConfig, runner bootRunner) error {
 	}
 }
 
+// bootLaunchdLegacy is the job `mewla boot install` made under the old label.
+type bootLaunchdLegacy struct {
+	Path   string
+	Loaded bool
+}
+
+func bootLaunchdLegacyPlistPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, "Library", "LaunchAgents", bootLaunchdLegacyLabel+".plist"), nil
+}
+
+func bootLaunchdLegacyTarget() string { return bootLaunchdDomain() + "/" + bootLaunchdLegacyLabel }
+
+// bootLaunchdFindLegacy is the old label's job when this boot made it; nil when there is none, or when the file is
+// someone else's (which is left alone).
+func bootLaunchdFindLegacy(runner bootRunner) *bootLaunchdLegacy {
+	path, err := bootLaunchdLegacyPlistPath()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(data), bootLaunchdMarker) {
+		return nil
+	}
+	_, printErr := runner.run("launchctl", "print", bootLaunchdLegacyTarget())
+	return &bootLaunchdLegacy{Path: path, Loaded: printErr == nil}
+}
+
+// bootout stops the old job and waits until launchd no longer lists it: the state lock is then free.
+func (l *bootLaunchdLegacy) bootout(runner bootRunner) error {
+	if !l.Loaded {
+		return nil
+	}
+	if output, err := runner.run("launchctl", "bootout", bootLaunchdLegacyTarget()); err != nil {
+		return fmt.Errorf("launchctl bootout %s: %v: %s", bootLaunchdLegacyTarget(), err, strings.TrimSpace(string(output)))
+	}
+	deadline := time.Now().Add(bootVerifyTimeout)
+	for {
+		if _, err := runner.run("launchctl", "print", bootLaunchdLegacyTarget()); err != nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s is still loaded after bootout", bootLaunchdLegacyLabel)
+		}
+		time.Sleep(bootVerifyInterval)
+	}
+}
+
+// restore starts the old job again after the new one could not take over.
+func (l *bootLaunchdLegacy) restore(runner bootRunner) error {
+	if !l.Loaded {
+		return nil
+	}
+	return bootLaunchdBootstrap(runner, l.Path)
+}
+
+// remove deletes the old job's files: its plist and the metadata beside it.
+func (l *bootLaunchdLegacy) remove() {
+	_ = os.Remove(l.Path)
+	_ = os.Remove(bootMetadataPath(l.Path))
+}
+
 func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) error {
+	legacy := bootLaunchdFindLegacy(runner)
+	if legacy == nil || config.DryRun {
+		return bootLaunchdInstallJob(config, runner, out, nil)
+	}
+	freed := false
+	err := bootLaunchdInstallJob(config, runner, out, func() error {
+		freed = true
+		return legacy.bootout(runner)
+	})
+	if err != nil {
+		if freed {
+			if restoreErr := legacy.restore(runner); restoreErr != nil {
+				return fmt.Errorf("%w; the old job %s could not be started again either (%v): run `mewla boot install` again", err, bootLaunchdLegacyLabel, restoreErr)
+			}
+			return fmt.Errorf("%w; the old job %s runs again, `mewla boot install` tries again", err, bootLaunchdLegacyLabel)
+		}
+		return err
+	}
+	legacy.remove()
+	// What macOS granted the old bundle id does not follow to the new one: take its stale rows out of the privacy lists.
+	_, _ = runner.run("tccutil", "reset", "All", macapp.LegacyBundleID)
+	fmt.Fprintf(out, "Moved from %s (removed); macOS asks again for the permissions Mewla used\n", bootLaunchdLegacyLabel)
+	return nil
+}
+
+// bootLaunchdInstallJob installs the job. free runs once the checks that cannot change anything have passed, before
+// the state's owner is looked at: the place to stop a job that owns the state.
+func bootLaunchdInstallJob(config bootConfig, runner bootRunner, out io.Writer, free func() error) error {
 	if bootEffectiveUID() == 0 {
 		return errors.New("mewla boot install must run as the unprivileged user that owns the daemon state; refusing root")
 	}
@@ -418,6 +519,11 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 		return fmt.Errorf("refusing to replace %s, which mewla boot did not create", bundle)
 	}
 
+	if free != nil {
+		if err := free(); err != nil {
+			return err
+		}
+	}
 	// The state must be free or owned by this job; any other owner is refused,
 	// never killed.
 	preflight := bootLaunchdInspectOwner(config, runner, false)
@@ -523,6 +629,13 @@ func bootLaunchdInstall(config bootConfig, runner bootRunner, out io.Writer) err
 }
 
 func bootLaunchdStatus(runner bootRunner, out io.Writer) error {
+	if legacy := bootLaunchdFindLegacy(runner); legacy != nil {
+		state := "not loaded"
+		if legacy.Loaded {
+			state = "loaded"
+		}
+		fmt.Fprintf(out, "old LaunchAgent: %s (%s, %s); `mewla boot install` moves it to %s\n", bootLaunchdLegacyLabel, state, legacy.Path, bootLaunchdLabel)
+	}
 	path, err := bootLaunchdPlistPath()
 	if err != nil {
 		return err
@@ -602,7 +715,7 @@ func bootLaunchdDescribeSigning(metadata bootMetadata) string {
 // phone can't reach and launchd can't replace. kickstart leaves a running
 // job alone. handed reports whether the launch was handed off.
 func bootLaunchdHandOff(args []string, executable string, runner bootRunner) (handed bool, err error) {
-	if bootGOOS != "darwin" || len(args) > 0 || os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel {
+	if bootGOOS != "darwin" || len(args) > 0 || os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel || os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLegacyLabel {
 		return false, nil
 	}
 	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
@@ -633,7 +746,13 @@ func bootLaunchdReinstallArgs() (args []string, ok bool) {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil || !strings.Contains(string(data), bootLaunchdMarker) {
-		return nil, false
+		// A job still under the old label (the move did not finish) is moved by the same command.
+		if path, err = bootLaunchdLegacyPlistPath(); err != nil {
+			return nil, false
+		}
+		if data, err = os.ReadFile(path); err != nil || !strings.Contains(string(data), bootLaunchdMarker) {
+			return nil, false
+		}
 	}
 	args = []string{"boot", "install"}
 	metadata, err := readBootMetadata(bootMetadataPath(path))
@@ -673,6 +792,22 @@ func bootLaunchdApplyUpdate(binary string, out, errOut io.Writer) (ok bool, err 
 }
 
 func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
+	// A job still under the old label (the move did not finish) goes the same way.
+	if legacy := bootLaunchdFindLegacy(runner); legacy != nil {
+		if err := legacy.bootout(runner); err != nil {
+			return fmt.Errorf("%w (the old LaunchAgent is retained; retry `mewla boot uninstall`)", err)
+		}
+		metadata, metadataErr := readBootMetadata(bootMetadataPath(legacy.Path))
+		legacy.remove()
+		fmt.Fprintf(out, "Removed %s; daemon state and pairing are untouched\n", legacy.Path)
+		if bundle := macapp.Path(metadata.Home); metadataErr == nil && metadata.Binary == macapp.Executable(bundle) {
+			if err := macapp.Remove(bundle); err != nil {
+				fmt.Fprintf(out, "Note: %s was not removed: %v\n", bundle, err)
+			} else {
+				fmt.Fprintf(out, "Removed %s\n", bundle)
+			}
+		}
+	}
 	path, err := bootLaunchdPlistPath()
 	if err != nil {
 		return err

@@ -112,7 +112,7 @@ func TestRenderLaunchdPlistIsWellFormedAndEscaped(t *testing.T) {
 		"&amp; &lt;more&gt;",
 		"<key>AbandonProcessGroup</key>\n\t<true/>",
 		"<string>Aqua</string>",
-		"<key>AssociatedBundleIdentifiers</key>\n\t<string>com.daoleno.mewla</string>",
+		"<key>AssociatedBundleIdentifiers</key>\n\t<string>ai.mewla.app</string>",
 		"<key>KeepAlive</key>\n\t<true/>",
 	} {
 		if !strings.Contains(plist, want) {
@@ -167,7 +167,7 @@ func TestBootLaunchdInstallIsIdempotentAndUninstalls(t *testing.T) {
 	if program, _ := os.ReadFile(daemon.Binary); string(program) != "#!/bin/sh\n" || !macapp.Managed(bundle) {
 		t.Fatalf("bundle executable = %q", program)
 	}
-	if !runner.called("codesign --force --sign - --identifier com.daoleno.mewla " + bundle + ".new") {
+	if !runner.called("codesign --force --sign - --identifier ai.mewla.app " + bundle + ".new") {
 		t.Fatal("bundle was not signed")
 	}
 
@@ -275,7 +275,7 @@ func TestOpeningMewlaAppStartsTheLaunchAgent(t *testing.T) {
 	}
 
 	// LaunchServices opening the app: no arguments, its own XPC service name.
-	t.Setenv("XPC_SERVICE_NAME", "application.com.daoleno.mewla.1234")
+	t.Setenv("XPC_SERVICE_NAME", "application.ai.mewla.app.1234")
 	if handed, err := bootLaunchdHandOff(nil, bundleExecutable, runner); !handed || err != nil {
 		t.Fatalf("open Mewla.app: %v %v", handed, err)
 	}
@@ -308,7 +308,7 @@ func TestBootLaunchdInstallSignsWithTheLocalIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	bundle := macapp.Path(config.Home)
-	if !runner.called("codesign --force --sign " + hash + " --identifier com.daoleno.mewla --keychain " + keychain + " " + bundle + ".new") {
+	if !runner.called("codesign --force --sign " + hash + " --identifier ai.mewla.app --keychain " + keychain + " " + bundle + ".new") {
 		t.Fatalf("bundle not signed with the local identity: %q", runner.calls)
 	}
 	if !strings.Contains(out.String(), "Signing: "+bootSigningLocal) {
@@ -339,12 +339,12 @@ func TestBootLaunchdInstallFallsBackToAdHoc(t *testing.T) {
 	config, runner := launchdFreshInstall(t)
 	hash := launchdLocalIdentity(runner, config)
 	bundle := macapp.Path(config.Home)
-	runner.fail("codesign --force --sign "+hash+" --identifier com.daoleno.mewla --keychain "+macapp.IdentityKeychain(config.Home)+" "+bundle+".new", "errSecInternalComponent")
+	runner.fail("codesign --force --sign "+hash+" --identifier ai.mewla.app --keychain "+macapp.IdentityKeychain(config.Home)+" "+bundle+".new", "errSecInternalComponent")
 	var out bytes.Buffer
 	if err := bootLaunchdInstall(config, runner, &out); err != nil {
 		t.Fatal(err)
 	}
-	if !runner.called("codesign --force --sign - --identifier com.daoleno.mewla " + bundle + ".new") {
+	if !runner.called("codesign --force --sign - --identifier ai.mewla.app " + bundle + ".new") {
 		t.Fatal("no ad hoc fallback")
 	}
 	if !strings.Contains(out.String(), "Signing: "+bootSigningAdHoc+" (") || !strings.Contains(out.String(), "errSecInternalComponent") {
@@ -576,5 +576,153 @@ func TestBootLaunchdSnapshotVerifiesOwnerFromTheKernelAndTheDaemon(t *testing.T)
 	silent.OwnerErr = errors.New("connection refused")
 	if text := silent.describeOwner(); !strings.Contains(text, "outside") || !strings.Contains(text, "not answering") {
 		t.Errorf("describeOwner = %q", text)
+	}
+}
+
+// launchdLegacyInstalled models a Mac whose daemon still runs under the label of before 11-21: its plist and metadata
+// are on disk and launchd lists the job until it is booted out.
+func launchdLegacyInstalled(t *testing.T, config bootConfig, runner *fakeBootRunner) (path string) {
+	t.Helper()
+	path, err := bootLaunchdLegacyPlistPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(strings.TrimSuffix(path, "/"+bootLaunchdLegacyLabel+".plist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old, err := renderLaunchdPlist(bootLaunchdDaemonConfig(config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old = strings.ReplaceAll(old, bootLaunchdLabel, bootLaunchdLegacyLabel)
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeBootMetadata(bootMetadataPath(path), bootMetadataFor(bootLaunchdDaemonConfig(config))); err != nil {
+		t.Fatal(err)
+	}
+	target := bootLaunchdLegacyTarget()
+	runner.succeed("launchctl print "+target, "gui/501/"+bootLaunchdLegacyLabel+" = {\n\tstate = running\n\tpid = 1\n}\n")
+	runner.on("launchctl bootout "+target, func() { runner.fail("launchctl print "+target, "Could not find service") })
+	return path
+}
+
+func TestBootLaunchdInstallMovesTheOldLabelAndRemovesIt(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	_, bootstrap, _ := launchdKeys(t, config)
+	legacyPath := launchdLegacyInstalled(t, config, runner)
+	legacyBootout := "launchctl bootout " + bootLaunchdLegacyTarget()
+
+	var out bytes.Buffer
+	if err := bootLaunchdInstall(config, runner, &out); err != nil {
+		t.Fatalf("install = %v", err)
+	}
+	// The old job is booted out before the new one starts (one daemon, never two), and its files go.
+	if !runner.called(legacyBootout) || !runner.called(bootstrap) {
+		t.Fatalf("calls: %q", runner.calls)
+	}
+	order := map[string]int{}
+	for i, call := range runner.calls {
+		order[strings.Join(call, " ")] = i
+	}
+	if order[legacyBootout] > order[bootstrap] {
+		t.Fatalf("the old job was stopped after the new one started: %q", runner.calls)
+	}
+	for _, path := range []string{legacyPath, bootMetadataPath(legacyPath)} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("%s remains: %v", path, err)
+		}
+	}
+	if path, _ := bootLaunchdPlistPath(); !fileExists(path) {
+		t.Fatal("the new LaunchAgent was not written")
+	}
+	if !runner.called("tccutil reset All " + macapp.LegacyBundleID) {
+		t.Fatalf("the old bundle id's stale privacy rows stay: %q", runner.calls)
+	}
+	if !strings.Contains(out.String(), "Moved from "+bootLaunchdLegacyLabel) {
+		t.Fatalf("output: %s", out.String())
+	}
+
+	// Again: nothing left to move.
+	runner.reset()
+	out.Reset()
+	if err := bootLaunchdInstall(config, runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if runner.called(legacyBootout) || strings.Contains(out.String(), "Moved from") {
+		t.Fatalf("second install moved again: %s", out.String())
+	}
+}
+
+func TestBootLaunchdInstallThatCannotStartLeavesTheOldJobRunning(t *testing.T) {
+	previousTimeout, previousInterval := bootVerifyTimeout, bootVerifyInterval
+	bootVerifyTimeout, bootVerifyInterval = 300*time.Millisecond, 50*time.Millisecond
+	defer func() { bootVerifyTimeout, bootVerifyInterval = previousTimeout, previousInterval }()
+
+	config, runner := launchdFreshInstall(t)
+	legacyPath := launchdLegacyInstalled(t, config, runner)
+	legacyBootstrap := "launchctl bootstrap " + bootLaunchdDomain() + " " + legacyPath
+	// The new job starts but is not the daemon that owns the state.
+	launchdStandInDaemon(t, os.Getpid(), "/usr/local/bin/something-else")
+
+	err := bootLaunchdInstall(config, runner, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), bootLaunchdLegacyLabel+" runs again") {
+		t.Fatalf("install = %v", err)
+	}
+	if !runner.called(legacyBootstrap) {
+		t.Fatalf("the old job was not started again: %q", runner.calls)
+	}
+	for _, path := range []string{legacyPath, bootMetadataPath(legacyPath)} {
+		if !fileExists(path) {
+			t.Fatalf("%s was removed although the move failed", path)
+		}
+	}
+	// The retry command is still available to an update that finds only the old job.
+	newPath, _ := bootLaunchdPlistPath()
+	_ = os.Remove(newPath)
+	if args, ok := bootLaunchdReinstallArgs(); !ok || len(args) < 2 || args[0] != "boot" {
+		t.Fatalf("reinstall args from the old job = %v, %v", args, ok)
+	}
+}
+
+func TestBootLaunchdStatusAndUninstallSeeTheOldLabel(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	legacyPath := launchdLegacyInstalled(t, config, runner)
+
+	var out bytes.Buffer
+	if err := bootLaunchdStatus(runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "old LaunchAgent: "+bootLaunchdLegacyLabel+" (loaded") || !strings.Contains(out.String(), "mewla boot install") {
+		t.Fatalf("status: %s", out.String())
+	}
+
+	out.Reset()
+	if err := bootLaunchdUninstall(runner, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !runner.called("launchctl bootout "+bootLaunchdLegacyTarget()) || fileExists(legacyPath) {
+		t.Fatalf("uninstall left the old job: %s", out.String())
+	}
+}
+
+// Someone else's file under the old label is never touched.
+func TestBootLaunchdLeavesAForeignOldLabelAlone(t *testing.T) {
+	config, runner := launchdFreshInstall(t)
+	path, err := bootLaunchdLegacyPlistPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(strings.TrimSuffix(path, "/"+bootLaunchdLegacyLabel+".plist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("<plist/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := bootLaunchdInstall(config, runner, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(path) || runner.called("launchctl bootout "+bootLaunchdLegacyTarget()) {
+		t.Fatal("a plist that mewla boot did not write was touched")
 	}
 }

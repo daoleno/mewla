@@ -73,7 +73,7 @@ func TestInstallAssemblesAndSignsBundle(t *testing.T) {
 	}
 	info, _ := os.ReadFile(filepath.Join(bundle, "Contents", "Info.plist"))
 	for _, want := range []string{
-		"<string>com.daoleno.mewla</string>",
+		"<string>ai.mewla.app</string>",
 		"<key>CFBundleName</key>\n\t<string>Mewla</string>",
 		"<key>CFBundleExecutable</key>\n\t<string>mewla</string>",
 		"<key>CFBundleIconFile</key>\n\t<string>Mewla</string>",
@@ -85,7 +85,7 @@ func TestInstallAssemblesAndSignsBundle(t *testing.T) {
 			t.Fatalf("Info.plist lacks %q:\n%s", want, info)
 		}
 	}
-	sign := "codesign --force --sign Mewla Dev --identifier com.daoleno.mewla --keychain /k.keychain-db " + bundle + ".new"
+	sign := "codesign --force --sign Mewla Dev --identifier ai.mewla.app --keychain /k.keychain-db " + bundle + ".new"
 	if !contains(codesign.calls, sign) {
 		t.Fatalf("codesign calls = %q", codesign.calls)
 	}
@@ -134,7 +134,7 @@ func TestInstallReplacesChangedBinary(t *testing.T) {
 	if program, _ := os.ReadFile(Executable(bundle)); string(program) != "build two signed" {
 		t.Fatalf("executable = %q", program)
 	}
-	if !contains(codesign.calls, "codesign --force --sign - --identifier com.daoleno.mewla "+bundle+".new") {
+	if !contains(codesign.calls, "codesign --force --sign - --identifier ai.mewla.app "+bundle+".new") {
 		t.Fatalf("ad hoc signing missing: %q", codesign.calls)
 	}
 }

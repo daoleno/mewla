@@ -6,7 +6,7 @@
 # The bundle: Contents/MacOS/<Name> (this host, client/macos), Contents/Helpers/mewla (the daemon and CLI: one
 # file, its own directory so the daemon can put it first on PATH; APFS is case-insensitive, so it cannot sit
 # beside MacOS/Mewla), Contents/Resources/nsh (client/ui, built by `nsh build`), the icon and Info.plist.
-# --dev makes Mewla Dev (com.daoleno.mewla.dev), which installs beside Mewla. Signed ad hoc, inside out; Developer
+# --dev makes Mewla Dev (ai.mewla.app.dev), which installs beside Mewla. Signed ad hoc, inside out; Developer
 # ID and notarization come with the release job (FACTS.md §4).
 #
 # The app's own updates (NSH's updater): the release bundle names its source in nsh/assets/nsh-updater.json, the
@@ -37,7 +37,7 @@ done
 [[ -x "$daemon" ]] || { echo "--daemon: no executable at '$daemon'" >&2; exit 2; }
 file "$daemon" | grep -q 'Mach-O 64-bit.*arm64' || { echo "--daemon is not a macOS arm64 binary" >&2; exit 2; }
 
-if [[ $dev == 1 ]]; then name="Mewla Dev"; id="com.daoleno.mewla.dev"; else name="Mewla"; id="com.daoleno.mewla"; fi
+if [[ $dev == 1 ]]; then name="Mewla Dev"; id="ai.mewla.app.dev"; else name="Mewla"; id="ai.mewla.app"; fi
 version=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/client/ui/nsh.json")
 [[ -z "$version_override" ]] || version="$version_override"
 [[ -z "$updater_url" && -z "$updater_key" ]] || [[ -n "$updater_url" && -n "$updater_key" ]] || { echo "--updater-url and --updater-key go together" >&2; exit 2; }
@@ -105,16 +105,16 @@ cp -R "$work/nsh" "$app/Contents/Resources/nsh"
 # its child on its own state and carries none.
 if [[ $dev == 0 ]]; then
   mkdir -p "$app/Contents/Library/LaunchAgents"
-  cat > "$app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist" <<'PLIST'
+  cat > "$app/Contents/Library/LaunchAgents/ai.mewla.daemon.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.daoleno.mewla.daemon</string>
+  <key>Label</key><string>ai.mewla.daemon</string>
   <key>BundleProgram</key><string>Contents/Helpers/mewla</string>
   <key>ProgramArguments</key><array><string>mewla</string><string>serve</string></array>
   <key>EnvironmentVariables</key><dict><key>MEWLA_NO_AUTOUPDATE</key><string>1</string></dict>
-  <key>AssociatedBundleIdentifiers</key><array><string>com.daoleno.mewla</string></array>
+  <key>AssociatedBundleIdentifiers</key><array><string>ai.mewla.app</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>5</integer>
@@ -124,7 +124,7 @@ if [[ $dev == 0 ]]; then
 </dict>
 </plist>
 PLIST
-  plutil -lint "$app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist" >/dev/null
+  plutil -lint "$app/Contents/Library/LaunchAgents/ai.mewla.daemon.plist" >/dev/null
 fi
 
 iconset="$work/AppIcon.iconset"
