@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentInstalled } from "./agentAvailability";
+import { agentInstalled, missingAgentSentence } from "./agentAvailability";
 import { ANTIGRAVITY_COMMAND, CLAUDE_CODE_COMMAND, CURSOR_AGENT_COMMAND } from "./agentCommands";
 
 const executors = [
@@ -22,5 +22,12 @@ describe("an agent the computer found", () => {
     expect(agentInstalled("pi", executors, states)).toBe(true);
     expect(agentInstalled(ANTIGRAVITY_COMMAND, executors, undefined)).toBe(true);
     expect(agentInstalled(ANTIGRAVITY_COMMAND, undefined, states)).toBe(true);
+  });
+});
+
+describe("the refusal sentence", () => {
+  test("names the agent and the computer as the header does", () => {
+    expect(missingAgentSentence("Antigravity", "workbench")).toBe("Antigravity is not installed on workbench.");
+    expect(missingAgentSentence("Codex", undefined)).toBe("Codex is not installed on this computer.");
   });
 });

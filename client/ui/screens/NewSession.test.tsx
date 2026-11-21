@@ -8,7 +8,7 @@ const EXECUTORS = [
   { id: "agent", name: "agent", provider: "cursor", command: "cursor-agent --force --sandbox disabled" },
   { id: "agy", name: "agy", provider: "antigravity", command: "agy" },
 ];
-const AGY_REFUSAL = "Antigravity (agy) is not installed on this computer. Install it with: curl -fsSL https://antigravity.google/cli/install.sh | bash";
+const AGY = { agent: "Antigravity", install: "curl -fsSL https://antigravity.google/cli/install.sh | bash" };
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -82,24 +82,23 @@ const found = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { in
 const created = (app: Awaited<ReturnType<typeof newSessionOn>>) => framesOf(app.host.posts(), "create_session").length;
 
 describe("New session on a computer with some agents missing", () => {
-  test("a missing agent's tile is dimmed and says so, the others are as before, and one line says where to get more", async () => {
+  test("a missing agent's tile is dimmed and says so, and the others are as before", async () => {
     const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude", "codex", "agent") } });
     expect(app.shows("label:Antigravity, not installed")).toBe(true);
     expect(app.shows("label:Codex")).toBe(true);
     expect(app.shows("label:Shell")).toBe(true);
     expect(app.shows("label:Cursor, not installed")).toBe(false);
-    expect(app.shows("text:Install more with mewla deps")).toBe(true);
+    // No command and no URL in the sheet: the dimmed tiles are the whole message.
+    expect(app.texts().some((text) => /mewla deps|curl|https?:/.test(text))).toBe(false);
   }, 30_000);
 
-  test("on a computer that has them all there is no mark and no line", async () => {
+  test("on a computer that has them all there is no mark", async () => {
     const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude", "codex", "agent", "agy") } });
-    expect(app.count("id:new-agents-install")).toBe(0);
     expect(app.texts().some((text) => text.includes("not installed"))).toBe(false);
   }, 30_000);
 
   test("a computer that says nothing of its agents stops nothing", async () => {
     const app = await newSessionOn({ brain: {} });
-    expect(app.count("id:new-agents-install")).toBe(0);
     expect(app.shows("label:Antigravity")).toBe(true);
   }, 30_000);
 
@@ -110,12 +109,13 @@ describe("New session on a computer with some agents missing", () => {
     expect(app.shows("label:Claude Code, not installed, chosen")).toBe(false);
   }, 30_000);
 
-  test("Start on a missing agent is refused by the computer: its cause shows in the sheet, no Session is made, and another agent starts at once", async () => {
-    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude") }, missing_agents: { agy: AGY_REFUSAL } });
+  test("Start on a missing agent is refused by the computer: one plain sentence in the sheet (no command, no URL), no Session is made, and another agent starts at once", async () => {
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude") }, missing_agents: { agy: AGY } });
     await app.press("label:Antigravity, not installed");
     await app.press("id:new-launch");
     await app.waitFor("id:new-problem");
-    expect(app.texts()).toContain(AGY_REFUSAL);
+    expect(app.texts()).toContain("Antigravity is not installed on Desk.");
+    expect(app.texts().some((text) => /curl|https?:|agy\)/.test(text))).toBe(false);
     expect(app.count("id:new-launch")).toBe(1);
     expect(created(app)).toBe(1);
     // The refusal is not an unknown outcome: no "Refresh required" wait.
@@ -126,7 +126,7 @@ describe("New session on a computer with some agents missing", () => {
   }, 30_000);
 
   test("a custom command stays free-form", async () => {
-    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude") }, missing_agents: { agy: AGY_REFUSAL } });
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude") }, missing_agents: { agy: AGY } });
     await app.press("id:new-advanced");
     await app.waitFor("id:new-command");
     await app.type("id:new-command", "./my-tool --flag");

@@ -68,13 +68,19 @@ type MissingAgent struct {
 	Install string
 }
 
-// Message is the cause as a person reads it.
+// Message is the cause in one plain sentence, without the install command
+// (that travels as its own field, for the CLI and for an Install action).
 func (m MissingAgent) Message() string {
-	message := fmt.Sprintf("%s (%s) is not installed on this computer.", m.Name, m.Program)
-	if m.Install != "" {
-		message += " Install it with: " + m.Install
+	return fmt.Sprintf("%s (%s) is not installed on this computer.", m.Name, m.Program)
+}
+
+// MessageWithInstall is the cause for a terminal: the sentence and the line
+// that installs it, when Mewla has one.
+func (m MissingAgent) MessageWithInstall() string {
+	if m.Install == "" {
+		return m.Message()
 	}
-	return message
+	return m.Message() + " Install it with: " + m.Install
 }
 
 // launchProgram is the program a launch command runs: the first word, after

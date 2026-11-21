@@ -36,11 +36,12 @@ and tap what to run:
 window title. The Session starts on the current computer.
 
 The agent must already be installed and signed in on the computer; Mewla never
-signs in for you. The sheet dims the agents this computer does not have, under
-one line, "Install more with mewla deps". Starting one is refused before any
-Session exists, and the sheet shows why and how to install it (for example
-"Antigravity (agy) is not installed on this computer. Install it with: …"; the
-daemon's `create_session` answers `agent_not_installed`). A shell and a custom
+signs in for you. The sheet dims the agents this computer does not have.
+Starting one is refused before any Session exists, and the sheet says so in one
+sentence ("Antigravity is not installed on workbench."). The daemon's
+`create_session` answers `agent_not_installed` with the agent's name, its
+program and, where Mewla has one, the install command as separate fields (the
+CLI and a later Install action use them; the app does not print them). A shell and a custom
 command are never refused for a program that is not an agent's.
 
 For an agent, **Task** ("What should it do?") is the Session's first message.

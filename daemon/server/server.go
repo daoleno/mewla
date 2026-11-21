@@ -1307,7 +1307,18 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 		// cause. A shell and a custom command are never refused here.
 		if missing := work.MissingAgentFor(command); missing != nil {
 			log.Printf("create_session refused: %s is not installed (command %q)", missing.Program, command)
-			s.sendErrorWithRequestID(conn, raw.RequestID, "agent_not_installed", missing.Message())
+			payload := map[string]any{
+				"type":       "error",
+				"request_id": raw.RequestID,
+				"code":       "agent_not_installed",
+				"message":    missing.Message(),
+				"agent":      missing.Name,
+				"program":    missing.Program,
+			}
+			if missing.Install != "" {
+				payload["install"] = missing.Install
+			}
+			s.sendJSON(conn, payload)
 			return
 		}
 		if work.InferWorkerProvider(command) == work.WorkerProviderDSH {

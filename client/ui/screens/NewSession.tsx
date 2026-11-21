@@ -6,7 +6,7 @@ import { Sheet, SheetRoom } from "../kit/Sheet";
 import { agentGridColumns, composing, scrollBesidePinned, taskCaptionShows } from "../../core/shell/sheet";
 import { Field, PillButton, Row, Section } from "../kit/kit";
 import { LAUNCH_PRESETS } from "../../core/sessions/agentCommands";
-import { agentInstalled, INSTALL_MORE_LINE } from "../../core/sessions/agentAvailability";
+import { agentInstalled, missingAgentSentence } from "../../core/sessions/agentAvailability";
 import { createSession } from "../../core/sessions/create";
 import { resolveLaunchSelection } from "../../core/session/providerLaunch";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -209,7 +209,6 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
     const first = LAUNCH_PRESETS.find((item) => item.command && !presetMissing(item.key));
     if (first) untracked(() => preset.set(first.key));
   });
-  const someMissing = () => LAUNCH_PRESETS.some((item) => presetMissing(item.key));
 
   const folders = (): FolderChoice[] => {
     const recent = recentFolders(workers());
@@ -242,7 +241,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
       store.blockCreatesUntilList();
       return problem.set(result.message);
     }
-    if (result.kind === "failed") return problem.set(result.message);
+    if (result.kind === "failed") return problem.set(result.missingAgent ? missingAgentSentence(result.missingAgent, untracked(current)?.name) : result.message);
     newSessionOpen.set(false);
     if (serverId) startedWithFirstMessage(serverId, result.workerId, firstMessage.trim(), result.firstMessage === "pending");
     props.onCreated(result.workerId, Boolean(targetId), { cwd: cwd().trim() || undefined, command: launchCommand.trim() || undefined, name: launchName.trim() || undefined, startedAt, focusComposer: true, ...(result.durabilityWarning ? { durabilityWarning: result.durabilityWarning } : {}) });
@@ -303,7 +302,6 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
                       </View>
                     ))}
                   </View>
-                  <If when={someMissing()}><View class="px-4 pb-3"><Text testID="new-agents-install" class="text-sub text-muted-foreground">{INSTALL_MORE_LINE}</Text></View></If>
                   <Row testID="new-advanced" icon="terminal" title="Custom command" chevron onPress={() => advanced.set(true)} />
                 </Section></If>
               <Section sheet title="Folder" testID="new-cwd">
