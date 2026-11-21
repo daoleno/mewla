@@ -67,7 +67,6 @@ import i_flash from "./svg/flash.svg";
 import i_flask from "./svg/flask.svg";
 import i_folder from "./svg/folder.svg";
 import i_folder_open from "./svg/folder-open.svg";
-import i_git from "./svg/git.svg";
 import i_git_branch from "./svg/git-branch.svg";
 import i_git_compare from "./svg/git-compare.svg";
 import i_git_network from "./svg/git-network.svg";
@@ -222,7 +221,6 @@ export const ICON_ASSETS = {
   "flask": i_flask,
   "folder": i_folder,
   "folder-open": i_folder_open,
-  "git": i_git,
   "git-branch": i_git_branch,
   "git-compare": i_git_compare,
   "git-network": i_git_network,

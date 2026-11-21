@@ -424,6 +424,16 @@ export function gitReview(target: GitTarget): GitReview | null {
   return review;
 }
 
+/**
+ * The review already made for this Session's folder, or null: it never makes one. A review made inside a computed
+ * (the Session's Git button) would be owned by it and lose its own computeds when that re-runs, so whoever reads
+ * a review reactively reads it with this, and one made outside any computation by `gitReview` first.
+ */
+export function heldGitReview(target: GitTarget): GitReview | null {
+  const current = untracked(daemon);
+  return current ? reviews.get(reviewKey(current.server.id, target)) ?? null : null;
+}
+
 // Another computer's repositories are not this one's.
 let boundServer: string | null = null;
 effect(() => {
