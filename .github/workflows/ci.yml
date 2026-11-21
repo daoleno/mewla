@@ -2,7 +2,8 @@ name: CI
 
 # The test track. Every push to main and every PR runs the checks: the daemon (Linux, macOS,
 # Windows), the session host's terminal engine, the NSH client's core and UI, the web UI the
-# daemons embed, the native terminal contract and the release scripts. A release never runs them
+# daemons embed, the terminal's render corpus (when the terminal changed), the native terminal
+# contract and the release scripts. A release never runs them
 # again: it ships a main commit this workflow passed (scripts/release-green.py,
 # docs/ci-release.md). The client's native hosts are built by client.yml, and signed by
 # release-artifacts.yml and ios-release.yml.
@@ -208,6 +209,40 @@ jobs:
         env:
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
         run: ./scripts/build-web-ui.sh
+
+  # The terminal's render corpus (scripts/terminal-corpus/run.sh): every screen of the corpus drawn by the web
+  # client's terminal page in Chromium, Firefox and WebKit and checked for seams between block and line glyphs,
+  # emoji in the wrong cell and screens that never drew. Only when the commits under test touch the terminal
+  # (scripts/terminal-corpus/paths.txt): otherwise the job is the checkout and one script, seconds. The Android
+  # and iOS renderers are not here: iOS runs the same corpus in client.yml's TerminalTests, Android's replay is
+  # `run.sh --android` on the lane emulator (client/README.md, Proving a change).
+  terminal-corpus:
+    name: Terminal render corpus (Chromium, Firefox, WebKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Does the change touch the terminal?
+        id: changed
+        run: scripts/terminal-corpus/changed.sh
+      - uses: oven-sh/setup-bun@v2
+        if: steps.changed.outputs.run == 'true'
+        with:
+          bun-version: "1.3.5"
+      # The WebAssembly VT main's native-cache.yml built, as the web-ui job uses it.
+      - uses: ./.github/actions/desktop-release-cache
+        if: steps.changed.outputs.run == 'true'
+        with:
+          web: "true"
+      # The three browsers (about 450 MB) for the pinned Playwright; run.sh installs what is missing.
+      - uses: actions/cache@v4
+        if: steps.changed.outputs.run == 'true'
+        with:
+          path: ~/.cache/mewla/terminal-corpus/browsers
+          key: terminal-corpus-browsers-${{ runner.os }}-${{ hashFiles('scripts/terminal-corpus/playwright-version.txt') }}
+      - name: Terminal render corpus
+        if: steps.changed.outputs.run == 'true'
+        run: scripts/terminal-corpus/run.sh
 
   windows:
     name: Windows (daemon build, platform tests, install.ps1)

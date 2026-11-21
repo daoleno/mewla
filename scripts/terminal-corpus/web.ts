@@ -3,7 +3,7 @@
 // frame sandboxed like NSH's web view (srcdoc, an opaque origin), at a real device pixel ratio. Each
 // screen is written into the page at its grid; one PNG per screen, the screen's own pixels.
 //
-//   bun scripts/terminal-corpus/web.ts <out dir> [name...]
+//   bun scripts/terminal-corpus/web.ts <out dir> [name...]     (scripts/terminal-corpus/run.sh runs all three engines and checks the pictures)
 //
 // Needs playwright-core importable (PLAYWRIGHT_CORE: a path to it) and a browser: ENGINE chromium
 // (default), firefox or webkit; BROWSER (or CHROME): its binary, else Playwright's own. DPR (default 2.625, a 1080 px wide phone) and 13px text. The VT is
@@ -74,6 +74,8 @@ const server = Bun.serve({
 // it takes the scale a HiDPI screen gives it (the pref). WebKit keeps the frame in the page's process.
 const browser = await playwright[engine].launch({
   executablePath: process.env.BROWSER ?? process.env.CHROME,
+  // Chromium's own new headless (the full build), not the headless shell: the shell ignores the forced device scale.
+  ...(engine === "chromium" && !(process.env.BROWSER ?? process.env.CHROME) ? { channel: "chromium" } : {}),
   args: engine === "chromium" ? [`--force-device-scale-factor=${dpr}`] : [],
   ...(engine === "firefox" ? { firefoxUserPrefs: { "layout.css.devPixelsPerPx": String(dpr) } } : {}),
 });
@@ -133,7 +135,11 @@ for (const name of names) {
 }
 await browser.close();
 server.stop();
+// One verdict line for the caller to read (bun can crash as it exits after a Playwright run, so the exit code alone is not trusted).
 if (failures.length) {
   console.error(failures.join("\n"));
+  console.log(`corpus web ${engine}: FAIL (${failures.length} problems in ${names.length} screens)`);
   process.exit(1);
 }
+console.log(`corpus web ${engine}: ok (${names.length} screens)`);
+process.exit(0);

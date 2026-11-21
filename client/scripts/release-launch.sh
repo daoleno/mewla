@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # The release's launch smoke on an Android emulator that is already booted (adb sees one device): the
 # exact signed APK this run built installs on a fresh device, reports the release's version, opens,
-# and is still running with nothing in the crash log after ten seconds.
+# and is still running with nothing in the crash log after ten seconds; then, on the first-run screen, its scanner opens
+# in this release build (R8 once dropped ML Kit's registrar and the first "Scan code" killed the app): the system's
+# camera prompt, then the camera looking for a code (the finder holds `qr-camera` only
+# while it runs) with the app up and nothing in the crash log.
 # release-artifacts.yml runs it before publishing, on an emulator that boots while the APK builds.
 # Inputs: VERSION (X.Y.Z), OUT (evidence directory), and APK (the signed APK), or ARTIFACT (this run's
 # artifact holding it, waited for up to 40 min; GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID) with
 # BUILD_JOB (the job that uploads it, so its failure ends the wait). Exit 0 only if all of it holds.
 set -euo pipefail
 : "${VERSION:?}" "${OUT:?}"
-PKG=com.daoleno.mewla
+PKG="${PKG:-com.daoleno.mewla}"
+here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT"
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/launch.log"; }
 fail() {
@@ -18,23 +22,14 @@ fail() {
   exit 1
 }
 
+# shellcheck source=lib/adbui.sh
+source "$here/lib/adbui.sh"
+# shellcheck source=lib/artifact.sh
+source "$here/lib/artifact.sh"
 if [[ -z "${APK:-}" ]]; then
   : "${ARTIFACT:?}" "${BUILD_JOB:?}"
-  # The artifacts API, not `gh run download`: this run is still going.
-  api="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-  id=""
-  log "waiting for $ARTIFACT"
-  for _ in $(seq 1 240); do
-    id="$(gh api "$api/artifacts?name=$ARTIFACT" --jq '.artifacts[0].id // empty' 2>&1)" || { log "artifacts API: $id"; id=""; }
-    [[ -z "$id" ]] || break
-    state="$(gh api "$api/jobs?per_page=100" --jq ".jobs[] | select(.name == \"$BUILD_JOB\") | \"\(.status) \(.conclusion)\"" 2>&1)" || state=""
-    [[ "$state" != completed* || "$state" == "completed success" ]] || fail "$BUILD_JOB ended without an APK ($state)"
-    sleep 10
-  done
-  [[ -n "$id" ]] || fail "no $ARTIFACT after 40 min"
   dir="$(mktemp -d)"
-  timeout 600 gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$dir/apk.zip" || fail "downloading artifact $id failed"
-  (cd "$dir" && unzip -q apk.zip) || fail "artifact $id is not a zip"
+  fetch_artifact "$ARTIFACT" "$BUILD_JOB" "$dir"
   APK="$(find "$dir" -name '*.apk' -print -quit)"
   [[ -n "$APK" ]] || fail "$ARTIFACT holds no APK"
   log "downloaded $(basename "$APK")"
@@ -55,3 +50,21 @@ crashes="$(adb logcat -d -b crash 2>/dev/null | grep -c "$PKG" || true)"
 [[ "$crashes" == 0 ]] || fail "the crash log names $PKG"
 adb exec-out screencap -p > "$OUT/launched.png" 2>/dev/null || true
 log "running as pid $pid, no crash: launched"
+
+# The first run: Welcome offers the scanner ("Mewla already running? Scan its code"). Notifications are granted beforehand so
+# that their prompt is not in the way of the camera's.
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb logcat -c
+tap "scan-now" 30 || { adb exec-out screencap -p > "$OUT/no-scan-now.png" 2>/dev/null || true; fail "the first-run screen has no way to the scanner (scan-now)"; }
+# The scan step asks for the camera as it opens; the app's own "Allow camera" shows only when it has not asked yet.
+if shows "allow-camera" 2; then tap "allow-camera" 5; fi
+tap "While using the app" 20 || fail "the system did not ask for the camera"
+shows "qr-camera" 20 || fail "the scanner is not looking for a code (no qr-camera)"
+sleep 3
+adb exec-out screencap -p > "$OUT/scanner.png" 2>/dev/null || true
+[[ -n "$(adb shell pidof "$PKG" | tr -d '\r')" ]] || fail "the app died with the scanner open"
+crashes="$(adb logcat -d -b crash 2>/dev/null | grep -c "$PKG" || true)"
+[[ "$crashes" == 0 ]] || fail "the crash log names $PKG after the scanner opened"
+shows "qr-camera" 5 || fail "the scanner stopped looking for a code"
+log "the scanner runs: camera allowed, app up, looking for a code"
+log "PASS"

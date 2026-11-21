@@ -524,7 +524,7 @@ jobs:
     name: Launch the signed APK on Android
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     permissions:
       contents: read
       actions: read
@@ -546,13 +546,17 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Boot, wait for the APK, install and launch it
+      # The exact signed APK: installed, opened, its scanner run (release-launch.sh); then paired to the release's own
+      # Linux daemon and the phone lane's flows replayed on it (release-flows.sh).
+      - name: Boot, wait for the APK, install, launch it and replay the flows
         uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 25
+        timeout-minutes: 30
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT: mewla-android-apk-${{ needs.validate.outputs.tag }}
           BUILD_JOB: Build and verify signed Android
+          DAEMON_ARTIFACT: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          DAEMON_JOB: Build Linux and Windows daemons
           VERSION: ${{ env.APK_VERSION }}
           OUT: ${{ runner.temp }}/launch
         with:
@@ -561,7 +565,9 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: client/scripts/release-launch.sh
+          script: |
+            client/scripts/release-launch.sh
+            client/scripts/release-flows.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

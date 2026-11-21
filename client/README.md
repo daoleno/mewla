@@ -48,6 +48,7 @@ APK, or walks first run and pairing by hand to prove a change: that is the relea
 |---|---|---|
 | Logic, state, protocol (`core/`, `ui/` behaviour, the daemon) | `bun test core`, `cd client/ui && nsh check && nsh test <touched files>` (whole `nsh test` before main), `go test` for the daemon | seconds; 0 model tokens |
 | What a screen looks like (layout, copy, dark mode, a narrow or short window) | `client/scripts/shots.sh`: the app on its fixture computer in headless Chrome, no device | 3 s a picture |
+| How the terminal draws (the packer, glyphs, the web page's canvas, `ui/terminal`, `core/terminal`) | `scripts/terminal-corpus/run.sh`: every corpus screen in Chromium and Firefox with pixel checks, one PASS or FAIL per engine; `--android` adds the lane phone | 40 s (`--android`: +70 s, the lane phone booted and shut down); CI runs it with WebKit when the terminal's paths change |
 | What only Android shows (intent filters and the share sheet, permissions, notifications, keyboard and insets, lifecycle, the camera) | one shared emulator, see below | minutes; no queue unless another lane emulator runs |
 | Install, first run, every pairing route including the scanned QR, upgrade from the last release | the release gate (`client.yml`, `release-artifacts.yml`, the daily upgrade test): CI, on the exact artifact | not per change |
 
@@ -64,14 +65,21 @@ the owner's dev server (8790). It has its own lock (`~/.mewla/lane/emulator.lock
 not use the heavy lock; `up` refuses with one line when less than 8 GiB of memory is available or a lane emulator already
 runs, and `down` (or the 30-minute cap) stops it. Only the Gradle build of `phone.sh install` takes the heavy lock.
 `client/scripts/phone.sh -h` lists the verbs: `reset` (the app stopped and started again, Brain open and connected: 6–10 s), `restore` (the phone back to the snapshot: 11–14 s, but about 1 in 20 takes 50–150 s waiting for the app to show Brain after the restore, cause not found, so `reset` is the default), `shot`, `tap`,
-`dump` (the screen as text), `type`, `shows`, `share-file` / `share-text` (a share from another app, about 1 s), `install`
+`dump` (the screen as text), `type`, `shows`, `share-file` / `share-text` (a share from another app, about 1 s), `corpus OUT` (the terminal corpus in the Dev app's TerminalView, one PNG per screen; `scripts/terminal-corpus/run.sh --android` checks it), `install`
 (incremental debug build), `run VERB -- VERB...` (up, the verbs, down). `reset` does not put the phone back (drafts, files and the lane daemon's message thread stay), so a flow sends fresh text and names. `phone.sh flow all` runs the journeys in `client/scripts/flows/` (send a
 message, open Calendar, share a picture in), each after a `reset`; they are the local phone lane and part of the release
 gate, not a per-push CI job. `open-with` is untested. adb must stay the shell user: a share started as root is refused ("Cannot read this file"), and the script stops with that message.
 
 A fault the owner found gets its test in the fixing commit: headless if it can be, a scene in `scripts/shots/` if it is
-layout, a `phone.sh` flow if only Android shows it. What no lane sees (terminal drawing, Screen, the QR camera, the Chrome
-extension) has its own checks, see AGENTS.md.
+layout, a `phone.sh` flow if only Android shows it. What no lane sees (Screen, the QR camera) has its own checks, see AGENTS.md. The
+Chrome extension's service worker is run against a stand-in `chrome` in `go test ./agentuse` (`TestExtensionBackground`,
+`TestSiteDataGuard`: node, no browser, under a second).
+
+**What runs when.**
+- Per change: the lanes above, nothing else (`bun test core`, `nsh check` / `nsh test`, `go test`, `shots.sh`, `terminal-corpus/run.sh`, `phone.sh` for what only Android shows). CI on main runs its fast checks; the terminal corpus only when the terminal's paths change.
+- Per release (`release-artifacts.yml`, on the exact signed APK): the launch smoke with the scanner (`release-launch.sh`), the flow replay (`release-flows.sh`: `phone.sh flow all` on the release build, paired to the release's own daemon), and the first-run + scanned-QR walk, which stays a person's.
+- Daily (`upgrade.yml`): `release-upgrade.sh`, the latest release upgraded to main.
+- On dispatch of `client.yml` with `gate`: the Expo leg (`upgrade-gate.sh`: Expo v0.3.1 → NSH, the device key, the stored computers and the draft come over) and Preview → Preview (`preview-upgrade.sh`).
 
 ## A call into JS has 2 s
 

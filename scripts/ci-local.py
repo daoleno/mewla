@@ -43,6 +43,12 @@ SKIPPED_JOBS = {
 if sys.platform != "darwin":
     SKIPPED_JOBS["daemon-macos"] = "needs a macOS runner (the daemon's darwin build and its tests)"
 
+def corpus_paths():
+    """The paths that make the terminal corpus worth running: scripts/terminal-corpus/paths.txt, which changed.sh reads in CI."""
+    lines = (ROOT / "scripts/terminal-corpus/paths.txt").read_text().splitlines()
+    return [line for line in lines if line and not line.startswith("#")]
+
+
 # Path globs (git paths, fnmatch with * crossing "/") that make a job relevant.
 # A change to ci.yml or to this script runs everything.
 EVERYTHING = [".github/workflows/ci.yml", "scripts/ci-local.py", "bunfig.toml"]
@@ -53,6 +59,7 @@ JOB_PATHS = {
     "daemon-macos": ["daemon/*"],
     "client": ["client/*", "bun.lock", "package.json"],
     "client-ui": ["client/*"],
+    "terminal-corpus": corpus_paths(),
     "web-ui": [
         "client/*", "scripts/build-web-ui.sh", "scripts/web-splash.py", "scripts/web-page-root.py",
         "scripts/build-libghostty-web.sh", "scripts/lib/*", "native/terminal-vt/*", "daemon/webui/*",
@@ -75,6 +82,10 @@ IGNORED_ACTIONS = (
     "actions/checkout@", "oven-sh/setup-bun@", "actions/setup-go@", "actions/upload-artifact@", "actions/cache/restore@",
     "actions/cache@",
 )
+
+# A step CI runs only when an earlier step of the job found its job relevant (the terminal corpus's changed.sh): here
+# JOB_PATHS has already decided, so the step runs.
+JOB_RELEVANT = re.compile(r"steps\.[\w-]+\.outputs\.run\s*==\s*'true'")
 
 # Steps CI runs only on tags and manual dispatch.
 RELEASE_ONLY = re.compile(r"workflow_dispatch|ref_type\s*==\s*'tag'")
@@ -165,7 +176,7 @@ def plan_job(job_id, job, job_dir, matrix, runner_temp):
         if condition and RELEASE_ONLY.search(condition):
             steps.append(Step(job_id, name, None, ROOT, {}, skip="runs only on release tags and manual dispatch", variant=variant))
             continue
-        if condition:
+        if condition and not JOB_RELEVANT.fullmatch(condition.strip()):
             raise ValueError(f"job {job_id}: step {name!r} has condition {condition!r} that scripts/ci-local.py does not know")
         cwd = ROOT / expand(step.get("working-directory", job_dir), runner_temp, matrix)
         env = {key: expand(str(value), runner_temp, matrix) for key, value in {**(job.get("env") or {}), **(step.get("env") or {})}.items()}

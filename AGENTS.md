@@ -21,6 +21,7 @@ Read the relevant code and directory instructions before editing. Complete autho
 - Daemon: bun run daemon:build; cd daemon && go test ./... before daemon/protocol/auth/terminal/work/session changes.
 - cd daemon && go run ./cmd/mewla-dev starts a hot-reloading daemon. Editing watched Go files can restart it; check live watchers before changes.
 - Before pushing to main, run `scripts/ci-local.py` (the jobs your diff touches; `--all` for everything). It runs the commands of .github/workflows/ci.yml, so it also fails on a stale client/ui/more/settings/licenses/licenses.json or Screen viewer bundle, or a node_modules that differs from bun.lock (bun install does not prune; delete the listed directories from node_modules). After pushing, wait for the CI run on your commit to go green before calling the work done. If main is already red from someone else's commit, say so and do not pile on.
+- Terminal drawing (client/ui/terminal, client/core/terminal, client/native/terminal, native/terminal-vt): `scripts/terminal-corpus/run.sh` (add `--android` for the lane phone). Chrome extension (daemon/agentuse/extension): `cd daemon && go test ./agentuse`.
 - Test changed behavior and required repository gates. Broaden or repeat only after edits, failures or unresolved concerns. Use device/UI evidence for visible changes; report platform limitations.
 
 ## Proving A Change

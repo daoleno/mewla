@@ -12,7 +12,7 @@ import kotlin.math.ceil
 /**
  * Debug builds only: one render-corpus screen (scripts/terminal-corpus) replayed into the real
  * TerminalView at the screen's grid, for side-by-side shots and the corpus check
- * (scripts/terminal-corpus/android.sh). No daemon, no page: the bytes go straight in.
+ * (`phone.sh corpus`, run by scripts/terminal-corpus/run.sh --android). No daemon, no page: the bytes go straight in.
  *
  *   adb shell am start -n <app>/com.daoleno.mewla.terminal.TerminalReplayActivity \
  *     --es file corpus/sgr.vt --ei cols 52 --ei rows 30 [--ef font 8] [--ez light true] \

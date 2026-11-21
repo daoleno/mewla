@@ -2,7 +2,10 @@
 """The corpus shots' pixel checks: rows of block and line glyphs must touch; narrow emoji and flags
 are drawn at full size.
 
-    check.py <shots dir>     # box.png from android.sh, web.ts or the iOS test (MEWLA_TEST_OUT/corpus)
+    check.py <shots dir> [name...]   # box.png etc. from android.sh, web.ts or the iOS test (MEWLA_TEST_OUT/corpus)
+
+Every screen asked for (all of corpus.json by default) must be there as a PNG with something drawn on it: a missing
+or blank screen fails (the cursor screens, the emptiest, ink 0.4% of their pixels; blank is under 0.1%).
 
 The box screen (gen.py) has a wall three rows tall at rows 12-14: eight full blocks (cols 0-7), eight
 light verticals (9-16) and eight heavy verticals (18-25). A renderer whose cells are not whole pixels,
@@ -27,9 +30,34 @@ def near(a, b, tolerance=24):
     return all(abs(x - y) <= tolerance for x, y in zip(a[:3], b[:3]))
 
 
+def drawn(path):
+    """The share of the screen's pixels that differ from its background (sampled every other pixel)."""
+    image = Image.open(path).convert("RGB")
+    W, H = image.size
+    px = image.load()
+    background = px[2, H - 2]
+    ink = sum(1 for y in range(0, H, 2) for x in range(0, W, 2) if not near(px[x, y], background, 40))
+    return ink / ((W // 2) * (H // 2))
+
+
 def main() -> int:
     shots = pathlib.Path(sys.argv[1])
     corpus = json.loads((pathlib.Path(__file__).parent / "corpus.json").read_text())
+    names = sys.argv[2:] or list(corpus)
+    failures = []
+    for name in names:
+        if name not in corpus:
+            failures.append(f"{name}: not a screen of corpus.json")
+        elif not (shots / f"{name}.png").exists():
+            failures.append(f"{name}: no picture in {shots}")
+        elif drawn(shots / f"{name}.png") < 0.001:
+            failures.append(f"{name}: nothing drawn")
+    if failures or "box" not in names:
+        for failure in failures:
+            print("FAIL " + failure)
+        if not failures:
+            print(f"{len(names)} screens drawn (no box screen: no seam check)")
+        return 1 if failures else 0
     cols, rows = corpus["box"]["cols"], corpus["box"]["rows"]
     image = Image.open(shots / "box.png").convert("RGB")
     W, H = image.size
@@ -37,7 +65,6 @@ def main() -> int:
     px = image.load()
     background = px[2, H - 2]
     y0, y1 = round(WALL_TOP * ch) + 1, round((WALL_TOP + WALL_ROWS) * ch) - 2
-    failures = []
 
     # The full blocks: every pixel inside the wall is ink.
     holes = sum(1 for y in range(y0, y1 + 1) for x in range(round(0.5 * cw), round(7.5 * cw))
@@ -58,8 +85,11 @@ def main() -> int:
                 break
 
     print(f"{shots / 'box.png'}: cell {cw:.2f}x{ch:.2f} px, wall y {y0}-{y1}: " + ("seams: " + "; ".join(failures) if failures else "rows touch"))
-    if (shots / "emoji.png").exists():
+    if "emoji" in names:
         failures += emoji(shots / "emoji.png", corpus["emoji"]["cols"], corpus["emoji"]["rows"])
+    print(f"{len(names)} screens drawn")
+    for failure in failures:
+        print("FAIL " + failure)
     return 1 if failures else 0
 
 
