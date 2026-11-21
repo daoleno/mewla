@@ -1,6 +1,5 @@
 import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
 import { openedForSomething } from "./whatsnew/state";
-import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPlace";
 import { nshPlatform } from "./platform";
@@ -19,19 +18,7 @@ import { startMac } from "./mac/mac";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
 
-// The first start after the in-place upgrade from the Expo app (Android; the web host reads the
-// Expo web app's) takes over what it kept: computers, drafts, preferences. The device key stays
-// where it was, in the host's secure store. iOS has no upgrade to make (owner, 2026-11-15).
 async function start(): Promise<void> {
-  if (host.available() && platform.os !== "ios") {
-    await copyLegacyStorage(
-      {
-        entries: async () => (await host.call("app.legacyStorage")) as Record<string, string> | null,
-        copied: async () => void (await host.call("app.legacyStorageCopied")),
-      },
-      Storage,
-    ).catch((error) => console.warn("legacy storage not copied:", error));
-  }
   // Where chats were read to before this start (a reload while reading), before any chat opens.
   await loadReadingPlaces();
   await loadSession();

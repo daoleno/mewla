@@ -363,9 +363,7 @@ describe("notifications", () => {
   }, 20_000);
 
   test("a tap that starts the app opens its item once the computers are loaded", async () => {
-    // The phone is slow to hand over the old app's storage: the tap comes first.
-    const slowStart = { "app.legacyStorage": () => new Promise((resolve) => setTimeout(() => resolve(null), 500)) };
-    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }, slowStart), storage: paired, platform: "android", network: expoTokenService });
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("push.opened", { data: { screen: "calendar", calendar_id: "Call the bank", server_id: "s1" } });
     await app.waitFor("id:calendar-item-page");
   }, 20_000);

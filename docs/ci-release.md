@@ -89,7 +89,7 @@ Until v0.4.4 the desktop archives were public a few minutes before the APK, the 
 - **30 computer switches with one computer frozen** were added for the v0.4.0 freeze, NSH's List leaking its `empty` cell. CI covers that cause. `client/core/listEmpty.test.ts` fails the moment an `empty=` comes back. `Sessions.test.tsx` ("a link for the other computer while All Sessions waits…") runs the same switch headless. With one `empty=` put back on NSH 0.5.0 that test hangs, which fails the run, and on the fixed tree it passes in about 2 s. The switches passed every release since (v0.4.1–v0.4.3) without catching anything.
 - **Opening on the owner's dev daemon** needed the owner's machine, which a release must not depend on.
 
-`client.yml`'s upgrade gate (the Expo app to the NSH app, and Preview to Preview) remains a manual check for the client; releases do not wait for it. Nor does a release wait for any proof after it: there is no post-publish Linux, Windows, Mac or Android pass by hand. What CI cannot check yet is listed in the report of the change (Brain worklog `mewla-fast-release-1116`).
+`client.yml`'s upgrade gate (Preview to Preview) remains a manual check for the client; releases do not wait for it. Nor does a release wait for any proof after it: there is no post-publish Linux, Windows, Mac or Android pass by hand. What CI cannot check yet is listed in the report of the change (Brain worklog `mewla-fast-release-1116`).
 
 ## Repository secrets (names only)
 

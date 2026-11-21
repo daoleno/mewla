@@ -74,7 +74,7 @@ describe("a new device asks to be let in", () => {
   test("a browser that isn't paired shows its number and joins once approved", async () => {
     let polls = 0;
     const app = await open(APP, {
-      host: { params: { daemon: { brain: {} } }, handlers: { "app.origin": () => "https://desk.example.ts.net", "links.initial": () => null, "app.legacyStorage": () => null, "app.legacyStorageCopied": () => null, "secure.get": () => null, "secure.set": () => null, "app.testFrame": () => null } },
+      host: { params: { daemon: { brain: {} } }, handlers: { "app.origin": () => "https://desk.example.ts.net", "links.initial": () => null, "secure.get": () => null, "secure.set": () => null, "app.testFrame": () => null } },
       platform: "web",
       network: {
         "POST https://desk.example.ts.net/enrollment/request": { status: 200, body: { request_id: "r1", secret: "s", verification_number: "317", expires_at: "2099-01-01T00:00:00Z" } },

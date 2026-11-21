@@ -15,7 +15,7 @@ import com.longbridge.nsh.NshView
 
 /**
  * `push.*`: whether notifications are allowed, the system prompt, and the device's
- * FCM token with the Expo installation id, which the app exchanges for its Expo token
+ * FCM token with the install's id, which the app exchanges for its Expo push token
  * (core/push). A tapped push reaches the app as the event `push.opened {data}`.
  */
 class PushHost(private val activity: ComponentActivity, private val nsh: NshView) {

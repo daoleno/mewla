@@ -7,8 +7,6 @@ const host = {
     "secure.get": ({ key }: { key: string }) => secure.get(key) ?? null,
     "secure.set": ({ key, value }: { key: string; value: string }) => void secure.set(key, value),
     "secure.remove": ({ key }: { key: string }) => void secure.delete(key),
-    "app.legacyStorage": () => null,
-    "app.legacyStorageCopied": () => undefined,
   },
 };
 const paired = {

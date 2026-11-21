@@ -3,8 +3,8 @@ name: Client (NSH)
 # The NSH client's native hosts, on the test track: a push to main that touches the client builds
 # the Android preview APK and the iOS Simulator app with its unit tests (and saves the caches ci.yml
 # restores); dispatch also signs the Preview with the release key (client/scripts/preview-signer.sh,
-# so every Preview installs over the last one) and can run the Android upgrade gate (the released
-# Expo APK, then the release-signed NSH app). A red run here is a bug to fix now; it does not hold a
+# so every Preview installs over the last one) and can run the Android upgrade gate (this Preview over the
+# last dispatched one). A red run here is a bug to fix now; it does not hold a
 # release, which ships a commit ci.yml passed (docs/ci-release.md). The fast checks (core tests,
 # nsh check, nsh test) run in ci.yml.
 on:
@@ -14,12 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       gate:
-        description: "Run the Android upgrade gate (released Expo APK → release-signed NSH app)"
+        description: "Run the Android upgrade gate (this Preview installs over the last dispatched one)"
         type: boolean
         default: true
-      old_version:
-        description: "Expo release the gate upgrades from (a tag; v0.3.1 is the last Expo release, Latest is the NSH app since v0.4.0)"
-        default: "v0.3.1"
       android_only:
         description: "Only the Android host: a Preview-signed APK to hand over (no iOS job)"
         type: boolean
@@ -184,60 +181,13 @@ jobs:
           retention-days: 14
 
   upgrade-gate:
-    name: Android upgrade gate (Expo ${{ inputs.old_version || 'v0.3.1' }} → NSH; Preview → Preview)
+    name: Android upgrade gate (Preview → Preview)
     if: github.event_name == 'workflow_dispatch' && inputs.gate
-    # Not `needs: android`: the gate sets up and builds its own app while that job builds the
-    # Preview, and waits for the Preview just before it needs it (one after the other: 12 min, 11-14).
+    # Not `needs: android`: it waits for the Preview just before it needs it.
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      # Java 17, the SDK and NDK, and the verified arm64 libghostty-vt the terminal links (cached on main).
-      - name: Android SDK, arm64 Ghostty and Gradle home
-        uses: ./.github/actions/android-native
-      - uses: actions/cache@v4
-        with:
-          path: ~/.nsh
-          key: nsh-${{ runner.os }}-${{ hashFiles('client/scripts/fetch-nsh.sh') }}
-      - name: Install NSH
-        run: client/scripts/fetch-nsh.sh
-      - name: The released Expo APK and daemon
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OLD: ${{ inputs.old_version || 'v0.3.1' }}
-        run: |
-          set -euo pipefail
-          # The gate upgrades from what users run: the latest release unless a tag is named.
-          [[ "$OLD" == latest ]] && OLD=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          echo "upgrading from $OLD"
-          mkdir -p "$RUNNER_TEMP/old"
-          gh release download "$OLD" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/old" \
-            --pattern "mewla-android-arm64-$OLD.apk" --pattern mewla-linux-amd64.tar.gz --pattern SHA256SUMS
-          cd "$RUNNER_TEMP/old"
-          grep -E " (mewla-android-arm64-$OLD.apk|mewla-linux-amd64.tar.gz)$" SHA256SUMS | sha256sum -c -
-          tar -xzf mewla-linux-amd64.tar.gz
-          echo "OLD_APK=$RUNNER_TEMP/old/mewla-android-arm64-$OLD.apk" >> "$GITHUB_ENV"
-          echo "MEWLA=$(find "$RUNNER_TEMP/old" -name mewla -type f -perm -u+x | head -1)" >> "$GITHUB_ENV"
-      - name: Materialize the release keystore (temp, mode 0600)
-        env:
-          MEWLA_ANDROID_KEYSTORE_BASE64: ${{ secrets.ZEN_ANDROID_KEYSTORE_BASE64 }}
-          MEWLA_ANDROID_KEYSTORE: ${{ runner.temp }}/mewla-release.p12
-        run: ./scripts/materialize-android-keystore.sh > /dev/null
-      - name: Build the release-signed NSH app
-        working-directory: client/android
-        env:
-          MEWLA_ANDROID_KEYSTORE: ${{ runner.temp }}/mewla-release.p12
-          MEWLA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ZEN_ANDROID_KEYSTORE_PASSWORD }}
-          MEWLA_ANDROID_KEY_ALIAS: ${{ secrets.ZEN_ANDROID_KEY_ALIAS }}
-          MEWLA_ANDROID_KEY_PASSWORD: ${{ secrets.ZEN_ANDROID_KEY_PASSWORD }}
-        run: |
-          ./gradlew --no-daemon --console=plain assembleProductionRelease -Pmewla.abis=arm64-v8a
-          echo "NEW_APK=$PWD/app/build/outputs/apk/production/release/app-production-release.apk" >> "$GITHUB_ENV"
-      - name: Shred the keystore
-        if: always()
-        run: |
-          KS="${{ runner.temp }}/mewla-release.p12"
-          [[ -f "$KS" ]] && { shred -u "$KS" 2>/dev/null || rm -f "$KS"; } || true
       - name: Wait for this run's Preview
         env:
           GH_TOKEN: ${{ github.token }}
@@ -291,9 +241,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: |
-            client/scripts/upgrade-gate.sh
-            client/scripts/preview-upgrade.sh
+          script: client/scripts/preview-upgrade.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:

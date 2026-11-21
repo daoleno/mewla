@@ -98,12 +98,11 @@ app its messages passes 100 ms. What a thread or a Session list shows is made on
 
 | Call / event / component | |
 |---|---|
-| `secure.get` / `secure.set` / `secure.remove` `{key, value}` | The device key and other secrets, Android: in the store and format the Expo app used (expo-secure-store's `SecureStore` prefs and Keystore key); iOS: Keychain service `app:no-auth`. A stored item that can't be read is an error, never `null`. |
-| `app.legacyStorage` → entries or `null`, `app.legacyStorageCopied` | Android (and the web host): the Expo app's AsyncStorage `mewla*` entries, once; `core/legacyStorage.ts` copies them into `Storage` before anything reads it. iOS has no upgrade from the Expo app to make and no such call. |
+| `secure.get` / `secure.set` / `secure.remove` `{key, value}` | The device key and other secrets, Android: in `SecureStore` prefs under a Keystore key (expo-secure-store's format, kept so existing installs keep their key); iOS: Keychain service `app:no-auth`. A stored item that can't be read is an error, never `null`. |
 | `links.open` `{url}` (event) | A `mewla://` link the system opened the app with; held until the app listens. |
 | `mewla.qrScanner` `{active}` → `scan {value}`, `unavailable {reason}` | The camera's QR reader. |
 | `host.params.deviceName` | The name a computer lists this phone under. |
-| `push.permission` / `push.requestPermission` / `push.deviceToken`, `push.opened {data}` (event) | Notifications allowed, the system prompt, the FCM / APNs token with the Expo installation id kept where expo-notifications kept it (Android: its uuid file, so the Expo token survives the upgrade; iOS: its Keychain item). A tapped notification, cold start included, is `push.opened`. |
+| `push.permission` / `push.requestPermission` / `push.deviceToken`, `push.opened {data}` (event) | Notifications allowed, the system prompt, the FCM / APNs token with the install's own id, the `deviceId` of the Expo push token exchange (Android: a uuid file in the app's no-backup directory; iOS: its Keychain item), made on first use. A tapped notification, cold start included, is `push.opened`. |
 | `live.*` | The live notification (Android) / Live Activity (iOS) and the home-screen widgets of the current computer. iOS: the Expo app's WidgetKit extension (`ios/LiveExtension`, same bundle id, widget kind and activity type), its App Group files, and content-available `mewla_live` pushes applied in the background. |
 | `share.take` → shares, `share.ack {ids}`, `share.release {uris}`, `share.arrived` (event) | Android: what other apps share (the share sheet) or open with Mewla (ACTION_VIEW of a content:// or file:// URI), copied into the app's cache at once because the sender's read grant ends with the activity. `share.take` lists the shares not yet acknowledged (`{id, text, problem, assets: [UploadDocumentAsset]}`, each asset's `uri` a file:// copy that `files.upload` streams); the app acknowledges a share once its files are chips in Brain's composer and gives each copy back when its chip goes. A share waits on disk until acknowledged; a start deletes what no chip holds. `ui/more/files/shareIn.ts`. |
 | `calendar.alerts*`, `calendar.zones`, `calendar.pickDate` / `pickTime` | The phone's own calendar alerts (Android: exact alarms and the lock-screen alert; iOS: local notifications on a calendar trigger pinned to the item's zone), the zone table QuickJS lacks, the system date and time pickers. |
@@ -112,9 +111,8 @@ app its messages passes 100 ms. What a thread or a Session list shows is made on
 
 The version is `ui/nsh.json` `version` (also the daemon's; `scripts/prepare-release.py` moves it). The Android
 version code and iOS build number are `major·1 000 000 + minor·10 000 + patch·100 + 99`, or `+ N` for `-beta.N`
-(`scripts/lib/release_identity.py`; 0.3.2 is 30299), above every Expo build (142 / 140). The
-upgrade gate (`client.yml`, manual dispatch) installs the released Expo APK on an emulator, pairs it with a fresh
-daemon and types a draft, installs the release-signed NSH app over it, and passes only if the daemon still lists
-that one device and sees it sign in again and the draft is in the new storage
-(`client/scripts/upgrade-gate.sh`). iOS carries no upgrade from the Expo app (owner, 2026-11-15: no one used
-it); only its identity (bundle id, build numbers above 140) stays.
+(`scripts/lib/release_identity.py`; 0.3.2 is 30299). Upgrades are proved by `release-upgrade.sh` (the previous release's
+APK pairs with its daemon and keeps a draft, this one installs over it: still paired, same device, draft kept; daily, `upgrade.yml`) and, on
+dispatch of `client.yml`, by Preview → Preview (`preview-upgrade.sh`). Nothing upgrades from the Expo app any more (owner, 2026-11-21: no
+one runs an Expo build): its AsyncStorage and push-id readers are gone. A device key made by an Expo build is still read where
+`SecureStore.kt` finds it, because an install that began as an Expo build may hold its key in that form.

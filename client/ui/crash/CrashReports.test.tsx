@@ -14,8 +14,6 @@ function host(reports: unknown[]) {
       "secure.get": () => null,
       "secure.set": () => undefined,
       "secure.remove": () => undefined,
-      "app.legacyStorage": () => null,
-      "app.legacyStorageCopied": () => undefined,
       "app.crashReports": () => reports,
       "app.clearCrashReports": () => null,
       "scan.permission": () => "denied",
