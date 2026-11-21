@@ -51,8 +51,15 @@ function tabs(buttons, key, pick) {
 tabs($$('[data-os]'), 'os', (os) => {
   for (const c of $$('[data-os-cmd]')) c.hidden = c.dataset.osCmd !== os;
   for (const c of $$('[data-os-note]')) c.hidden = c.dataset.osNote !== os;
+  for (const c of $$('[data-os-step]')) c.hidden = !c.dataset.osStep.split(' ').includes(os);
 });
-if (/Windows/.test(navigator.userAgent)) $('[data-os="win"]')?.click();
+// A link inside a pane that switches to another tab.
+for (const a of $$('[data-os-go]')) a.addEventListener('click', (e) => { e.preventDefault(); $(`[data-os="${a.dataset.osGo}"]`)?.click(); });
+// The Mac app is the first tab. A Windows computer, Linux and a phone (which cannot run it) open on theirs: the
+// phone on the terminal install it always had.
+const ua = navigator.userAgent;
+if (/Windows/.test(ua)) $('[data-os="win"]')?.click();
+else if (/Android|iPhone|iPad|iPod|Linux/.test(ua)) $('[data-os="unix"]')?.click();
 
 const rises = $$('.rise');
 if (reduce || !('IntersectionObserver' in window)) {
