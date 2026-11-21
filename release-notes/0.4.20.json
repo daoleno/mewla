@@ -25,5 +25,8 @@
       "try": {"kind": "prompt", "target": "What Work did you close today?"}
     }
   ],
-  "fixes": []
+  "fixes": [
+    "Antigravity (agy) can run your Workers.",
+    "The Telegram channel is gone: Settings has no Channels, and its stored bot token is deleted."
+  ]
 }
