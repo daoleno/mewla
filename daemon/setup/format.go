@@ -112,5 +112,6 @@ func executorInstallSteps(report doctor.Report) []string {
 	add("Grok: install Grok CLI, then run: grok login")
 	add("Pi: install Pi Coding Agent (`pi`), then configure provider auth (no official auth-status command)")
 	add("OpenCode: install OpenCode (`opencode`), then run: opencode auth login")
+	add("Antigravity: install the Antigravity CLI (`agy`), then run `agy` once and sign in with Google OAuth")
 	return steps
 }

@@ -12,7 +12,7 @@ cover the alternatives.
   binary; no cloud service is required, and remote access is an opt-in sign-in.
 - **The app** on Android or iOS connects to one computer at a time. The daemon
   also serves it as a web page.
-- **Your agent CLIs** (Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode)
+- **Your agent CLIs** (Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, Antigravity)
   do the work. Mewla starts and reads them; you sign in to each yourself.
 
 Your code, keys and agent state stay on your computer.

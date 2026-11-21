@@ -8,6 +8,7 @@ export const CODEX_COMMAND = "codex --dangerously-bypass-approvals-and-sandbox";
 export const CURSOR_AGENT_COMMAND = "cursor-agent --force --sandbox disabled";
 export const GROK_COMMAND =
   "grok --no-alt-screen --permission-mode bypassPermissions";
+export const ANTIGRAVITY_COMMAND = "agy --dangerously-skip-permissions";
 export const DSH_COMMAND = "dsh";
 export const PI_COMMAND = "pi";
 export const OPENCODE_AUTO_COMMAND = "opencode --auto";
@@ -57,5 +58,6 @@ export const LAUNCH_PRESETS: readonly NewTerminalLaunchPreset[] = [
   { key: "grok", kind: "grok", label: "Grok", command: GROK_COMMAND },
   { key: "pi", kind: "pi", label: "Pi", command: PI_COMMAND },
   { key: "opencode", kind: "opencode", label: "OpenCode", command: OPENCODE_AUTO_COMMAND },
+  { key: "antigravity", kind: "antigravity", label: "Antigravity", command: ANTIGRAVITY_COMMAND },
   { key: "dsh", kind: "dsh", label: "DSH", command: DSH_COMMAND },
 ];

@@ -143,7 +143,7 @@ func (d *depsPrompt) runPlan(plan hostdeps.Plan) bool {
 // agentNames are the display names of the executors first run reports.
 var agentNames = map[string]string{
 	"claude": "Claude Code", "codex": "Codex", "agent": "Cursor Agent",
-	"grok": "Grok", "pi": "Pi", "opencode": "OpenCode",
+	"grok": "Grok", "pi": "Pi", "opencode": "OpenCode", "agy": "Antigravity",
 }
 
 func agentName(id string) string {

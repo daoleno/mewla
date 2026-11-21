@@ -98,11 +98,24 @@ type Agent struct {
 // agentOrder lists executor ids in the one order Mewla uses everywhere: the
 // install menu, doctor's recommended host and the Brain host picked when more
 // than one agent CLI is ready. Claude Code comes first, as on mewla.ai.
-var agentOrder = []string{"claude", "codex", "agent", "grok", "pi", "opencode"}
+var agentOrder = []string{"claude", "codex", "agent", "grok", "pi", "opencode", "agy"}
+
+// workerOnlyAgents are agents that run Workers but cannot host Brain yet: Brain
+// reads its own conversation from the agent's transcript, and agy keeps its
+// conversations in a SQLite database Mewla has no reader for.
+var workerOnlyAgents = map[string]bool{"agy": true}
 
 // agentCommands names the executable each agent id runs, where it differs from
 // the id: Cursor's CLI is installed as cursor-agent.
 var agentCommands = map[string]string{"agent": "cursor-agent"}
+
+// CanHostBrain reports whether the agent id can be Brain's host.
+func CanHostBrain(id string) bool { return !workerOnlyAgents[id] }
+
+// HostAgentOrder is AgentOrder without the agents that cannot host Brain.
+func HostAgentOrder() []string {
+	return slices.DeleteFunc(slices.Clone(agentOrder), func(id string) bool { return workerOnlyAgents[id] })
+}
 
 // AgentCommand is the executable the agent id launches.
 func AgentCommand(id string) string {

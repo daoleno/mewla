@@ -11,6 +11,7 @@ import { Icon } from "./Icon";
  * (a tray row's 28 pt tile).
  *
  * Where agents/*.svg come from (paths copied verbatim, root fill-rule kept):
+ * - antigravity.svg @lobehub/icons-static-svg 1.104.0 `antigravity` (the one-colour mark, Google's Antigravity)
  * - claude.svg   @lobehub/icons-rn 2.21.0 `Claude.Color` (ClaudeColor), brand #D97757
  * - codex.svg    @lobehub/icons-rn 2.21.0 `Codex.Color` (CodexColor), white tile + gradient
  * - grok.svg     @lobehub/icons-rn 2.21.0 `Grok` (GrokMono)
@@ -36,7 +37,7 @@ export function AgentIcon(props: { kind: AgentKind; flavor?: TerminalFlavor; siz
   );
 }
 
-const TINTED = new Set<AgentKind>(["cursor", "grok", "pi", "opencode", "dsh"]);
+const TINTED = new Set<AgentKind>(["antigravity", "cursor", "grok", "pi", "opencode", "dsh"]);
 
 const LETTER_FLAVORS: Partial<Record<TerminalFlavor, { letter: string; background: string; text: string }>> = {
   bun: { letter: "B", background: "#141414", text: "#F9F1E1" },

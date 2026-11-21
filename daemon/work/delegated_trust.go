@@ -31,7 +31,8 @@ var errTrustConfigChanged = errors.New("provider config changed while preparing 
 // folder without the dialog, so that one key is written (see docs/sessions.md).
 func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (string, error) {
 	provider := InferWorkerProvider(command)
-	if provider != WorkerProviderCodex && provider != WorkerProviderClaude && provider != WorkerProviderCursor {
+	if provider != WorkerProviderCodex && provider != WorkerProviderClaude && provider != WorkerProviderCursor &&
+		provider != WorkerProviderAntigravity {
 		return command, nil
 	}
 	options, ok := inspectLaunchCommandOptions(command)
@@ -71,6 +72,9 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 	dirs := []string{abs}
 	if real != abs {
 		dirs = append(dirs, real)
+	}
+	if provider == WorkerProviderAntigravity {
+		return antigravityWorkspaceCommand(command, dirs)
 	}
 	if provider == WorkerProviderCodex {
 		present, enabled := options.option("", "--dangerously-bypass-hook-trust")
@@ -285,4 +289,80 @@ func sameDir(a, b string) (bool, error) {
 		return false, err
 	}
 	return os.SameFile(ai, bi), nil
+}
+
+// antigravityWorkspaceCommand answers agy's folder-trust dialog for one
+// delegated launch. agy has no per-launch trust flag, but --settings takes
+// settings.json keys for this session only and never saves them, so the cwd is
+// trusted there and nothing is written to the person's settings.json. agy keeps
+// only the last --settings, so an inline JSON object of the command's own is
+// merged into rather than followed by a second one, and a --settings naming a
+// file is left alone (the person's own choice, as for Claude).
+//
+// The same payload sets the two review gates --dangerously-skip-permissions
+// leaves: toolPermission (a person's "strict" would ask before every action)
+// and artifactReviewPolicy (a plan waits for review unless told otherwise).
+// Keys the command's own JSON sets are kept.
+func antigravityWorkspaceCommand(command string, dirs []string) (string, error) {
+	fields, ok := shellquote.Fields(command)
+	if !ok || len(fields) == 0 {
+		return "", fmt.Errorf("cannot establish delegated workspace for agy")
+	}
+	settings := map[string]any{}
+	settingsAt, equalsForm := -1, false
+	for index, field := range fields {
+		if field == "--" {
+			break
+		}
+		value := ""
+		switch {
+		case field == "--settings" && index+1 < len(fields):
+			value, settingsAt = fields[index+1], index+1
+		case strings.HasPrefix(field, "--settings="):
+			value, settingsAt, equalsForm = strings.TrimPrefix(field, "--settings="), index, true
+		default:
+			continue
+		}
+		if !strings.HasPrefix(strings.TrimSpace(value), "{") {
+			return command, nil
+		}
+		if err := json.Unmarshal([]byte(value), &settings); err != nil {
+			return "", fmt.Errorf("agy --settings is not valid JSON: %w", err)
+		}
+	}
+	trusted, _ := settings["trustedWorkspaces"].([]any)
+	have := map[string]bool{}
+	for _, value := range trusted {
+		if text, ok := value.(string); ok {
+			have[text] = true
+		}
+	}
+	for _, dir := range dirs {
+		if !have[dir] {
+			trusted = append(trusted, dir)
+		}
+	}
+	settings["trustedWorkspaces"] = trusted
+	if _, ok := settings["toolPermission"]; !ok {
+		settings["toolPermission"] = "always-proceed"
+	}
+	if _, ok := settings["artifactReviewPolicy"]; !ok {
+		settings["artifactReviewPolicy"] = "always-proceed"
+	}
+	encoded, err := json.Marshal(settings)
+	if err != nil {
+		return "", err
+	}
+	if settingsAt >= 0 {
+		if equalsForm {
+			fields[settingsAt] = "--settings=" + string(encoded)
+		} else {
+			fields[settingsAt] = string(encoded)
+		}
+		for index := range fields {
+			fields[index] = shellquote.Word(fields[index])
+		}
+		return strings.Join(fields, " "), nil
+	}
+	return command + " --settings " + shellquote.Word(string(encoded)), nil
 }

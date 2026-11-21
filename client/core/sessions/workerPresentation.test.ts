@@ -5,7 +5,7 @@ const base = { name: "", summary: "", last_output_lines: [] as string[] };
 
 describe("agentKindFromProvider", () => {
   test("presents a Worker by the provider the daemon names", () => {
-    for (const provider of ["claude", "codex", "cursor", "grok", "pi", "opencode", "dsh"]) {
+    for (const provider of ["claude", "codex", "cursor", "grok", "pi", "opencode", "dsh", "antigravity"]) {
       expect(agentKindFromProvider(provider)).toBe(provider as never);
     }
   });

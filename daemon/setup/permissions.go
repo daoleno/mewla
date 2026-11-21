@@ -31,6 +31,10 @@ func commandForProvider(provider, id, existingCommand string) (command, kind str
 		return "pi", ""
 	case work.WorkerProviderOpenCode:
 		return "opencode " + work.OpenCodeAutoFlag, ""
+	case work.WorkerProviderAntigravity:
+		// The launch path adds --dangerously-skip-permissions and the folder
+		// trust for each Worker, so the command stays plain.
+		return "agy", "antigravity"
 	default:
 		// Preserve custom commands.
 		if existingCommand != "" {

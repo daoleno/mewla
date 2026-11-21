@@ -509,6 +509,7 @@ export function providerLabel(value?: string): string {
     case "codex": return "Codex";
     case "cursor": return "Cursor Agent";
     case "grok": return "Grok";
+    case "antigravity": return "Antigravity";
     case "claude": return "Claude Code";
     default: return value?.trim() || "Custom";
   }

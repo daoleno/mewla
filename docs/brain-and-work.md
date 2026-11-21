@@ -382,6 +382,7 @@ Without `-executor`, the Worker uses Brain's own agent. Mewla maps `-model` and
 | `claude` | `--model` | `--effort`: `low`, `medium`, `high`, `xhigh`, `max` |
 | `pi` | `--model provider/id` | `--thinking`: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `grok` | `--model` | Not supported |
+| `agy` | `--model` (an id from `agy models`) | Not supported (the level is in the id) |
 | `agent` (Cursor) | `--model` | Not supported |
 | `opencode` | Not supported; OpenCode 2 uses the model saved in OpenCode | Not supported |
 
@@ -447,7 +448,7 @@ mewla brain use claude
 The thread and its history move with Brain. First run asks which agent Brain
 uses when more than one is ready and keeps that answer. A start without a
 terminal (a service, CI) never asks: Brain takes the first installed agent in
-the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, preferring one
+the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode (Antigravity runs Workers but is never picked for Brain), preferring one
 `mewla doctor` verified as signed in over one it could not verify, and the daemon
 log names it and the `mewla brain use` command that changes it.
 

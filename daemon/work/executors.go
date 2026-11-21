@@ -63,6 +63,7 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 			"opencode": {Name: "opencode", Command: "opencode", Kind: "opencode"},
 			"pi":       {Name: "pi", Command: "pi", Kind: "pi"},
 			"dsh":      {Name: "dsh", Command: "dsh", Kind: "dsh"},
+			"agy":      {Name: "agy", Command: "agy", Kind: "antigravity"},
 		},
 	}
 

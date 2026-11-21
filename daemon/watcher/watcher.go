@@ -3912,6 +3912,12 @@ func isPiCommand(command string) bool {
 	return commandExecutableBase(command) == "pi"
 }
 
+// isAntigravityCommand is Google's Antigravity CLI, the program "agy". The
+// program "antigravity" is the desktop app launcher and is not an agent here.
+func isAntigravityCommand(command string) bool {
+	return commandExecutableBase(command) == "agy"
+}
+
 func isOpenCodeCommand(command string) bool {
 	return commandExecutableBase(command) == "opencode"
 }
@@ -5057,7 +5063,7 @@ func isGrokResumeCommandLine(command string) bool {
 
 func isWorkerCommand(command string) bool {
 	name := workerCommandName(command)
-	return name == "claude" || name == "claude-code" || name == "codex" || name == "cursor-agent" || name == "grok" || name == "cc" || name == "pi" || name == "opencode" || name == "dsh"
+	return name == "claude" || name == "claude-code" || name == "codex" || name == "cursor-agent" || name == "grok" || name == "cc" || name == "pi" || name == "opencode" || name == "dsh" || name == "agy"
 }
 
 func workerCommandName(command string) string {

@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
  * for the person. RemoteViews and a notification's large icon can only show bitmaps, so it is drawn here.
  */
 internal object LiveArt {
-  private val KINDS = setOf("claude", "codex", "cursor", "grok", "pi", "opencode", "dsh")
+  private val KINDS = setOf("claude", "codex", "cursor", "grok", "pi", "opencode", "dsh", "antigravity")
 
   /** The logo for a provider: an agent's mark, Brain's mark, or the terminal glyph. */
   fun agentDrawable(agent: String): Int = when {
@@ -30,6 +30,7 @@ internal object LiveArt {
       "grok" -> R.drawable.mewla_agent_grok
       "pi" -> R.drawable.mewla_agent_pi
       "opencode" -> R.drawable.mewla_agent_opencode
+      "antigravity" -> R.drawable.mewla_agent_antigravity
       else -> R.drawable.mewla_agent_dsh
     }
     else -> R.drawable.mewla_agent_terminal

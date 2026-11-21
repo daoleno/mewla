@@ -20,6 +20,8 @@ export function brainProviderLabel(value?: string): string {
       return "Claude Code";
     case "pi":
       return "Pi";
+    case "antigravity":
+      return "Antigravity";
     case "opencode":
       return "OpenCode";
     case "dsh":
@@ -74,10 +76,10 @@ export function brainExecutorChoices(
   executors: readonly BrainExecutorRef[],
   states: Readonly<Record<string, BrainExecutorState>> | undefined,
 ): { choices: BrainExecutorRef[]; moreToInstall: boolean } {
-  const installed = executors.filter((executor) => states?.[executor.id]?.installed);
+  const installed = executors.filter((executor) => !executor.worker_only && states?.[executor.id]?.installed);
   const signedIn = installed.filter((executor) => states?.[executor.id]?.signed_in);
   const others = installed.filter((executor) => !states?.[executor.id]?.signed_in);
-  return { choices: [...signedIn, ...others], moreToInstall: installed.length < executors.length };
+  return { choices: [...signedIn, ...others], moreToInstall: installed.length < executors.filter((executor) => !executor.worker_only).length };
 }
 
 /** Switching needs an installed executor other than the one Brain runs on. */
