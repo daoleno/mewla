@@ -1,4 +1,4 @@
-import { computed, effect, keyboardFrame, lifecycle, signal, Storage, untracked } from "nsh";
+import { computed, effect, keyboardFrame, lifecycle, platform, signal, Storage, untracked } from "nsh";
 import manifest from "../nsh.json";
 import bundled from "./notes.json";
 import {
@@ -13,6 +13,7 @@ import {
   QUIET_MS,
   releaseOf,
   releasePages,
+  releasesFor,
   updateLines,
   type UpdateLine,
   type WhatsNewPage,
@@ -37,13 +38,14 @@ import { newSessionOpen } from "../screens/NewSession";
  */
 
 export const APP_VERSION: string = manifest.version;
-const own = parseReleases(bundled);
+/** This app's notes, as this platform has them (a highlight of another platform's only is not offered here). */
+const own = releasesFor(parseReleases(bundled), platform.os);
 
 /** The current computer's record; null until read (and on a computer without one). */
 const record = signal<WhatsNewRecord | null>(null);
 /** The computer's notes: releases newer than this app come from it. */
 const computerReleases = signal<WhatsNewRelease[]>([]);
-export const releases = computed(() => mergeReleases(own, computerReleases()));
+export const releases = computed(() => mergeReleases(own, releasesFor(computerReleases(), platform.os)));
 
 /**
  * The newest Mewla the person runs here: this app's or its computer's (the web UI is the computer's own).

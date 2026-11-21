@@ -4,8 +4,15 @@
 One file per release at release-notes/<version>.json is the source. The app (client/ui) and the daemon
 (daemon/whatsnew) cannot read outside their own directories, so this script writes one bundle of every
 release into each: client/ui/whatsnew/notes.json (the app and the web UI) and daemon/whatsnew/notes.json
-(the daemon, for an app older than its computer). `--check` fails when a file is malformed or a bundle
-is not what this script would write; `--require VERSION` also fails when that version has no file.
+(the daemon, for an app older than its computer). The daemon's copy carries no highlights: an app older
+than its computer cannot draw a newer release's scenes or honour its "platforms", and the sheet it would
+show settles those highlights for good, so it gets the release's line and fixes, and the sheet comes with
+the app's own update. `--check` fails when a file is malformed or a bundle is not what this script would
+write; `--require VERSION` also fails when that version has no file.
+
+From GIFT_FROM on, a release cannot give a person only a wall of text: its fixes are at most MAX_FIXES
+lines of at most MAX_FIX characters, the list a release of fixes only shows at a glance; what else a
+person will feel is a highlight with its scene (owner 11-22: 0.4.19 shipped nine paragraphs and no sheet).
 
 Every release has its file: it is written with the feature when it lands, and the release preparation
 (scripts/prepare-release.py) and the release identity check (scripts/verify-release-identity.sh) refuse a
@@ -34,6 +41,13 @@ TRY_KINDS = ("open", "prompt")
 MAX_TITLE_WORDS = 6
 MAX_LINE = 90
 MAX_HIGHLIGHTS = 4
+# A highlight's "platforms": the app's platform.os names. Absent, every platform has it.
+PLATFORMS = ("android", "ios", "web", "macos")
+# The fixes a person reads at a glance (README.md "fixes"), for every release from GIFT_FROM on; older files
+# shipped as they are (ids and lines people have seen are not rewritten).
+GIFT_FROM = "0.4.20"
+MAX_FIXES = 3
+MAX_FIX = 100
 
 SHAPE = """{
   "version": "X.Y.Z",
@@ -44,12 +58,14 @@ SHAPE = """{
       "title": "At most six words",
       "line": "One short line of what the person can now do.",
       "media": {"scene": "a-scene-in-client/ui/whatsnew/scenes"},
-      "try": {"kind": "open", "target": "screen"}
+      "try": {"kind": "open", "target": "screen"},
+      "platforms": ["android"]
     }
   ],
   "fixes": ["A fix, in the person's words."]
 }
-"highlights" may be empty (a fixes-only release shows no sheet, only the line in Brain's chat)."""
+"highlights" may be empty (a fixes-only release shows no sheet, only the line in Brain's chat).
+"platforms" is optional: only for a feature some platforms (android, ios, web, macos) do not have."""
 
 
 class NotesError(RuntimeError):
@@ -109,7 +125,7 @@ def check_release(path: Path, seen_ids: set[str]) -> dict:
         at = f"{where}: highlights[{index}]"
         if not isinstance(item, dict):
             raise NotesError(f"{at} must be an object")
-        unknown = set(item) - {"id", "title", "line", "media", "try"}
+        unknown = set(item) - {"id", "title", "line", "media", "try", "platforms"}
         if unknown:
             raise NotesError(f"{at}: unknown keys {sorted(unknown)}")
         hid = item.get("id")
@@ -138,11 +154,23 @@ def check_release(path: Path, seen_ids: set[str]) -> dict:
             if action["kind"] == "prompt":
                 check_text(action["target"], f"{at}.try.target", limit=200)
             out["try"] = {"kind": action["kind"], "target": action["target"]}
+        if "platforms" in item:
+            platforms = item["platforms"]
+            if not isinstance(platforms, list) or not platforms or len(set(platforms)) != len(platforms) \
+                    or any(p not in PLATFORMS for p in platforms) or set(platforms) == set(PLATFORMS):
+                raise NotesError(f"{at}.platforms must name some of {list(PLATFORMS)}, each once (all of them: leave it out)")
+            out["platforms"] = platforms
         out_highlights.append(out)
     fixes = data.get("fixes", [])
     if not isinstance(fixes, list):
         raise NotesError(f"{where}: fixes must be a list of lines")
-    out_fixes = [check_text(fix, f"{where}: fixes[{i}]", limit=160) for i, fix in enumerate(fixes)]
+    gift = version_key(version) >= version_key(GIFT_FROM)
+    out_fixes = [check_text(fix, f"{where}: fixes[{i}]", limit=MAX_FIX if gift else 160) for i, fix in enumerate(fixes)]
+    if gift and len(out_fixes) > MAX_FIXES:
+        raise NotesError(
+            f"{where}: {len(out_fixes)} fixes; a person reads at most {MAX_FIXES} at a glance. Give what they will feel "
+            f"a highlight with its scene and keep the {MAX_FIXES} fixes they will notice most ({SOURCE_DIR}/README.md)"
+        )
     if not out_highlights and not out_fixes:
         raise NotesError(f"{where}: give at least one highlight or fix")
     return {"version": version, "date": data["date"], "highlights": out_highlights, "fixes": out_fixes}
@@ -164,6 +192,14 @@ def bundle_text(releases: list[dict]) -> str:
     return json.dumps({"releases": releases}, indent=2, ensure_ascii=False) + "\n"
 
 
+def bundle_texts(releases: list[dict]) -> dict[str, str]:
+    """Each bundle's text: the app's every release whole, the daemon's without highlights (see the module's doc)."""
+    return {
+        BUNDLES[0]: bundle_text(releases),
+        BUNDLES[1]: bundle_text([{**release, "highlights": []} for release in releases]),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", type=Path, default=ROOT)
@@ -177,9 +213,10 @@ def main(argv: list[str] | None = None) -> int:
             version_key(args.require)
             if not any(r["version"] == args.require for r in releases):
                 raise NotesError(missing(args.require))
-        text = bundle_text(releases)
+        texts = bundle_texts(releases)
         stale = []
         for relative in BUNDLES:
+            text = texts[relative]
             path = root / relative
             current = path.read_text(encoding="utf-8") if path.is_file() else None
             if current == text:

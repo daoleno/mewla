@@ -1,11 +1,14 @@
-import { createMotion, Easing, reduceMotion, Text, untracked, View } from "nsh";
+import { createMotion, Easing, reduceMotion, signal, Text, untracked, View } from "nsh";
 import type { JSX, MotionFrame } from "nsh";
+import { color, withAlpha } from "../kit/colors";
 import { Icon, type IconName } from "../kit/Icon";
+import { ProgressHalo } from "../kit/ProgressHalo";
 
 /**
  * What's New's pictures: each highlight's feature in use, drawn as a small loop of the app's own parts (a chat card,
  * a Session row, a browser window), so it follows the theme, works offline and weighs nothing. A release names one
- * by `media.scene` (release-notes/<version>.json); a name this app does not know draws its glyph alone.
+ * by `media.scene` (release-notes/<version>.json); a name this app does not know draws its glyph alone (the computer's
+ * notes carry no highlights since 0.4.20, so only an app's own notes name its scenes).
  *
  * Every loop rests on its telling frame: with reduced motion nothing moves and that frame is what shows.
  */
@@ -532,6 +535,186 @@ function TriggerWatch() {
   );
 }
 
+/** The picture the scenes share: a sun over two hills, `w` × `h`. */
+function Picture(props: { w: number; h: number; radius?: number }) {
+  const k = props.h / 118;
+  return (
+    <View class="overflow-hidden bg-muted" style={{ width: props.w, height: props.h, borderRadius: props.radius ?? 14 }}>
+      <View class="absolute rounded-full bg-seal" style={{ right: 22 * k, top: 18 * k, width: 18 * k, height: 18 * k }} />
+      <View class="absolute bg-track" style={{ left: -30 * k, top: 66 * k, width: 100 * k, height: 100 * k, borderRadius: 12 * k, transform: [{ rotate: "45deg" }] }} />
+      <View class="absolute bg-add" style={{ left: 50 * k, top: 80 * k, width: 110 * k, height: 110 * k, borderRadius: 12 * k, transform: [{ rotate: "45deg" }] }} />
+    </View>
+  );
+}
+
+/** Android: another app's share sheet offers Mewla; the picture lands in Brain's composer as a chip, nothing sent. */
+function ShareIn() {
+  const other = loop([{ offset: 0, opacity: 1 }, { offset: 0.42, opacity: 1 }, { offset: 0.48, opacity: 0 }, { offset: 0.96, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  const sheet = loop([{ offset: 0, opacity: 0, translateY: 30 }, { offset: 0.06, opacity: 0, translateY: 30 }, { offset: 0.16, opacity: 1, translateY: 0 }, { offset: 0.42, opacity: 1, translateY: 0 }, { offset: 0.48, opacity: 0, translateY: 0 }, { offset: 1, opacity: 0, translateY: 30 }]);
+  const composer = loop([{ offset: 0, opacity: 0, translateY: 10 }, { offset: 0.46, opacity: 0, translateY: 10 }, { offset: 0.54, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  const chip = loop(appear(0.6, 6));
+  const uploading = loop(between(0.6, 0.74));
+  const ready = loop([{ offset: 0, opacity: 0 }, { offset: 0.76, opacity: 0 }, { offset: 0.8, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const Target = (props: { icon: IconName; label: string; mewla?: boolean }) => (
+    <View class="items-center gap-1">
+      <View class={`size-[34px] items-center justify-center rounded-full ${props.mewla ? "bg-foreground" : "bg-muted"}`}>
+        <Icon name={props.icon} size={16} tone={props.mewla ? "canvas" : "soft"} />
+      </View>
+      <Text class={`text-[9px] ${props.mewla ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{props.label}</Text>
+    </View>
+  );
+  return (
+    <View class="relative h-[150px] w-[250px]">
+      {/* Another app: the picture open, its share sheet up. */}
+      <View class="absolute inset-0 items-center" style={other}>
+        <Picture w={170} h={92} />
+      </View>
+      <Card class="absolute bottom-0 left-0 right-0 gap-2 border border-border px-3 pb-2.5 pt-2" style={sheet}>
+        <View class="h-[4px] w-[28px] self-center rounded-full bg-track" />
+        <View class="relative flex-row justify-around">
+          <Target icon="chat" label="Messages" />
+          <Target icon="paw" label="Mewla" mewla />
+          <Target icon="folder" label="Files" />
+          <Target icon="cloud" label="Drive" />
+          <Press at={0.34} style={{ left: 79, top: 4 }} />
+        </View>
+      </Card>
+      {/* Mewla: Brain's composer with the picture as a chip, the person's draft still theirs to send. */}
+      <View class="absolute inset-0 justify-end gap-2" style={composer}>
+        <View class="self-start"><Text class="text-[12px] text-foreground">Morning! All quiet.</Text></View>
+        <View class="gap-2 rounded-[20px] border border-border bg-card p-2">
+          <View class="w-[150px] flex-row items-center gap-2 rounded-[12px] bg-muted px-2 py-1.5" style={chip}>
+            <Picture w={26} h={26} radius={6} />
+            <View class="flex-1 gap-0.5">
+              <Text class="text-[11px] font-semibold text-foreground line-clamp-1">sunset.jpg</Text>
+              <View class="relative h-[12px]">
+                <Text class="absolute text-[9px] text-muted-foreground" style={uploading}>Uploading</Text>
+                <Text class="absolute text-[9px] text-muted-foreground" style={ready}>Picture · 2.1 MB</Text>
+              </View>
+            </View>
+            <Icon name="close" size={12} tone="soft" />
+          </View>
+          <View class="flex-row items-center gap-2 pl-1">
+            <Text class="flex-1 text-[12px] text-muted-foreground">What should Brain do?</Text>
+            <View class="size-[26px] items-center justify-center rounded-full bg-foreground"><Icon name="arrow-up" size={13} tone="canvas" /></View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** A file's status tile on the Git page (more/git/parts.tsx StatusTile): its mark in its colour on its wash. */
+function GitTile(props: { mark: "M" | "A"; tone: "warning" | "add"; alpha: number }) {
+  return (
+    <View class="size-[20px] items-center justify-center rounded-[6px]" style={{ backgroundColor: withAlpha(color(props.tone), props.alpha) }}>
+      <Text class="font-mono text-[10px] font-semibold" style={{ color: color(props.tone) }}>{props.mark}</Text>
+    </View>
+  );
+}
+
+/** A Session's turn ends with files changed: its Git button turns amber; a tap opens the Git page's changes. */
+function GitButton() {
+  const running = loop([{ offset: 0, opacity: 1 }, { offset: 0.26, opacity: 1 }, { offset: 0.3, opacity: 0 }, { offset: 0.96, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  const spin = loop([{ offset: 0, rotate: 0 }, { offset: 0.3, rotate: 360 }, { offset: 1, rotate: 360 }]);
+  const edited = loop(appear(0.12, 4));
+  const clean = loop([{ offset: 0, opacity: 1 }, { offset: 0.3, opacity: 1 }, { offset: 0.34, opacity: 0 }, { offset: 0.96, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  const changed = loop([{ offset: 0, opacity: 0, scale: 1 }, { offset: 0.3, opacity: 0, scale: 1 }, { offset: 0.34, opacity: 1, scale: 1.25 }, { offset: 0.4, opacity: 1, scale: 1 }, { offset: 0.96, opacity: 1, scale: 1 }, { offset: 1, opacity: 0, scale: 1 }]);
+  const page = loop([{ offset: 0, opacity: 0, translateY: 60 }, { offset: 0.56, opacity: 0, translateY: 60 }, { offset: 0.66, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 60 }]);
+  return (
+    <View class="relative h-[150px] w-[256px] gap-2 overflow-hidden">
+      <Card class="flex-row items-center gap-2 border border-border px-3 py-2">
+        <Icon name="chevron-left" size={14} tone="ink" />
+        <View class="flex-1">
+          <Text class="text-[12px] font-semibold text-foreground">website</Text>
+          <Text class="text-[10px] text-muted-foreground">Claude</Text>
+        </View>
+        <View class="relative size-[22px] items-center justify-center">
+          <View class="absolute" style={clean}><Icon name="git-branch" size={16} tone="ink" /></View>
+          <View class="absolute" style={changed}><Icon name="git-branch" size={16} tone="warning" /></View>
+          <Press at={0.48} style={{ left: -2, top: -2 }} />
+        </View>
+        <Icon name="terminal" size={15} tone="ink" />
+        <Icon name="more-horizontal" size={15} tone="ink" />
+      </Card>
+      <View class="gap-2 px-1">
+        <View class="self-end rounded-[14px] bg-accent px-3 py-1.5"><Text class="text-[12px] text-foreground">Fix the login page</Text></View>
+        <View class="flex-row items-center gap-1.5" style={edited}>
+          <Icon name="edit" size={12} tone="soft" />
+          <Text class="text-[11px] text-muted-foreground">Edited login.tsx, added a test</Text>
+        </View>
+        <View class="flex-row items-center gap-1.5" style={running}>
+          <View style={spin}><Icon name="sync" size={11} tone="meter" /></View>
+          <Text class="text-[11px] text-muted-foreground">Running</Text>
+        </View>
+      </View>
+      <Card class="absolute bottom-0 left-2 right-2 gap-1.5 rounded-b-none border border-b-0 border-border px-3 pb-3 pt-2" style={page}>
+        <View class="h-[4px] w-[28px] self-center rounded-full bg-track" />
+        <Text class="text-[12px] font-semibold text-foreground">Changes</Text>
+        <View class="flex-row items-center gap-2">
+          <GitTile mark="M" tone="warning" alpha={0.12} />
+          <Text class="flex-1 font-mono text-[11px] font-semibold text-foreground">login.tsx</Text>
+          <Text class="font-mono text-[10px]" style={{ color: color("add") }}>+18</Text>
+          <Text class="font-mono text-[10px]" style={{ color: color("del") }}>−6</Text>
+        </View>
+        <View class="flex-row items-center gap-2">
+          <GitTile mark="A" tone="add" alpha={0.13} />
+          <Text class="flex-1 font-mono text-[11px] font-semibold text-foreground">login.test.tsx</Text>
+          <Text class="font-mono text-[10px]" style={{ color: color("add") }}>+42</Text>
+        </View>
+      </Card>
+    </View>
+  );
+}
+
+/** Brain has a Worker's result: the Work's ring closes, it reads Done and leaves the list by itself. */
+function WorkCloses() {
+  const reply = loop(appear(0.22));
+  const moving = loop([{ offset: 0, opacity: 1 }, { offset: 0.34, opacity: 1 }, { offset: 0.38, opacity: 0 }, { offset: 0.96, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  const closed = loop([{ offset: 0, opacity: 0 }, { offset: 0.34, opacity: 0 }, { offset: 0.38, opacity: 1 }, { offset: 0.96, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const leaves = loop([{ offset: 0, opacity: 1, translateX: 0 }, { offset: 0.58, opacity: 1, translateX: 0 }, { offset: 0.68, opacity: 0, translateX: 30 }, { offset: 0.96, opacity: 0, translateX: 30 }, { offset: 1, opacity: 1, translateX: 0 }]);
+  const rises = loop([{ offset: 0, translateY: 0 }, { offset: 0.66, translateY: 0 }, { offset: 0.76, translateY: -46 }, { offset: 0.96, translateY: -46 }, { offset: 1, translateY: 0 }]);
+  const two = loop([{ offset: 0, opacity: 1 }, { offset: 0.66, opacity: 1 }, { offset: 0.7, opacity: 0 }, { offset: 0.96, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  const one = loop([{ offset: 0, opacity: 0 }, { offset: 0.66, opacity: 0 }, { offset: 0.7, opacity: 1 }, { offset: 0.96, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const Slip = (props: { title: string; percent: number; style?: Record<string, unknown>; done?: { moving: Record<string, unknown>; closed: Record<string, unknown> } }) => (
+    <View class="absolute left-0 right-0 h-[46px] flex-row items-center gap-2.5 px-3" style={props.style}>
+      <View class="relative size-[32px] items-center justify-center">
+        <View class="absolute inset-0" style={props.done?.moving}><ProgressHalo mark={() => ({ kind: "percent", percent: props.percent, tone: "moving" })} /></View>
+        <If when={props.done}><View class="absolute inset-0" style={props.done!.closed}><ProgressHalo mark={() => ({ kind: "last" })} /></View></If>
+        <View class="size-[24px] items-center justify-center rounded-full bg-muted"><Icon name="terminal" size={12} tone="ink" /></View>
+      </View>
+      <View class="flex-1 gap-0.5">
+        <Text class="text-[12px] font-semibold text-foreground">{props.title}</Text>
+        <View class="relative h-[13px]">
+          <Text class="absolute text-[10px] text-muted-foreground" style={props.done?.moving}>Running</Text>
+          <If when={props.done}><View class="absolute flex-row items-center gap-1" style={props.done!.closed}>
+              <Icon name="check" size={10} tone="ok" />
+              <Text class="text-[10px] text-muted-foreground">Done</Text>
+            </View></If>
+        </View>
+      </View>
+    </View>
+  );
+  return (
+    <View class="w-[256px] gap-2">
+      <View class="self-start" style={reply}><Text class="text-[12px] text-foreground">The login fix is live. Closing it.</Text></View>
+      <Card class="gap-1 border border-border pt-2">
+        <View class="flex-row items-center px-3">
+          <Text class="flex-1 text-[12px] font-semibold text-foreground">Work</Text>
+          <View class="relative h-[14px] w-[70px] items-end">
+            <Text class="absolute text-[10px] text-muted-foreground" style={two}>2 running</Text>
+            <Text class="absolute text-[10px] text-muted-foreground" style={one}>1 running</Text>
+          </View>
+        </View>
+        <View class="relative h-[92px] overflow-hidden">
+          <Slip title="Fix the login page" percent={70} style={{ top: 0, ...leaves }} done={{ moving, closed }} />
+          <View class="absolute left-0 right-0 top-[46px] h-[46px]" style={rises}><Slip title="Write the release notes" percent={30} style={{ top: 0 }} /></View>
+        </View>
+      </Card>
+    </View>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -547,6 +730,9 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "picture-save": PictureSave,
   "work-menu": WorkMenu,
   "trigger-watch": TriggerWatch,
+  "share-in": ShareIn,
+  "git-button": GitButton,
+  "work-closes": WorkCloses,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */
@@ -569,13 +755,28 @@ function Glyph(props: SceneProps) {
   return <Icon name={FALLBACK[props.target ?? ""] ?? "bulb"} size={44} tone="ink" />;
 }
 
+/** A scene's own width at most (the widest loop, with its margin), and how much larger a phone shows it. */
+const SCENE_WIDTH = 272;
+const SCENE_SCALE = 1.16;
+
+/**
+ * How large a frame `width` wide shows its scene: a little larger than drawn, so a phone reads it, and smaller on a
+ * frame narrower than that (the smallest phone, 320 wide), so the loop is never cut at the frame's sides.
+ */
+export function sceneScale(width: number): number {
+  return width > 0 ? Math.min(SCENE_SCALE, width / SCENE_WIDTH) : SCENE_SCALE;
+}
+
 /** A page's picture, in its frame. */
 export function Scene(props: { name: string; version: string; target?: string }) {
   const Drawn = SCENES[props.name] ?? Glyph;
+  const width = signal(0);
+  const scale = () => sceneScale(width());
   return (
-    <View testID={`whats-new-scene-${props.name}`} accessibilityElementsHidden class="h-[204px] items-center justify-center overflow-hidden rounded-[22px] bg-sheet-surface">
+    <View testID={`whats-new-scene-${props.name}`} accessibilityElementsHidden class="items-center justify-center overflow-hidden rounded-[22px] bg-sheet-surface"
+      style={{ height: Math.round((204 * scale()) / SCENE_SCALE) }} onLayout={({ bounds }) => width.set(bounds.size.width)}>
       {/* Drawn at the size of the app's own parts and shown a little larger, so a phone reads them. */}
-      <View style={{ transform: [{ scale: 1.16 }] }}><Drawn version={props.version} target={props.target} /></View>
+      <View style={{ transform: [{ scale: scale() }] }}><Drawn version={props.version} target={props.target} /></View>
     </View>
   );
 }

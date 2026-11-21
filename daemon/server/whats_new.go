@@ -20,7 +20,7 @@ type whatsNewMessage struct {
 }
 
 // handleWhatsNew answers whats_new_get (the record and every release's
-// notes, for an app older than this computer), whats_new_seen (ids the
+// line and fixes, without highlights, for an app older than this computer), whats_new_seen (ids the
 // person has seen, added to the record) and whats_new_note (a version the
 // app updated to). Each replies whats_new with the record.
 func (s *Server) handleWhatsNew(conn *websocket.Conn, raw clientMessage, msg []byte) {

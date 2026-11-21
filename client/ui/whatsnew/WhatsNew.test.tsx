@@ -66,7 +66,7 @@ const NEWEST_ONLY = "99.8.0";
 
 type Kept = { baseline: string; seen?: string[]; updates?: { version: string; at: number }[]; replay?: boolean; releases?: unknown };
 
-function setup(options: { record?: Kept; computer?: string; storage?: { [key: string]: string }; platform?: "android" | "web"; paired?: boolean; conversation?: unknown[] } = {}) {
+function setup(options: { record?: Kept; computer?: string; storage?: { [key: string]: string }; platform?: "android" | "ios" | "web"; paired?: boolean; conversation?: unknown[]; width?: number; height?: number } = {}) {
   const daemon = {
     brain,
     conversations: { "brain-host": options.conversation ?? [say(0, "Morning", 1), say(1, "Morning! All quiet.", 2)] },
@@ -74,6 +74,7 @@ function setup(options: { record?: Kept; computer?: string; storage?: { [key: st
   };
   return {
     platform: options.platform ?? ("android" as const),
+    ...(options.width ? { width: options.width, height: options.height } : {}),
     // A manual clock: the quiet moment and the waits after it pass at once.
     clock: {},
     storage: { ...(options.paired === false ? {} : paired), ...ranBefore, ...options.storage },
@@ -193,6 +194,74 @@ describe("What's New: when it shows", () => {
     expect(framesOf(app.host.posts(), "whats_new_note")[0].version).toBe(APP_VERSION);
     expect(JSON.parse(app.storage()["mewla:whats_new"]).app).toBe(APP_VERSION);
   }, 30_000);
+});
+
+/** The smallest phone the app is drawn for (an iPhone SE's first size), and a short browser window. */
+const SMALL = { width: 320, height: 568 };
+/** 0.4.19's fixes as they shipped: nine paragraphs, two to four lines each on a phone. */
+const WALL = Array.from({ length: 9 }, (_, i) => `Fix ${i + 1}: something that changed in this release, written as a paragraph that runs on for two or three lines on a phone.`);
+
+describe("What's New: whatever it shows fits the screen (owner 11-22: 0.4.19's nine fixes ran off it and did not scroll)", () => {
+  const fixesOnly = (fixes: string[]): Kept => ({ baseline: BASELINE, updates: [{ version: TOP, at: at(3) }], releases: { releases: [{ version: TOP, date: "2026-11-20", highlights: [], fixes }] } });
+
+  for (const [name, options] of [["the smallest phone", { ...SMALL }], ["a short browser window", { platform: "web" as const, width: 1280, height: 600 }]] as const) {
+    test(`on ${name} a long fixes list scrolls to its end and Done stays on screen`, async () => {
+      const app = await open(APP, setup({ record: fixesOnly(WALL), computer: TOP, ...options }));
+      await app.waitFor("id:update-line", { timeout: 15_000 });
+      await app.press("id:update-line");
+      await app.waitFor("id:whats-new-fixes");
+      // Done is pinned under the list: on screen before any scroll (it was under the screen's edge, clipped).
+      expect(app.shows("id:whats-new-done")).toBe(true);
+      await app.scroll("id:whats-new-scroll", 4_000);
+      expect(app.shows(`text:${WALL[8]}`)).toBe(true);
+      await app.press("id:whats-new-done");
+      await app.waitUntil(() => !app.shows("id:whats-new"));
+    }, 40_000);
+  }
+
+  test("on the smallest phone held sideways the pages scroll and the last one's Done is on screen", async () => {
+    const app = await open(APP, setup({ record: news(NEWEST_ONLY), computer: TOP, width: SMALL.height, height: SMALL.width }));
+    await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
+    await app.scroll("id:whats-new-scroll", 400);
+    await app.press("id:whats-new-dot-2");
+    await app.waitFor("id:whats-new-page-2");
+    expect(app.shows("id:whats-new-done")).toBe(true);
+    await app.press("id:whats-new-done");
+    await app.waitUntil(() => !app.shows("id:whats-new"));
+  }, 40_000);
+});
+
+describe("What's New: a feature of one platform", () => {
+  const ONLY = {
+    releases: [{
+      version: TOP, date: "2026-11-22", fixes: [],
+      highlights: [
+        { ...page("t-share", "Share to Mewla", "share-in", "brain"), platforms: ["android"] },
+        page("t-git", "Git turns amber", "git-button", "sessions"),
+      ],
+    }],
+  };
+  const record = (): Kept => ({ baseline: BASELINE, releases: ONLY });
+
+  test("Android is offered it", async () => {
+    const app = await open(APP, setup({ record: record(), computer: TOP }));
+    await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
+    expect(app.shows("text:Share to Mewla")).toBe(true);
+    await app.waitUntil(() => framesOf(app.host.posts(), "whats_new_seen").length === 1);
+    expect(framesOf(app.host.posts(), "whats_new_seen")[0].ids).toEqual(["t-share", "t-git"]);
+  }, 30_000);
+
+  for (const os of ["web", "ios"] as const) {
+    test(`${os} is not, and its sheet leaves it unseen for the person's Android phone`, async () => {
+      const app = await open(APP, setup({ record: record(), computer: TOP, platform: os }));
+      await app.waitFor("id:whats-new-page-0", { timeout: 15_000 });
+      expect(app.shows("text:Git turns amber")).toBe(true);
+      expect(app.shows("text:Share to Mewla")).toBe(false);
+      expect(app.shows("id:whats-new-dots")).toBe(false);
+      await app.waitUntil(() => framesOf(app.host.posts(), "whats_new_seen").length === 1);
+      expect(framesOf(app.host.posts(), "whats_new_seen")[0].ids).toEqual(["t-git"]);
+    }, 30_000);
+  }
 });
 
 describe("What's New: Try it", () => {

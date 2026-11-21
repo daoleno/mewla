@@ -1,6 +1,52 @@
 {
   "releases": [
     {
+      "version": "0.4.20",
+      "date": "2026-11-22",
+      "highlights": [
+        {
+          "id": "0.4.20-share-to-mewla",
+          "title": "Share to Mewla from any app",
+          "line": "A picture, file or link from another app lands in Brain's composer, ready to send.",
+          "media": {
+            "scene": "share-in"
+          },
+          "try": {
+            "kind": "open",
+            "target": "brain"
+          },
+          "platforms": [
+            "android"
+          ]
+        },
+        {
+          "id": "0.4.20-git-amber",
+          "title": "Git turns amber with changes",
+          "line": "A Session's Git button turns amber when its folder has changes. Tap it to review.",
+          "media": {
+            "scene": "git-button"
+          },
+          "try": {
+            "kind": "open",
+            "target": "sessions"
+          }
+        },
+        {
+          "id": "0.4.20-work-closes",
+          "title": "Finished Work closes itself",
+          "line": "Once Brain has the result, done Work leaves your list. Brain reopens it if needed.",
+          "media": {
+            "scene": "work-closes"
+          },
+          "try": {
+            "kind": "prompt",
+            "target": "What Work did you close today?"
+          }
+        }
+      ],
+      "fixes": []
+    },
+    {
       "version": "0.4.19",
       "date": "2026-11-22",
       "highlights": [],
