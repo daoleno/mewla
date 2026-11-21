@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
   private val legacy by lazy { LegacyStorage(this) }
   private lateinit var push: PushHost
   private lateinit var channelHosts: ChannelHosts
+  private lateinit var shareIn: com.daoleno.mewla.share.ShareIn
   private lateinit var watchdog: JsWatchdog
   private lateinit var network: com.daoleno.mewla.link.NetworkWatch
 
@@ -53,17 +54,21 @@ class MainActivity : ComponentActivity() {
     push = PushHost(this, nsh)
     LiveHost(this, nsh)
     com.daoleno.mewla.files.FilesHost(this, nsh)
+    shareIn = com.daoleno.mewla.share.ShareIn(this, nsh)
     channelHosts = ChannelHosts(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
     // The Dev app runs from its `nsh dev` server when it answers (src/debug/DevBoot.kt); a release build has none.
     if (!DevBoot.start(this, nsh, intent)) nsh.loadAssetBundle("nsh")
+    // What other apps shared or opened with Mewla: copied now, handed to the app when it asks (share.take).
+    shareIn.start(intent, state != null)
     openLink(intent)
   }
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    shareIn.receive(intent)
     channelHosts.onNewIntent(intent)
     openLink(intent)
   }
@@ -93,7 +98,7 @@ class MainActivity : ComponentActivity() {
   /** A `mewla://` link the system opened us with; the app holds the event until it listens. */
   private fun openLink(intent: Intent?) {
     push.opened(intent)
-    val url = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
+    val url = intent?.takeIf { it.action == Intent.ACTION_VIEW && it.data?.scheme == "mewla" }?.dataString ?: return
     nsh.send("links.open", mapOf("url" to url))
   }
 
