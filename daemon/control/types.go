@@ -102,14 +102,16 @@ type Request struct {
 	BrainWorkDisposition *brain.WorkReviewDispositionRequest `json:"brain_work_disposition,omitempty"`
 	WorkID               string                              `json:"work_id,omitempty"`
 	WorkFields           []string                            `json:"work_fields,omitempty"`
-	Service              *watcher.ManagedServiceDescriptor   `json:"service,omitempty"`
-	ServiceID            string                              `json:"service_id,omitempty"`
-	ServiceGeneration    string                              `json:"service_generation,omitempty"`
-	TunnelAction         string                              `json:"tunnel_action,omitempty"`
-	ServiceUnit          string                              `json:"service_unit,omitempty"`
-	Memory               *MemoryRequest                      `json:"memory,omitempty"`
-	AgentEvent           *AgentEventRequest                  `json:"agent_event,omitempty"`
-	ApprovalID           string                              `json:"approval_id,omitempty"`
+	// WorkWaitUntil is when the named wait a work update sets ends (-until).
+	WorkWaitUntil     *time.Time                        `json:"work_wait_until,omitempty"`
+	Service           *watcher.ManagedServiceDescriptor `json:"service,omitempty"`
+	ServiceID         string                            `json:"service_id,omitempty"`
+	ServiceGeneration string                            `json:"service_generation,omitempty"`
+	TunnelAction      string                            `json:"tunnel_action,omitempty"`
+	ServiceUnit       string                            `json:"service_unit,omitempty"`
+	Memory            *MemoryRequest                    `json:"memory,omitempty"`
+	AgentEvent        *AgentEventRequest                `json:"agent_event,omitempty"`
+	ApprovalID        string                            `json:"approval_id,omitempty"`
 	// ApprovalBasis is what an answer relied on (the brief sentence that
 	// authorizes an approved action); worker_approve from Brain requires it.
 	ApprovalBasis string `json:"approval_basis,omitempty"`

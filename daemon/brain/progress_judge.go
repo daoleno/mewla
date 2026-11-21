@@ -240,7 +240,7 @@ func (s *Service) requestChanged() {
 	p := &s.progress
 	now := s.nowUTC()
 	for _, item := range items {
-		if item.Status == WorkCancelled || strings.HasPrefix(item.ID, resourcePressureWorkPrefix) ||
+		if item.Status == WorkCancelled || strings.HasPrefix(item.ID, resourcePressureWorkPrefix) || strings.HasPrefix(item.ID, overdueWorkPrefix) ||
 			(item.Status == WorkDone && !closedInList(item, now)) {
 			continue
 		}

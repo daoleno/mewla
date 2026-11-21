@@ -206,7 +206,11 @@ not handled are Brain's too; after a day Mewla wakes Brain for an undecided
 result, and after two hours it hands Brain back a Work it parked with nothing
 asked and nothing named to wait on. A wait Brain names (`-wait-for` a computer,
 a pull request, a Worker's next commit), a Trigger's Work and a Work with a
-live Worker are Brain's own and stay quiet. A prompt on a Worker's terminal that Brain cannot answer (a sign-in,
+live Worker are Brain's own and stay quiet. A wait Brain names has an end
+(`-until`, else a day); once a day at most, Mewla hands Brain every Work whose
+wait has run out in one list, and Brain closes each, does the step, or waits
+again until a time. A finished Work closes: a later step gets its own Work, a
+calendar item or a question. A prompt on a Worker's terminal that Brain cannot answer (a sign-in,
 an approval outside the brief) still comes to you, and a Session you started
 yourself asks you directly.
 

@@ -691,10 +691,18 @@ func (s *Store) fsmResolveReview(workID string, disposition lifecycle.Dispositio
 		return ErrNoOpenReviewFSM
 	}
 	in := lifecycle.ResolveReviewInput{Disposition: disposition}
+	if wake != nil && disposition == lifecycle.DispositionWait {
+		ended, err := withWaitEnd(wake, wake.Until, s.nowUTC())
+		if err != nil {
+			return err
+		}
+		wake = ended
+	}
 	if wake != nil {
 		in.WakeKind = lifecycle.WakeKind(wake.Kind)
 		in.WakeRef = wake.Ref
 		in.NextAttemptAt = wake.NextAttemptAt
+		in.WakeUntil = wake.Until
 	}
 	_, err = s.fsm.ResolveReview(lifecycle.WorkID(workID), st.Review.EventID, in)
 	return err
@@ -705,7 +713,7 @@ func fsmWakeFromState(st *lifecycle.State) *WorkWake {
 	if st.Wake == nil {
 		return nil
 	}
-	return &WorkWake{Kind: WorkWakeKind(st.Wake.Kind), Ref: st.Wake.Ref, NextAttemptAt: st.Wake.NextAttemptAt}
+	return &WorkWake{Kind: WorkWakeKind(st.Wake.Kind), Ref: st.Wake.Ref, NextAttemptAt: st.Wake.NextAttemptAt, Until: st.Wake.Until}
 }
 
 // ErrNoOpenReviewFSM reports a missing canonical event.

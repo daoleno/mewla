@@ -1194,6 +1194,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 			},
 		},
 		{
+			name: "Work wait ends",
+			run: func(ctx context.Context) error {
+				if err := w.WaitForSnapshot(ctx); err != nil {
+					return err
+				}
+				brainService.RunWaitEnds(ctx)
+				return nil
+			},
+		},
+		{
 			name: "Telegram connection",
 			run:  telegramManager.Run,
 		},
@@ -2420,6 +2430,8 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 	fs.StringVar(&item.DoneCriteriaRef, "done-criteria", "", "done-criteria reference")
 	fs.StringVar(&item.NextAction, "next-action", "", "next useful action")
 	fs.StringVar(&item.WaitFor, "wait-for", "", "current wait condition (with -status waiting); empty ends the wait")
+	var until string
+	fs.StringVar(&until, "until", "", "when the wait ends: a duration (90m, 36h, 3d) or a local time (15:04, 2006-01-02, 2006-01-02 15:04, RFC3339); default 24h. Past it Brain is asked about the Work in the day's one list of waits past their end")
 	fs.StringVar(&item.ContextRef, "context", "", "Brain Worklog/context reference (relative to the configured Brain workspace)")
 	fs.StringVar(&item.Question, "question", "", "what you ask the user about this Work; shown on its slip (empty clears it)")
 	fs.Var((*stringListFlag)(&item.Choices), "choice", "a one-tap answer to -question, repeatable (up to 4)")
@@ -2445,8 +2457,17 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 			return fmt.Errorf("-recommend must be one of the -choice values")
 		}
 	}
+	var waitUntil *time.Time
+	if strings.TrimSpace(until) != "" {
+		at, err := parseWaitUntil(until, time.Now())
+		if err != nil {
+			return fmt.Errorf("-until: %w", err)
+		}
+		waitUntil = &at
+	}
 	fields := []string{}
 	fieldNames := map[string]string{
+		"until": "wait_until",
 		"title": "title", "objective": "objective", "status": "status", "attempt-session-id": "attempt_session_id",
 		"completion": "completion_policy", "done-criteria": "done_criteria_ref",
 		"next-action": "next_action", "wait-for": "wait_for", "context": "context_ref",
@@ -2458,7 +2479,7 @@ func runBrainWorkUpdate(args []string, stderr io.Writer) error {
 		}
 	})
 	resp, err := callControl(cfg, control.Request{
-		Type: "brain_work_update", WorkID: workID, BrainWork: &item, WorkFields: fields,
+		Type: "brain_work_update", WorkID: workID, BrainWork: &item, WorkFields: fields, WorkWaitUntil: waitUntil,
 	})
 	if err != nil {
 		return err

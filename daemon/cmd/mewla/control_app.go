@@ -1122,6 +1122,12 @@ func (a *controlApp) handleBrainWorkUpdate(req control.Request) control.Response
 			update.NextAction = &source.NextAction
 		case "wait_for":
 			update.WaitFor = &source.WaitFor
+		case "wait_until":
+			if req.WorkWaitUntil == nil {
+				return control.ErrorResponse("invalid_brain_work", "wait_until needs a time.")
+			}
+			until := *req.WorkWaitUntil
+			update.WaitUntil = &until
 		case "context_ref":
 			update.ContextRef = &source.ContextRef
 		case "question":

@@ -15,7 +15,9 @@ const (
 // DirectWorkEventInput is the complete provider-neutral internal input shape.
 // It is transport data only; Work and Event remain the durable product owners.
 type DirectWorkEventInput struct {
-	ResourcePressure   json.RawMessage `json:"resource_pressure,omitempty"`
+	ResourcePressure json.RawMessage `json:"resource_pressure,omitempty"`
+	// OverdueWaits lists the Works whose wait has run out (brain/wait_end.go).
+	OverdueWaits       json.RawMessage `json:"overdue_waits,omitempty"`
 	EventID            string          `json:"event_id"`
 	WorkID             string          `json:"work_id"`
 	WorkRevision       uint64          `json:"work_revision"`

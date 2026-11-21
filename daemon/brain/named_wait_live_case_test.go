@@ -102,7 +102,8 @@ func TestLiveCaseNamedWaitSurvivesChatRestartAndJudgment(t *testing.T) {
 
 // Should a named wait be lost anyway (as with the binary running on 11-19),
 // the judgment still sees what Brain said the Work waits for, not only that
-// the Worker's last turn is done.
+// the Worker's last turn is done, and is told when such a wait keeps it: only
+// when what it waits for delivers this Work's own outcome (11-21).
 func TestLiveCaseJudgeSeesBrainsNamedWaitAfterItWasReleased(t *testing.T) {
 	judge := &fakeJudge{verdict: JudgeVerdict{Outcome: VerdictKeep, Reason: "Waiting for the delta re-check of looper #103/#104."}}
 	store, service, item := endedHandlingFixture(t, judge)
@@ -128,7 +129,7 @@ func TestLiveCaseJudgeSeesBrainsNamedWaitAfterItWasReleased(t *testing.T) {
 	}
 	brief := judge.briefs[0]
 	if !strings.Contains(brief, "waits Brain set on this Work") || !strings.Contains(brief, "Delta re-check of looper #103/#104") ||
-		!strings.Contains(brief, "stays pending until something shows that step happened") {
+		!strings.Contains(brief, "it keeps the Work only when what it waits for delivers this Work's own outcome") {
 		t.Fatalf("the judge was not shown Brain's named wait:\n%s", brief)
 	}
 	if got, _ := store.Work(item.ID); got.Status != WorkWaiting {

@@ -310,9 +310,12 @@ func (s *Service) BrainUpdateWork(id string, update WorkUpdate) (Work, error) {
 			_, _, resolveErr := s.store.ResolveWorkReview(request)
 			switch {
 			case resolveErr == nil:
-				// The disposition carried the wait; the update keeps only its prose.
+				// The disposition carried the wait (and its end); the update keeps only its prose.
 				if statusIsDisposition {
 					update.Status = nil
+					if request.Disposition == WorkDispositionWait {
+						update.WaitUntil = nil
+					}
 				}
 			case request.Disposition == WorkDispositionWait &&
 				(errors.Is(resolveErr, ErrWorkAttemptConflict) || strings.TrimSpace(handling.SourceThreadID) == ""):
@@ -346,7 +349,7 @@ func (s *Service) reviewWaitWake(id, threadID string, update WorkUpdate) (*WorkW
 	if update.WaitFor != nil && strings.TrimSpace(*update.WaitFor) != "" {
 		ref = *update.WaitFor
 	}
-	return &WorkWake{Kind: WorkWakeNamed, Ref: ref}, nil
+	return withWaitEnd(&WorkWake{Kind: WorkWakeNamed, Ref: ref}, update.WaitUntil, s.nowUTC())
 }
 
 func (s *Service) cleanupAfterWorkDecision(workID string) error {
