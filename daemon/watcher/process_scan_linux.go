@@ -23,6 +23,14 @@ const userHZ = 100
 // changes its arguments without changing its identity.
 const cmdlineRefresh = 10 * time.Second
 
+// youngProcess is how long after its start a process's command line is read
+// afresh on every scan. A forked child carries its parent's command line until
+// it execs, and an exec that keeps the name (sh to sh) changes neither the
+// pid, the start nor the comm: a reading taken in that moment was trusted for
+// cmdlineRefresh, so a Stop looking for "turn-cmd: count" matched a shell that
+// had only been forked from the script naming it. The start is whole seconds.
+const youngProcess = 3 * time.Second
+
 // cachedProc is what one scan learned about a process. stat is the parsed
 // /proc/<pid>/stat, args the command line; each carries the time it was read
 // so a scan can leave an unchanged-looking process alone.
@@ -122,7 +130,7 @@ func scanProcessTable(roots []int, coldAge time.Duration) (map[int]processInfo, 
 		// An unread command line is never kept: right after exec it is
 		// empty for a moment, and keeping that reading made a just-started
 		// agent look like one without its arguments for cmdlineRefresh.
-		if !seen || cached.argsUnread || cached.start != start || cached.info.comm != info.comm || now.Sub(cached.argsAt) >= cmdlineRefresh {
+		if !seen || cached.argsUnread || cached.start != start || cached.info.comm != info.comm || now.Sub(cached.argsAt) >= cmdlineRefresh || now.Sub(info.startedAt) < youngProcess {
 			args := readCmdline(entry.Name(), info.comm)
 			cached = cachedProc{start: start, args: args, argsUnread: cmdlineUnread(pid, info, args), argsAt: now}
 		}

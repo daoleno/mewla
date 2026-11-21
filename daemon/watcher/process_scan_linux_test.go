@@ -94,6 +94,35 @@ func TestSnapshotProcessTableRereadsArgsAfterExecUnderTheSameName(t *testing.T) 
 	}
 }
 
+// A shell forked from a script carries the script's text until it execs; when
+// the exec keeps the name (sh to sh) a reading cached before it must not stand
+// for cmdlineRefresh. This was the flake of TestStopTurnCommandsEndsOnlyTheGroupStartedThisTurn
+// (11-21: three CI runs): the Stop test's wait for a child named "count" matched
+// the earlier command's shell by the script text it was forked with.
+func TestSnapshotProcessTableRereadsAYoungProcessThatExecsUnderTheSameName(t *testing.T) {
+	cmd := exec.Command("sh", "-c", `m=AF; n=TER; sleep 0.5; exec sh -c "echo $m$n; sleep 30; echo end"`)
+	if err := cmd.Start(); err != nil {
+		t.Skipf("cannot spawn: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	pid := cmd.Process.Pid
+	first, err := snapshotProcessTable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args := first[pid].args; !strings.Contains(args, "m=AF") {
+		t.Fatalf("before the exec: args %q", args)
+	}
+	time.Sleep(900 * time.Millisecond)
+	second, err := snapshotProcessTable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args := second[pid].args; !strings.Contains(args, "echo AFTER") {
+		t.Fatalf("after the exec (same pid, same name): args %q, want the new command line", args)
+	}
+}
+
 // selfReads is this process's read syscall count and bytes, from procfs.
 func selfReads(t *testing.T) (syscr, rchar uint64) {
 	t.Helper()
