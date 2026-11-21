@@ -5,11 +5,14 @@
 # The phone is the AVD `mewla-lane` (API 35, 2.5 GB RAM) with the Dev app (preview debug) installed, paired to an
 # isolated test daemon of its own (fixed state dir, loopback port, inert Brain host, never the live daemon) and saved as
 # the snapshot `ready`. UI changes reach it by hot reload (an `nsh dev --release` server on this host), a Kotlin
-# change by `phone.sh install` (incremental Gradle, no clean build). It takes the heavy lock only while the emulator
-# runs (a `timeout` caps that) and never keeps it between checks.
+# change by `phone.sh install` (incremental Gradle, no clean build). Its own lock ($MEWLA_LANE_HOME/emulator.lock)
+# allows one lane emulator at a time while it runs (a `timeout` caps that), and `up` refuses to start when less than
+# 8 GiB of memory is available. The heavy lock is not taken by the emulator; only the Gradle build of `install` takes it.
 #
-#   phone.sh up          boot from the snapshot (waits for the heavy lock), start the test daemon and the dev server
-#   phone.sh reset       back to the snapshot's known state (paired, Brain open)
+#   phone.sh up          boot from the snapshot (refuses below 8 GiB of free memory or when one is running), start the test daemon and the dev server
+#   phone.sh reset       the app stopped and started again: Brain open, connected (about 4 s). Not restored: what the app and the
+#                        phone keep (drafts, other apps, files, the test daemon's messages); flows send fresh text and names
+#   phone.sh restore     back to the snapshot's state (paired, Brain open). About 11 s, but about 1 in 20 takes 50-150 s (see README)
 #   phone.sh shot [F]    screenshot to F (default: a fresh png under $TMPDIR), prints the path
 #   phone.sh tap REGEX   tap the first node whose text, description or class matches (uiautomator), waits up to 20 s
 #   phone.sh shows REGEX [SECS]  exit 0 once the screen has such a node (waits up to SECS, default 10)
@@ -26,14 +29,15 @@
 #   phone.sh run VERB..  up, then the verbs (a `-- ` separates each), then down: a whole check, lock held only meanwhile
 #
 # Everything is under $MEWLA_LANE_HOME (default ~/.mewla/lane): the daemon binary (built from this checkout
-# by `phone.sh daemon-build`), its state, pid files. Environment: LANE_WAIT_MIN (lock wait, 60), LANE_MAX_MIN (hard cap
+# by `phone.sh daemon-build`), its state, pid files. Environment: LANE_MIN_GIB (memory to start, 8), LANE_MAX_MIN (hard cap
 # on the emulator's life, 30), DEV_PORT (8899; never 8790, the owner's), DAEMON_PORT (9951), SERIAL (emulator-5584).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 client="$(cd "$here/.." && pwd)"
 repo="$(cd "$client/.." && pwd)"
 lane="${MEWLA_LANE_HOME:-$HOME/.mewla/lane}"
-lock="${LANE_LOCK:-$HOME/.mewla/t/0g-heavy.lock}"
+lock="$lane/emulator.lock"
+heavy_lock="${LANE_HEAVY_LOCK:-$HOME/.mewla/t/0g-heavy.lock}"
 avd="${LANE_AVD:-mewla-lane}"
 console_port="${SERIAL_PORT:-5584}"
 serial="emulator-$console_port"
@@ -59,24 +63,25 @@ emu_up() {
   if alive "$lane/emulator.pid" && boot_done; then return 0; fi
   [[ -x "$emulator" ]] || die "no emulator at $emulator (ANDROID_HOME)"
   avail=$(awk '/MemAvailable/ {print int($2/1048576)}' /proc/meminfo)
-  ((avail >= 6)) || die "only ${avail} GB of memory available: an emulator would risk the OOM killer (want 6+)"
+  ((avail >= ${LANE_MIN_GIB:-8})) || die "only ${avail} GiB of memory available (want ${LANE_MIN_GIB:-8}+): not starting the lane emulator"
+  (flock -n 8) 8> "$lock" || die "another lane emulator is running (one at a time; phone.sh down stops it)"
   local mode=(-no-snapshot-load)
   [[ -d "$HOME/.android/avd/$avd.avd/snapshots/$snapshot" && -z "${COLD:-}" ]] && mode=(-snapshot "$snapshot")
-  log "waiting up to ${LANE_WAIT_MIN:-60} min for the heavy lock ($lock), then booting $avd (${mode[*]})"
+  log "booting $avd (${mode[*]}), lane lock $lock"
   # The lock is held by the emulator process itself (flock execs it, `timeout` caps its life): when it exits, the
   # lock is free. The daemon and the dev server are started elsewhere, never with this lock's descriptor.
   : > "$lane/emulator.log"
   # setsid may fork: the shell that execs flock writes its own pid, which stays the pid of the process holding the lock.
   setsid -f sh -c 'echo $$ > "$0"; exec "$@"' "$lane/emulator.pid" \
-    flock -w $(( ${LANE_WAIT_MIN:-60} * 60 )) "$lock" \
+    flock -n "$lock" \
     timeout --signal=TERM $(( ${LANE_MAX_MIN:-30} * 60 )) \
     "$emulator" -avd "$avd" -port "$console_port" -no-window -no-audio -no-boot-anim -no-metrics \
       -gpu swiftshader_indirect -memory 2560 -cores 4 "${mode[@]}" -no-snapshot-save \
     > "$lane/emulator.log" 2>&1 < /dev/null
   for _ in $(seq 1 20); do [[ -s "$lane/emulator.pid" ]] && break; sleep 0.1; done
-  local deadline=$((SECONDS + ${LANE_WAIT_MIN:-60} * 60 + 240))
+  local deadline=$((SECONDS + 240))
   until boot_done; do
-    alive "$lane/emulator.pid" || die "the emulator did not start (heavy lock not free in ${LANE_WAIT_MIN:-60} min, or a crash): $(tail -3 "$lane/emulator.log")"
+    alive "$lane/emulator.pid" || die "the emulator did not start (the lane lock was taken, or a crash): $(tail -3 "$lane/emulator.log")"
     ((SECONDS < deadline)) || die "the emulator did not boot in time"
     sleep 2
   done
@@ -251,7 +256,7 @@ open_with() {
 install_app() {
   # Incremental: Gradle's own up-to-date checks; never `clean`. --no-daemon and a memory cap: the host is shared.
   (cd "$client/android" && JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk}" NSH_HOME="$nsh_home" PATH="$nsh_home/bin:$PATH" \
-    systemd-run --user --scope -q -p MemoryMax=6G -p CPUQuota=800% \
+    flock -w 3600 "$heavy_lock" systemd-run --user --scope -q -p MemoryMax=6G -p CPUQuota=800% \
     ./gradlew --no-daemon -q assemblePreviewDebug -Pmewla.abis=x86_64) >&2
   [[ -f "$apk" ]] || die "no APK at $apk"
 }
@@ -287,6 +292,12 @@ after_restore() {
   # Back to the shell user: a root caller's `am start --grant-read-uri-permission` grants nothing (shares are then refused).
   adb -s "$serial" unroot > /dev/null 2>&1 || true
   sleep 1; adb -s "$serial" wait-for-device > /dev/null 2>&1 || true
+  # Right after a restore the guest's network drops connections to the host for a second or two (nc to 10.0.2.2 fails
+  # now and then, then holds). The Dev app asks the dev server once at launch: when that one try meets a drop it runs its
+  # built-in 16 MB bundle for ~135 s (then "cannot read asset ... MapleMono" in the daemon's app_crash log) and Brain
+  # shows 2+ minutes late. So launch it only once the guest has reached the dev server 5 times in a row.
+  adb -s "$serial" shell "timeout 60 sh -c 'n=0; while [ \$n -lt 5 ]; do if timeout 2 nc -z -w 1 10.0.2.2 $dev_port 2>/dev/null; then n=\$((n+1)); else n=0; fi; done'" \
+    || die "the guest cannot reach the dev server at 10.0.2.2:$dev_port (is the dev server up?)"
   adb -s "$serial" shell am force-stop "$pkg"
   adb -s "$serial" shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
   sleep 4 # the screen still shows the old frame for a moment
@@ -325,9 +336,17 @@ verb() {
     up) emu_up; daemon_up; dev_up
       if [[ -z "${COLD:-}" ]]; then after_restore; wait_connected; fi ;;
     reset)
+      # The plain path: the app's process is stopped and started again (Brain, connected). The phone is not restored.
       emu_up; daemon_up; dev_up
+      adb -s "$serial" shell am force-stop "$pkg"
+      adb -s "$serial" shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+      wait_connected
+      ;;
+    restore)
+      emu_up; daemon_up
       adb -s "$serial" emu avd snapshot load "$snapshot" | tail -1 >&2
       for _ in $(seq 1 30); do boot_done && break; sleep 1; done
+      dev_down; dev_up
       after_restore
       wait_connected
       ;;
