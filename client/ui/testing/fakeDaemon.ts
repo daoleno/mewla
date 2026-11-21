@@ -16,6 +16,8 @@ export interface FakeDaemonState {
   live?: Record<string, unknown>;
   /** The Sessions `worker_session_list` sends; `create_session` and `kill_worker` change them. */
   worker_sessions?: Record<string, unknown>[];
+  /** Agent programs this computer does not have, each with the refusal `create_session` gives for it (the daemon's agent_not_installed). */
+  missing_agents?: Record<string, string>;
   /** Each Session's transcript (by worker id), as `codex_conversation_subscribe` answers it. */
   conversations?: Record<string, Record<string, unknown>[] | { source?: string; available?: boolean; reason?: string; events: Record<string, unknown>[] }>;
   /** A DSH Session's pending requests (`dsh_interaction`). */
@@ -361,6 +363,9 @@ export class FakeDaemon {
       case "list_worker_sessions":
         return this.to(socket, { type: "worker_session_list", seq: this.seq, worker_sessions: this.state.worker_sessions ?? [] });
       case "create_session": {
+        const program = String(frame.command ?? "").trim().split(/\s+/)[0]?.split("/").pop() ?? "";
+        const refusal = this.state.missing_agents?.[program];
+        if (refusal) return reply("error", { code: "agent_not_installed", message: refusal });
         const id = `w${++this.revision}`;
         const session = { id, name: String(frame.name || ""), status: "running", cwd: String(frame.cwd || "/home/me"), command: String(frame.command || ""), started_at: Date.now(), updated_at: Date.now() };
         this.state.worker_sessions = [...(this.state.worker_sessions ?? []), session];

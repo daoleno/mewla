@@ -5,6 +5,7 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { agentKindFromProvider } from "../../core/sessions/workerPresentation";
 import { brainExecutorChoices, brainExecutorLabel, brainExecutorMeta } from "../../core/brainMenu";
 import type { BrainExecutorRef } from "../../core/brain";
+import { INSTALL_MORE_LINE } from "../../core/sessions/agentAvailability";
 import { currentBrain, type BrainSource } from "./source";
 
 /**
@@ -40,7 +41,7 @@ export function BrainHostPanel(props: { onClose: () => void; source?: BrainSourc
           </View>
         </View>
       </Scroll>
-      <If when={choices().moreToInstall}><View class="px-4"><Text testID="brain-executor-install" class="text-sub text-muted-foreground">Install more with mewla deps</Text></View></If>
+      <If when={choices().moreToInstall}><View class="px-4"><Text testID="brain-executor-install" class="text-sub text-muted-foreground">{INSTALL_MORE_LINE}</Text></View></If>
       <If when={source.hostSwitch.error()}><View class="px-4"><Text testID="brain-executor-error" class="text-sub text-foreground">{source.hostSwitch.error()}</Text></View></If>
     </View>
   );

@@ -16,6 +16,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
 
@@ -172,6 +173,9 @@ func TestCreateSessionTrustsTheChosenFolderForClaude(t *testing.T) {
 	if err := os.Mkdir(chosen, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	// Claude is on this computer (a launch of a missing agent is refused before
+	// any folder is trusted).
+	defer work.SetAgentLookPath(func(name string) (string, error) { return "/usr/bin/" + name, nil })()
 	c := newFirstMessageClient(t)
 	c.send(map[string]any{"type": "create_session", "request_id": "r-claude", "cwd": chosen, "command": "claude"})
 	c.next(byRequest("r-claude"))

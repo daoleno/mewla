@@ -1,6 +1,14 @@
 import { describe, expect, open, test } from "nsh/test";
-import { paired, phoneHost } from "../testing/fixtures";
+import { framesOf, paired, phoneHost } from "../testing/fixtures";
 import { parentDirectoryPath } from "./NewSession";
+
+const EXECUTORS = [
+  { id: "claude", name: "claude", provider: "claude", command: "claude" },
+  { id: "codex", name: "codex", provider: "codex", command: "codex" },
+  { id: "agent", name: "agent", provider: "cursor", command: "cursor-agent --force --sandbox disabled" },
+  { id: "agy", name: "agy", provider: "antigravity", command: "agy" },
+];
+const AGY_REFUSAL = "Antigravity (agy) is not installed on this computer. Install it with: curl -fsSL https://antigravity.google/cli/install.sh | bash";
 
 const APP = "../FakeDaemonApp.tsx";
 
@@ -58,4 +66,72 @@ describe("Up a folder", () => {
     expect(parentDirectoryPath("/home")).toBe("/");
     expect(parentDirectoryPath("/")).toBe("/");
   });
+});
+
+/** New session on a computer that has some agents: Brain's snapshot lists the executors and which it found. */
+async function newSessionOn(daemon: Record<string, unknown>) {
+  const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "ios", width: 390, height: 844 });
+  await app.host.send("links.open", { url: "mewla://sessions" });
+  await app.waitFor("id:tray-new", { timeout: 10_000 });
+  await app.press("id:tray-new");
+  await app.waitFor("id:new-launch", { timeout: 10_000 });
+  return app;
+}
+
+const found = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { installed: true, signed_in: true }]));
+const created = (app: Awaited<ReturnType<typeof newSessionOn>>) => framesOf(app.host.posts(), "create_session").length;
+
+describe("New session on a computer with some agents missing", () => {
+  test("a missing agent's tile is dimmed and says so, the others are as before, and one line says where to get more", async () => {
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude", "codex", "agent") } });
+    expect(app.shows("label:Antigravity, not installed")).toBe(true);
+    expect(app.shows("label:Codex")).toBe(true);
+    expect(app.shows("label:Shell")).toBe(true);
+    expect(app.shows("label:Cursor, not installed")).toBe(false);
+    expect(app.shows("text:Install more with mewla deps")).toBe(true);
+  }, 30_000);
+
+  test("on a computer that has them all there is no mark and no line", async () => {
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude", "codex", "agent", "agy") } });
+    expect(app.count("id:new-agents-install")).toBe(0);
+    expect(app.texts().some((text) => text.includes("not installed"))).toBe(false);
+  }, 30_000);
+
+  test("a computer that says nothing of its agents stops nothing", async () => {
+    const app = await newSessionOn({ brain: {} });
+    expect(app.count("id:new-agents-install")).toBe(0);
+    expect(app.shows("label:Antigravity")).toBe(true);
+  }, 30_000);
+
+  test("the last used agent is not here: the first that is, is chosen", async () => {
+    // Claude (the default with no Session yet) is missing; Codex is the first agent that is here.
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("codex") } });
+    expect(app.shows("label:Codex, chosen")).toBe(true);
+    expect(app.shows("label:Claude Code, not installed, chosen")).toBe(false);
+  }, 30_000);
+
+  test("Start on a missing agent is refused by the computer: its cause shows in the sheet, no Session is made, and another agent starts at once", async () => {
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude") }, missing_agents: { agy: AGY_REFUSAL } });
+    await app.press("label:Antigravity, not installed");
+    await app.press("id:new-launch");
+    await app.waitFor("id:new-problem");
+    expect(app.texts()).toContain(AGY_REFUSAL);
+    expect(app.count("id:new-launch")).toBe(1);
+    expect(created(app)).toBe(1);
+    // The refusal is not an unknown outcome: no "Refresh required" wait.
+    await app.press("label:Claude");
+    await app.press("id:new-launch");
+    await app.waitUntil(() => app.count("id:new-launch") === 0, { timeout: 10_000 });
+    expect(created(app)).toBe(2);
+  }, 30_000);
+
+  test("a custom command stays free-form", async () => {
+    const app = await newSessionOn({ brain: { executors: EXECUTORS, executor_states: found("claude") }, missing_agents: { agy: AGY_REFUSAL } });
+    await app.press("id:new-advanced");
+    await app.waitFor("id:new-command");
+    await app.type("id:new-command", "./my-tool --flag");
+    await app.press("id:new-launch");
+    await app.waitUntil(() => app.count("id:new-launch") === 0, { timeout: 10_000 });
+    expect(created(app)).toBe(1);
+  }, 30_000);
 });

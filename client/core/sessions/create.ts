@@ -41,6 +41,9 @@ export async function createSession(transport: Transport, options: CreateSession
     }, { reply: "session_created", timeoutMs: 10_000 });
   } catch (error) {
     const code = (error as { code?: unknown }).code;
+    // The computer refused before it made anything (the agent is not installed): a failure with its cause, not an
+    // unknown outcome, so the person picks another agent and starts at once.
+    if (code === "agent_not_installed") return { kind: "failed", message: (error as Error).message, requiresReconcileBeforeCreate: false };
     const known = typeof code === "string" && code ? providerErrorFromPayload({ code, message: (error as Error).message }) : error;
     return reconcileCreateSessionFailure(known, true);
   }

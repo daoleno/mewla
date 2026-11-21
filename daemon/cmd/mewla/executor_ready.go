@@ -4,18 +4,12 @@ import (
 	"runtime"
 
 	"github.com/daoleno/mewla/daemon/brain"
-	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-// agyInstallCommand is Google's official installer for the Antigravity CLI
-// (antigravity.google/download): a per-user install, in ~/.local/bin on macOS
-// and Linux and in %LOCALAPPDATA%\agy\bin on Windows (PowerShell).
+// agyInstallCommand is Google's official installer for the Antigravity CLI.
 func agyInstallCommand(goos string) string {
-	if goos == "windows" {
-		return "irm https://antigravity.google/cli/install.ps1 | iex"
-	}
-	return "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+	return work.AgentInstallCommand(work.WorkerProviderAntigravity, goos)
 }
 
 // executorNotReady says, before a Worker is spawned, why an Antigravity launch
@@ -27,7 +21,7 @@ func executorNotReady(command string) string {
 	if work.InferWorkerProvider(command) != work.WorkerProviderAntigravity {
 		return ""
 	}
-	if _, err := hostdeps.LookPath("agy"); err != nil {
+	if _, err := work.AgentLookPath("agy"); err != nil {
 		return "Antigravity (agy) is not installed on this computer. Install it with: " + agyInstallCommand(runtime.GOOS)
 	}
 	if brain.ExecutorAuth("agy") == brain.HostAuthUnauthenticated {
