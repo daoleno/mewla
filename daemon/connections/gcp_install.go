@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,6 +33,9 @@ const gcpInstallDocs = "https://docs.cloud.google.com/sdk/docs/install-sdk"
 func gcpInstallSupport(platform string) (string, string) {
 	if _, ok := gcpArchives[platform]; ok {
 		return "", ""
+	}
+	if strings.HasPrefix(platform, "windows/") {
+		return "Install the Google Cloud CLI for Windows, then choose Check again.", gcpInstallDocs
 	}
 	return "Install Google Cloud CLI (gcloud) in ~/google-cloud-sdk, then check again.", gcpInstallDocs
 }

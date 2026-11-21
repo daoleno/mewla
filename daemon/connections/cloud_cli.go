@@ -124,6 +124,12 @@ func (c *cloudRuntime) resolveExecutableLease(id string) (string, *os.File, erro
 		}
 		closeCloudLease(lease)
 	}
+	// A computer Mewla has no installer for says what to install, not that an install failed.
+	if support, ok := p.(interface{ installSupport() (string, string) }); ok {
+		if message, _ := support.installSupport(); message != "" {
+			return "", nil, errors.New(message)
+		}
+	}
 	if reason := c.installError(id); reason != "" {
 		return "", nil, errors.New("Could not install the CLI: " + reason)
 	}
