@@ -17,7 +17,7 @@ import {
   type GitReviewRow,
 } from "../../../core/git/gitReviewModel";
 import { formatGitAge, gitCommitDays, spokenGitAge } from "../../../core/git/gitReviewTime";
-import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, SearchField, Section, SectionLabel, Spinner, Tag } from "../../kit/kit";
+import { DisplayTitle, EmptyState, Notice, Page, PillButton, Row, SearchField, Section, SectionLabel, Spinner } from "../../kit/kit";
 import { Icon, type IconName } from "../../kit/Icon";
 import { Segmented } from "../../kit/Segmented";
 import { createTabPager, TabPages } from "../../kit/TabPager";
@@ -26,7 +26,7 @@ import { CommitFilePage, DiffPage, DiffReader } from "./GitDiff";
 import { listDetail } from "../../shell/layout";
 import { createMenuAnchor, showMenu, type MenuItem } from "../../kit/Menu";
 import { FilePage, FilesPage } from "./GitFiles";
-import { Counts, Current, FileName, FlashLine, IconButton, StatusTile } from "./parts";
+import { Counts, Current, FileName, FlashLine, IconButton, RefChips, StatusTile } from "./parts";
 import type { GitPage } from "./routes";
 import { BranchSheet, CommitSheet } from "./sheets";
 import { copyText, gitReview, say, type GitReview } from "./state";
@@ -493,14 +493,15 @@ function HistoryBody(props: { review: GitReview; nav: PageNav }) {
 
 function CommitRow(props: { review: GitReview; nav: PageNav; commit: GitCommitSummary }) {
   const c = props.commit;
-  const refs = (c.refs ?? []).slice(0, 2).join(" · ");
   return (
     <Row
       testID={`git-commit-${c.short}`}
+      textTestID={`git-commit-text-${c.short}`}
       title={c.subject || "(no message)"}
       subtitle={[c.short, c.author, formatGitAge(c.date)].join(" · ")}
+      subtitleOneLine
       accessibilityLabel={`${c.subject || "(no message)"}, ${c.author}, ${spokenGitAge(c.date)}`}
-      trailing={<If when={refs}>{(refs) => <Tag label={refs()} />}</If>}
+      below={<RefChips testID={`git-commit-refs-${c.short}`} refs={c.refs} upstream={props.review.status()?.upstream} />}
       chevron
       onPress={() => props.nav.push({ name: "git-commit", ...target(props.review), sha: c.sha })}
     />

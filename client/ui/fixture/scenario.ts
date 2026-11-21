@@ -252,6 +252,12 @@ export function scenario(): FakeDaemonState & { assets: Record<string, string> }
           { path: "ratelimit/window_test.go", status: "untracked", staged: false, unstaged: false, untracked: true, working_additions: 42 },
         ],
       } },
+      // Real-shaped history (owner 11-22): a long branch, HEAD, the remote's copy and a tag on one commit with a one-word title.
+      git_log: { type: "git_log", log: { has_more: false, commits: [
+        { sha: "7c4d1e9a2b3f", short: "7c4d1e9", subject: "Fix", author: "Ada Lovelace", date: Math.floor(Date.now() / 1000) - 5400, refs: ["HEAD -> feat/globalresearch-source-eu-ingest", "origin/feat/globalresearch-source-eu-ingest", "tag: v0.4.19-rc.1"] },
+        { sha: "a1b2c3d4e5f6", short: "a1b2c3d", subject: "Rate limiter: slide the window by the second, not the minute, so a burst at :59 is counted with the one at :00", author: "Grace Hopper", date: Math.floor(Date.now() / 1000) - 7200, refs: ["origin/main", "main"] },
+        { sha: "0f9e8d7c6b5a", short: "0f9e8d7", subject: "Add the parser", author: "Ada Lovelace", date: Math.floor(Date.now() / 1000) - 9000 },
+      ] } },
       // A getter: every read is sampled now, as the computer's own five-second poll would be.
       // Its history moves with it, so the window stays the five minutes it holds.
       get get_resource_telemetry() {

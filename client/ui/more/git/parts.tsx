@@ -8,6 +8,7 @@ import { statusTileLook } from "../../../core/git/colour";
 import { color, withAlpha } from "../../kit/colors";
 import { Icon, type IconName } from "../../kit/Icon";
 import { EmptyState, Spinner } from "../../kit/kit";
+import { parseCommitRefs, type CommitRefChip } from "../../../core/git/refs";
 import { gitFlash, type GitReview } from "./state";
 
 /**
@@ -113,5 +114,34 @@ export function Current(props: { review: GitReview; class?: string; children: ()
     <View class={props.class}>
       <If when={props.review.current()} else={<EmptyState testID="git-elsewhere" icon="server" title="Not on the current computer" detail="Switch back to the computer this Session runs on." />}>{untracked(props.children)}</If>
     </View>
+  );
+}
+
+/**
+ * A commit's refs on a line of their own under its text: HEAD as its own small marker, the branch and tags as chips, remote
+ * branches quieter, a long name cut in the middle, several wrapping onto further lines. Never beside the text, so the
+ * title keeps the row's whole width.
+ */
+export function RefChips(props: { refs: readonly string[] | undefined; upstream?: string; testID?: string }) {
+  const parsed = () => parseCommitRefs(props.refs, { upstream: props.upstream });
+  return (
+    <If when={parsed().head || parsed().chips.length > 0}>
+      <View testID={props.testID} class="mt-1.5 flex-row flex-wrap items-center gap-1.5">
+        <If when={parsed().head}>
+          <View testID="git-ref-head" class="rounded-md bg-foreground px-1.5 py-0.5">
+            <Text class="font-mono text-caption font-semibold text-background">HEAD</Text>
+          </View>
+        </If>
+        <Each of={parsed().chips} key={(chip: CommitRefChip) => `${chip.kind}:${chip.name}`}>
+          {(chip: () => CommitRefChip) => (
+            <View testID={`git-ref-${chip().kind}`} accessible accessibilityLabel={chip().kind === "tag" ? `tag ${chip().name}` : chip().name}
+              class={`max-w-full rounded-full px-2 py-0.5 ${chip().kind === "remote" ? "border border-border" : "bg-muted"}`}>
+              <Text class={`text-caption ${chip().kind === "remote" ? "text-muted-foreground" : "font-semibold text-foreground"} line-clamp-1`}>{chip().label}</Text>
+            </View>
+          )}
+        </Each>
+        <If when={parsed().more > 0}><Text class="text-caption text-muted-foreground">{`+${parsed().more}`}</Text></If>
+      </View>
+    </If>
   );
 }
