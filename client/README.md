@@ -61,9 +61,10 @@ a gallery. It is not a phone: no status bar, navigation bar or keyboard, the bro
 **Lane 2, the warm phone, `client/scripts/phone.sh`.** One AVD, `mewla-lane`, with the Dev app paired to an isolated
 test daemon of its own and saved as a snapshot; never create another AVD and never use the live daemon or the port of
 the owner's dev server (8790). It takes `/home/daoleno/.mewla/t/0g-heavy.lock` only while the emulator runs and lets go
-at `down`. `client/scripts/phone.sh -h` lists the verbs. **Not promoted yet:** `phone.sh share-file` is not reliable and a
-`reset` was once slow, so use `phone.sh` for the verbs that work (`reset`, `shot`, `tap`, `shows`, `install`) and say in
-your report when a share check failed for that reason. This note goes when the fix has landed.
+at `down`. `client/scripts/phone.sh -h` lists the verbs: `reset` (back to the snapshot, paired, Brain open: 11.8 s), `shot`, `tap`, `shows`,
+`share-file` / `share-text` (a share from another app, about 1 s), `install` (incremental debug build), `run VERB -- VERB...`
+(up, the verbs, down). Waiting for the heavy lock is not in those numbers: other jobs hold it, and a start waited 19 min for it once.
+`open-with` is untested. adb must stay the shell user: a share started as root is refused ("Cannot read this file"), and the script stops with that message.
 
 A fault the owner found gets its test in the fixing commit: headless if it can be, a scene in `scripts/shots/` if it is
 layout, a `phone.sh` flow if only Android shows it. What no lane sees (terminal drawing, Screen, the QR camera, the Chrome

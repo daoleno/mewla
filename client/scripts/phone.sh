@@ -13,8 +13,7 @@
 #   phone.sh shot [F]    screenshot to F (default: a fresh png under $TMPDIR), prints the path
 #   phone.sh tap REGEX   tap the first node whose text, description or class matches (uiautomator), waits up to 20 s
 #   phone.sh shows REGEX exit 0 if the screen has such a node
-#   phone.sh share-file PATH [MIME]   share a file into Mewla (ACTION_SEND of a MediaStore content:// URI). Known: the grant is
-#                        denied ("Cannot read this file") in some runs after a reset; the cause is not found yet (open-with: untested)
+#   phone.sh share-file PATH [MIME]   share a file into Mewla (ACTION_SEND of a MediaStore content:// URI; about 1 s; open-with: untested)
 #   phone.sh share-text TEXT          share text into Mewla
 #   phone.sh open-with PATH [MIME]    "Open with Mewla" a file (ACTION_VIEW)
 #   phone.sh install     incremental debug build + install of the Dev app (a Kotlin or manifest change)
@@ -200,16 +199,24 @@ content_uri_of() { # PATH -> content:// URI of its MediaStore row
   dest="$dir/$name"
   adb -s "$serial" shell mkdir -p "$dir"
   adb -s "$serial" push "$1" "$dest" > /dev/null
-  for _ in $(seq 1 20); do
-    id="$(adb -s "$serial" shell content query --uri content://media/external/file --projection _id:_data --where "_data=\\'$dest\\'" 2>/dev/null | grep -o '_id=[0-9]*' | tail -1 | cut -d= -f2)"
+  # MediaStore keeps the path as /storage/emulated/0/..., not the /sdcard/... an adb push used: a query on the /sdcard
+  # spelling matches nothing, which is why this lookup once timed out. The index of a pushed file is asynchronous, so
+  # wait for the row (a scan request first), not for a second attempt.
+  local dbpath="/storage/emulated/0${dest#/sdcard}"
+  adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$dest" > /dev/null 2>&1 || true
+  for _ in $(seq 1 40); do
+    id="$(adb -s "$serial" shell content query --uri content://media/external/file --projection _id --where "_data=\\'$dbpath\\'" 2>/dev/null | grep -o '_id=[0-9]*' | tail -1 | cut -d= -f2)"
     [[ -z "$id" ]] || { echo "content://media/external/file/$id"; return 0; }
-    adb -s "$serial" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file://$dest" > /dev/null 2>&1 || true
-    sleep 0.5
+    sleep 0.25
   done
   die "MediaStore did not index $dest"
 }
+# A share started by a root adb is refused: "the system cannot issue a Uri permission grant" (UriGrantsManagerService), the app
+# shows "Cannot read this file". Everything that hands a URI to the app runs as the shell user.
+as_shell() { [[ "$(adb -s "$serial" shell id -u | tr -d '\r')" == 2000 ]] || die "adb is not the shell user (adb root left on): a URI grant would be refused; run adb unroot"; }
 share_file() {
   local uri mime="${2:-$(mime_of "$1")}"
+  as_shell
   uri="$(content_uri_of "$1")"
   adb -s "$serial" shell am start -W -n "$pkg/com.daoleno.mewla.MainActivity" -a android.intent.action.SEND -t "$mime" \
     -d "$uri" --eu android.intent.extra.STREAM "$uri" --grant-read-uri-permission > /dev/null
@@ -220,6 +227,7 @@ share_text() {
 }
 open_with() {
   local uri mime="${2:-$(mime_of "$1")}"
+  as_shell
   uri="$(content_uri_of "$1")"
   adb -s "$serial" shell am start -W -n "$pkg/com.daoleno.mewla.MainActivity" -a android.intent.action.VIEW -t "$mime" -d "$uri" --grant-read-uri-permission > /dev/null
 }
