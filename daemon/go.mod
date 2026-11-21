@@ -25,7 +25,6 @@ require (
 	github.com/pion/turn/v5 v5.1.3
 	github.com/pion/webrtc/v4 v4.2.26
 	github.com/rivo/uniseg v0.4.7
-	github.com/yuin/goldmark v1.7.13
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
 	golang.org/x/net v0.61.0

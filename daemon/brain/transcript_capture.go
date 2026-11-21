@@ -14,8 +14,8 @@ import (
 
 const (
 	// hostTranscriptCaptureInterval bounds reply latency for consumers that read
-	// the durable Brain timeline without an App WebSocket subscription
-	// (Telegram). Unchanged provider sources never take the timeline lock.
+	// the durable Brain timeline without an App WebSocket subscription.
+	// Unchanged provider sources never take the timeline lock.
 	hostTranscriptCaptureInterval = time.Second
 	// hostTranscriptCaptureAttempts bounds retries when NewChat or a Host
 	// replacement races one capture read. Each retry re-reads the current

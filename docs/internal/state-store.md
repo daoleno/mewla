@@ -1,6 +1,6 @@
 # State store
 
-Brain, the calendar and Telegram keep their durable state in SQLite
+Brain, the calendar and Triggers keep their durable state in SQLite
 (`modernc.org/sqlite`, already a dependency of memory search). A commit writes
 the rows it changed and nothing else; no state is rewritten as a whole file.
 
@@ -8,11 +8,10 @@ the rows it changed and nothing else; no state is rewritten as a whole file.
 | --- | --- |
 | `~/.mewla/brain/state/brain.db` | lifecycle Works and Events, Brain presentation, the chat timeline |
 | `~/.mewla/calendar/calendar.db` | calendar items and runs |
-| `~/.mewla/telegram/state.db` | Telegram's durable state |
 | `~/.mewla/triggers/triggers.db` | Triggers, one JSON row each (`trg_item`); see [Calendar](calendar-engineering.md#triggers) |
 
-They are separate files because separate owners open them: the calendar,
-Telegram and Triggers do not know where Brain's state lives, and their schemas
+They are separate files because separate owners open them: the calendar
+and Triggers do not know where Brain's state lives, and their schemas
 change on their own schedules. They share one package, `daemon/sqlitedb`, for
 opening, transactions, schema versions and migration.
 
@@ -69,16 +68,6 @@ opening, transactions, schema versions and migration.
 `(item_id, seq)`. Claiming or finishing a run writes that run and the item, not
 the run history (a recurring action's history was most of the old 2.8 MB file).
 
-## Telegram (`state.db`)
-
-`tg_core` holds the scalars; `tg_entry(field, key, body)` holds every map entry
-and list element, found by reflection on `durableState`, so a new field is
-stored without touching the database code. Map keys are the entry's key, list
-keys the index. Telegram's polling projections are unbounded (about 22 thousand
-entries on the author's machine); a mutation writes the entries it changes, so
-the size no longer costs anything per update. Nothing is pruned: whether a
-projection entry can be dropped is Telegram's decision, not the store's.
-
 ## Migrating from the JSON files
 
 The first start of a daemon that finds the old files moves them in, once
@@ -98,8 +87,7 @@ The first start of a daemon that finds the old files moves them in, once
 
 Backups sit beside the migrated directory: `~/.mewla/brain/legacy-state-<UTC
 time>/state/…`, `~/.mewla/calendar`'s sibling `~/.mewla/legacy-calendar-<UTC
-time>/calendar/calendar.json…`, and `~/.mewla/telegram`'s sibling
-`~/.mewla/legacy-telegram-<UTC time>/telegram/state.json…`. Brain's backup also
+time>/calendar/calendar.json…`. Brain's backup also
 takes the repair copies the old store had accumulated (`*.pre-digest-repair-*`,
 `*.schema1.bak`, `messages-<n>.jsonl`, crash-left `.tmp-*`). Nothing is deleted;
 remove a backup yourself once you are satisfied. `mewla` never reads one.
@@ -117,7 +105,7 @@ skipped. Any other malformed line fails the migration.
 ### Rolling back
 
 The tombstone (`lifecycle/state.json` with schema 3, `calendar.json` with
-`schema_version` 3, `state.json` with `schema` 99) makes an older binary stop
+`schema_version` 3) makes an older binary stop
 at start with an unsupported-schema error instead of opening an empty store.
 To go back: stop the daemon, move the backup's files back to where they were,
 delete the tombstone and the `.db` files, and start the older binary. Anything

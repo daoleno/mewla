@@ -99,7 +99,7 @@ as separate fields, queues them together in the send outbox, and the daemon is
 the only place that renders them into provider input (`attachment.Message.Render`
 in `daemon/attachment/input.go`: the text, then a `<mewla_attachments>` JSON tag
 the Worker reads to learn the uploaded paths; golden-tested, one function for every
-provider and sender, including Telegram). Providers and the DSH terminal only
+provider and sender). Providers and the DSH terminal only
 accept text, so they echo that rendering back in their transcripts; the daemon
 reads it once at the projection boundary (`attachment.Split`, called from
 `work.ProjectUserAttachments`) and gives the phone `attachments` on the

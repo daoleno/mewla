@@ -13,14 +13,13 @@ export type StateTone = "ok" | "warn" | "error" | "off";
 
 /** The named products whose real mark the client draws (ui/kit/marks.ts: simple-icons, or the vendor's own SVG). */
 export const BRAND_MARKS = [
-  "telegram", "github", "notion", "linear", "nodejs", "go", "docker", "python", "postgresql", "sentry", "vercel", "cloudflare", "figma", "tailscale",
+  "github", "notion", "linear", "nodejs", "go", "docker", "python", "postgresql", "sentry", "vercel", "cloudflare", "figma", "tailscale",
   "slack", "chrome", "google", "googlecloud", "vertex", "bedrock", "azure", "openai", "openrouter",
 ] as const;
 export type BrandMark = (typeof BRAND_MARKS)[number];
 
 /** The names a product goes by (a service id, a process name, a label), folded to its mark. */
 const ALIASES: Record<string, BrandMark> = {
-  telegram: "telegram",
   github: "github",
   gh: "github",
   notion: "notion",

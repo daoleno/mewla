@@ -8,7 +8,6 @@ import type { GitPage } from "./git/routes";
 export type MorePage =
   | { name: "settings" }
   | { name: "settings-computer"; id: string }
-  | { name: "settings-telegram" }
   | { name: "settings-providers" }
   | { name: "settings-provider-editor"; client: "codex" | "claude"; connectionId?: string; retry?: boolean }
   | { name: "settings-provider-models"; connectionId: string }

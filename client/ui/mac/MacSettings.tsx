@@ -13,7 +13,6 @@ import manifest from "../nsh.json";
 import { appUpdateRow } from "../../core/update/appUpdate";
 import { appUpdateOwner } from "../update/update";
 import { appearance, chooseAppearance, type Appearance } from "../more/settings/Settings";
-import { loadTelegram, telegramRow } from "../more/settings/telegramState";
 import type { MorePage } from "../more/routes";
 import { pet } from "../pets/pets";
 import { connection, current } from "../session";
@@ -62,7 +61,7 @@ export function openMacSettings(page?: MacSettingsPage): void {
   }).focus();
 }
 
-/** A page that lives in the window's own stack (Telegram, the model providers, the pet): the window shows it there. */
+/** A page that lives in the window's own stack (the model providers, the pet): the window shows it there. */
 function openInWindow(route: MorePage): void {
   showMainWindow();
   runDesktopCommand({ kind: "go", key: "settings" });
@@ -126,7 +125,6 @@ function Connections() {
   effect(() => {
     if (connection() !== "connected" || !isThisMac(current())) return;
     untracked(() => {
-      loadTelegram();
       void daemonPairing().then((next) => pairing.set(next)).catch(() => pairing.set(null));
     });
   });
@@ -139,11 +137,6 @@ function Connections() {
       <Section title="Phones reach this Mac">
         <Row testID="mac-settings-remote" title="Anywhere" value={host(pairing()?.phone_address) || "Off"} />
         <Row testID="mac-settings-wifi" title="This Wi‑Fi" value={host(pairing()?.wifi_address) || "Not on Wi‑Fi"} />
-      </Section>
-      <Section title="Channels">
-        <Row testID="mac-settings-telegram" lead={{ kind: "mark", mark: "telegram" }} title="Telegram"
-          trailing={<If when={telegramRow().tone && telegramRow().label}><StateLine tone={telegramRow().tone!} label={telegramRow().label!} /></If>}
-          chevron onPress={() => openInWindow({ name: "settings-telegram" })} />
       </Section>
       </></If>
     </View>

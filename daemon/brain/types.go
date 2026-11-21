@@ -7,9 +7,9 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-// ExternalInputDisposition is the channel-neutral result of one exact Brain
-// admission attempt. Channels persist this value before acknowledging their
-// own transport receipt and must never infer provider acceptance themselves.
+// ExternalInputDisposition is the result of one exact Brain
+// admission attempt. A sender persists this value before acknowledging its own
+// transport receipt and must never infer provider acceptance itself.
 type ExternalInputDisposition string
 
 const (

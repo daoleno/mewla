@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { typeUntil, pressWhenEnabled } from "../../testing/fixtures";
+import { pressWhenEnabled } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -46,38 +46,17 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("Settings", () => {
-  test("lists the channels, the agents, Labs, Appearance, Pet and About", async () => {
-    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "connected", enabled: true, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false } } : null), {
+  test("lists the agents, Labs, Appearance, Pet and About, and no Channels", async () => {
+    const c = computer({ name: "settings" }, () => null, {
       network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
     });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("text:@mewla_bot");
+    await app.waitFor("text:Model Providers");
     const texts = app.texts();
-    for (const word of ["Telegram", "Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
-    // A connected bot shows its state with a dot (SPEC §10.4), not a Connect button.
-    expect(app.shows("id:settings-telegram-state")).toBe(true);
-    expect(app.shows("id:settings-telegram-state-dot")).toBe(true);
-    expect(app.shows("id:settings-telegram-connect")).toBe(false);
-  });
-
-  test("Telegram with no bot set up offers Connect, which opens its page", async () => {
-    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "disabled", enabled: false, binding_pending: false } } : null), {
-      network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
-    });
-    const app = await open(HARNESS, c.options);
-    await app.waitFor("id:settings-telegram-connect");
-    expect(app.shows("id:settings-telegram-state")).toBe(false);
-    await app.press("id:settings-telegram-connect");
-    await app.waitFor("id:telegram");
-  });
-
-  test("a disconnected bot reads as off: its word, no dot", async () => {
-    const c = computer({ name: "settings" }, (type) => (type === "telegram_connection_status" ? { connection: { state: "disabled", enabled: false, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false } } : null), {
-      network: { "GET http://desk.test:9877/auth-check": { status: 503 } },
-    });
-    const app = await open(HARNESS, c.options);
-    await app.waitFor("text:Disconnected");
-    expect(app.shows("id:settings-telegram-state-dot")).toBe(false);
+    for (const word of ["Model Providers", "Outside agents", "Friends", "Auto", "Light", "Dark", "Open-source Licenses"]) expect(texts).toContain(word);
+    expect(texts).not.toContain("Channels");
+    expect(texts).not.toContain("Telegram");
+    expect(c.asked.filter((a) => a.type.startsWith("telegram_"))).toEqual([]);
   });
 
   test("the appearance chosen is kept in the Expo app's key", async () => {
@@ -204,28 +183,6 @@ describe("Provider editor", () => {
     await app.press("id:provider-test");
     await app.waitUntil(() => app.texts().some((t) => t.endsWith("connect: connection refused")));
     expect(app.texts().join(" ")).not.toContain("Providers are not available");
-  });
-});
-
-describe("Telegram", () => {
-  test("a token is verified once and never kept on the phone", async () => {
-    let status: Record<string, unknown> = { state: "disabled", enabled: false, binding_pending: false };
-    const c = computer({ name: "settings-telegram" }, (type, body) => {
-      if (type === "telegram_connection_status") return { connection: status };
-      if (type === "telegram_connection_configure") {
-        expect(body.credential).toBe("123:abc");
-        status = { state: "setup_pending", enabled: true, bot_username: "mewla_bot", binding_pending: false };
-        return { connection: status };
-      }
-      return null;
-    });
-    const app = await open(HARNESS, c.options);
-    await app.waitFor("id:telegram-token");
-    await typeUntil(app, "id:telegram-token", "123:abc", "id:telegram-verify");
-    await app.press("id:telegram-verify");
-    await app.waitFor("text:@mewla_bot");
-    expect(app.shows("id:telegram-connect")).toBe(true);
-    expect(JSON.stringify(app.storage())).not.toContain("123:abc");
   });
 });
 

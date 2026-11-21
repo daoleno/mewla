@@ -179,7 +179,7 @@ them with `answer`. The phone answers the same requests.
 `close`, `event`, `resolve`) are what Brain and its Workers call. You can run
 them, but you rarely need to.
 
-## Services, Calendar, Screen, Telegram, Extensions, Resources, Watch
+## Services, Calendar, Screen, Extensions, Resources, Watch
 
 ```sh
 mewla service list --json
@@ -212,9 +212,6 @@ mewla computers remove mac
 mewla agents mcp connect [-for claude|codex]   # let Claude Code or Codex hand work to Brain (see Agents outside Mewla)
 mewla agents mcp list|approve|deny|revoke|requests
 
-mewla telegram setup          # asks for the bot token, prints a one-time link to bind your chat
-mewla telegram status|enable|disable
-
 mewla connections list --json
 mewla connections import-gh   # copy your current gh login into the daemon's vault
 
@@ -234,5 +231,5 @@ mewla watch project link-linear --project <id> --team KEY --confirm
 ```
 
 Details: [Services](sessions.md#services), [Calendar](calendar.md), [Triggers](calendar.md#triggers),
-[Telegram](notifications.md), [Extensions](extensions.md), [Agents outside Mewla](outside-agents.md),
+[Extensions](extensions.md), [Agents outside Mewla](outside-agents.md),
 [Resources](usage-and-resources.md#resources), [Watch](watch.md).

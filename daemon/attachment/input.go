@@ -47,7 +47,7 @@ type Caption struct {
 }
 
 // Message is one person's input as typed fields: what they wrote, the files
-// staged in the upload store, and (Telegram) the captions those files carried.
+// staged in the upload store, and the captions those files carried.
 // Senders hand the daemon this shape; Render is the only place that turns it
 // into the text a provider receives.
 type Message struct {

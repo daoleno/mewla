@@ -494,6 +494,5 @@ available" with **Open terminal** and **Switch executor**.
 
 ## Brain from elsewhere
 
-- **Telegram**: your bot chat talks to the same Brain thread. See [Telegram](notifications.md#telegram).
 - **Calendar**: a **Mewla action** runs as Work and posts back to the thread it came from. See [Calendar](calendar.md).
 - **Extensions**: Brain and Workers can read Linear, Notion, GitHub and more, and change them with your consent. See [Extensions](extensions.md).

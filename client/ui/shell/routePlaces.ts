@@ -25,7 +25,7 @@ function placePageOf(route: Route): PlacePage | null {
     case "extensions-tools": return { name: route.name, service: route.service, ...(route.account ? { account: route.account } : {}) };
     case "extensions-agent": return { name: route.name, scope: route.scope };
     case "workFile": return { name: route.name, id: route.id };
-    case "settings-telegram": case "settings-providers": case "settings-agents": case "settings-friends": case "settings-iphone": case "settings-phone":
+    case "settings-providers": case "settings-agents": case "settings-friends": case "settings-iphone": case "settings-phone":
     case "settings-virtual-screen": case "settings-pet": case "settings-licenses":
     case "friends-drafts": case "friends-notifications": case "friends-bookmarks": case "friends-blocked":
       return { name: route.name };

@@ -104,13 +104,6 @@ export function MarkView(props: { mark: BrandMark; size?: number }) {
         cx.translate(size() / 2, size() / 2);
         cx.scale(s, s);
         cx.translate(-(bx + bs / 2), -(by + bs / 2));
-        // A knockout mark keeps its cut-out white in dark: a white plate under the plane (§10.4).
-        if (props.mark === "telegram") {
-          cx.fillStyle = color("onBlack");
-          cx.beginPath();
-          cx.arc(12, 12, 9.6, 0, Math.PI * 2);
-          cx.fill();
-        }
         for (const layer of mark.layers) {
           cx.save();
           if (layer.at) cx.translate(layer.at[0], layer.at[1]);

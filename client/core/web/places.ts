@@ -77,7 +77,6 @@ export function placeLabel(key: PlaceKey): string {
  */
 export type PlacePage =
   | { name: "settings-computer"; id: string }
-  | { name: "settings-telegram" }
   | { name: "settings-providers" }
   | { name: "settings-agents" }
   | { name: "settings-friends" }
@@ -109,7 +108,6 @@ export type WebPlace =
 
 /** Settings' pages by their path segment (the Expo app's `app/settings/*.tsx`). */
 const SETTINGS_PAGES: Record<string, PlacePage> = {
-  telegram: { name: "settings-telegram" },
   "model-providers": { name: "settings-providers" },
   agents: { name: "settings-agents" },
   friends: { name: "settings-friends" },

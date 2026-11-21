@@ -1,5 +1,5 @@
 // Package attachment owns the local upload store shared by authenticated UI
-// uploads and owner-verified channel input. Files are data, never executable.
+// uploads and the input another computer hands Brain. Files are data, never executable.
 package attachment
 
 import (
