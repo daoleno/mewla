@@ -23,10 +23,13 @@ export const MacPane = context(false);
 export function RowTile(props: { tile: () => TrayTile; mark?: () => ProgressMark | undefined }) {
   const ringed = () => Boolean(props.mark?.());
   const agentLogo = () => { const tile = props.tile(); return tile.kind === "agent" ? { ...tile, ringed: ringed() } : undefined; };
+  // The Mac's pane (win.css `.lp .rows .trow .agent`): a 16 pt mark in a 16 pt slot, its ring 22 around it.
+  const mac = MacPane();
+  const t = mac ? { slot: 16, halo: 22, icon: 16, brain: 16, brainRinged: 11, logo: 16, logoRinged: 11, framed: 13, framedRinged: 9 } : { slot: 28, halo: 32, icon: 24, brain: 26, brainRinged: 18, logo: 26, logoRinged: 20, framed: 18, framedRinged: 14 };
   return (
-    <View class="size-[28px] items-center justify-center">
-      <If when={props.mark?.()}>{(mark) => <View class="absolute" style={{ left: -2, top: -2 }}><ProgressHalo mark={() => mark()!} /></View>}</If>
-      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<Icon name="calendar" size={24} tone="soft" />}><Icon name="shield-check" size={24} tone="soft" /></If>}><Icon name="brain" size={ringed() ? 18 : 26} tone="ink" /></If>}>
+    <View class="items-center justify-center" style={{ width: t.slot, height: t.slot }}>
+      <If when={props.mark?.()}>{(mark) => <View class="absolute" style={{ left: (t.slot - t.halo) / 2, top: (t.slot - t.halo) / 2 }}><ProgressHalo mark={() => mark()!} size={t.halo} /></View>}</If>
+      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<Icon name="calendar" size={t.icon} tone="soft" />}><Icon name="shield-check" size={t.icon} tone="soft" /></If>}><Icon name="brain" size={ringed() ? t.brainRinged : t.brain} tone="ink" /></If>}>
         {/* Kept by agent, flavor and ring: the row's tile is a new object each time the tray is made again (every second). */}
         <Each of={agentLogo() ? [agentLogo()!] : []} key={(logo) => `${logo.agent}|${logo.flavor}|${logo.ringed}`}>{(logo) => {
           // Read once: the key is agent, flavor and ring, so they cannot change here, and a read inside JSX would make
@@ -34,7 +37,7 @@ export function RowTile(props: { tile: () => TrayTile; mark?: () => ProgressMark
           const { agent, flavor, ringed: inRing } = untracked(logo);
           // Grok and a plain terminal draw their own frame around the mark (AgentIcon), so their mark is smaller.
           const framed = agent === "terminal" || agent === "grok";
-          return <AgentIcon kind={agent} flavor={flavor} size={inRing ? (framed ? 14 : 20) : framed ? 18 : 26} slot={28} />;
+          return <AgentIcon kind={agent} flavor={flavor} size={inRing ? (framed ? t.framedRinged : t.logoRinged) : framed ? t.framed : t.logo} slot={t.slot} />;
         }}</Each>
       </If>
     </View>
@@ -54,7 +57,8 @@ export function RowText(props: { row: () => TrayRow }) {
 }
 
 function Dot(props: { tone: "ink" | "seal"; testID: string }) {
-  return <View testID={props.testID} class={`size-2 rounded-full ${props.tone === "seal" ? "bg-seal" : "bg-foreground"}`} />;
+  // 8 pt; 6 in the Mac's pane (mac.css `.trow .age::before`).
+  return <View testID={props.testID} class={`${MacPane() ? "size-1.5" : "size-2"} rounded-full ${props.tone === "seal" ? "bg-seal" : "bg-foreground"}`} />;
 }
 
 /**
@@ -65,10 +69,10 @@ export function RowEnd(props: { row: () => TrayRow }) {
   const row = props.row;
   const mac = MacPane();
   return (
-    <View testID="row-end" class="flex-row items-center gap-2">
+    <View testID="row-end" class={`flex-row items-center ${mac ? "gap-1.5" : "gap-2"}`}>
       <If when={row().needs} else={<If when={row().live} else={<If when={row().unread}><Dot tone="ink" testID="tray-unread" /></If>}><Dot tone="ink" testID="row-live" /></If>}><Dot tone="seal" testID="row-needs" /></If>
       <If when={row().end}><Text class={`${mac ? "text-[11.5px]" : "text-sub"} text-muted-foreground`} style={{ fontVariant: ["tabular-nums"] }}>{row().end}</Text></If>
-      <If when={row().done}><Icon name="check" size={18} tone="faint" /></If>
+      <If when={row().done}><Icon name="check" size={mac ? 14 : 18} tone="faint" /></If>
     </View>
   );
 }

@@ -82,3 +82,14 @@ export function headerSize() {
     window: { bar: "h-[46px] pl-[18px] pr-3", title: "text-[13.5px] leading-[18px] font-semibold", back: "size-7", backIcon: 16, mark: 18, name: "text-[13.5px] leading-[18px] font-semibold", sub: "text-[12px] leading-[16px]", oneLine: true, action: 28, actionIcon: 16 },
   });
 }
+
+/**
+ * A request card in a thread (Approve, a question, a sign-in): the phone's 48 pt buttons in a 16 pt padded card; the
+ * Mac's 30 pt buttons at 13, radius 9, in a 12/14 padded card of radius 16 (DESIGN-MAC sheets, mac.css `.card`, `.btn`).
+ */
+export function requestCardSize() {
+  return dense({
+    phone: { card: "gap-3 rounded-(--radius-group) bg-card p-4", button: "h-[48px] rounded-(--radius-control)", label: "text-body", check: 18, option: "min-h-[54px]", field: "min-h-[44px] text-body", later: "-mb-2 -mt-1 h-[44px]", laterText: "text-sub" },
+    window: { card: "gap-2.5 rounded-2xl bg-card px-3.5 py-3", button: "h-[30px] rounded-[9px]", label: "text-[13px] leading-[17px]", check: 14, option: "min-h-[40px]", field: "min-h-[32px] text-[13px]", later: "-mb-1 -mt-1 h-[24px]", laterText: "text-[12px]" },
+  });
+}

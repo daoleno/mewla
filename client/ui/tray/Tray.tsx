@@ -71,7 +71,7 @@ function onAndroidBack(listener: () => boolean): void {
 }
 
 /** A row in Mewla for Mac's pane (RESULT-DESIGN-PAIRS #6): 40 tall, radius 9, on the material; hover and selected the well. */
-const MAC_ROW = "min-h-[40px] gap-2.5 overflow-hidden rounded-[9px] px-2.5 py-1";
+const MAC_ROW = "min-h-[40px] gap-[9px] overflow-hidden rounded-[9px] px-2 py-1";
 
 /** A section label (caption 600, soft) with an optional link at the right ("Calendar ›", "All ›"). */
 function Label(props: { title: string; link?: string; onLink?: () => void; testID?: string }) {
@@ -140,10 +140,10 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected
         <Text testID="tray-request-line" class={`${mac ? "text-[11.5px] leading-[15px]" : "text-sub"} text-muted-foreground line-clamp-1`}>{named() ? r().ask : r().source}</Text>
       </View>
       <Button testID={r().oneTap ? "tray-approve" : r().opens ? "tray-open" : "tray-answer"} disabled={props.busy} onPress={() => (r().oneTap ? props.onApprove() : props.onOpen())}
-        class={`h-[30px] items-center justify-center rounded-full bg-seal px-3 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
-        {/* SPEC §16.2 pattern 5, in a 30 pt pill: the 16 pt ring. */}
+        class={`${mac ? "h-[22px] px-[9px]" : "h-[30px] px-3"} items-center justify-center rounded-full bg-seal active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
+        {/* SPEC §16.2 pattern 5, in a 30 pt pill: the 16 pt ring. The Mac's pane: 22 pt at 11.5 (win.css `.lp .pill`). */}
         <BusyLabel busy={props.busy} small label={tag()} tone="onSeal" testID="tray-request-ring">
-          <Text class="text-caption font-semibold text-seal-foreground">{tag()}</Text>
+          <Text class={`${mac ? "text-[11.5px] leading-[14px]" : "text-caption"} font-semibold text-seal-foreground`}>{tag()}</Text>
         </BusyLabel>
       </Button>
       <If when={!(mac || props.selected || props.last)}><RowHair /></If>

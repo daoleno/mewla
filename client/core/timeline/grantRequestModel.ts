@@ -74,3 +74,15 @@ export function grantPermissionName(permission: GrantPermission): string {
       return "Chrome";
   }
 }
+
+/** The card's title, as `m-perm` words it: "Allow screen recording". Also the tray row's words. */
+export function grantTitle(permission: GrantPermission): string {
+  switch (permission) {
+    case "screen_recording":
+      return "Allow screen recording";
+    case "accessibility":
+      return "Allow Accessibility";
+    case "chrome":
+      return "Allow Chrome";
+  }
+}

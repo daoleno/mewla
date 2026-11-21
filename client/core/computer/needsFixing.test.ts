@@ -72,8 +72,11 @@ describe("needs fixing", () => {
     const rows = needsFixing({ ...base, agentUse: agentUse({ state: "no_key", fix: "install_extension" }, { state: "permission", summary: "", fix: "open_settings", permission: "Accessibility" }) });
     expect(rows.map((r) => [r.title, r.button, r.action])).toEqual([
       ["Chrome extension missing", "Fix", { kind: "agent_use", fix: "install_extension" }],
-      ["Accessibility access not allowed", "Fix", { kind: "agent_use", fix: "open_settings" }],
+      ["Accessibility not allowed", "Fix", { kind: "agent_use", fix: "open_settings" }],
     ]);
+    // The daemon's id is named as Privacy & access names it, never shown raw.
+    const screen = needsFixing({ ...base, agentUse: agentUse({ state: "no_extension" }, { state: "permission", summary: "", fix: "open_settings", permission: "screen_recording" }) });
+    expect(screen.map((r) => r.title)).toEqual(["Screen recording not allowed"]);
     // Nobody started browser setup: not a problem.
     expect(needsFixing({ ...base, agentUse: agentUse({ state: "no_extension", fix: "install_extension" }) })).toEqual([]);
     // Agents turned off: nothing about their tools.

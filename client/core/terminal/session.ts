@@ -39,6 +39,15 @@ const openQueues = new WeakMap<Transport, Promise<void>>();
 const OPEN_TIMEOUT_MS = 15_000;
 
 /**
+ * A Session the computer does not have yet ("not an available Mewla-owned Session": Brain's host while its computer
+ * starts it, or the new one that replaces it) is asked again every `notYetMs`, for `notYetForMs` from the first open,
+ * before the view is told it could not attach: the light capture of 11-21 said "Couldn't attach · MacBook Pro didn't
+ * answer" 1.3 s after its computer came up, while Brain's new host was still starting.
+ */
+export const terminalTiming = { notYetMs: 1000, notYetForMs: 12_000 };
+const NOT_YET = /not an available Mewla-owned Session/i;
+
+/**
  * One terminal attached to a Session over the current connection:
  * opens once the transport is connected and the view knows its size, opens
  * again after every reconnect (the daemon closes attachments with the socket),
@@ -52,6 +61,9 @@ export class TerminalSession {
   /** The grid the view measured out of sight: the one it opens with if it never had another. */
   private hiddenGrid: { cols: number; rows: number } | null = null;
   private opening = false;
+  /** When the first open was asked (`terminalTiming`); null until then. */
+  private firstOpen: number | null = null;
+  private again: ReturnType<typeof setTimeout> | undefined;
   /** The Session's size the computer told last (`terminal_size`). */
   private told: { cols: number; rows: number } | null = null;
   private closed = false;
@@ -214,6 +226,8 @@ export class TerminalSession {
 
   /** Try again after the attachment failed to open ("Couldn't attach"): opens it now, if it is not open or opening. */
   retry(): void {
+    // Try again: the Session gets its own time to appear again.
+    this.firstOpen = null;
     this.open();
   }
 
@@ -234,6 +248,7 @@ export class TerminalSession {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    clearTimeout(this.again);
     if (this.sessionId) this.send({ type: "terminal_close", session_id: this.sessionId });
     this.sessionId = null;
     this.wheel.reset();
@@ -244,6 +259,7 @@ export class TerminalSession {
   private open(): void {
     if (this.closed || this.exited || this.opening || this.sessionId || !this.size || this.transport.state !== "connected") return;
     this.opening = true;
+    this.firstOpen ??= Date.now();
     const previous = openQueues.get(this.transport) ?? Promise.resolve();
     const turn = previous.then(() => this.attach());
     openQueues.set(this.transport, turn.catch(() => {}));
@@ -277,7 +293,14 @@ export class TerminalSession {
       }));
       const stopFailed = this.transport.on("terminal_error", (frame) => {
         if (frame.session_id) return;
-        done(() => this.handlers.error(String(frame.message ?? "The terminal could not open.")));
+        const message = String(frame.message ?? "The terminal could not open.");
+        if (NOT_YET.test(message) && Date.now() - (this.firstOpen ?? Date.now()) < terminalTiming.notYetForMs) {
+          return done(() => {
+            clearTimeout(this.again);
+            this.again = setTimeout(() => this.open(), terminalTiming.notYetMs);
+          });
+        }
+        done(() => this.handlers.error(message));
       });
       const timer = setTimeout(() => done(() => this.handlers.error("The terminal did not open.")), OPEN_TIMEOUT_MS);
       if (!this.send({ type: "terminal_open", target_id: this.targetId, ...this.size })) done(() => {});

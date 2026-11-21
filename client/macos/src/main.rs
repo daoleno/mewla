@@ -45,10 +45,16 @@ fn main() -> std::process::ExitCode {
         }
     };
     let support_dir = nsh_engine::support_dir();
-    let launch = nsh_engine::updates::launch(bundle, &dir, support_dir.as_deref());
-    options.asset_base = Some(AssetBase::Directory(launch.assets));
+    let mut launch = nsh_engine::updates::launch(bundle, &dir, support_dir.as_deref());
+    options.asset_base = Some(AssetBase::Directory(launch.assets.clone()));
 
     let config = daemon::Config::from_env(&contents);
+    // The main window opens as large and where the person left it (the engine keeps its placement as it changes);
+    // before they have one, at its first size. It never resizes itself while open. `MEWLA_APP_WINDOW_SIZE=<w>x<h>`
+    // (Mewla Dev's proof runs) opens it at that size whatever was kept.
+    let forced = std::env::var("MEWLA_APP_WINDOW_SIZE").ok().as_deref().and_then(parse_size);
+    launch.bundle.main_window.get_or_insert_with(Default::default).restore_bounds = forced.is_none();
+    options.size = forced.unwrap_or_else(|| first_size(&config.root()));
     // The real app's daemon is its LaunchAgent (agent.rs); Mewla Dev's is its child, on its own state.
     let release = config.state_root.is_none() && options.app_id == "com.daoleno.mewla";
     let child = if release {
@@ -207,8 +213,8 @@ fn setup() -> (std::path::PathBuf, nsh_platform_macos::AppOptions) {
     if field("activationPolicy").as_deref() == Some("accessory") {
         options.activation_policy = ActivationPolicy::Accessory;
     }
-    // The design's Brain frame (DESIGN-MAC.md `w-home`).
-    options.size = (1280, 800);
+    // The design's Brain frame (DESIGN-MAC.md `w-home`); `main` picks the first size (`first_size`).
+    options.size = MAIN_SIZE;
     // ⌘W hides the window; the app (the menu bar cat, the perch) keeps running until Quit.
     options.keep_alive_on_close = true;
     // Mewla Dev on a Mac someone is using: never the active app, so its windows come up without taking the keyboard
@@ -230,6 +236,58 @@ fn install_logger(app_id: &str, data_dir: Option<&std::path::Path>) {
     };
     logging.output = Some(Box::new(move |r: &log::Record<'_>| unified.log(r)));
     nsh_engine::logging::install(logging);
+}
+
+/// The main window's default: the design's Brain frame, two panes (DESIGN-MAC.md `w-home`).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+const MAIN_SIZE: (i32, i32) = (1280, 800);
+/// The design's first-run window: one column, the waking cat, then ready (the gallery's m-waking, m-ready, m-noagent,
+/// m-perm frames).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+const FIRST_RUN_SIZE: (i32, i32) = (720, 560);
+
+/// The main window's size before the person has one of their own: the first-run window on a Mac where Mewla's daemon
+/// has never run (so there is no Session or Work for the left pane to hold), the main default where it has (its
+/// state root holds its identity or Brain's database). Read from disk before the daemon is up, so an approximation: a
+/// daemon that ran once and holds nothing still opens two panes.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn first_size(state_root: &std::path::Path) -> (i32, i32) {
+    let ran = ["identity.json", "brain/brain.db"].iter().any(|marker| state_root.join(marker).exists());
+    if ran { MAIN_SIZE } else { FIRST_RUN_SIZE }
+}
+
+/// `<w>x<h>` in points.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn parse_size(text: &str) -> Option<(i32, i32)> {
+    let (w, h) = text.trim().split_once('x')?;
+    let (w, h) = (w.trim().parse::<i32>().ok()?, h.trim().parse::<i32>().ok()?);
+    (w >= 200 && h >= 200).then_some((w, h))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_mac_opens_the_first_run_window_and_one_that_ran_mewla_the_main_one() {
+        let root = std::env::temp_dir().join(format!("mewla-first-size-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(first_size(&root), FIRST_RUN_SIZE, "no state root at all");
+        std::fs::create_dir_all(root.join("logs")).unwrap();
+        assert_eq!(first_size(&root), FIRST_RUN_SIZE, "only the app's daemon log");
+        std::fs::create_dir_all(root.join("brain")).unwrap();
+        std::fs::write(root.join("brain/brain.db"), b"").unwrap();
+        assert_eq!(first_size(&root), MAIN_SIZE, "Brain's database");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_forced_size_reads_w_by_h() {
+        assert_eq!(parse_size("1280x800"), Some((1280, 800)));
+        assert_eq!(parse_size(" 720 x 560 "), Some((720, 560)));
+        assert_eq!(parse_size("1280"), None);
+        assert_eq!(parse_size("0x0"), None);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

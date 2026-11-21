@@ -84,6 +84,17 @@ function hostRow(input: NeedsFixingInput): FixRow | null {
   return null;
 }
 
+/** The system permission as Settings › Privacy & access names it: the daemon sends its id (`screen_recording`). */
+const PERMISSION_NAMES: Record<string, string> = { screen_recording: "Screen recording", accessibility: "Accessibility" };
+
+export function permissionName(permission: string | undefined): string {
+  if (!permission) return "Screen recording";
+  const named = PERMISSION_NAMES[permission.toLowerCase()];
+  if (named) return named;
+  const words = permission.replace(/[_-]+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1).toLowerCase() : "Screen recording";
+}
+
 /** What agents need on this computer: the Chrome extension, the screen permission. */
 function agentUseRows(status: AgentUseStatus | null): FixRow[] {
   if (!status?.enabled) return [];
@@ -97,7 +108,7 @@ function agentUseRows(status: AgentUseStatus | null): FixRow[] {
   }
   const computer = status.computer;
   if (computer?.state === "permission" && computer.fix) {
-    rows.push({ key: "screen", title: computer.permission ? `${computer.permission} access not allowed` : "Screen access not allowed", button: "Fix", action: { kind: "agent_use", fix: computer.fix }, blocking: false });
+    rows.push({ key: "screen", title: `${permissionName(computer.permission)} not allowed`, button: "Fix", action: { kind: "agent_use", fix: computer.fix }, blocking: false });
   }
   return rows;
 }

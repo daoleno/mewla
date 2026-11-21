@@ -6,6 +6,7 @@ import { agentKindFromProvider } from "../../core/sessions/workerPresentation";
 import { brainExecutorChoices, brainExecutorLabel, brainExecutorMeta } from "../../core/brainMenu";
 import type { BrainExecutorRef } from "../../core/brain";
 import { currentBrain, type BrainSource } from "./source";
+import { isMacApp } from "../mac/app";
 
 /**
  * "Brain host" (soft-final/SPEC.md §1.6 Switch executor): the installed agents,
@@ -40,7 +41,8 @@ export function BrainHostPanel(props: { onClose: () => void; source?: BrainSourc
           </View>
         </View>
       </Scroll>
-      <If when={choices().moreToInstall}><View class="px-4"><Text testID="brain-executor-install" class="text-sub text-muted-foreground">Install more with mewla deps</Text></View></If>
+      {/* Not on the Mac: Settings › Agents names no command (DESIGN-MAC.md §2.5; Brain 11-22). */}
+      <If when={choices().moreToInstall && !isMacApp()}><View class="px-4"><Text testID="brain-executor-install" class="text-sub text-muted-foreground">Install more with mewla deps</Text></View></If>
       <If when={source.hostSwitch.error()}><View class="px-4"><Text testID="brain-executor-error" class="text-sub text-foreground">{source.hostSwitch.error()}</Text></View></If>
     </View>
   );

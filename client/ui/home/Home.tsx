@@ -38,6 +38,7 @@ import { HomeCat } from "./Cat";
 import { isMacApp } from "../mac/app";
 import { MacNoAgent } from "../mac/NoAgent";
 import { MacReady } from "../mac/Ready";
+import { MacWaking } from "../mac/Starting";
 import { StateControl } from "../tray/StateControl";
 import { ChatUpdateRow, chatUpdate } from "../update/ChatUpdateRow";
 import { ProviderOutageRow, providerOutage } from "./ProviderOutageRow";
@@ -395,7 +396,8 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
           requests={() => (routedBrainThread() ? 0 : requestsHere().length)} reveal={revealRequests} />
         );
       }}</Each>
-      <If when={shows() === "waking"}><Notice title="Brain is starting…" /></If>
+      {/* On the Mac, `m-waking`: the waking cat and "Waking up" in the middle. */}
+      <If when={shows() === "waking"}><If when={isMacApp()} else={<Notice title="Brain is starting…" />}><MacWaking /></If></If>
       <If when={shows() === "host_down"}><Notice title="Brain can't start" detail={brain()?.host_problem?.detail} /></If>
       <If when={shows() === "no_agent"}><MacNoAgent /></If>
       {/* A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`. */}
@@ -412,7 +414,8 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
   const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text), onSent: () => brainSends.set(untracked(brainSends) + 1) });
   const block = () => brainComposerBlock({ surface: surface(), snapshot: brain(), chat: chatState() });
   const pairAgain = () => tray().state.kind === "pair";
-  const placeholder = () => (connection() === "connected" ? "Tell Brain" : "Sends when back online");
+  // While Brain wakes on the Mac the composer says so (`m-waking`: "Connecting…").
+  const placeholder = () => (isMacApp() && surface() === "waking" ? "Connecting…" : connection() === "connected" ? "Tell Brain" : "Sends when back online");
   return (
     <>
       <ChatComposer text={props.text} placeholder={placeholder} canSend={tools.canSend} attached={() => tools.uploads.ready().length > 0}

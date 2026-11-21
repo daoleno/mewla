@@ -19,6 +19,11 @@ pub struct Config {
 }
 
 impl Config {
+    /// The daemon's state root: [`Config::state_root`], or `~/.mewla`.
+    pub fn root(&self) -> PathBuf {
+        self.state_root.clone().unwrap_or_else(|| std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".mewla"))
+    }
+
     pub fn from_env(contents: &Path) -> Config {
         let var = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
         Config {
