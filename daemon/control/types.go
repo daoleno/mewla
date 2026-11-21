@@ -313,6 +313,8 @@ type Executor struct {
 	Command      string               `json:"command,omitempty"`
 	Capabilities ExecutorCapabilities `json:"capabilities"`
 	Host         bool                 `json:"host,omitempty"`
+	// HostByChoiceOnly marks an agent Mewla never offers as Brain's host.
+	HostByChoiceOnly bool `json:"host_by_choice_only,omitempty"`
 }
 
 type Handler interface {
