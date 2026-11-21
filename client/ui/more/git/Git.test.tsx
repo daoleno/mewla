@@ -29,6 +29,8 @@ const PATCH = [
 
 const COMMITS = [
   { sha: "a1b2c3d4e5f6", short: "a1b2c3d", subject: "Add the parser", author: "Ada", date: Math.floor(Date.now() / 1000) - 3600, refs: ["main"] },
+  // Real-shaped (owner 11-22): a long branch, HEAD, the remote's copy and a tag on one commit with a one-word title.
+  { sha: "7c4d1e9a2b3f", short: "7c4d1e9", subject: "Fix", author: "Ada", date: Math.floor(Date.now() / 1000) - 7200, refs: ["HEAD -> feat/globalresearch-source-eu-ingest", "origin/feat/globalresearch-source-eu-ingest", "tag: v0.4.19-rc.1"] },
   { sha: "0f9e8d7c6b5a", short: "0f9e8d7", subject: "First commit", author: "Ada", date: Math.floor(Date.now() / 1000) - 86_400 },
 ];
 
@@ -330,6 +332,28 @@ describe("Git review", () => {
     await app.press("id:git-commit-file-app.ts");
     await app.waitFor("id:git-diff-view");
     expect(app.shows("id:git-stage-toggle")).toBe(false);
+  });
+
+  test("a commit's refs sit on a line of their own under its text: the title keeps the row's width, HEAD is a marker, the long branch is cut in the middle", async () => {
+    const repo = repository([app_ts]);
+    const app = await open(HARNESS, repo.options);
+    await app.press("id:git-tab-history");
+    await app.waitFor("id:git-commit-7c4d1e9");
+    // The refs are inside the text column (title, one-line subtitle, chips), never a column beside it.
+    expect(app.shows("id:git-commit-text-7c4d1e9 >> id:git-commit-refs-7c4d1e9")).toBe(true);
+    expect(app.shows("id:git-commit-text-7c4d1e9 >> id:git-ref-head")).toBe(true);
+    expect(app.shows("id:git-commit-text-7c4d1e9 >> id:git-ref-local")).toBe(true);
+    expect(app.shows("id:git-commit-text-7c4d1e9 >> id:git-ref-remote")).toBe(true);
+    expect(app.shows("id:git-commit-text-7c4d1e9 >> id:git-ref-tag")).toBe(true);
+    // The long names keep start and end; the whole name is what a screen reader hears.
+    expect(app.texts().some((t) => t.startsWith("feat/globalr") && t.includes("…") && t.endsWith("eu-ingest"))).toBe(true);
+    expect(app.texts()).toContain("v0.4.19-rc.1");
+    expect(app.shows("label:feat/globalresearch-source-eu-ingest")).toBe(true);
+    // A commit with no refs has no line for them.
+    expect(app.shows("id:git-commit-refs-0f9e8d7")).toBe(false);
+    // The row reads its text whole and opens as before.
+    expect(app.texts()).toContain("Fix");
+    expect(app.texts()).toContain("7c4d1e9 · Ada · 2h");
   });
 
   test("a switch to another computer drops this one's changes", async () => {

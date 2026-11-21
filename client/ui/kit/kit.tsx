@@ -261,6 +261,12 @@ function Hairline(props: { inset: number }) {
 export interface RowProps {
   title: string;
   subtitle?: string;
+  /** The subtitle stays on one line (a commit's hash · author · age) instead of up to three. */
+  subtitleOneLine?: boolean;
+  /** Under the text, inside its column (chips that must never push the text: a commit's refs). */
+  below?: JSX.Element;
+  /** The text column's own id (title, subtitle and `below`: it is as wide as the row less its chevron). */
+  textTestID?: string;
   /** The subtitle is a state's words (SPEC §10.4): `warn` and `error` colour it, the rest stay soft. */
   subtitleTone?: StateTone;
   /** The title is a state's words (a Needs fixing row, SPEC §10.4): `warn` and `error` colour it. */
@@ -306,9 +312,10 @@ export function Row(props: RowProps) {
   const body = (
     <View class={`${size.row} flex-row items-center ${props.lead ? "gap-3.5" : "gap-3"}`}>
       {props.leading ?? (<If when={props.lead} else={<If when={props.icon}>{(icon) => <Icon name={icon()} size={24} tone={props.destructive ? "ink" : "soft"} />}</If>}>{(leadValue) => <RowTile lead={leadValue()} />}</If>)}
-      <View class="min-w-0 flex-1">
+      <View testID={props.textTestID} class="min-w-0 flex-1">
         <Text class={props.destructive ? `${size.text} text-destructive` : props.mono ? "font-mono text-code" : size.text} style={props.titleTone === "warn" || props.titleTone === "error" ? { numberOfLines: 2, color: color(stateTextColor(props.titleTone)) } : { numberOfLines: 2 }}>{props.title}</Text>
-        <If when={props.subtitle}>{(subtitle) => <Text class={`mt-0.5 ${size.sub} text-muted-foreground line-clamp-3`} style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{subtitle()}</Text>}</If>
+        <If when={props.subtitle}>{(subtitle) => <Text class={`mt-0.5 ${size.sub} text-muted-foreground ${props.subtitleOneLine ? "line-clamp-1" : "line-clamp-3"}`} style={props.subtitleTone ? { color: color(stateTextColor(props.subtitleTone)) } : undefined}>{subtitle()}</Text>}</If>
+        {props.below ?? null}
       </View>
       <If when={props.value}>{(value) => <Text class={`max-w-[50%] text-right ${size.text} text-muted-foreground line-clamp-1`} style={{ fontVariant: ["tabular-nums"] }}>{value()}</Text>}</If>
       {props.trailing ?? null}
