@@ -26,6 +26,9 @@
 #   phone.sh down        stop the emulator (releases the lock), the daemon and the dev server
 #   phone.sh type TEXT   tap the composer and type
 #   phone.sh flow [NAME..|all]   reset, then run flows/NAME.sh (a journey as a file); prints PASS or FAIL and the seconds
+#   phone.sh corpus OUT [NAME..]  the terminal render corpus (scripts/terminal-corpus) replayed into the Dev app's TerminalView, one PNG per
+#                        screen in OUT (FONT=<dp>, LIGHT=1); a screen that does not come up is reported and fails. Needs the debug build
+#                        with TerminalReplayActivity (`install` after a Kotlin change); `reset` brings Brain back
 #   phone.sh run VERB..  up, then the verbs (a `-- ` separates each), then down: a whole check, lock held only meanwhile
 #
 # Everything is under $MEWLA_LANE_HOME (default ~/.mewla/lane): the daemon binary (built from this checkout
@@ -48,6 +51,11 @@ emulator="${ANDROID_HOME:-$HOME/Android/Sdk}/emulator/emulator"
 nsh_home="${NSH_HOME:-$HOME/.nsh}"
 pkg="com.daoleno.mewla.preview.debug"
 apk="$client/android/app/build/outputs/apk/preview/debug/app-preview-debug.apk"
+# PHONE_EXTERNAL=1: the phone, the app and the test daemon are the caller's (the release gate's emulator and the exact signed APK,
+# release-flows.sh): PHONE_PKG is the app's package, ANDROID_SERIAL its device, and only the verbs that act on a booted, paired app
+# work (reset, wait-connected, shot, tap, shows, dump, type, flow, share-file, share-text, open-with).
+external="${PHONE_EXTERNAL:-}"
+if [[ -n "$external" ]]; then pkg="${PHONE_PKG:?PHONE_EXTERNAL needs PHONE_PKG}"; serial="${ANDROID_SERIAL:?PHONE_EXTERNAL needs ANDROID_SERIAL}"; fi
 export ANDROID_SERIAL="$serial"
 mkdir -p "$lane/bin" "$lane/state" "$lane/home"
 
@@ -316,6 +324,38 @@ wait_connected() {
   die "the app did not show a connected Brain within 80 s"
 }
 
+# The terminal corpus on the lane phone: each screen replayed into the real TerminalView (the debug build's
+# TerminalReplayActivity, no daemon, no page), one PNG per screen cropped to the terminal. The caller checks the pictures
+# (scripts/terminal-corpus/check.py); a screen with no picture here is a failure, not a skip.
+corpus() {
+  local out names=() n cols rows rect failed=0 dir="$repo/scripts/terminal-corpus"
+  out=$(mkdir -p "${1:?corpus OUT [NAME..]}" && cd "$1" && pwd); shift
+  names=("$@")
+  [[ ${#names[@]} -gt 0 ]] || mapfile -t names < <(python3 -I -c "import json,sys;print('\n'.join(json.load(open(sys.argv[1]))))" "$dir/corpus.json")
+  adb -s "$serial" shell settings put global window_animation_scale 0
+  adb -s "$serial" shell settings put global transition_animation_scale 0
+  adb -s "$serial" shell run-as "$pkg" mkdir -p files/corpus
+  for n in "${names[@]}"; do
+    adb -s "$serial" shell "run-as $pkg sh -c 'cat > files/corpus/$n.vt'" < "$dir/$n.vt"
+    read -r cols rows < <(python3 -I -c "import json,sys;m=json.load(open(sys.argv[1]));print(m[sys.argv[2]]['cols'],m[sys.argv[2]]['rows'])" "$dir/corpus.json" "$n")
+    adb -s "$serial" logcat -c
+    adb -s "$serial" shell am start -S -W -n "$pkg/com.daoleno.mewla.terminal.TerminalReplayActivity" \
+      --es file "corpus/$n.vt" --ei cols "$cols" --ei rows "$rows" ${LIGHT:+--ez light true} ${FONT:+--ef font "$FONT"} > /dev/null
+    rect=""
+    for _ in $(seq 1 40); do
+      rect=$(adb -s "$serial" logcat -d -s TerminalReplay:I | sed -n 's/.*rect \([0-9]*\) \([0-9]*\) \([0-9]*\) \([0-9]*\).*/\3x\4+\1+\2/p' | tail -1)
+      [[ -n "$rect" ]] && break
+      sleep 0.5
+    done
+    if [[ -z "$rect" ]]; then echo "FAIL $n: the replay never reported its rect" >&2; failed=1; continue; fi
+    sleep 0.5
+    adb -s "$serial" exec-out screencap -p > "$out/full-$n.png"
+    magick "$out/full-$n.png" -crop "$rect" +repage "$out/$n.png" && rm "$out/full-$n.png"
+    echo "$n $rect"
+  done
+  return $failed
+}
+
 # flows/NAME.sh: a journey as a file (the phone back at the snapshot, then the file; its exit status is the verdict).
 flows() {
   local names=("$@") f name start failed=0
@@ -332,12 +372,15 @@ flows() {
 
 verb() {
   local v="$1"; shift
+  if [[ -n "$external" ]]; then
+    case "$v" in reset|wait-connected|shot|tap|shows|dump|type|flow|share-file|share-text|open-with) ;; *) die "$v is not available with PHONE_EXTERNAL (the device, app and daemon are not this script's)" ;; esac
+  fi
   case "$v" in
     up) emu_up; daemon_up; dev_up
       if [[ -z "${COLD:-}" ]]; then after_restore; wait_connected; fi ;;
     reset)
       # The plain path: the app's process is stopped and started again (Brain, connected). The phone is not restored.
-      emu_up; daemon_up; dev_up
+      [[ -n "$external" ]] || { emu_up; daemon_up; dev_up; }
       adb -s "$serial" shell am force-stop "$pkg"
       adb -s "$serial" shell monkey -p "$pkg" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
       wait_connected
@@ -357,6 +400,7 @@ verb() {
     dump) dump ;;
     type) tap '^Tell Brain$' > /dev/null || die "no composer on the screen"; adb -s "$serial" shell input text "${1// /%s}" ;;
     flow) flows "$@" ;;
+    corpus) corpus "$@" ;;
     share-file) share_file "$@" ;;
     share-text) share_text "$@" ;;
     open-with) open_with "$@" ;;
@@ -379,7 +423,7 @@ verb() {
   esac
 }
 
-[[ $# -gt 0 ]] || { sed -n 2,28p "$0"; exit 0; }
+[[ $# -gt 0 ]] || { sed -n 2,36p "$0"; exit 0; }
 if [[ "$1" == run ]]; then
   shift
   trap 'verb down' EXIT

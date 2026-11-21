@@ -135,13 +135,20 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
         launch = between(RELEASE, "  android-launch:\n", "  stage:\n")
         self.assertIn("needs: validate\n", launch)
         for needle in ("ARTIFACT: mewla-android-apk-${{ needs.validate.outputs.tag }}",
-                       "BUILD_JOB: Build and verify signed Android", "script: client/scripts/release-launch.sh"):
+                       "BUILD_JOB: Build and verify signed Android", "client/scripts/release-launch.sh",
+                       "client/scripts/release-flows.sh", "DAEMON_ARTIFACT: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}",
+                       "DAEMON_JOB: Build Linux and Windows daemons"):
             self.assertIn(needle, launch)
+        daemon_name = re.search(r"\n  daemon:\n    name: ([^\n]+)\n", RELEASE).group(1)
+        self.assertEqual(daemon_name, "Build Linux and Windows daemons")
         android_name = re.search(r"\n  android:\n    needs: validate\n    name: ([^\n]+)\n", RELEASE).group(1)
         self.assertEqual(android_name, "Build and verify signed Android")
         script = read("client/scripts/release-launch.sh")
-        for step in ("versionName", "pidof", "-b crash"):
+        for step in ("versionName", "pidof", "-b crash", "scan-now", "While using the app", "qr-camera"):
             self.assertIn(step, script)
+        flows = read("client/scripts/release-flows.sh")
+        for step in ("PHONE_EXTERNAL=1", "flow all", "Pair and grant access", "Open Brain", "adb unroot"):
+            self.assertIn(step, flows)
         # The suites ran on main: the release checks that and runs none itself.
         self.assertIn('python3 scripts/release-green.py --sha "$(git rev-parse HEAD)"', between(RELEASE, "  validate:\n", "  web-ui:\n"))
         self.assertIn("python3 scripts/release-green.py", PREPARATION)
@@ -579,13 +586,23 @@ class CIWorkflowTests(unittest.TestCase):
             self.assertIn(needle, client)
         self.assertNotIn("if:", client)
         # The UI suite runs in shards, one runner each; every shard of the count, nothing else.
-        ui = between(CI, "  client-ui:\n", "  windows:")
+        ui = between(CI, "  client-ui:\n", "  web-ui:\n")
         self.assertNotIn("if:", ui)
         count = int(re.search(r"--shard \$\{\{ matrix\.shard \}\}/(\d+)", ui).group(1))
         shards = re.search(r"matrix:\s*\n\s*shard: \[([\d, ]+)\]", ui).group(1)
         self.assertEqual([int(n) for n in shards.split(",")], list(range(1, count + 1)))
         self.assertIn(f"name: Client UI tests (${{{{ matrix.shard }}}}/{count})", ui)
         self.assertIn("fail-fast: false", ui)
+
+    def test_the_terminal_corpus_job_runs_its_steps_only_when_the_terminal_changed(self):
+        corpus = between(CI, "  terminal-corpus:\n", "  windows:")
+        self.assertIn("run: scripts/terminal-corpus/changed.sh", corpus)
+        self.assertIn("run: scripts/terminal-corpus/run.sh", corpus)
+        # Everything after the change check waits on it; the check itself always runs.
+        steps = corpus.split("      - ")[1:]
+        for step in steps:
+            gated = "steps.changed.outputs.run == 'true'" in step
+            self.assertEqual(gated, "id: changed" not in step and "actions/checkout" not in step, step.splitlines()[0])
 
     def test_daemon_tests_and_vet_run_on_every_push(self):
         daemon = between(CI, "  daemon:\n", "  daemon-engine:\n")

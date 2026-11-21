@@ -13,9 +13,12 @@ sandboxed to an opaque origin that inherits the app's Content-Security-Policy: i
 script, faces and VT come from the app's `/terminal/`, read cross-origin (the daemon
 marks those files `Access-Control-Allow-Origin: *`), and the policy names the app's
 own origin beside `'self'`, because WebKit matches an inherited `'self'` against
-the frame's opaque origin and refuses them otherwise. `scripts/terminal-corpus/web.ts`
-renders the corpus through that page in Chromium, Firefox or WebKit (`ENGINE`) at a
-real device scale. All three draw the packer's runs on a grid of
+the frame's opaque origin and refuses them otherwise. `scripts/terminal-corpus/run.sh` is the one
+command that proves a drawing change: `web.ts` renders the corpus through that page in Chromium,
+Firefox and WebKit (`ENGINE`) at a real device scale, `check.py` fails on a missing or blank screen,
+a seam between block or line glyphs and an emoji in the wrong cell, and `--android` replays the same
+screens in the Dev app's TerminalView on the lane emulator (`phone.sh corpus`). CI runs it (with
+WebKit) when a path in `scripts/terminal-corpus/paths.txt` changes. All three draw the packer's runs on a grid of
 whole device pixels and draw box, block, braille and Powerline glyphs themselves, so
 rows of lines and blocks meet. Each keeps a character's width per face, measured
 once (whether it fills exactly one cell decides how a run is drawn), and sets the
