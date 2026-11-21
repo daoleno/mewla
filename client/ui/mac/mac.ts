@@ -309,6 +309,8 @@ async function updateProof(hold = 12): Promise<void> {
   const state = owner.state();
   if (state.kind !== "available") return void console.log(`dev script: update none (${state.kind})`);
   console.log(`dev script: update found ${state.update.version}`);
+  // The cat's menu row for this state, from the function the menu's items come from (a run cannot open a menu bar item's menu).
+  console.log(`dev script: menu row ${JSON.stringify(appUpdateMenuItem(state, () => {}).flatMap((item) => ("label" in item ? [item.label] : [])))}`);
   await new Promise((resolve) => setTimeout(resolve, hold * 1000));
   owner.press();
 }

@@ -24,7 +24,7 @@ A release counts only when all of these hold. [`scripts/released.py`](../scripts
 
 1. `vX.Y.Z` is an annotated tag on `main` (an ancestor of `origin/main`).
 2. Its commit passed CI on `main`, or is the version change on top of a commit that did. A run cancelled by the next push is not a pass.
-3. The GitHub release is public and carries all 8 assets, none empty: the four daemon archives, the APK, `SHA256SUMS`, `release-manifest.json` and its `.sig`.
+3. The GitHub release is public and carries every asset, none empty: the four daemon archives, the APK, `SHA256SUMS`, `release-manifest.json` and its `.sig` (8), and for a stable tag Mewla for Mac's five files: `Mewla-<version>-macos-aarch64.zip` (the app's update), `latest.json` and `latest.json.sig` (the update manifest the installed apps read from `releases/latest`), `Mewla-<version>-macos-arm64.dmg` (what people install from) and the same disk image as `Mewla-macos-arm64.dmg`, a name without a version that the site's download links to (13). A beta carries no Mac file: the apps look at the Latest release.
 4. A stable tag is marked Latest and is the highest stable version published, or a higher release has since taken the mark. A beta is a prerelease.
 
 A failed release is reported as failed. It is never silently covered by the next tag.
@@ -64,6 +64,7 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | Signed arm64 APK of the NSH client (`client/android`, `:app:assembleProductionRelease -Pmewla.channel=github`) | yes | — |
 | Launch smoke of the signed APK on a fresh emulator (`android-launch`, `client/scripts/release-launch.sh`): it installs, reports the release's version, opens and is still running with nothing in the crash log after 10 s; the emulator boots while the APK builds | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
+| Mewla for Mac (`mac-app`, [`macos-release.yml`](../.github/workflows/macos-release.yml) called from here; a stable tag or a candidate, not a beta): the app and its daemon built on `macos-26`, signed with the Developer ID certificate (hardened runtime, secure timestamps, inside out), notarized and stapled, the `.dmg` signed, notarized and stapled, the update zip of the stapled app and the update manifest signed with `MEWLA_MAC_UPDATE_KEY` (a candidate makes no manifest). The files wait in the artifact `mewla-macos-release-<tag>`; `release-ready` needs the job, so a release whose Mac files were not made is not published | yes | — |
 | Stage tree + checksums + signed updater manifest (tags only; a candidate is never signed) | yes | — |
 | Upload workflow artifact | yes | — |
 | `release-ready`: every job above succeeded | yes | — |
@@ -78,8 +79,8 @@ GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN
 
 1. The daemons, the signed APK and the APK's launch smoke run side by side. The launch job boots its emulator with the run and waits for this run's APK.
 2. Once the daemons have run on their platforms and the APK is verified, a signing job stages the complete set: the four archives, the APK, `SHA256SUMS`, and the signed updater manifest.
-3. `release-ready` passes only if every one of those jobs succeeded. Cancelled or skipped counts as not passed; the one skip allowed is the stage of a build-only candidate, which is never signed.
-4. A write-scoped job then writes the notes from the commits since the previous tag, creates the draft, uploads the eight assets, verifies the exact set, and makes it public: a stable tag as Latest, a beta tag as a prerelease. A rerun after publication passes only if the release already carries the same `SHA256SUMS`, and never replaces public bytes.
+3. `release-ready` passes only if every one of those jobs succeeded, `mac-app` among them. Cancelled or skipped counts as not passed; the skips allowed are the stage of a build-only candidate, which is never signed, and the Mac app of a beta tag, which has none.
+4. A write-scoped job then writes the notes from the commits since the previous tag, creates the draft, uploads every asset (a stable tag's thirteen: the eight and Mewla for Mac's five, which it checks are there first), verifies the exact set, and makes it public: a stable tag as Latest, a beta tag as a prerelease. A rerun after publication passes only if the release already carries the same `SHA256SUMS`, and never replaces public bytes.
 5. `released` checks the [definition](#released). Then `ios-testflight` dispatches `ios-release.yml` at the tag (`app_identity=preview`, `destination=testflight`, the build number `release_identity.py` derives). That workflow uploads the Preview to TestFlight and submits it for beta review. It then expires the older Preview builds still waiting for beta review, so only the newest one waits ([iOS CI](ios-ci-release.md#signed-release-and-testflight)). A bare tag push no longer starts `ios-release.yml`.
 
 A red job publishes nothing: no draft, no assets. Fix the cause and **Re-run failed jobs**; GitHub reruns the failed jobs and every job that depends on them, so `release-ready`, publish and the iPhone dispatch follow. A flaky emulator in `android-launch` is the expected reason for such a rerun.
@@ -148,7 +149,7 @@ One rule (`scripts/lib/release_identity.py`, the same in the client's Gradle bui
 | `publish` | boolean | `false` | Reviewed recovery authorization to reconcile and publish the matching draft/existing release |
 | `candidate_version` | string | empty | Required for a build-only candidate: the `X.Y.Z` its binaries report, newer than the tracked version |
 
-A **build-only candidate** (`ref` is not a tag, `publish=false`) builds and verifies every daemon and the signed APK exactly as a release would, runs each daemon on its platform, and stops: no updater-key signing, no stage, no publication. Its artifacts are kept for five days. Use it to test a release candidate before tagging:
+A **build-only candidate** (`ref` is not a tag, `publish=false`) builds and verifies every daemon and the signed APK exactly as a release would, runs each daemon on its platform, builds, signs and notarizes Mewla for Mac (without its update manifest), and stops: no updater-key signing, no stage, no publication. Its artifacts are kept for five days. Use it to test a release candidate before tagging:
 
 ```bash
 gh workflow run release-artifacts.yml --ref main -f ref=main -f publish=false -f candidate_version=0.3.0
@@ -317,6 +318,14 @@ gh run list --workflow=release-artifacts.yml --limit 5
 gh run watch
 ```
 
+## Mewla for Mac
+
+[`macos-release.yml`](../.github/workflows/macos-release.yml) makes the Mac app's release files; the release track calls it (`mac-app`) and `publish` uploads them. It needs, in the `app-store-connect-preview` environment, `MEWLA_MAC_DEVELOPER_ID_P12_BASE64` and `MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD` (the Developer ID Application certificate with its private key), `ZEN_ASC_API_KEY_BASE64` and `ZEN_ASC_KEY_ID` (the App Store Connect key, which notarizes) and `MEWLA_MAC_UPDATE_KEY` (the update manifest's key; its public half is built into every app). The gate names any that is missing and stops the release before anything is published. The Developer ID certificate's intermediate (Apple's G2 CA) is fetched from apple.com into the job's temporary keychain; the keychain and the key files are deleted at the end of the step.
+
+Run without a tag (`gh workflow run macos-release.yml --ref <branch>`) it is the proof: two builds of the commit (A at its version, B the next patch), both signed, notarized and stapled, with their update source on loopback, then a clean `macos-26` runner holding no secret installs A from its `.dmg` as a person does (the download's quarantine kept; `spctl`, `stapler validate`), launches it through LaunchServices, checks the daemon, the Keychain item, launchd restarting the daemon with the Sessions kept, and updates A to B (same daemon id, paired device, login item, designated requirement). Nothing is tagged, attached or published.
+
+What is not proven by any run before a first release: that `publish` uploads these files into a real draft (its list is checked against `scripts/released.py` by `scripts/tests/test_released.py`), and the site's `releases/latest/download/Mewla-macos-arm64.dmg` link.
+
 ## Staged asset names
 
 Under `dist-download/v<version>/` (and the workflow artifact):
@@ -331,6 +340,8 @@ Under `dist-download/v<version>/` (and the workflow artifact):
 - `release-manifest.json.sig`
 
 Not published, kept 90 days as the workflow artifact `mewla-android-symbols-v<version>`: R8's `mapping.txt` (`retrace`) and the client's JS source map `bundleUi.js.map` (`nsh symbolicate`), which turn a captured Android trace or a minified JS stack from that release back into names. `ios-release.yml` keeps the iOS build's map the same way, as `<artifact name>-symbols-<build number>`.
+
+Mewla for Mac's five files are not in this tree or in `SHA256SUMS`: they come from `mac-app` (above) and have their own signed manifest, `latest.json`.
 
 Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NOTICE`, and `TRADEMARKS.md` at their root. The site serves `install.sh` and `install.ps1` from the repository byte for byte. Release notes stay in the GitHub Release body; Android third-party notices remain embedded in the APK. This keeps the download list focused without dropping required attribution.
 
