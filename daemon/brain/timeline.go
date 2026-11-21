@@ -525,7 +525,7 @@ func (s *Store) materializeProviderConversationLocked(threadID string, conversat
 	if threadID == "" {
 		return nil
 	}
-	conversation.Events = work.SuppressPrivateHostTurns(conversation.Events)
+	conversation.Events = hostChatEvents(conversation.Events)
 	sessionID := strings.TrimSpace(conversation.SessionID)
 	if sessionID == "" {
 		sessionID = "provider"

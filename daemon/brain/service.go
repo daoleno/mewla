@@ -3063,9 +3063,9 @@ type hostSuppressMemo struct {
 	out    []work.CodexConversationEvent
 }
 
-// suppressedHostEvents is work.SuppressPrivateHostTurns of the conversation's
-// events, kept for as long as the reader answers with the same parse: the
-// answer is the same events, and the filter is a pure function of them.
+// suppressedHostEvents is hostChatEvents of the conversation's events, kept
+// for as long as the reader answers with the same parse: the answer is the
+// same events, and the filter is a pure function of them.
 func (s *Service) suppressedHostEvents(reader *work.ProviderConversationReader, conversation work.CodexConversation) []work.CodexConversationEvent {
 	stamp := reader.ConversationStamp()
 	memo := &s.hostSuppressed
@@ -3074,7 +3074,7 @@ func (s *Service) suppressedHostEvents(reader *work.ProviderConversationReader, 
 	if stamp != 0 && memo.reader == reader && memo.stamp == stamp && memo.count == len(conversation.Events) {
 		return memo.out
 	}
-	out := work.SuppressPrivateHostTurns(conversation.Events)
+	out := hostChatEvents(conversation.Events)
 	if stamp != 0 {
 		memo.reader, memo.stamp, memo.count, memo.out = reader, stamp, len(conversation.Events), out
 	}

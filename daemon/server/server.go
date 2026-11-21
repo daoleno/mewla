@@ -2315,7 +2315,7 @@ func (s *Server) publishCodexConversationSubscription(
 		}
 	}
 	if !reusedProvider {
-		conversation = work.SanitizeConversationProjection(conversation)
+		conversation = projectProviderConversation(conversation, brainScoped)
 		conversation = conversationForProviderAttachment(conversation, resolved.fromWatcher)
 		// A Brain-scoped provider conversation with no parse stamp can only be
 		// told unchanged by its content; one with a stamp that moved is projected
@@ -2699,6 +2699,17 @@ func (s *Server) isCurrentCodexSubscription(conn *websocket.Conn, subscriptionID
 	subscriptions := s.codexSubs[conn]
 	current, ok := subscriptions[subscriptionID]
 	return ok && current.generation == generation
+}
+
+// projectProviderConversation is a provider conversation as the apps see it.
+// Brain's Chat overlays the Host Session's live conversation, so it leaves out
+// the provider's refusal of a Work delivery that is replayed; that is read
+// before sanitizing drops the Work-event inputs the refusal answered.
+func projectProviderConversation(conversation work.CodexConversation, brainScoped bool) work.CodexConversation {
+	if brainScoped {
+		conversation.Events = brain.SuppressRefusedWorkReplies(conversation.Events)
+	}
+	return work.SanitizeConversationProjection(conversation)
 }
 
 func (s *Server) brainScopedConversation(scopeKey string, conversation work.CodexConversation, now time.Time) work.CodexConversation {

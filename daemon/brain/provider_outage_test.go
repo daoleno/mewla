@@ -285,4 +285,32 @@ func TestBrainsChatLeavesOutTheProvidersRefusalOfAWorkDeliveryOnly(t *testing.T)
 	if strings.Join(bodies, "|") != strings.Join(want, "|") {
 		t.Fatalf("Chat replies = %q, want %q", bodies, want)
 	}
+	// The App's live overlay of the same transcript, and a direct
+	// materialization of it, leave it out too.
+	live, err := service.HostBoundProviderConversation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodies = nil
+	for _, event := range live.Events {
+		if event.Kind == "assistant_message" {
+			bodies = append(bodies, event.Body)
+		}
+	}
+	if strings.Join(bodies, "|") != strings.Join(want, "|") {
+		t.Fatalf("live Chat replies = %q, want %q", bodies, want)
+	}
+	if err := store.MaterializeProviderConversation(threadID, work.CodexConversation{SessionID: "host-claude", Events: append([]work.CodexConversationEvent(nil), live.Events...)}); err != nil {
+		t.Fatal(err)
+	}
+	unfiltered, err := work.NewProviderConversationReader().LoadByIdentity(work.HostTranscriptIdentity{Provider: "claude", SessionID: "host-claude", Path: transcript})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MaterializeProviderConversation(threadID, unfiltered); err != nil {
+		t.Fatal(err)
+	}
+	if rows := waitForTimelineAssistant(t, store, threadID, 3); len(rows) != 3 {
+		t.Fatalf("materialized rows = %d", len(rows))
+	}
 }

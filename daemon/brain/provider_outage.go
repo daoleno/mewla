@@ -180,14 +180,22 @@ func (s *Store) reviewClaimable(now time.Time) bool {
 	return claimable
 }
 
-// suppressRefusedWorkReplies keeps out of Chat the provider's refusal text
+// hostChatEvents is what Brain's Chat shows of the Host transcript: no private
+// Host turns, and no provider refusal of a Work delivery that is replayed.
+// Every path from the Host transcript to Chat (capture, materialization, the
+// App's live overlay) goes through it.
+func hostChatEvents(events []work.CodexConversationEvent) []work.CodexConversationEvent {
+	return SuppressRefusedWorkReplies(work.SuppressPrivateHostTurns(events))
+}
+
+// SuppressRefusedWorkReplies keeps out of Chat the provider's refusal text
 // ("API Error: Request rejected (429) …") that ends a Host turn handed a Work
 // event, when the refusal is transient: that delivery is replayed
 // (endHostHandling), and Chat's one outage line says the provider is not
 // answering. A refused reply to the person's own message stays, since that
 // message is not replayed, and so do sign-in and other non-transient refusals,
 // which nothing else reports.
-func suppressRefusedWorkReplies(events []work.CodexConversationEvent) []work.CodexConversationEvent {
+func SuppressRefusedWorkReplies(events []work.CodexConversationEvent) []work.CodexConversationEvent {
 	var out []work.CodexConversationEvent
 	answeringWork := false
 	for index, event := range events {
