@@ -64,6 +64,7 @@ import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "../sessions/AllSessions";
 import { showAlert } from "../shell/alert";
 import { getGitRepository } from "../../core/git/requests";
+import { gitReview } from "../more/git/state";
 import { headerSize } from "../kit/density";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
@@ -327,9 +328,29 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       if (repoOf()?.cwd === cwd) return;
       void getGitRepository(transport, { targetId: props.workerId, cwd })
         .then((repo) => {
-          if (untracked(gitCwd) === cwd) repoOf.set({ cwd, repo });
+          if (untracked(gitCwd) !== cwd) return;
+          repoOf.set({ cwd, repo });
+          // One status read of the folder's own (what the Git page reads; the computer lists at most 1000 files), so the
+          // button knows whether there is anything to review. After it, the Git page's own reads keep it current.
+          if (repo) void gitReview({ targetId: props.workerId, cwd })?.refresh();
         })
         .catch(() => {});
+    });
+  });
+  // The button's colour: the Git state the app already holds for this folder (the review's status), nothing of its own.
+  // Anything the Git page would list (changed, staged, untracked) is a change.
+  const gitChanged = computed(() => {
+    if (!isRepo()) return false;
+    const status = gitReview({ targetId: props.workerId, cwd: gitCwd() })?.status();
+    return status?.available === true && (!status.clean || status.file_count > 0);
+  });
+  // A turn that ends is when files have changed: read the status again once, not on a timer.
+  let turnWasRunning = false;
+  effect(() => {
+    const running = activity()?.status === "running";
+    untracked(() => {
+      if (turnWasRunning && !running && isRepo() && connected()) void gitReview({ targetId: props.workerId, cwd: gitCwd() })?.refresh();
+      turnWasRunning = running;
     });
   });
   // A Git review of this Session closes when the Session changes folder, as the Expo app's sheet did;
@@ -624,8 +645,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
           </Button>
         </If>
         <If when={isRepo()}>
-          <Button testID="session-git" accessibilityLabel="Git changes" onPress={openGit} hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
-            <Icon name="diff" size={bar ? head.actionIcon : 22} color="foreground" />
+          <Button testID="session-git" accessibilityLabel={gitChanged() ? "Git, changes" : "Git"} onPress={openGit} hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
+            <Icon name="git" size={bar ? head.actionIcon : 22} color={gitChanged() ? "meter" : "foreground"} />
           </Button>
         </If>
         {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a
@@ -674,7 +695,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       // The side rail's: Stop while a turn runs, Git in a repository, the view, ⋯ (the capsule's actions, in its order).
       rail={[
         { id: "stop", transient: true, icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping" : "Stop", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
-        { id: "session-git", icon: "git-compare", label: "Git changes", onPress: openGit, shown: () => isRepo() },
+        { id: "session-git", icon: "git", tone: gitChanged() ? "meter" : undefined, label: gitChanged() ? "Git, changes" : "Git", onPress: openGit, shown: () => isRepo() },
         { id: "session-mode", icon: mode() === "chat" ? "terminal" : "chat", label: mode() === "chat" ? "Show terminal" : "Show chat", onPress: () => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")), shown: () => Boolean(props.brain) || canChat() },
         { id: "session-menu", icon: "more-horizontal", label: "Session menu", onPress: () => void menu(), shown: () => hasMenu(), ref: menuAnchor.ref },
       ]}
