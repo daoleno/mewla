@@ -370,6 +370,7 @@ type Watcher struct {
 	workerOrder       []string
 	prevContent       map[string]string
 	hidden            map[string]bool
+	startPins         map[string]startPin
 	delegated         map[string]bool
 	activityProbe     classifier.ActivityProbe
 	executorResolver  func(command string) string
@@ -1942,7 +1943,11 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 		// the Worker keeps the identity it had instead of being rewritten from
 		// the Session's command alone.
 		if processes != nil {
-			detectedCommand, detectedStartedAt, detectedPID := detectWorkerProcess(win.command, win.panePID, processes, processSnapshotAt)
+			detectedCommand, detectedStartedAt, detectedPID, startFromSnapshot := detectWorkerProcessStart(win.command, win.panePID, processes, processSnapshotAt)
+			if w.startPins == nil {
+				w.startPins = make(map[string]startPin)
+			}
+			detectedStartedAt = pinFallbackStart(w.startPins, win.target, startFromSnapshot, detectedCommand, detectedPID, processes[win.panePID].tpgid, detectedStartedAt)
 			// Sub-second provider start evidence: ps lstart is whole-second
 			// precision, so instance-ownership arms would compare against a
 			// rounded start. The platform's precise derivation (Linux
@@ -2162,6 +2167,7 @@ func (w *Watcher) projectMissingWorkersLocked(missing []missingPollWorker) []Ses
 		}
 		old := w.workers[id]
 		delete(w.workers, id)
+		delete(w.startPins, id)
 		delete(w.prevContent, id)
 		delete(w.hidden, id)
 		delete(w.delegated, id)

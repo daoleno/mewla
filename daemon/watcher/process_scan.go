@@ -352,6 +352,14 @@ func processDescendsFrom(rootPID, processID int, processes map[int]processInfo) 
 }
 
 func detectWorkerProcess(baseCommand string, panePID int, processes map[int]processInfo, fallbackAt time.Time) (string, time.Time, int) {
+	command, startedAt, pid, _ := detectWorkerProcessStart(baseCommand, panePID, processes, fallbackAt)
+	return command, startedAt, pid
+}
+
+// detectWorkerProcessStart is detectWorkerProcess that also says whether the
+// returned start is the caller's fallbackAt (the poll's own snapshot time)
+// rather than a process start the scan read: that value moves on every poll.
+func detectWorkerProcessStart(baseCommand string, panePID int, processes map[int]processInfo, fallbackAt time.Time) (string, time.Time, int, bool) {
 	command := normalizeCommand(baseCommand)
 	baseStartedAt := time.Time{}
 	basePID := 0
@@ -405,7 +413,7 @@ func detectWorkerProcess(baseCommand string, panePID int, processes map[int]proc
 					bestCommand = "grok resume"
 				}
 			}
-			return bestCommand, firstNonZeroTime(bestProcess.startedAt, fallbackAt), bestProcess.pid
+			return bestCommand, firstNonZeroTime(bestProcess.startedAt, fallbackAt), bestProcess.pid, bestProcess.startedAt.IsZero()
 		}
 	}
 
@@ -418,14 +426,14 @@ func detectWorkerProcess(baseCommand string, panePID int, processes map[int]proc
 		}
 		for _, proc := range scan {
 			if isAntigravityProcess(proc) && !proc.startedAt.IsZero() {
-				return command, proc.startedAt, proc.pid
+				return command, proc.startedAt, proc.pid, false
 			}
 		}
 	}
 	if isWorkerCommand(command) {
-		return command, fallbackAt, basePID
+		return command, fallbackAt, basePID, true
 	}
-	return command, baseStartedAt, basePID
+	return command, baseStartedAt, basePID, false
 }
 
 // Preserve only the explicit transcript identity from the proven provider

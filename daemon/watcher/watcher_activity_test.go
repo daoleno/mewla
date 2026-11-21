@@ -644,3 +644,35 @@ func TestPollFollowsAHiddenFlipInBothDirections(t *testing.T) {
 		t.Fatalf("unhiding the pane must bring the Worker back, got %+v", got)
 	}
 }
+
+// A known agent whose process the scan does not bind (here a claude pane whose
+// process table shows only its shell) used to get the poll's own snapshot time
+// as its start, a new value every poll.
+func TestPollKeepsTheFirstObservedStartOfAnUnboundAgent(t *testing.T) {
+	w := New(time.Second)
+	base := time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)
+	steps := make([]time.Time, 0, 40)
+	for i := 0; i < 40; i++ {
+		steps = append(steps, base.Add(time.Duration(i)*time.Second))
+	}
+	w.pollNow = fakePollClock(steps)
+	shell := processInfo{pid: 111, ppid: 1, pgid: 111, tpgid: 111, startedAt: sessionAStarted, comm: "zsh", args: "zsh"}
+	restore := installFakePollSeams(w, testWindows()[:1], map[string]string{"sess-a:@1": contentA},
+		map[int]processInfo{111: shell})
+	defer restore()
+
+	var starts []time.Time
+	for i := 0; i < 4; i++ {
+		w.poll()
+		worker := workerByID(w.Workers(), "sess-a:@1")
+		if worker == nil {
+			t.Fatal("worker missing")
+		}
+		starts = append(starts, worker.StartedAt)
+	}
+	for i, got := range starts {
+		if !got.Equal(starts[0]) {
+			t.Fatalf("poll %d StartedAt = %s, want the first observed %s (all: %v)", i, got, starts[0], starts)
+		}
+	}
+}
