@@ -26,7 +26,7 @@ const (
 func (f *progressJudgeFixture) judgeNow(t *testing.T, summary string) {
 	t.Helper()
 	f.reportVia(t, "running", "working", summary)
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatalf("not judged after %q", summary)
 	}
@@ -34,11 +34,11 @@ func (f *progressJudgeFixture) judgeNow(t *testing.T, summary string) {
 
 func TestTheJudgeNamesTheWorkInItsSameCall(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownZh)
-	if _, err := f.store.AppendTimelineItem(TimelineItem{ID: "u1", ThreadID: "t", SessionID: "s", Role: "user", Kind: "user_message", Body: "发现个严重的问题，上传完图片输入框就没法工作了", CreatedAt: f.clock.Add(-30 * time.Minute)}); err != nil {
+	if _, err := f.store.AppendTimelineItem(TimelineItem{ID: "u1", ThreadID: "t", SessionID: "s", Role: "user", Kind: "user_message", Body: "发现个严重的问题，上传完图片输入框就没法工作了", CreatedAt: f.now().Add(-30 * time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
 	f.reportVia(t, "running", "working", "fix deployed")
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	before := f.work(t)
 	if !f.judgeDue(t) {
 		t.Fatal("not judged")
@@ -77,10 +77,10 @@ func TestTheJudgeNamesTheWorkInItsSameCall(t *testing.T) {
 func TestThePersonsTitleAndProjectStick(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownZh, answerShownLater)
 	f.judgeNow(t, "fix deployed")
-	if _, err := f.store.SetWorkShown(f.workID, ShownTitle, "  Composer after upload  ", f.clock); err != nil {
+	if _, err := f.store.SetWorkShown(f.workID, ShownTitle, "  Composer after upload  ", f.now()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.SetWorkShown(f.workID, ShownProject, "0G App", f.clock); err != nil {
+	if _, err := f.store.SetWorkShown(f.workID, ShownProject, "0G App", f.now()); err != nil {
 		t.Fatal(err)
 	}
 	f.judgeNow(t, "verified on mobile")
@@ -95,14 +95,14 @@ func TestThePersonsTitleAndProjectStick(t *testing.T) {
 		t.Fatalf("the judge was not told what the person set:\n%s", f.model.prompts[1])
 	}
 	// Clearing hands the title back to the judge.
-	cleared, err := f.store.SetWorkShown(f.workID, ShownTitle, "", f.clock)
+	cleared, err := f.store.SetWorkShown(f.workID, ShownTitle, "", f.now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(cleared.ByPerson) != 1 || cleared.ByPerson[0] != "project" {
 		t.Fatalf("by_person = %v", cleared.ByPerson)
 	}
-	if _, err := f.store.SetWorkShown(f.workID, "line", "x", f.clock); !errors.Is(err, ErrShownField) {
+	if _, err := f.store.SetWorkShown(f.workID, "line", "x", f.now()); !errors.Is(err, ErrShownField) {
 		t.Fatalf("set line err = %v", err)
 	}
 }
@@ -117,7 +117,7 @@ func TestAJudgeThatSaysNothingOrFailsKeepsTheLastGoodText(t *testing.T) {
 	}
 	f.model.err = errors.New("401 authentication_error")
 	f.reportVia(t, "running", "working", "again")
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	f.judgeDue(t)
 	if got := f.work(t).Shown; got.Title != first.Title || got.Line != first.Line {
 		t.Fatalf("a failed judgment changed the row: %#v", got)
@@ -133,7 +133,7 @@ func TestAnOpenWorkWithNoNameIsAskedForOneOnce(t *testing.T) {
 	if !pending {
 		t.Fatal("an unnamed open Work was not asked for a name")
 	}
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) || f.work(t).Shown == nil {
 		t.Fatal("the first judgment did not name the Work")
 	}
@@ -149,13 +149,13 @@ func TestAnOpenWorkWithNoNameIsAskedForOneOnce(t *testing.T) {
 func TestAWorkTheJudgeTriedToNameWaitsForEvidence(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownBlank)
 	f.service.requestChanged()
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("not asked for a name")
 	}
-	f.clock = f.clock.Add(24 * time.Hour)
+	f.advance(24 * time.Hour)
 	f.service.requestChanged()
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if f.judgeDue(t) {
 		t.Fatal("asked again with no new evidence")
 	}
@@ -253,8 +253,8 @@ type parkedFixture struct {
 	store   *Store
 	service *Service
 	model   *fakeProgressModel
-	clock   time.Time
-	id      string
+	*fixtureClock
+	id string
 }
 
 func newParkedFixture(t *testing.T, answers ...string) *parkedFixture {
@@ -263,7 +263,7 @@ func newParkedFixture(t *testing.T, answers ...string) *parkedFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &parkedFixture{t: t, store: store, model: &fakeProgressModel{answers: answers}, clock: time.Now().UTC()}
+	f := &parkedFixture{t: t, store: store, model: &fakeProgressModel{answers: answers}, fixtureClock: newFixtureClock()}
 	f.restart()
 	item, _, err := store.EnsureWork(Work{ID: "w-xcode", Title: "XcodeLogsViewerHang", Objective: "Find why the Xcode Logs viewer hangs and fix it.", CompletionPolicy: CompletionBounded})
 	if err != nil {
@@ -277,7 +277,7 @@ func newParkedFixture(t *testing.T, answers ...string) *parkedFixture {
 func (f *parkedFixture) restart() {
 	f.service = newTestService(f.t, f.store, nil, nil)
 	f.service.SetProgressAsker(f.model.ask)
-	f.service.now = func() time.Time { return f.clock }
+	f.service.now = func() time.Time { return f.now() }
 	f.service.progress.loading = func(WorkTranscriptLink) (work.CodexConversation, error) { return work.CodexConversation{}, nil }
 	f.service.seedProgressLastRun()
 }
@@ -286,7 +286,7 @@ func (f *parkedFixture) restart() {
 // judgment that is due once the evidence has settled. It says how many ran.
 func (f *parkedFixture) scan() int {
 	f.service.requestChanged()
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	ran := 0
 	for workID := f.service.nextProgressDue(); workID != ""; workID = f.service.nextProgressDue() {
 		f.service.judgeProgress(context.Background(), workID)
@@ -394,7 +394,7 @@ func TestAClosedWorkIsReadOnceForHowItEnded(t *testing.T) {
 		t.Fatalf("a closed Work was judged %d more times", ran)
 	}
 	// Long closed: never read again.
-	f.clock = f.clock.Add(progressClosedWindow + time.Hour)
+	f.advance(progressClosedWindow + time.Hour)
 	if ran := f.scan(); ran != 0 {
 		t.Fatalf("an old closed Work was judged %d times", ran)
 	}
@@ -440,7 +440,7 @@ func TestASweptClosedWorkIsNotReadAgain(t *testing.T) {
 	}
 	// Its row written over a day ago: not in the list any more.
 	err := f.store.updateWorkProgressLocked(f.id, func(item *Work) (*WorkEvent, bool) {
-		item.Shown = &WorkShown{Title: "旧事", Line: "进行中", Status: "active", JudgedAt: f.clock.Add(-progressClosedWindow - time.Hour)}
+		item.Shown = &WorkShown{Title: "旧事", Line: "进行中", Status: "active", JudgedAt: f.now().Add(-progressClosedWindow - time.Hour)}
 		return nil, false
 	})
 	if err != nil {
@@ -468,11 +468,11 @@ func TestTheLanguageIsThePersonsNotTheWorks(t *testing.T) {
 	f := newParkedFixture(t, answerParked)
 	// The person's newest messages are hours after the Work began, outside its own window.
 	for i, text := range []string{"这个也看不懂。", "你看好多任务我都看不懂", "Dev 的代码最新的要往 main 合一下。"} {
-		if _, err := f.store.AppendTimelineItem(TimelineItem{ID: fmt.Sprintf("u%d", i), ThreadID: "t", SessionID: "s", Role: "user", Kind: "user_message", Body: text, CreatedAt: f.clock.Add(10 * time.Hour)}); err != nil {
+		if _, err := f.store.AppendTimelineItem(TimelineItem{ID: fmt.Sprintf("u%d", i), ThreadID: "t", SessionID: "s", Role: "user", Kind: "user_message", Body: text, CreatedAt: f.now().Add(10 * time.Hour)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	f.clock = f.clock.Add(11 * time.Hour)
+	f.advance(11 * time.Hour)
 	f.scan()
 	if prompt := f.model.prompts[len(f.model.prompts)-1]; !strings.Contains(prompt, "The person writes in Chinese: write title, line and next in Chinese.") {
 		t.Fatalf("the judge was not told the person's language:\n%s", prompt[strings.Index(prompt, "<<<PERSON"):])
@@ -494,7 +494,7 @@ func TestNoDailyCapStopsAJudgmentOfNewEvidence(t *testing.T) {
 				progress = *cloneWorkProgress(item.Progress)
 			}
 			for i := 0; i < n; i++ {
-				progress.Runs = append(progress.Runs, ProgressRun{At: f.clock.Add(-time.Duration(n-i) * time.Minute), USD: 0.002})
+				progress.Runs = append(progress.Runs, ProgressRun{At: f.now().Add(-time.Duration(n-i) * time.Minute), USD: 0.002})
 			}
 			item.Progress = &progress
 			return nil, false

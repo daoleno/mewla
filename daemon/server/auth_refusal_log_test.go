@@ -8,23 +8,49 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-func captureLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	previousWriter, previousFlags := log.Writer(), log.Flags()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	t.Cleanup(func() { log.SetOutput(previousWriter); log.SetFlags(previousFlags) })
-	return &buf
+// logBuffer is the captured log: the server's goroutines write it while the
+// test reads it.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
 }
 
-func refusedLines(buf *bytes.Buffer) []string {
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *logBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func captureLog(t *testing.T) *logBuffer {
+	t.Helper()
+	buf := &logBuffer{}
+	previousWriter, previousFlags := log.Writer(), log.Flags()
+	log.SetOutput(buf)
+	log.SetFlags(0)
+	t.Cleanup(func() { log.SetOutput(previousWriter); log.SetFlags(previousFlags) })
+	return buf
+}
+
+func refusedLines(buf *logBuffer) []string {
 	var lines []string
 	for _, line := range strings.Split(buf.String(), "\n") {
 		if strings.HasPrefix(line, "auth: refused ") {

@@ -9,7 +9,7 @@ import (
 func (f *progressJudgeFixture) restartService() {
 	restarted := NewService(f.store, nil, nil)
 	restarted.SetProgressAsker(f.model.ask)
-	restarted.now = func() time.Time { return f.clock }
+	restarted.now = func() time.Time { return f.now() }
 	restarted.progress.loading = f.service.progress.loading
 	f.service = restarted
 	f.service.seedProgressLastRun()
@@ -23,12 +23,12 @@ func TestARestartReplayingAnOlderTurnJudgesNothing(t *testing.T) {
 	f.noteAndWait(t, f.fact("turn:1", "running", "fix written"), true)
 	f.noteAndWait(t, f.fact("turn:1", "done", "fix written"), false)
 	f.service.requestChanged() // the live loop's scan: Brain's disposition is noted once
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("turn:1 not judged")
 	}
 	f.noteAndWait(t, f.fact("turn:2", "running", "verifying on mobile"), true)
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("turn:2 not judged")
 	}
@@ -39,7 +39,7 @@ func TestARestartReplayingAnOlderTurnJudgesNothing(t *testing.T) {
 	}
 	time.Sleep(100 * time.Millisecond)
 	f.service.requestChanged()
-	f.clock = f.clock.Add(time.Hour)
+	f.advance(time.Hour)
 	if f.judgeDue(t) || len(f.model.prompts) != calls {
 		t.Fatalf("a restart replaying an older turn judged again: %d model calls, want %d", len(f.model.prompts), calls)
 	}
@@ -51,20 +51,20 @@ func TestAReportLeftUnjudgedAtARestartKeepsItsGap(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownZh, answerShownLater)
 	f.reportVia(t, "running", "working", "tests 10/20")
 	f.service.requestChanged() // the live loop's scan: Brain's disposition is noted once
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("not judged")
 	}
-	judgedAt := f.clock
+	judgedAt := f.now()
 	f.reportVia(t, "running", "working", "tests 20/20")
-	f.clock = f.clock.Add(2 * time.Minute)
+	f.advance(2 * time.Minute)
 	f.restartService()
 	f.service.requestChanged()
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if f.judgeDue(t) {
-		t.Fatalf("judged %v after the last judgment, inside the gap", f.clock.Sub(judgedAt))
+		t.Fatalf("judged %v after the last judgment, inside the gap", f.now().Sub(judgedAt))
 	}
-	f.clock = judgedAt.Add(progressMinGap + time.Second)
+	f.setClock(judgedAt.Add(progressMinGap + time.Second))
 	if !f.judgeDue(t) {
 		t.Fatal("the report left at the restart was never judged")
 	}

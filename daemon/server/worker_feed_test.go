@@ -181,7 +181,10 @@ func feedTestSocket(t *testing.T, srv *Server, subprotocols ...string) *websocke
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The server may already be serving the first socket: its handlers read auth under mu.
+	srv.mu.Lock()
 	srv.auth = manager
+	srv.mu.Unlock()
 	pairing, err := manager.IssuePairingToken(time.Minute)
 	if err != nil {
 		t.Fatal(err)
