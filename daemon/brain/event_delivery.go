@@ -20,6 +20,7 @@ const (
 func marshalDirectWorkEventInput(action WorkReviewAction, item Work) (string, error) {
 	input := work.DirectWorkEventInput{
 		ResourcePressure:   resourcePressureDetails(action.Kind, action.DetailsJSON),
+		OverdueWaits:       overdueDetails(action.Kind, action.DetailsJSON),
 		EventID:            strings.TrimSpace(action.EventID),
 		WorkID:             strings.TrimSpace(action.WorkID),
 		WorkRevision:       action.DeliveryWorkRevision,
@@ -36,7 +37,7 @@ func marshalDirectWorkEventInput(action WorkReviewAction, item Work) (string, er
 	}
 	payload := work.FormatDirectWorkEventInput(input)
 	limit := directWorkEventInputMaxBytes
-	if len(input.ResourcePressure) > 0 {
+	if len(input.ResourcePressure) > 0 || len(input.OverdueWaits) > 0 {
 		limit = 12 * 1024
 	}
 	if len(payload) > limit {

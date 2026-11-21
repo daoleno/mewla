@@ -239,8 +239,9 @@ func (s *Store) objectiveProgressLocked(file objectiveFile) (Objective, error) {
 }
 
 // isObjectiveChildWork leaves out Work the daemon creates on its own:
-// Calendar occurrences and machine resource telemetry.
+// Calendar occurrences, machine resource telemetry and the overdue-wait list.
 func isObjectiveChildWork(workID string) bool {
 	return !strings.HasPrefix(workID, calendarWorkPrefix) &&
-		!strings.HasPrefix(workID, resourcePressureWorkPrefix)
+		!strings.HasPrefix(workID, resourcePressureWorkPrefix) &&
+		!strings.HasPrefix(workID, overdueWorkPrefix)
 }

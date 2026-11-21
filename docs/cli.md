@@ -72,7 +72,8 @@ mewla brain work update -id <work> -status done
 mewla brain work update -id <work> -status waiting \
   -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins" \
   -recommend "Newest wins"   # the phone tags that button "Brain's pick"
-mewla brain work update -id <work> -status waiting -wait-for "the deploy window"
+mewla brain work update -id <work> -status waiting -wait-for "the deploy window" -until "2026-11-25 22:00"
+mewla brain work update -id <work> -until 3d      # moves the end of the standing wait
 mewla brain work update -id <work> -wait-for ""   # ends the wait
 mewla brain work event -id <work> -kind deploy.done -dedupe deploy-42 -payload <file> -actionable
 ```

@@ -430,9 +430,15 @@ fact is at least 3 minutes old, so a Work Brain just created is not judged
 before its Worker starts), the Work is a candidate. A `WorkJudge` is given the
 Work's objective, its recent events including the Worker's result, every wait
 set on it (what Brain named with `-wait-for`, kept readable after the wait is
-released; a named step stays pending until something shows it happened), and
-the chat between the user and Brain since the last event, and returns `done`,
-`cancelled` or `keep` with a reason. The production judge runs the user's own Claude Code once, headless, the way
+released), and the chat between the user and Brain since the last event, and
+returns `done`, `cancelled` or `keep` with a reason. Its own earlier keep
+verdicts are not shown to it: a keep is never argued from the last one. The
+distinction it is given (11-21): when the delegated result is in and accepted
+and what Brain or the user names is a different, later step (a check, a
+follow-up, a release, the owner's own try, a decision the owner owes), the
+Work is `done`, and that step gets its own Work, a calendar item or a
+question. Only when this same Work's outcome is not delivered yet and the
+context names what will deliver it is it `keep`. The production judge runs the user's own Claude Code once, headless, the way
 Watch's judgment does (`watch/judge_agents.go`): Sonnet in print mode, no
 tools, MCP servers, hooks or saved session, only the user's own settings
 (they carry how this person signs in), in an empty directory. The call never runs under the
@@ -447,8 +453,33 @@ While that revision stands, the Work shows `waiting` with `wait_for` in the
 judge's words (for example "owner decision on the rate-limit options"). It is
 judged again when something happens on the Work: a lifecycle change, a new
 Work event, or a Brain message that names the Work by id or title. It is also
-judged again once a day. No timer ever closes a kept Work; Brain closes or
-continues it from the stale list below.
+judged again once a day. A keep is a wait with an end: `kept.since` is the
+first keep at that revision and `kept.until` is 24 hours later, and a keep
+judged again at the same revision carries both, so the end never slides.
+Nothing closes a kept Work at its end; it goes on the day's list of waits
+past their end (below), and Brain closes or continues it.
+
+**Waits past their end.** A Work is on the board only while a Session works on
+it or it waits for something that ends by itself: an event the runtime will
+deliver, or a time. Brain's named wait and the judge's keep have no producer,
+so each has an end (`wake.until`, `kept.until`): `-until` when Brain gave one,
+else 24 hours (`WaitDefaultEnd`, the judge's own rejudge interval). Trigger
+Works are watchers and never listed; a question waits on the person's reply,
+which the runtime delivers, and has no end. Once a minute
+`brain/wait_end.go` looks for open Works whose end has passed. When there are
+any and no list was raised in the last 24 hours, it creates one Work
+`overdue-waits:<time>` ("Waits past their end") with one actionable
+`work.waits_overdue` event that lists up to 12 of them (Work id, title, what it
+waits for, who set it: `brain` or `judge`, since, until, how long it has
+waited) and wakes Brain once; Brain's event input carries the list as
+`overdue_waits`. Brain then closes each, does the owed step, or sets a new
+wait with a time. Nothing is closed behind Brain's back and nothing is raised
+per Work. The list's own Work closes as a fact (actor `runtime`, no judge call)
+once Brain's reading ends; an unread one is replaced by the next day's. The
+newest list Work's creation time is the durable record, so a restart neither
+repeats a list nor loses one half written. On the first start with ends, every
+open wait without one gets the default end from that moment (written once),
+so the upgrade raises nothing.
 
 **When the judge cannot answer** (the route refuses it, it is killed, rate
 limited or times out, or its reply is not a verdict), nothing is decided: every
@@ -695,7 +726,11 @@ A Work waits on the person only when Brain asks them something (a question).
 standing, sets a `user_input` wake (on Brain's thread during a review). Without
 one it sets a `named` wake: the condition `-wait-for` names (tomorrow's run, a
 release, another Worker's push), or `operator:<work>` when nothing is named.
-No producer ends a `named` wake. It ends when Brain sets a new status or wait
+A `named` wake has an end, `-until` (a duration such as `36h` or `3d`, or a
+local time: `15:04`, `2006-01-02`, `2006-01-02 15:04`, RFC3339) or 24 hours;
+`-until` alone moves the end of the standing named wait and keeps its start.
+Past its end the Work goes on the day's list of waits past their end
+([Settlement](#settlement)). No producer ends a `named` wake. It ends when Brain sets a new status or wait
 or an empty `-wait-for`, when a follow-up Turn starts on the Work, or when an
 event opens a review for Brain (a Trigger firing on its Work, a result). Input on
 Brain's thread and a reply on a Work's card end a `user_input` wait only on a

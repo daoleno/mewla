@@ -64,6 +64,9 @@ type WorkWake struct {
 	Kind          WorkWakeKind `json:"kind"`
 	Ref           string       `json:"ref"`
 	NextAttemptAt *time.Time   `json:"next_attempt_at,omitempty"`
+	// Until is when a named wait ends (wait_end.go): -until, else the default
+	// end. Past it the Work is listed for Brain once a day; nothing closes it.
+	Until *time.Time `json:"until,omitempty"`
 }
 
 type BrainInputAdmissionState string
@@ -185,6 +188,11 @@ type WorkKept struct {
 	Reason   string    `json:"reason"`
 	Revision uint64    `json:"revision"`
 	At       time.Time `json:"at"`
+	// Since is the first keep at this revision; Until is when the wait it
+	// names ends (wait_end.go). A keep judged again at the same revision
+	// carries both, so the end never slides.
+	Since *time.Time `json:"since,omitempty"`
+	Until *time.Time `json:"until,omitempty"`
 }
 
 // WorkEvent is an append-only fact and at most a one-shot wake/delivery
@@ -238,8 +246,11 @@ type WorkUpdate struct {
 	DoneCriteriaRef  *string
 	NextAction       *string
 	WaitFor          *string
-	Wake             **WorkWake
-	ContextRef       *string
+	// WaitUntil is when the named wait this update sets ends (-until); without
+	// it the wait gets the default end.
+	WaitUntil  *time.Time
+	Wake       **WorkWake
+	ContextRef *string
 	// Question with Choices replaces what Brain asks the user; an empty
 	// question clears both.
 	Question *string
@@ -515,6 +526,12 @@ func cloneWorkKept(kept *WorkKept) *WorkKept {
 		return nil
 	}
 	copied := *kept
+	for _, at := range []**time.Time{&copied.Since, &copied.Until} {
+		if *at != nil {
+			value := **at
+			*at = &value
+		}
+	}
 	return &copied
 }
 
@@ -527,6 +544,10 @@ func cloneWorkWake(wake *WorkWake) *WorkWake {
 	if wake.NextAttemptAt != nil {
 		next := wake.NextAttemptAt.UTC()
 		copy.NextAttemptAt = &next
+	}
+	if wake.Until != nil {
+		until := wake.Until.UTC()
+		copy.Until = &until
 	}
 	return &copy
 }
@@ -1021,10 +1042,14 @@ func workWakeEqual(left, right *WorkWake) bool {
 	if left.Kind != right.Kind || strings.TrimSpace(left.Ref) != strings.TrimSpace(right.Ref) {
 		return false
 	}
-	if left.NextAttemptAt == nil || right.NextAttemptAt == nil {
-		return left.NextAttemptAt == nil && right.NextAttemptAt == nil
+	return timesEqual(left.NextAttemptAt, right.NextAttemptAt) && timesEqual(left.Until, right.Until)
+}
+
+func timesEqual(left, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
 	}
-	return left.NextAttemptAt.Equal(*right.NextAttemptAt)
+	return left.Equal(*right)
 }
 
 func validWorkDisposition(disposition WorkDisposition) bool {
@@ -1562,15 +1587,38 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 			if wake == nil {
 				wake = &WorkWake{Kind: waitWakeKind(item, update.Question), Ref: firstNonEmpty(waitFor, "operator:"+item.ID)}
 			}
-			if _, err := s.fsm.SetWait(lifecycle.WorkID(item.ID), lifecycle.WakeKind(wake.Kind), wake.Ref); err != nil {
+			wake, err := withWaitEnd(wake, update.WaitUntil, now)
+			if err != nil {
+				return Work{}, err
+			}
+			if _, err := s.fsm.SetWaitUntil(lifecycle.WorkID(item.ID), lifecycle.WakeKind(wake.Kind), wake.Ref, wake.Until); err != nil {
 				return Work{}, err
 			}
 		default:
 			return Work{}, fmt.Errorf("%w: status %q is derived; only done/cancelled/waiting are operator-settable", ErrWorkConflict, string(*update.Status))
 		}
 	} else if !terminalUpdate && update.Wake != nil && *update.Wake != nil {
-		wake := cloneWorkWake(*update.Wake)
-		if _, err := s.fsm.SetWait(lifecycle.WorkID(item.ID), lifecycle.WakeKind(wake.Kind), wake.Ref); err != nil {
+		wake, err := withWaitEnd(cloneWorkWake(*update.Wake), update.WaitUntil, now)
+		if err != nil {
+			return Work{}, err
+		}
+		if _, err := s.fsm.SetWaitUntil(lifecycle.WorkID(item.ID), lifecycle.WakeKind(wake.Kind), wake.Ref, wake.Until); err != nil {
+			return Work{}, err
+		}
+	} else if !terminalUpdate && update.WaitUntil != nil {
+		// -until alone moves the end of the standing named wait.
+		st, err := s.fsmState(item.ID)
+		if err != nil {
+			return Work{}, err
+		}
+		if st.Wake == nil || st.Wake.Kind != lifecycle.WakeNamed {
+			return Work{}, fmt.Errorf("%w: -until needs a named wait (-status waiting -wait-for \"<what>\")", ErrWorkConflict)
+		}
+		wake, err := withWaitEnd(&WorkWake{Kind: WorkWakeNamed, Ref: st.Wake.Ref}, update.WaitUntil, now)
+		if err != nil {
+			return Work{}, err
+		}
+		if _, err := s.fsm.SetWaitUntil(lifecycle.WorkID(item.ID), st.Wake.Kind, st.Wake.Ref, wake.Until); err != nil {
 			return Work{}, err
 		}
 	} else if !terminalUpdate && update.Wake != nil && *update.Wake == nil {

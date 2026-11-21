@@ -293,7 +293,11 @@ func Reduce(prev *State, ev Event) *State {
 			return noop(s, ev) // waits apply only without an active Attempt
 		}
 		p := payload[WakePayload](ev)
-		s.Wake = &WakeState{Kind: p.WakeKind, Ref: p.Ref, Since: ev.At, NextAttemptAt: p.NextAttemptAt}
+		since := ev.At
+		if s.Wake != nil && s.Wake.Kind == p.WakeKind && s.Wake.Ref == p.Ref {
+			since = s.Wake.Since // the same wait set again moves only its end
+		}
+		s.Wake = &WakeState{Kind: p.WakeKind, Ref: p.Ref, Since: since, NextAttemptAt: p.NextAttemptAt, Until: p.Until}
 		s.Status = StatusWaiting
 
 	case KWakeCleared:
@@ -420,7 +424,7 @@ func Reduce(prev *State, ev Event) *State {
 			if s.Attempt == nil {
 				s.Wake = &WakeState{
 					Kind: p.WakeKind, Ref: p.WakeRef,
-					Since: ev.At, NextAttemptAt: p.NextAttemptAt,
+					Since: ev.At, NextAttemptAt: p.NextAttemptAt, Until: p.WakeUntil,
 				}
 				s.Status = StatusWaiting
 			}

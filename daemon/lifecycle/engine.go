@@ -969,6 +969,13 @@ func (e *Engine) Reopen(id WorkID, reason string) (*State, error) {
 
 // SetWait parks a non-owned Work on a typed external producer.
 func (e *Engine) SetWait(id WorkID, kind WakeKind, ref string) (*State, error) {
+	return e.SetWaitUntil(id, kind, ref, nil)
+}
+
+// SetWaitUntil parks a non-owned Work on a typed external producer; a named
+// wait also carries when it ends. Setting the same wait again with another end
+// keeps its start and moves only the end.
+func (e *Engine) SetWaitUntil(id WorkID, kind WakeKind, ref string, until *time.Time) (*State, error) {
 	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
 		if st == nil {
 			return nil, ErrUnknownWork
@@ -979,9 +986,18 @@ func (e *Engine) SetWait(id WorkID, kind WakeKind, ref string) (*State, error) {
 		if st.Attempt != nil {
 			return nil, ErrAttemptActive
 		}
+		if err := validateWaitUntil(kind, until); err != nil {
+			return nil, err
+		}
+		source := "wake:" + string(kind) + ":" + ref
+		if until != nil {
+			at := until.UTC()
+			until = &at
+			source += fmt.Sprintf(":until:%d", at.UnixNano())
+		}
 		return []Event{{
-			WorkID: id, Kind: KWakeSet, SourceID: "wake:" + string(kind) + ":" + ref, At: now,
-			Payload: WakePayload{WakeKind: kind, Ref: ref},
+			WorkID: id, Kind: KWakeSet, SourceID: source, At: now,
+			Payload: WakePayload{WakeKind: kind, Ref: ref, Until: until},
 		}}, nil
 	})
 }
@@ -1198,6 +1214,8 @@ type ResolveReviewInput struct {
 	WakeKind      WakeKind
 	WakeRef       string
 	NextAttemptAt *time.Time
+	// WakeUntil is when a named wait ends.
+	WakeUntil *time.Time
 }
 
 // ResolveReview applies the disposition. Resolving an already-closed Event is an
@@ -1213,6 +1231,15 @@ func (e *Engine) ResolveReview(id WorkID, eventID string, in ResolveReviewInput)
 		if err := validateWaitDisposition(in.Disposition, in.WakeKind, in.WakeRef, in.NextAttemptAt, now); err != nil {
 			return nil, err
 		}
+		if in.Disposition != DispositionWait {
+			in.WakeUntil = nil
+		} else if err := validateWaitUntil(in.WakeKind, in.WakeUntil); err != nil {
+			return nil, err
+		}
+		if in.WakeUntil != nil {
+			at := in.WakeUntil.UTC()
+			in.WakeUntil = &at
+		}
 		if in.Disposition == DispositionWait && st.Attempt != nil &&
 			(in.WakeKind != WakeSessionTerminal ||
 				in.WakeRef != "session:"+st.Attempt.SessionID+":turn:"+string(st.Attempt.TurnToken)) {
@@ -1222,10 +1249,19 @@ func (e *Engine) ResolveReview(id WorkID, eventID string, in ResolveReviewInput)
 			WorkID: id, Kind: KReviewResolved, SourceID: "resolve:" + eventID, At: now,
 			Payload: ReviewResolvedPayload{
 				EventID: eventID, Disposition: in.Disposition, Actor: in.Actor,
-				WakeKind: in.WakeKind, WakeRef: in.WakeRef, NextAttemptAt: in.NextAttemptAt,
+				WakeKind: in.WakeKind, WakeRef: in.WakeRef, NextAttemptAt: in.NextAttemptAt, WakeUntil: in.WakeUntil,
 			},
 		}}, nil
 	})
+}
+
+// validateWaitUntil allows an end only on a named wait: every other kind has
+// a producer that ends it.
+func validateWaitUntil(kind WakeKind, until *time.Time) error {
+	if until != nil && kind != WakeNamed {
+		return fmt.Errorf("%w: only a named wait has an end (until)", ErrInvalidCommand)
+	}
+	return nil
 }
 
 func validateWaitDisposition(disposition Disposition, kind WakeKind, ref string, nextAttemptAt *time.Time, now time.Time) error {

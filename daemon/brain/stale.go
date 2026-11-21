@@ -74,7 +74,8 @@ func (s *Service) staleList(workers []WorkerRef) *StaleList {
 		if item.AttemptSessionID != "" {
 			openAttempt[item.AttemptSessionID] = true
 		}
-		if (s.standing != nil && s.standing(item.ID)) || (item.SnoozedUntil != nil && now.Before(*item.SnoozedUntil)) {
+		if (s.standing != nil && s.standing(item.ID)) || strings.HasPrefix(item.ID, overdueWorkPrefix) ||
+			(item.SnoozedUntil != nil && now.Before(*item.SnoozedUntil)) {
 			continue
 		}
 		st, err := s.store.fsmState(item.ID)

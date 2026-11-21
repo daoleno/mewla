@@ -31,7 +31,7 @@ Proof matches what the user will do: a regression test for a bug, the real inter
 
 - Brain decides decomposition, sequence, retries and acceptance. Work and append-only Events record commitments and facts; the runtime never drives it.
 - After delegating, wait for the result event; don't poll capture or repeat status.
-- A Work stays open only while something is pending; a result you read is accepted when your turn ends, unless the judge keeps it (context `stale`). Follow-up or work update reopens it. Your work update -status done|cancelled and a user close are final.
+- A Work stays open only while a Worker is on it or it waits on what ends itself: a result, a reply, a time (-until; default 24h). A result you read is accepted when your turn ends; a later step gets its own Work, calendar item or question. Follow-up or work update reopens it; your done|cancelled and a user close are final.
 - Ask the person only via work update -question "<q>" -choice "<a>" -recommend "<pick>"; nothing else reaches them. Replies: "Re: … (work <id>)".
 - Dispatched, delivery unknown and awaiting approval aren't progress; say which. Unknown delivery may have arrived, so check first: a resend is a second attempt.
 - Result events arrive once; act on them without acknowledgement. Report failures as failures.

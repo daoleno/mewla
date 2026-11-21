@@ -420,6 +420,8 @@ type WakePayload struct {
 	WakeKind      WakeKind   `json:"wake_kind"`
 	Ref           string     `json:"ref"`
 	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+	// Until is when a named wait ends (see WakeState.Until).
+	Until *time.Time `json:"until,omitempty"`
 }
 
 type WakeClearedPayload struct {
@@ -447,6 +449,7 @@ type ReviewResolvedPayload struct {
 	WakeKind      WakeKind    `json:"wake_kind,omitempty"`
 	WakeRef       string      `json:"wake_ref,omitempty"`
 	NextAttemptAt *time.Time  `json:"next_attempt_at,omitempty"`
+	WakeUntil     *time.Time  `json:"wake_until,omitempty"`
 }
 
 type ReviewClaimedPayload struct {
@@ -527,6 +530,10 @@ type WakeState struct {
 	Ref           string     `json:"ref"`
 	Since         time.Time  `json:"since"`
 	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
+	// Until is when a named wait ends. Nothing happens to the Work then: the
+	// runtime lists it for Brain with every other wait past its end. Only a
+	// named wake carries one; every other kind has a producer that ends it.
+	Until *time.Time `json:"until,omitempty"`
 }
 
 // ReviewState is the stable attention obligation Brain must disposition.
@@ -636,6 +643,10 @@ func (s *State) clone(includeSeenSources bool) *State {
 		if s.Wake.NextAttemptAt != nil {
 			next := *s.Wake.NextAttemptAt
 			w.NextAttemptAt = &next
+		}
+		if s.Wake.Until != nil {
+			until := *s.Wake.Until
+			w.Until = &until
 		}
 		out.Wake = &w
 	}
