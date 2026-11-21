@@ -8,6 +8,12 @@ This file records release-readiness blockers and the evidence that resolved them
 
 None.
 
+## Release checks
+
+### 0.4.19 (2026-11-22)
+
+No blocker open. Checked before the tag: `python3 scripts/plugin-publisher-flags.py --require github --require slack` passes; the repository holds the four `ZEN_ANDROID_*` secrets and `ZEN_UPDATE_SIGNING_KEY_BASE64`, and the `app-store-connect-preview` environment holds the Apple and App Store Connect secrets (names only); the last three releases' `release-artifacts.yml` and `ios-release.yml` runs succeeded; CI is green on the commit the release candidate was built from (build-only candidate run 44929547685, then run again for its one failed collection job).
+
 ## Resolved
 
 ### `ios-distribution-artifacts` (resolved 2026-10-15)
