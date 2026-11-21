@@ -27,7 +27,32 @@ pub fn adopt_and_register(home: &Path, cli: &Path) -> Vec<String> {
     take_over_boot_install(home, &mut said);
     link_cli(home, cli, &mut said);
     register(&mut said);
+    refresh_daemon(cli, &mut said);
     said
+}
+
+/// An update replaces the app while its daemon runs on: the LaunchAgent is already registered and loaded, so nothing
+/// above starts the new one. The CLI of this app restarts a daemon older than itself onto it (`mewla restart
+/// -if-older`: in place, after Workers' model replies finish; Sessions and Workers keep running) and leaves a current
+/// one alone.
+fn refresh_daemon(cli: &Path, said: &mut Vec<String>) {
+    // The daemon may still be starting (the first launch, a login): ask again for a minute until it answers.
+    for attempt in 1..=12 {
+        match Command::new(cli).args(["restart", "-if-older"]).output() {
+            Ok(out) => {
+                let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).trim().to_owned();
+                said.push(format!("mewla restart -if-older (try {attempt}): {} {}", text(&out.stdout), text(&out.stderr)).trim_end().to_owned());
+                if out.status.success() {
+                    return;
+                }
+            }
+            Err(err) => {
+                said.push(format!("mewla restart -if-older: {err}"));
+                return;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
 }
 
 fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {

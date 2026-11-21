@@ -1,5 +1,7 @@
 import { type Accessor, computed, effect, host, openUrl, platform, signal, lifecycle } from "nsh";
+import { checkForUpdate, downloadUpdate, installAndRestart, shellInfo } from "nsh/updater";
 import { appUpdatePending, type AppUpdateState, type UpdateHostInfo } from "../../core/update/appUpdate";
+import { DesktopUpdateController, type DesktopUpdater } from "../../core/update/desktopUpdate";
 import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type DownloadProgress, type DownloadRequest } from "../../core/update/controller";
 
 /**
@@ -12,6 +14,10 @@ import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type Downlo
  * `update.download` {url, fileName, sha256, size} → {fileName} with the event
  * `update.progress` {received, total}, `update.canInstall`, `update.openInstallSettings`,
  * `update.install` {fileName}. A failing `update.info` (the Play build, the web) hides it.
+ *
+ * Mewla for Mac updates by NSH's own updater (`nsh/updater`): the whole app, its daemon and CLI inside, is replaced
+ * from the release's signed `latest.json` and starts again; the release names that source in its nsh-updater.json
+ * (client/macos/package.sh), Mewla Dev has none and shows nothing.
  */
 export interface AppUpdate {
   state: Accessor<AppUpdateState>;
@@ -67,9 +73,32 @@ function hostDeps(): AppUpdateDeps {
   };
 }
 
+/** NSH's updater, as Mewla for Mac's update controller uses it. */
+const nshUpdater: DesktopUpdater = {
+  installedVersion: () => shellInfo().version ?? null,
+  check: async () => {
+    const found = await checkForUpdate();
+    return found ? { version: found.version, canInstall: found.canInstall, url: found.url } : null;
+  },
+  download: (onProgress) => downloadUpdate(onProgress),
+  installAndRestart: () => installAndRestart(),
+  openUrl: async (url) => (await openUrl(url)).opened,
+  now: () => Date.now(),
+  warn: (message, error) => console.warn(message, error instanceof Error ? error.message : error),
+};
+
+/** What the owner needs of either controller. */
+interface AppUpdateOwner {
+  readonly state: AppUpdateState;
+  subscribe(listener: (state: AppUpdateState) => void): () => void;
+  start(): Promise<void>;
+  foreground(): Promise<void>;
+  press(): Promise<void>;
+}
+
 /** An update owner; the app has one (`appUpdate`), tests make their own with a key and fetch of theirs. */
-export function createAppUpdate(overrides: Partial<AppUpdateDeps> = {}): AppUpdate {
-  const controller = new AppUpdateController({ ...hostDeps(), ...overrides });
+export function createAppUpdate(overrides: Partial<AppUpdateDeps> = {}, desktop: DesktopUpdater | null = platform.os === "macos" ? nshUpdater : null): AppUpdate {
+  const controller: AppUpdateOwner = desktop ? new DesktopUpdateController(desktop) : new AppUpdateController({ ...hostDeps(), ...overrides });
   const state = signal<AppUpdateState>(controller.state);
   controller.subscribe((next) => state.set(next));
   const pending = computed(() => appUpdatePending(state()));

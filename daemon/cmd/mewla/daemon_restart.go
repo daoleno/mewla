@@ -554,6 +554,7 @@ func runRestartCommand(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla restart", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	stateDir := fs.String("state-dir", "", "state directory of the Mewla to restart")
+	ifOlder := fs.Bool("if-older", false, "restart only a daemon older than this executable (Mewla for Mac runs it after an update)")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla restart [flags]")
 		fmt.Fprintln(stderr, "")
@@ -572,7 +573,12 @@ func runRestartCommand(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	rt := defaultDaemonRuntime()
+	return restartOntoInstalled(defaultDaemonRuntime(), resolved, *stateDir, *ifOlder, os.Stdout)
+}
+
+// restartOntoInstalled is `mewla restart` once its state directory is resolved; ifOlder leaves a daemon that is
+// not older than this executable alone.
+func restartOntoInstalled(rt daemonRuntime, resolved, stateDirFlag string, ifOlder bool, out io.Writer) error {
 	daemon, ok := rt.inspect(resolved)
 	if !ok && bootGOOS == "darwin" {
 		if _, managed := bootLaunchdReinstallArgs(); managed {
@@ -581,14 +587,18 @@ func runRestartCommand(args []string, stderr io.Writer) error {
 	}
 	if !ok {
 		if held, _ := bootStateLockHeld(resolved); !held {
-			return fmt.Errorf("Mewla is not running; start it with: %s", startCommand(*stateDir))
+			return fmt.Errorf("Mewla is not running; start it with: %s", startCommand(stateDirFlag))
 		}
 		return errors.New("the Mewla running here is not this installation, so it was not restarted")
+	}
+	if ifOlder && !selfupdate.Older(daemon.Version, Version) {
+		fmt.Fprintf(out, "Mewla %s is running.\n", daemon.Version)
+		return nil
 	}
 	if err := rt.restart(resolved, daemon, Version); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "Mewla %s is running.\n", Version)
+	fmt.Fprintf(out, "Mewla %s is running.\n", Version)
 	return nil
 }
 

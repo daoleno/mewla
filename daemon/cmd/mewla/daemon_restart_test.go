@@ -396,6 +396,41 @@ func TestRestartTakesADaemonStartedDetached(t *testing.T) {
 	}
 }
 
+// Mewla for Mac runs `mewla restart -if-older` when it starts: a daemon left on the version an update replaced
+// restarts onto the app's, one that is current is left alone.
+func TestRestartIfOlderLeavesACurrentDaemonAlone(t *testing.T) {
+	previousVersion := Version
+	Version = "0.4.8"
+	t.Cleanup(func() { Version = previousVersion })
+	stateDir, daemonID := restartStateDir(t)
+	daemon := &fakeDaemon{daemonID: daemonID, pid: 90, version: "0.4.7", running: true}
+	runner := windowsTaskRunner(t, daemon, "0.4.8")
+	rt := daemon.runtime(t, "windows", runner, `C:\Mewla\mewla.exe`)
+	rt.parentImage = func(int) (string, error) { return "", fmt.Errorf("parent 7 of 90: %w", platform.ErrParentGone) }
+
+	var out bytes.Buffer
+	if err := restartOntoInstalled(rt, stateDir, "", true, &out); err != nil {
+		t.Fatal(err)
+	}
+	if daemon.version != "0.4.8" || len(daemon.killed) != 1 || !strings.Contains(out.String(), "Mewla 0.4.8 is running.") {
+		t.Fatalf("an older daemon: version %s, killed %v, output %q", daemon.version, daemon.killed, out.String())
+	}
+	out.Reset()
+	if err := restartOntoInstalled(rt, stateDir, "", true, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(daemon.killed) != 1 || !strings.Contains(out.String(), "Mewla 0.4.8 is running.") {
+		t.Fatalf("a current daemon was restarted: killed %v, output %q", daemon.killed, out.String())
+	}
+	// Without the flag it restarts all the same.
+	if err := restartOntoInstalled(rt, stateDir, "", false, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(daemon.killed) != 2 {
+		t.Fatalf("plain restart killed %v", daemon.killed)
+	}
+}
+
 // Under the systemd unit the daemon restarts itself in place too (it drains
 // Workers' model replies and keeps the relay's sockets open across the exec);
 // systemd restarts only a daemon too old to do that.

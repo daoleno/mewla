@@ -1,0 +1,175 @@
+name: Mewla for Mac release
+
+# Mewla for Mac's release files for an existing release tag: the app signed with Developer ID and notarized (the .dmg
+# people install from, and the zip the app updates itself from), and the signed update manifest latest.json that tells
+# running apps a newer Mewla exists (NSH's updater; client/macos/package.sh names where they look).
+#
+#   gh workflow run macos-release.yml -f tag=v0.4.19            # builds, signs, notarizes, then attaches
+#   gh workflow run macos-release.yml -f tag=v0.4.19 -f attach=false   # builds and signs only (artifacts kept 7 days)
+#
+# It does nothing until the owner's Developer ID certificate is in the `app-store-connect-preview` environment, and says
+# exactly which secrets are missing. The release track (release-artifacts.yml) does not build the Mac app yet: this
+# runs beside it, by hand, and joins it when the owner has had the first signed app in his hands.
+#
+# Secrets, in the environment `app-store-connect-preview` (never commit values):
+#   MEWLA_MAC_DEVELOPER_ID_P12_BASE64     the Developer ID Application certificate with its private key (.p12), base64
+#   MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD   the .p12's password
+#   ZEN_ASC_API_KEY_BASE64, ZEN_ASC_KEY_ID  the App Store Connect key the iOS release uses (it reaches the notary service)
+#   MEWLA_MAC_UPDATE_KEY                  the update manifest's ed25519 secret key (`nsh keygen`); its public half is
+#                                         client/macos/update-public-key.txt, built into every app
+# The job that holds them never holds a write token; the job that attaches to the release holds the token and no secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag the Mac files join: vX.Y.Z (the tag's commit is built)"
+        required: true
+        type: string
+      attach:
+        description: "Attach the files to the release (false: build and sign only)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: The release has its certificate
+    runs-on: ubuntu-latest
+    environment: app-store-connect-preview
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Tag and secrets
+        id: check
+        env:
+          TAG: ${{ inputs.tag }}
+          P12: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD }}
+          ASC_KEY: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          UPDATE_KEY: ${{ secrets.MEWLA_MAC_UPDATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::the tag must be vX.Y.Z (a stable release); got '$TAG'"; exit 1; }
+          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          missing=()
+          [ -n "$P12" ] || missing+=(MEWLA_MAC_DEVELOPER_ID_P12_BASE64)
+          [ -n "$P12_PASSWORD" ] || missing+=(MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD)
+          [ -n "$ASC_KEY" ] || missing+=(ZEN_ASC_API_KEY_BASE64)
+          [ -n "$ASC_KEY_ID" ] || missing+=(ZEN_ASC_KEY_ID)
+          [ -n "$UPDATE_KEY" ] || missing+=(MEWLA_MAC_UPDATE_KEY)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Mewla for Mac cannot be released yet. Missing in the app-store-connect-preview environment: ${missing[*]}"
+            exit 1
+          fi
+
+  sign:
+    name: Build, sign with Developer ID, notarize
+    needs: gate
+    runs-on: macos-26
+    environment: app-store-connect-preview
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Zig, the terminal engine and the web VT from main's cache
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          lib: darwin_arm64
+          web: "true"
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: The daemon and CLI
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          set -euo pipefail
+          export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
+          ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
+          [ "$("$RUNNER_TEMP/daemon/mewla-darwin-arm64" --version | awk '{print $2}')" = "${{ needs.gate.outputs.version }}" ]
+      - name: The app
+        run: client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app"
+      - name: Developer ID signature, notarization, the .dmg
+        env:
+          P12: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD }}
+          ASC_KEY: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          pass=$(uuidgen)
+          printf '%s' "$P12" | base64 -d > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # The certificate names itself: "Developer ID Application: Name (TEAMID)".
+          IDENTITY=$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
+          [ -n "$IDENTITY" ] || { echo "::error::the .p12 holds no Developer ID Application identity"; exit 1; }
+          printf '%s' "$ASC_KEY" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey.p8"
+          mkdir -p "$RUNNER_TEMP/release"
+          ditto "$RUNNER_TEMP/app/Mewla.app" "$RUNNER_TEMP/release/Mewla.app"
+          client/macos/release.sh --app "$RUNNER_TEMP/release/Mewla.app" --identity "$IDENTITY" --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$ASC_KEY_ID" --out "$RUNNER_TEMP/release"
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/developer-id.p12"
+          security delete-keychain "$keychain" || true
+      - name: The update archive (the stapled app) and the signed manifest
+        env:
+          UPDATE_KEY: ${{ secrets.MEWLA_MAC_UPDATE_KEY }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.gate.outputs.version }}"
+          out="$RUNNER_TEMP/files"; mkdir -p "$out"
+          # The updater reads the platform from the archive's name (macos-aarch64) and swaps the whole .app in.
+          ditto -c -k --keepParent "$RUNNER_TEMP/release/Mewla.app" "$out/Mewla-$version-macos-aarch64.zip"
+          cp "$RUNNER_TEMP"/release/Mewla-"$version"-macos-arm64.dmg "$out/"
+          printf '%s' "$UPDATE_KEY" > "$RUNNER_TEMP/update.secret"; chmod 600 "$RUNNER_TEMP/update.secret"
+          # What `nsh update-manifest` reads the id, version and the key's public half from; the apps' own is the one that counts.
+          mkdir -p "$RUNNER_TEMP/entry"
+          python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"github":"daoleno/mewla","publicKey":open(sys.argv[2]).read().strip()}}, open(sys.argv[3],"w"))' "$version" client/macos/update-public-key.txt "$RUNNER_TEMP/entry/nsh.json"
+          "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/update.secret" --base-url "https://github.com/daoleno/mewla/releases/download/v$version" --out "$out" "$out/Mewla-$version-macos-aarch64.zip"
+          rm -f "$RUNNER_TEMP/update.secret"
+          cat "$out/latest.json"
+          (cd "$out" && shasum -a 256 *)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mewla-macos-release-${{ inputs.tag }}
+          path: ${{ runner.temp }}/files
+          if-no-files-found: error
+          retention-days: 7
+
+  attach:
+    name: Attach to the release
+    needs: sign
+    if: ${{ inputs.attach }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-release-${{ inputs.tag }}
+          path: files
+      - name: The release carries the files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "$TAG" files/* --repo "$GITHUB_REPOSITORY" --clobber
