@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -157,8 +158,8 @@ wait`
 	if took := time.Since(started); took > 2*time.Second {
 		t.Fatalf("a command that ends on SIGTERM took %s to report", took)
 	}
-	if err := syscall.Kill(-count, 0); err == nil {
-		t.Fatal("this turn's command group is still running")
+	if live := liveGroupMembers(t, count); len(live) > 0 {
+		t.Fatalf("this turn's command group is still running: %q", live)
 	}
 	if err := syscall.Kill(-earlier, 0); err != nil {
 		t.Fatalf("the earlier turn's command was ended: %v", err)
@@ -318,4 +319,25 @@ func (s *syncBuilder) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.b.Reset()
+}
+
+// liveGroupMembers lists the processes of group pgid that have not ended. A
+// kill(-pgid, 0) also finds one that has ended but is not reaped yet (the
+// group's sleep, reparented when its shell died on SIGTERM, until init reaps
+// it), so it is not a test of whether a command still runs.
+func liveGroupMembers(t *testing.T, pgid int) []string {
+	t.Helper()
+	out, err := exec.Command("ps", "-A", "-o", "pid=,pgid=,stat=,args=").Output()
+	if err != nil {
+		t.Fatalf("ps: %v", err)
+	}
+	var live []string
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || fields[1] != strconv.Itoa(pgid) || strings.HasPrefix(fields[2], "Z") {
+			continue
+		}
+		live = append(live, strings.TrimSpace(line))
+	}
+	return live
 }
