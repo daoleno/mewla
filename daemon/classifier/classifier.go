@@ -96,6 +96,10 @@ var blockedPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)Shall I`),
 	// Antigravity (agy): its sign-in menu, which waits for a person in a browser.
 	regexp.MustCompile(`Select login method`),
+	// Antigravity's permission dialog (agy 1.5.14): "Requesting permission for:",
+	// the action, "Run this command?" and "1. Yes, run command / 2. No, cancel".
+	regexp.MustCompile(`^Requesting permission for:?$`),
+	regexp.MustCompile(`^Run this command\?$`),
 	// Claude Code specific
 	regexp.MustCompile(`(?i)Do you want to create`),
 	regexp.MustCompile(`(?i)Do you want to run`),

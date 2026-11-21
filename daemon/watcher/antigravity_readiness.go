@@ -15,10 +15,13 @@ import (
 // Only the screens that stop a launch are named. They are the person's to
 // answer (sign-in, and the first-run choices that follow it), never Mewla's.
 var (
-	antigravityHeaderRe   = regexp.MustCompile(`Antigravity CLI \d+\.\d+`)
-	antigravityRuleRe     = regexp.MustCompile(`(?m)^\s*─{20,}\s*$`)
-	antigravityComposerRe = regexp.MustCompile(`(?m)^>(?: .*)?$`)
-	antigravityFooterRe   = regexp.MustCompile(`(?m)^\? for shortcuts\b`)
+	antigravityHeaderRe = regexp.MustCompile(`Antigravity CLI \d+\.\d+`)
+	antigravityRuleRe   = regexp.MustCompile(`(?m)^\s*─{20,}\s*$`)
+	// antigravityPlaceholderRe is the dim hint agy 1.5.14 shows in an empty
+	// composer in Auto mode: "Auto mode: edits & safe commands auto-approved
+	// (shift+tab to cycle)". It is not a draft.
+	antigravityPlaceholderRe = regexp.MustCompile(`^>\s+.*\(shift\+tab to cycle\)$`)
+	antigravityFooterRe      = regexp.MustCompile(`(?m)^\? for shortcuts\b`)
 )
 
 // latestAntigravityContent is the screen from agy's last start: scrollback
@@ -61,5 +64,5 @@ func isAntigravityInputReady(content string) bool {
 	// An empty composer: the "> " line between the last two rules is bare.
 	between := current[rules[len(rules)-2][1]:rules[len(rules)-1][0]]
 	text := strings.TrimSpace(between)
-	return text == ">" || antigravityComposerRe.MatchString(text) && strings.TrimSpace(strings.TrimPrefix(text, ">")) == ""
+	return text == ">" || antigravityPlaceholderRe.MatchString(text)
 }

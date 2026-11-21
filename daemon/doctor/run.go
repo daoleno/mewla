@@ -914,8 +914,13 @@ func parseCursorAuth(out []byte) AuthState {
 // neither. Any other failure (no network, a timeout) is unknown, never a guess.
 func parseAntigravityAuth(out []byte, err error) AuthState {
 	if err == nil {
-		if strings.Contains(string(out), "gemini-") || strings.Contains(string(out), "Gemini") {
-			return AuthAuthenticated
+		// Any model row is a sign-in: the list is the account's own (it now
+		// holds non-Google ids too), so no id is looked for by name.
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" && !strings.HasPrefix(line, "Fetching") {
+				return AuthAuthenticated
+			}
 		}
 		return AuthUnknown
 	}

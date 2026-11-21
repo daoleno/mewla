@@ -12,6 +12,11 @@ func TestAntigravityInputReady(t *testing.T) {
 	if !isWorkerInputReady("agy", ready) {
 		t.Fatalf("an empty composer under the header is ready")
 	}
+	// Auto mode (the signed-in default) puts a hint in the empty composer.
+	auto := agyHeader + agyRule + "\n> Auto mode: edits & safe commands auto-approved (shift+tab to cycle)\n" + agyRule + "\n? for shortcuts                       auto · Gemini 4 Neon · low\n"
+	if !isWorkerInputReady("agy", auto) {
+		t.Fatalf("the Auto-mode hint in an empty composer is not a draft")
+	}
 	typed := agyHeader + agyRule + "\n> say hi\n" + agyRule + "\n? for shortcuts                                              Gemini 3.1 Pro · low\n"
 	if isWorkerInputReady("agy", typed) {
 		t.Fatalf("a composer with a draft is not ready for a brief")
