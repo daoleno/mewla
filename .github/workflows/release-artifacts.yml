@@ -575,6 +575,21 @@ jobs:
           path: ${{ runner.temp }}/launch
           retention-days: 30
 
+  # Mewla for Mac (macos-release.yml): the app signed with Developer ID, notarized and stapled, the .dmg people
+  # install from, the zip the app updates itself from and the signed manifest that tells running apps. A stable release
+  # carries them (a beta does not: the apps look at the Latest release); a candidate builds them as a release does and
+  # makes no manifest. The files wait in this run's artifact `mewla-macos-release-<tag>` for `publish`, which uploads
+  # them with everything else: release-ready needs this job, so no Mac file missing means nothing published.
+  mac-app:
+    name: Mewla for Mac, signed and notarized
+    needs: validate
+    if: needs.validate.outputs.mode == 'candidate' || !contains(needs.validate.outputs.tag, '-beta.')
+    uses: ./.github/workflows/macos-release.yml
+    with:
+      tag: ${{ needs.validate.outputs.tag }}
+      version: ${{ needs.validate.outputs.version }}
+      checkout: ${{ needs.validate.outputs.mode == 'candidate' && needs.validate.outputs.checkout || '' }}
+
   stage:
     name: Stage, sign, and verify the release
     needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android]
@@ -629,7 +644,7 @@ jobs:
   # candidate, which is never signed. Publication needs this job and nothing overrides it.
   release-ready:
     name: Every check passed
-    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]
+    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, mac-app, stage]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -638,15 +653,18 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           MODE: ${{ needs.validate.outputs.mode }}
+          TAG: ${{ needs.validate.outputs.tag }}
           PUBLISH: ${{ needs.validate.outputs.publish }}
         run: |
           python3 - <<'PY'
           import json, os, sys
           needs, mode = json.loads(os.environ["NEEDS"]), os.environ["MODE"]
+          beta = "-beta." in os.environ["TAG"]
           bad = []
           for job, need in sorted(needs.items()):
               result = need["result"]
-              ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate")
+              # Skipped is allowed for a candidate's unsigned stage and for a beta's Mac app (a beta has no Mac files).
+              ok = result == "success" or (job == "stage" and result == "skipped" and mode == "candidate") or (job == "mac-app" and result == "skipped" and mode == "release" and beta)
               print(f"{'ok  ' if ok else 'FAIL'} {job}: {result}")
               if not ok:
                   bad.append(job)
@@ -678,6 +696,13 @@ jobs:
         with:
           name: mewla-release-stage-${{ needs.validate.outputs.tag }}
           path: stage
+      # A stable release's Mac files, signed and notarized by mac-app (which release-ready waited for).
+      - name: Download the signed Mac files
+        if: ${{ !contains(needs.validate.outputs.tag, '-beta.') }}
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-release-${{ needs.validate.outputs.tag }}
+          path: stage-mac
       # One publication of the complete signed set: a draft with every asset, checked, then public.
       # Stable tags become Latest; beta tags stay prereleases.
       - name: Create the draft, upload every asset, verify, and publish
@@ -713,6 +738,23 @@ jobs:
             release-manifest.json
             release-manifest.json.sig
           )
+          if [[ "$RELEASE_IS_STABLE" == true ]]; then
+            # Mewla for Mac: the app's update (zip) and its signed manifest (latest.json, which must appear with the
+            # other files at once, or releases/latest/download/latest.json points at a release without its zip), the
+            # .dmg people install from and its copy under a name without a version (the site links to that one).
+            mac=(
+              "Mewla-${VERSION}-macos-aarch64.zip"
+              "Mewla-${VERSION}-macos-arm64.dmg"
+              Mewla-macos-arm64.dmg
+              latest.json
+              latest.json.sig
+            )
+            for f in "${mac[@]}"; do
+              test -s "stage-mac/$f" || { echo "error: missing/empty Mac file $f" >&2; exit 1; }
+              cp "stage-mac/$f" "stage/$f"
+            done
+            assets+=("${mac[@]}")
+          fi
           for f in "${assets[@]}"; do
             test -s "stage/$f" || { echo "error: missing/empty staged asset $f" >&2; exit 1; }
           done
