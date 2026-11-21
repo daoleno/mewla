@@ -1,0 +1,61 @@
+name: Mewla for Mac fidelity
+
+# Probe: what a runner's display can show (modes, a HiDPI virtual display), a neutral desktop, and whether `open`
+# makes an app the active one. No app build.
+
+on:
+  push:
+    branches: ["mac-audit/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Displays as the runner has them
+        run: |
+          swift client/macos/scripts/fidelity/modes.swift
+          system_profiler SPDisplaysDataType || true
+          mkdir -p "$RUNNER_TEMP/probe"
+          screencapture -x "$RUNNER_TEMP/probe/0-runner.png"
+      - name: A HiDPI virtual display
+        run: |
+          set -x
+          clang -fobjc-arc -framework Foundation -framework CoreGraphics client/macos/scripts/fidelity/vdisplay.m -o "$RUNNER_TEMP/vdisplay"
+          nohup "$RUNNER_TEMP/vdisplay" 1512 982 > "$RUNNER_TEMP/probe/vdisplay.out" 2> "$RUNNER_TEMP/probe/vdisplay.err" &
+          echo $! > "$RUNNER_TEMP/vdisplay.pid"
+          for i in $(seq 1 20); do grep -q "^display" "$RUNNER_TEMP/probe/vdisplay.out" && break; sleep 1; done
+          cat "$RUNNER_TEMP/probe/vdisplay.out" "$RUNNER_TEMP/probe/vdisplay.err" || true
+          swift client/macos/scripts/fidelity/modes.swift
+          screencapture -x "$RUNNER_TEMP/probe/1-main.png" || true
+          for d in 1 2; do screencapture -x -D $d "$RUNNER_TEMP/probe/1-display$d.png" || true; done
+          ls -la "$RUNNER_TEMP/probe"
+      - name: A neutral desktop, the Dock hidden
+        run: |
+          python3 -I client/macos/scripts/fidelity/solid.py "$RUNNER_TEMP/desk-light.png" 64 64 222 224 228
+          osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk-light.png\"" || echo "wallpaper: refused"
+          defaults write com.apple.dock autohide -bool true; defaults write com.apple.dock autohide-delay -float 1000; killall Dock || true
+          sleep 3
+          screencapture -x "$RUNNER_TEMP/probe/2-desk.png" || true
+      - name: Does open make an app active
+        run: |
+          open -a TextEdit
+          sleep 4
+          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' || true
+          screencapture -x "$RUNNER_TEMP/probe/3-textedit.png" || true
+          # The same app started as a plain process (as macos-app.yml starts Mewla Dev).
+          osascript -e 'quit app "TextEdit"' || true; sleep 2
+          /System/Applications/TextEdit.app/Contents/MacOS/TextEdit > /dev/null 2>&1 &
+          sleep 4
+          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' || true
+          screencapture -x "$RUNNER_TEMP/probe/4-textedit-exec.png" || true
+          kill %1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fidelity-probe-${{ github.run_id }}
+          path: ${{ runner.temp }}/probe
