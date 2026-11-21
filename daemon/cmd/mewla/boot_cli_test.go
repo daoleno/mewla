@@ -918,6 +918,60 @@ func TestBootInstallRefusesBusyNewAddressOnUpdate(t *testing.T) {
 	}
 }
 
+// The ownership scan reads every process of the unit's cgroup. One that the
+// kernel will not show its descriptors to (here a process of this user, as a
+// sandboxed Worker or one that changed credentials is) must not turn the
+// update's own refusal into "inspect state ownership: scan process N file
+// descriptors: permission denied" (CI run 44950403811).
+func TestBootInstallRefusesBusyNewAddressOnUpdateBesideAnUnreadableProcess(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every process")
+	}
+	config, runner := bootFreshInstallEnvironment(t)
+	if err := bootInstall(config, runner, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	config.Addr = listener.Addr().String()
+	runner.reset()
+	bootUseProcFixture(t, os.Getpid())
+	bootUnreadableProcess(t, bootProcRoot, "1", bootCurrentCgroup(t))
+	err = bootInstall(config, runner, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not available") {
+		t.Fatalf("busy new address not refused: %v", err)
+	}
+	if runner.called(bootRestart) {
+		t.Fatal("refused update restarted the live unit")
+	}
+}
+
+// The other half of passing over an unreadable process: when the lock is held
+// and the only process that could hold it cannot be read, the holder is not
+// attributed to the unit, and an update refuses rather than claim the state.
+func TestBootInstallRefusesHeldStateWhoseHolderCannotBeRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every process")
+	}
+	config, runner := bootFreshInstallEnvironment(t)
+	if err := bootInstall(config, runner, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	runner.reset()
+	bootUseProcFixture(t)
+	bootUnreadableProcess(t, bootProcRoot, "1", bootCurrentCgroup(t))
+	err := bootInstall(config, runner, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "owned by a running process outside") {
+		t.Fatalf("held state with an unreadable holder was claimed: %v", err)
+	}
+	if runner.called(bootRestart) || runner.called(bootEnableNow) {
+		t.Fatal("refused update touched the unit")
+	}
+}
+
 func TestBootInstallFailsFastWhenUnitDoesNotStart(t *testing.T) {
 	config, runner := bootFreshInstallEnvironment(t)
 	runner.set(bootIsActive, "failed")
@@ -1336,14 +1390,14 @@ func TestBootStateLockPIDRequiresRealLock(t *testing.T) {
 	}
 	// The opener must never be reported, even though it is in the cgroup and
 	// has the lock file open.
-	openerHeld, err := bootPIDHoldsFileLock(opener.Process.Pid, lockPath, false)
+	openerHeld, err := bootPIDHoldsFileLock(opener.Process.Pid, lockPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if openerHeld {
 		t.Fatal("a process that only opened the lock file was reported as the holder")
 	}
-	holderHeld, err := bootPIDHoldsFileLock(os.Getpid(), lockPath, false)
+	holderHeld, err := bootPIDHoldsFileLock(os.Getpid(), lockPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1405,11 +1459,12 @@ func TestBootUninstallRetainsOnUnreadableOwnershipScan(t *testing.T) {
 	}
 }
 
-func TestBootStateLockPIDStrictPermissionIsUnknown(t *testing.T) {
-	config, _ := newBootTestEnvironment(t)
-	group := "/user.slice/user-1000.slice/user@1000.service/app.slice/mewla.service"
-	root := t.TempDir()
-	processDir := filepath.Join(root, "4242")
+// bootUnreadableProcess adds to the scanned procfs tree a process of the
+// requested cgroup whose descriptors the kernel refuses this user: a directory
+// of its own that nobody can read.
+func bootUnreadableProcess(t *testing.T, root, pid, group string) {
+	t.Helper()
+	processDir := filepath.Join(root, pid)
 	if err := os.MkdirAll(processDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1420,12 +1475,34 @@ func TestBootStateLockPIDStrictPermissionIsUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(filepath.Join(processDir, "fd"), 0o755) })
+}
+
+// A process of the unit's cgroup whose descriptors cannot be read (here one
+// the user owns, as a sandboxed or credential-changing child is) is not a
+// reason to fail the scan: it is passed over, never reported as the holder, and
+// the process that does hold the flock is still found.
+func TestBootStateLockPIDUnreadableProcessIsPassedOver(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every process")
+	}
+	config, _ := newBootTestEnvironment(t)
+	bootHoldStateLock(t, config.StateDir)
+	group := bootCurrentCgroup(t)
+	root := t.TempDir()
+	bootUnreadableProcess(t, root, "1", group)
 	previous := bootProcRoot
 	bootProcRoot = root
 	defer func() { bootProcRoot = previous }()
-
-	if _, err := bootStateLockPID(config.StateDir, group); err == nil {
-		t.Fatal("unreadable process in the matched cgroup was treated as no owner")
+	if pid, err := bootStateLockPID(config.StateDir, group); err != nil || pid != 0 {
+		t.Fatalf("an unreadable process alone: pid=%d err=%v, want no holder seen and no error", pid, err)
+	}
+	// "1" sorts before the holder: the scan meets the unreadable process first.
+	if err := os.Symlink("/proc/"+strconv.Itoa(os.Getpid()), filepath.Join(root, strconv.Itoa(os.Getpid()))); err != nil {
+		t.Fatal(err)
+	}
+	pid, err := bootStateLockPID(config.StateDir, group)
+	if err != nil || pid != os.Getpid() {
+		t.Fatalf("holder behind an unreadable process: pid=%d err=%v, want %d", pid, err, os.Getpid())
 	}
 }
 
@@ -1499,23 +1576,13 @@ func TestBootStateLockPIDZombieIsSkipped(t *testing.T) {
 }
 
 func TestBootUninstallRetainsHeldButUnattributable(t *testing.T) {
-	t.Run("matched cgroup inspection denied", func(t *testing.T) {
+	t.Run("matched cgroup process unreadable", func(t *testing.T) {
 		config, _ := newBootTestEnvironment(t)
 		path, metadataPath := bootWriteInstalledUnit(t, config)
 		bootHoldStateLock(t, config.StateDir)
 		group := "/user.slice/user-1000.slice/user@1000.service/app.slice/mewla.service"
 		root := t.TempDir()
-		processDir := filepath.Join(root, "4242")
-		if err := os.MkdirAll(processDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(processDir, "cgroup"), []byte("0::"+group+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Mkdir(filepath.Join(processDir, "fd"), 0o000); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.Chmod(filepath.Join(processDir, "fd"), 0o755) })
+		bootUnreadableProcess(t, root, "4242", group)
 		previous := bootProcRoot
 		bootProcRoot = root
 		defer func() { bootProcRoot = previous }()
@@ -1524,17 +1591,17 @@ func TestBootUninstallRetainsHeldButUnattributable(t *testing.T) {
 		runner.set(bootIsActive, "inactive")
 		runner.set(bootControlGroup, group)
 		err := bootUninstall(runner, &bytes.Buffer{})
-		if err == nil || !strings.Contains(err.Error(), "unit and configuration retained") {
-			t.Fatalf("denied inspection did not retain configuration: %v", err)
+		if err == nil || !strings.Contains(err.Error(), "could not be attributed") {
+			t.Fatalf("unreadable holder did not retain configuration: %v", err)
 		}
 		if _, statErr := os.Stat(path); statErr != nil {
-			t.Fatal("denied inspection removed the unit")
+			t.Fatal("unreadable holder removed the unit")
 		}
 		if _, statErr := os.Stat(metadataPath); statErr != nil {
-			t.Fatal("denied inspection removed the metadata")
+			t.Fatal("unreadable holder removed the metadata")
 		}
 		if runner.called(bootDisable) {
-			t.Fatal("denied inspection disabled the unit")
+			t.Fatal("unreadable holder disabled the unit")
 		}
 	})
 
