@@ -1964,8 +1964,7 @@ func controlExecutor(executor work.WorkerExecutor) control.Executor {
 			InteractiveTTY:   executor.Capabilities.InteractiveTTY,
 			StructuredEvents: executor.Capabilities.StructuredEvents,
 		},
-		Host:       executor.Host,
-		WorkerOnly: executor.WorkerOnly,
+		Host: executor.Host,
 	}
 }
 

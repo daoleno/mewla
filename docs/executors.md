@@ -258,9 +258,28 @@ once and sign in with Google OAuth in the browser; Mewla never types a
 credential. Gemini 4 Neon and the other models of your plan appear in
 `agy models`. `mewla doctor` runs `agy models` to see whether it is signed in.
 
-Antigravity runs Workers from Brain, Calendar and the app. It cannot be Brain's
-own agent yet: Brain reads its conversation from the agent's transcript, and
-agy keeps conversations in a SQLite database Mewla has no reader for. Its Chat
-is the terminal. Resume uses agy's own `--conversation <id>`; Mewla reads the id
-from agy's `conversation_summaries.db`, because agy never accepts an id it did
-not create. agy updates itself in the background and has no switch for it.
+Antigravity runs Workers from Brain, Calendar and the app, and can be Brain's own
+agent (`mewla brain use agy`, or the Brain menu's Switch executor). It is the
+last choice when Brain picks an agent by itself: it hosts Brain on its own only
+when no other agent is ready, because it has the fewest of the things below.
+
+Its Chat is read by asking `agy acp`, agy's Agent Client Protocol server, to
+replay the conversation (`session/load`). Mewla does not parse agy's
+`conversations/<id>.db`: those are undocumented protobuf blobs and agy updates
+itself daily, while ACP is a public, versioned protocol. The conversation file
+is only watched for a change, so an unchanged conversation is not replayed
+again. Mewla asks for the one conversation it started and never lists the
+others. If agy no longer answers the way Mewla expects (another protocol
+version, no `session/load`, a failing replay), Chat says why ("This chat can't be
+read: ...") and the Terminal keeps working.
+
+Compared with Claude Code as Brain's agent, Antigravity has no hooks Mewla can
+set, so a message is confirmed delivered when it shows in the replayed
+conversation, not by a hook; it has no per-launch way to answer a tool approval
+from the app (Brain runs with `--dangerously-skip-permissions`, as Workers do;
+an approval prompt that still appears is seen on the screen and answered in the
+Terminal); its turn starts have no timestamps in the replay, so Mewla uses
+agy's own run status. Resume uses agy's own `--conversation <id>`;
+Mewla reads the id from agy's `conversation_summaries.db`, because agy never
+accepts an id it did not create. agy updates itself in the background and has no
+switch for it.

@@ -86,6 +86,10 @@ func ResolveHostTranscriptIdentityForWorker(
 			out.Provider = provider
 		}
 		return out
+	case WorkerProviderAntigravity:
+		// The id is the binding; whether agy can replay the conversation is the
+		// reader's question, not the binding's.
+		return resolveAntigravityTranscriptIdentity(worker)
 	default:
 		conversation, err := NewProviderConversationReader().Load(worker, provider, time.Now().UTC())
 		if err != nil || !conversation.Available {
@@ -156,6 +160,9 @@ func (r *ProviderConversationReader) LoadByIdentity(identity HostTranscriptIdent
 		return r.loadBoundFileConversation(identity, piConversationSource, r.loadPiConversation)
 	case WorkerProviderOpenCode:
 		return r.loadBoundOpenCodeConversation(identity)
+	case WorkerProviderAntigravity:
+		id := firstNonEmpty(identity.SessionID, strings.TrimSuffix(filepath.Base(identity.Path), ".db"))
+		return r.loadAntigravityConversationByID(id)
 	default:
 		r.resetSource()
 		return CodexConversation{

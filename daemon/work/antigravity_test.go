@@ -35,8 +35,8 @@ func TestAntigravityProviderIsExactAgyOnly(t *testing.T) {
 	if !ok || agy.Provider != WorkerProviderAntigravity || agy.Command != "agy" || !agy.Capabilities.NativeResume {
 		t.Fatalf("default agy executor = %+v, %v", agy, ok)
 	}
-	if agy.Capabilities.StructuredEvents {
-		t.Fatalf("agy has no conversation reader yet; StructuredEvents must be false: %+v", agy.Capabilities)
+	if !agy.Capabilities.StructuredEvents {
+		t.Fatalf("agy's conversation is read through ACP; StructuredEvents must be true: %+v", agy.Capabilities)
 	}
 	if cfg.IDForCommand("agy --model gemini-4-neon-high") != "agy" {
 		t.Fatalf("a launch of agy with a model must belong to the agy executor")

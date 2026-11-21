@@ -362,7 +362,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
     <View class="flex-1" style={{ paddingTop: props.capsule && !shows().startsWith("chat:") ? props.capsule.top() : 0 }}>
       {/* One of these at a time, by `shows`; the thread is made again for each thread it names. */}
       <If when={shows() === "unavailable"}><BrainChatUnavailable onOpenTerminal={openTerminal} onSwitchExecutor={() => hostSheetOpen.set(true)} /></If>
-      <If when={shows() === "failed"}><BrainChatFailed onOpenTerminal={openTerminal} /></If>
+      <If when={shows() === "failed"}><BrainChatFailed onOpenTerminal={openTerminal} reason={brainThread().conversation?.reason} /></If>
       <Each of={shows().startsWith("chat:") ? [shows()] : []} key={(thread) => thread}>{(thread) => {
         const rows = () => threadRows(thread().slice("chat:".length));
         return (

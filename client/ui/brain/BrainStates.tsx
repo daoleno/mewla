@@ -3,13 +3,15 @@ import type { JSX } from "nsh";
 import { PillButton } from "../kit/kit";
 import { Icon } from "../kit/Icon";
 import { brainExecutorChoices, brainExecutorLabel, canSwitchBrainExecutor, canSwitchBrainExecutorFromProblem } from "../../core/brainMenu";
+import { conversationUnreadableDetail } from "../../core/session/timelinePhase";
 import { currentBrain, type BrainSource } from "./source";
 
 /** The centred place in Brain's thread area that says what is wrong, and its ways out. */
-function ThreadState(props: { testID: string; title: string; children?: JSX.Element }) {
+function ThreadState(props: { testID: string; title: string; detail?: string; children?: JSX.Element }) {
   return (
     <View testID={props.testID} class="flex-1 items-center justify-center gap-2 px-4">
       <Text class="text-center text-body font-semibold text-foreground">{props.title}</Text>
+      <If when={props.detail}><Text testID={`${props.testID}-detail`} class="text-center text-sub text-muted-foreground">{props.detail}</Text></If>
       <View class="flex-row flex-wrap justify-center gap-2">{props.children ?? null}</View>
     </View>
   );
@@ -38,10 +40,12 @@ export function BrainChatUnavailable(props: { onOpenTerminal?: (hostWorkerId: st
  * Try again (reads it again) and Open terminal. Its composer is disabled meanwhile
  * ("Chat didn't load").
  */
-export function BrainChatFailed(props: { onTryAgain?: () => void; onOpenTerminal?: (hostWorkerId: string) => void; source?: BrainSource }) {
+export function BrainChatFailed(props: { onTryAgain?: () => void; onOpenTerminal?: (hostWorkerId: string) => void; source?: BrainSource; reason?: string }) {
   const source = props.source ?? currentBrain;
+  const why = () => conversationUnreadableDetail(props.reason);
+  const agent = () => brainExecutorLabel(source.snapshot()?.host_executor) || "The agent";
   return (
-    <ThreadState testID="brain-chat-failed" title="Couldn't load the chat">
+    <ThreadState testID="brain-chat-failed" title="Couldn't load the chat" detail={why() ? `${agent()} did not share this conversation: ${why()}.` : undefined}>
       <PillButton testID="brain-chat-try-again" title="Try again" kind="ink" small onPress={() => (props.onTryAgain ? props.onTryAgain() : source.chat()?.reload())} />
       <PillButton testID="brain-chat-open-terminal" title="Open terminal" small onCanvas onPress={() => props.onOpenTerminal?.(source.snapshot()?.host_worker?.id ?? "")} />
     </ThreadState>

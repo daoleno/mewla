@@ -30,7 +30,6 @@ import (
 var (
 	ErrExecutorNotConfigured   = errors.New("brain host executor is not configured")
 	ErrExecutorLockedByEnv     = errors.New("brain host executor is locked by environment override")
-	ErrExecutorCannotHost      = errors.New("this agent runs Workers but cannot host Brain yet")
 	ErrHostActivationAmbiguous = errors.New("brain Host activation delivery is ambiguous")
 	// ErrRouteTransferNotDurable means TransferSession applied in memory but
 	// route-bindings.json durability was not proven. Host bind/success audit
@@ -1140,9 +1139,6 @@ func (s *Service) setHostExecutor(executorID string, explicit bool) (Snapshot, e
 	executor, ok := s.execs.WorkerExecutor(executorID)
 	if !ok {
 		return Snapshot{}, fmt.Errorf("%w: %s", ErrExecutorNotConfigured, executorID)
-	}
-	if !work.CanHostBrain(executor.Provider) {
-		return Snapshot{}, fmt.Errorf("%w: %s", ErrExecutorCannotHost, executor.ID)
 	}
 	setExecutor := s.store.setImplicitHostExecutorID
 	if explicit {
@@ -3996,6 +3992,19 @@ func (s *Service) hostProviderResumeToken(host HostSession, executor work.Worker
 			return path, true, false
 		}
 		return "", false, false
+	case work.WorkerProviderAntigravity:
+		// agy's --conversation takes only the id it chose; a path to its
+		// conversation file names the same id.
+		if id == "" && path != "" {
+			id = strings.TrimSuffix(filepath.Base(path), ".db")
+		}
+		if work.IsAntigravityConversationID(id) {
+			return id, true, true
+		}
+		if id != "" || path != "" {
+			return firstNonEmpty(id, path), true, false
+		}
+		return "", false, false
 	case work.WorkerProviderOpenCode:
 		if strings.HasPrefix(id, "ses_") {
 			return id, true, true
@@ -4082,7 +4091,7 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 				return executor
 			}
 		}
-		for _, id := range hostdeps.HostAgentOrder() {
+		for _, id := range hostdeps.AgentOrder() {
 			if executor, ok := s.execs.WorkerExecutor(id); ok {
 				return executor
 			}
@@ -4150,7 +4159,7 @@ func SetHostAuthProbe(probe func(executorID string) HostAuthState) {
 // start without a terminal lands here and logs the pick once.
 func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 	var installed []work.WorkerExecutor
-	for _, id := range hostdeps.HostAgentOrder() {
+	for _, id := range hostdeps.AgentOrder() {
 		executor, ok := s.execs.WorkerExecutor(id)
 		if !ok {
 			continue
@@ -4290,7 +4299,7 @@ func (s *Service) installedAlternativeHosts(current string) []string {
 		return nil
 	}
 	var installed []string
-	for _, id := range hostdeps.HostAgentOrder() {
+	for _, id := range hostdeps.AgentOrder() {
 		if id == current {
 			continue
 		}
@@ -4315,7 +4324,7 @@ func (s *Service) verifiedAlternativeHost(current string) string {
 	if s == nil || s.execs == nil {
 		return ""
 	}
-	for _, id := range hostdeps.HostAgentOrder() {
+	for _, id := range hostdeps.AgentOrder() {
 		if id == current {
 			continue
 		}
@@ -4584,7 +4593,7 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 			command = strings.TrimSpace(command + " --add-dir " + shellquote.Quote(workspace))
 		}
 		return withCLIOnPath(command), nil
-	case work.WorkerProviderGrok, work.WorkerProviderCursor:
+	case work.WorkerProviderGrok, work.WorkerProviderCursor, work.WorkerProviderAntigravity:
 		// The Brain host gets the same full-authority launch as a Worker, so it
 		// never stops at an approval prompt.
 		hardened, err := work.PrepareDelegatedCommand(provider, command)
@@ -4596,6 +4605,15 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 			command, err = work.WithProviderResumeToken(provider, command, resumeSessionID)
 			if err != nil {
 				return "", err
+			}
+		}
+		if provider == work.WorkerProviderAntigravity {
+			// agy answers its folder-trust dialog from an inline --settings on
+			// the command, so the Brain workspace is trusted by the launch itself.
+			if workspace != "" {
+				if command, err = work.PrepareDelegatedWorkspace(command, workspace, nil); err != nil {
+					return "", err
+				}
 			}
 		}
 		return withCLIOnPath(command), nil

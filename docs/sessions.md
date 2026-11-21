@@ -342,7 +342,7 @@ the screen or the agent's files:
 | Pi | A small extension Mewla loads into each Pi it starts (`pi -e`), which reports Pi's turns over a local socket; the session file is chosen at launch | Handed to Pi by the extension; Stop aborts the running turn |
 | Cursor | The chat is created before Cursor starts and resumed, so its transcript is known from the first moment; turns are read from the transcript and the screen | Typed into the Terminal |
 | Grok, dsh | The agent's transcript and the screen | Typed into the Terminal |
-| Antigravity | The screen (a Chat reader for agy's SQLite conversations is not built yet) | Typed into the Terminal |
+| Antigravity | The conversation, replayed by `agy acp` when its file changes, and the screen | Typed into the Terminal |
 
 Stop means the work stops. It ends the running turn, and also the commands
 that turn started and left running in the agent's background terminal: a
