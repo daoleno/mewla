@@ -105,7 +105,13 @@ for engine in $engines; do
       verdict="PASS $engine: $(tail -1 "$dir/check.log")"
     fi
   fi
-  [[ "$verdict" == PASS* ]] || failed=1
+  if [[ "$verdict" != PASS* ]]; then
+    failed=1
+    # On a runner the scratch directory is gone with the job: what failed is printed here, not only named.
+    for f in "$dir/install.log" "$dir/web.log" "$dir/check.log"; do
+      [[ -s "$f" ]] && { echo "::group::$engine: $(basename "$f")"; tail -60 "$f"; echo "::endgroup::"; } >&2
+    done
+  fi
   verdicts+=("$verdict, $((SECONDS - started)) s")
   log "${verdicts[-1]}"
 done
