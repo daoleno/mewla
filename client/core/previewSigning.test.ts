@@ -30,7 +30,7 @@ describe("every Preview is signed with one key", () => {
   test("the gate installs this Preview over the last dispatched one", () => {
     expect(workflow).toContain("needs: android");
     expect(workflow).toContain("actions: read");
-    expect(workflow).toMatch(/script: \|\n\s+client\/scripts\/upgrade-gate\.sh\n\s+client\/scripts\/preview-upgrade\.sh\n/);
+    expect(workflow).toContain("script: client/scripts/preview-upgrade.sh");
     const gate = readFileSync(join(root, "client/scripts/preview-upgrade.sh"), "utf8");
     expect(gate).toContain('adb install -r "$PREVIEW_APK"');
   });

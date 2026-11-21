@@ -552,9 +552,10 @@ class ClientWorkflowTests(unittest.TestCase):
         self.assertIn(f'select(.name == "{android_name}")', gate)
         self.assertIn("artifacts?name=mewla-preview-android", gate)
         self.assertLess(gate.index("name: Wait for this run's Preview"), gate.index("-n mewla-preview-android"))
-        # The same upgrade path as before: Expo release → NSH, and the last Preview → this one.
-        for needle in ("client/scripts/upgrade-gate.sh", "client/scripts/preview-upgrade.sh", "assembleProductionRelease"):
-            self.assertIn(needle, gate)
+        # Preview → Preview only: no Expo build is upgraded from any more (owner, 2026-11-21).
+        self.assertIn("client/scripts/preview-upgrade.sh", gate)
+        for gone in ("upgrade-gate.sh", "assembleProductionRelease", "old_version", "Expo"):
+            self.assertNotIn(gone, gate)
 
 
 class CIWorkflowTests(unittest.TestCase):

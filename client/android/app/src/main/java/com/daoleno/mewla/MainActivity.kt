@@ -20,7 +20,6 @@ import com.longbridge.nsh.NshView
 class MainActivity : ComponentActivity() {
   private lateinit var nsh: NshView
   private val secure by lazy { SecureStore(this) }
-  private val legacy by lazy { LegacyStorage(this) }
   private lateinit var push: PushHost
   private lateinit var channelHosts: ChannelHosts
   private lateinit var shareIn: com.daoleno.mewla.share.ShareIn
@@ -41,7 +40,6 @@ class MainActivity : ComponentActivity() {
     nsh.handle("secure.get") { data, reply -> answer(reply) { secure.get(key(data)) } }
     nsh.handle("secure.set") { data, reply -> answer(reply) { secure.set(key(data), field(data, "value")); null } }
     nsh.handle("secure.remove") { data, reply -> answer(reply) { secure.remove(key(data)); null } }
-    nsh.handle("app.legacyStorage") { _, reply -> answer(reply) { legacy.entries() } }
     // The navigation bar's buttons for the app's appearance (App.tsx); the theme sets them only at start.
     nsh.handle("app.navigationBar") { data, reply ->
       answer(reply) {
@@ -50,7 +48,6 @@ class MainActivity : ComponentActivity() {
         null
       }
     }
-    nsh.handle("app.legacyStorageCopied") { _, reply -> answer(reply) { legacy.copied(); null } }
     push = PushHost(this, nsh)
     LiveHost(this, nsh)
     com.daoleno.mewla.files.FilesHost(this, nsh)

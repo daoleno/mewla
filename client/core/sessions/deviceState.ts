@@ -1,8 +1,7 @@
 /**
- * What this device remembers about Sessions, from the Expo app's
- * services/storage.ts, over a KeyValueStore. The Expo app's AsyncStorage
- * entries are copied into NSH storage on the upgrade (legacyStorage.ts), so
- * the keys and value formats below are exactly the Expo app's:
+ * What this device remembers about Sessions, over a KeyValueStore. The keys
+ * and value formats below are what every install has stored since the Expo
+ * app, so they do not change:
  *
  * | Key | Value |
  * |---|---|

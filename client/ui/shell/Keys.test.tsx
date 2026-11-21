@@ -11,8 +11,6 @@ function webHost(daemon: Record<string, unknown> = { brain: {} }) {
       "secure.get": ({ key }: { key: string }) => secure.get(key) ?? null,
       "secure.set": ({ key, value }: { key: string; value: string }) => void secure.set(key, value),
       "secure.remove": ({ key }: { key: string }) => void secure.delete(key),
-      "app.legacyStorage": null,
-      "app.legacyStorageCopied": null,
       "app.origin": "http://127.0.0.1:1",
       "links.initial": null,
       "app.testFrame": null,
