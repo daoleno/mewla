@@ -13,6 +13,7 @@
 #              (client/scripts/phone.sh run corpus: boots mewla-lane under its lock and 8 GiB memory check, about 70 s;
 #              never in CI). Needs the debug build with TerminalReplayActivity: `client/scripts/phone.sh install` after a
 #              Kotlin change in the terminal.
+#              CORPUS_ADVISORY="firefox": engines whose failure is a warning, not a failure (CI sets it for Firefox)
 #   --out DIR  keep the pictures there (default: a fresh directory under $TMPDIR, printed)
 #
 # The Playwright version is pinned in playwright-version.txt (its Chromium, Firefox and WebKit builds are what the
@@ -117,7 +118,13 @@ for engine in $engines; do
     fi
   fi
   if [[ "$verdict" != PASS* ]]; then
-    failed=1
+    # An advisory engine (CORPUS_ADVISORY, CI's Firefox: see README.md) is reported as a warning, never as the job's failure.
+    if [[ " ${CORPUS_ADVISORY:-} " == *" $engine "* ]]; then
+      verdict="WARN (advisory, not failing) ${verdict#FAIL }"
+      echo "::warning title=Terminal corpus: $engine::$verdict" >&2
+    else
+      failed=1
+    fi
     # On a runner the scratch directory is gone with the job: what failed is printed here, not only named.
     for f in "$dir/install.log" "$dir/web-attempt1.log" "$dir/web.log" "$dir/check.log"; do
       [[ -s "$f" ]] && { echo "::group::$engine: $(basename "$f")"; tail -60 "$f"; echo "::endgroup::"; } >&2

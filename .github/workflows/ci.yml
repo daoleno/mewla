@@ -240,8 +240,11 @@ jobs:
         with:
           path: ~/.cache/mewla/terminal-corpus/browsers
           key: terminal-corpus-browsers-${{ runner.os }}-${{ hashFiles('scripts/terminal-corpus/playwright-version.txt') }}
+      # Chromium and WebKit decide the job; Firefox runs and is reported, but only as a warning (scripts/terminal-corpus/README.md).
       - name: Terminal render corpus
         if: steps.changed.outputs.run == 'true'
+        env:
+          CORPUS_ADVISORY: firefox
         run: scripts/terminal-corpus/run.sh
 
   windows:
