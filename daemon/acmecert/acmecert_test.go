@@ -127,14 +127,13 @@ func TestSeedServedUntilDueAndLaterOneWins(t *testing.T) {
 	if got := k.Status().NotAfter; !got.Equal(now.Add(80 * 24 * time.Hour).Truncate(time.Second)) {
 		t.Fatalf("seed not served: %v", got)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	go k.Run(ctx)
+	stop := runUntilCleanup(t, k.Run)
 	select {
 	case <-ca.done:
 		t.Fatal("renewed a certificate 80 days from expiry")
 	case <-time.After(300 * time.Millisecond):
 	}
-	cancel()
+	stop()
 
 	// A stored certificate that expires later than the seed is served instead.
 	storeDir := t.TempDir()
@@ -156,9 +155,7 @@ func TestRenewsWhenDueAndStores(t *testing.T) {
 	ca := &fakeCA{t: t, life: 90 * 24 * time.Hour, done: make(chan struct{}, 4)}
 	k := newKeeper(t, ca, Config{Dir: dir, SeedCert: seedC, SeedKey: seedK})
 	before := serial(t, k)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go k.Run(ctx)
+	runUntilCleanup(t, k.Run)
 	waitIssue(t, ca)
 	waitFor(t, func() bool { return serial(t, k) != before })
 	if d := k.Status().DaysLeft(time.Now()); d < 89 {
@@ -184,9 +181,7 @@ func TestFailureIsCountedAndRetried(t *testing.T) {
 	seedC, seedK := writePair(t, t.TempDir(), "seed", now.Add(-80*24*time.Hour), now.Add(5*24*time.Hour))
 	ca := &fakeCA{t: t, life: 90 * 24 * time.Hour, done: make(chan struct{}, 8), fail: errors.New("DNS provider said no")}
 	k := newKeeper(t, ca, Config{SeedCert: seedC, SeedKey: seedK, RetryAfter: 50 * time.Millisecond})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go k.Run(ctx)
+	runUntilCleanup(t, k.Run)
 	waitIssue(t, ca)
 	waitIssue(t, ca)
 	st := k.Status()
@@ -209,9 +204,7 @@ func TestRenewNowForcesARenewal(t *testing.T) {
 	ca := &fakeCA{t: t, life: 90 * 24 * time.Hour, done: make(chan struct{}, 4)}
 	k := newKeeper(t, ca, Config{SeedCert: seedC, SeedKey: seedK})
 	before := serial(t, k)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go k.Run(ctx)
+	runUntilCleanup(t, k.Run)
 	time.Sleep(100 * time.Millisecond)
 	k.RenewNow()
 	waitIssue(t, ca)
@@ -295,6 +288,26 @@ func TestRenewalReachesNewConnectionsWithoutClosingOpenOnes(t *testing.T) {
 	if n, err := open.Read(buf); err != nil || string(buf[:n]) != "still here" {
 		t.Fatalf("the open connection after renewal: %q %v", buf[:n], err)
 	}
+}
+
+// runUntilCleanup runs a Keeper's or Watcher's Run until stop or the end of
+// the test, and waits for it to return before the test's TempDirs go: a
+// Keeper still writing status.json into its Dir made their removal fail, and
+// its log after the test ended panicked.
+func runUntilCleanup(t *testing.T, run func(context.Context)) (stop func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		run(ctx)
+	}()
+	stop = func() {
+		cancel()
+		<-done
+	}
+	t.Cleanup(stop)
+	return stop
 }
 
 func waitFor(t *testing.T, ok func() bool) {
