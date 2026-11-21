@@ -185,12 +185,12 @@ func (s *Service) settleCandidates() ([]settleItem, error) {
 			log.Printf("brain release orphan admission %s: %v", item.ID, err)
 			continue
 		}
-		if strings.HasPrefix(item.ID, overdueWorkPrefix) {
-			// The overdue-wait list is read once: when Brain's reading ends it
-			// is done, a fact, never a model call.
+		if readOnceWork(item.ID) {
+			// The overdue-wait list and the permission answers are read once:
+			// when Brain's reading ends it is done, a fact, never a model call.
 			if settleCandidate(item, st, now) && st.Review != nil {
 				read := item
-				s.background.Go(func() { s.closeSettled(read, WorkDone, "Brain read the list of waits past their end.") })
+				s.background.Go(func() { s.closeSettled(read, WorkDone, "Brain read the list.") })
 			}
 			continue
 		}

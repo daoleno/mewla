@@ -2,8 +2,6 @@ package brain
 
 import (
 	"errors"
-	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -110,31 +108,4 @@ func (s *Store) UpdateGrantRequest(id string, change func(*TimelineItem) error) 
 func GrantRequestEvent(item TimelineItem) work.CodexConversationEvent {
 	event, _ := timelineItemToConversationEvent(item, 0)
 	return event
-}
-
-// NoteGrantAnswered tells Brain, once per card, how a grant request ended, in
-// one line, through the same lane a Work's events take: a Work of its own
-// (bounded, so Brain closes it once it has acted) with one actionable event.
-func (s *Service) NoteGrantAnswered(card TimelineItem, line string) error {
-	if s == nil || s.store == nil {
-		return errors.New("brain service is not configured")
-	}
-	workID := "grant-request:" + card.ID
-	if _, _, err := s.store.EnsureWork(Work{
-		ID:               workID,
-		Title:            "Permission answered: " + card.GrantPermission,
-		Objective:        "Act on the person's answer to a permission request.",
-		CompletionPolicy: CompletionBounded,
-		NextAction:       "Start the Worker again with the tool if it was granted; stop asking for this task if the person chose Not now; then close this.",
-	}); err != nil {
-		return fmt.Errorf("grant request Work: %w", err)
-	}
-	_, _, err := s.RaiseWorkEvent(WorkEvent{
-		WorkID: workID, Kind: "grant_request", DedupeKey: card.ID + ":" + card.Status,
-		SourceName: "Mewla", Summary: line, Actionable: true,
-	})
-	if err != nil {
-		log.Printf("grant request %s: telling Brain: %v", card.ID, err)
-	}
-	return err
 }

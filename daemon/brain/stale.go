@@ -74,7 +74,7 @@ func (s *Service) staleList(workers []WorkerRef) *StaleList {
 		if item.AttemptSessionID != "" {
 			openAttempt[item.AttemptSessionID] = true
 		}
-		if (s.standing != nil && s.standing(item.ID)) || strings.HasPrefix(item.ID, overdueWorkPrefix) ||
+		if (s.standing != nil && s.standing(item.ID)) || readOnceWork(item.ID) ||
 			(item.SnoozedUntil != nil && now.Before(*item.SnoozedUntil)) {
 			continue
 		}

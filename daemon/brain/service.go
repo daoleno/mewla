@@ -70,10 +70,14 @@ type Watcher interface {
 }
 
 type Service struct {
-	store   *Store
-	watcher Watcher
-	execs   *work.ExecutorConfig
-	now     func() time.Time
+	store *Store
+	// grantAnswersMu serializes the permission answers' list (grant_answers.go);
+	// grantWake tells its runner an answer was written.
+	grantAnswersMu sync.Mutex
+	grantWake      chan struct{}
+	watcher        Watcher
+	execs          *work.ExecutorConfig
+	now            func() time.Time
 	// resultGit probes Worker projects for a result's git_review action.
 	resultGit resultGitProbes
 	// triggerWork says whether a Trigger owns a Work (SetTriggerWork).
@@ -568,6 +572,7 @@ func NewService(store *Store, watcher Watcher, execs *work.ExecutorConfig) *Serv
 		execs:              execs,
 		now:                time.Now,
 		inFlightHostInputs: map[string]struct{}{},
+		grantWake:          make(chan struct{}, 1),
 	}
 }
 
