@@ -1,7 +1,6 @@
 package acmecert
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -28,16 +27,19 @@ func TestWatcherServesWhatTheKeeperRenews(t *testing.T) {
 		t.Fatalf("the watcher should serve the seed first: %.1f days", d)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go k.Run(ctx)
-	go w.Run(ctx)
+	runUntilCleanup(t, k.Run)
+	runUntilCleanup(t, w.Run)
 	time.Sleep(100 * time.Millisecond)
 	k.RenewNow()
 	waitIssue(t, ca)
+	// The keeper holds the renewal before it rewrites status.json (and status.json
+	// of its first look exists already): a reload in between serves the new
+	// certificate with the old status, which this watcher, looking hourly, would
+	// not read again. Reload once status.json itself has the renewal.
 	waitFor(t, func() bool {
-		_, err := os.Stat(filepath.Join(dir, StatusFile))
-		return err == nil && k.Status().Renewed.After(now)
+		var onDisk Status
+		raw, err := os.ReadFile(filepath.Join(dir, StatusFile))
+		return err == nil && json.Unmarshal(raw, &onDisk) == nil && onDisk.Renewed.After(now)
 	})
 	w.Reload()
 	waitFor(t, func() bool { return watcherSerial(t, w) != before })
