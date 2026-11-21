@@ -32,6 +32,12 @@ func testManager(t *testing.T, rt roundTripFunc) *Manager {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A cloud_run or list starts background profile refreshes that run the CLI
+	// and then save the catalog into the TempDir above. Close cancels and waits
+	// for them (and reaps sign-in children) before that TempDir is removed:
+	// cleanups run last first. Without it a refresh still writing made the
+	// TempDir cleanup fail ("directory not empty", CI 44903526336 on macOS).
+	t.Cleanup(m.Close)
 	return m
 }
 func mustHandle(t *testing.T, m *Manager, q Request) Response {
