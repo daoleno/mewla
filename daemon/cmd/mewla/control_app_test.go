@@ -2413,11 +2413,13 @@ func (w blockedAtLaunchWatcher) CreateSession(name string, opts watcher.CreateSe
 // sat at its first-run screen). The Session's own summary is carried, for every
 // agent, and the failure is still the not-submitted one.
 func TestControlAppWorkerSpawnNamesWhatABlockedSessionWaitsFor(t *testing.T) {
+	// agy's own first-run and sign-in screens are the classifier's tests: a
+	// spawn on agy is refused before launch on a computer without agy installed
+	// (CI), so this runs on agents that need nothing installed.
 	for _, tc := range []struct{ executor, command, screen string }{
-		{"agy", "agy", "Welcome to Antigravity CLI!\n\nChoose your color scheme:\n  > terminal\n    light\n    [Next]\n  ↑/↓ Navigate · enter Confirm\n"},
-		{"agy", "agy", "Welcome to the Antigravity CLI. You are currently not signed in.\n Select login method:\n > 1. Google OAuth\n   2. Use a Google Cloud project\n"},
 		{"claude", "claude", " Select login method:\n\n > 1. Claude account with subscription\n   2. Anthropic Console account\n\n"},
 		{"claude", "claude", "Do you want to create hello.txt?\n❯ 1. Yes\n  2. No\n"},
+		{"codex", "codex", "Update available\n> 1. Update now\n  2. Skip\nPress enter to continue\n"},
 	} {
 		want, summary := classifier.Classify(true, strings.Split(tc.screen, "\n"), tc.command)
 		if want != classifier.StateBlocked || summary == "" {
