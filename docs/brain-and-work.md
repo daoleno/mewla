@@ -30,6 +30,18 @@ The composer's **+** attaches a photo, a file, a screenshot of the computer or
 a file on the computer. Typing `@` lists your installed agents, and `/` at the
 start lists the slash commands of the agent Brain runs on.
 
+**Share to Brain (Android).** Mewla is in the phone's share sheet, for one file
+or several (pictures, video, audio, documents) and for text and links, and in
+**Open with** for a file of any type: the entry a chat app such as WeChat offers
+on a file as 「用其他应用打开」. Mewla opens on Brain's chat with the files as chips
+above the composer, uploading at once, and a shared link or text added below
+what you had typed. Nothing is sent until you press Send. A second share joins
+the first. It goes to the computer you are using; while no computer is paired
+or it cannot be reached, the share waits (a failed chip with Retry once the
+computer cannot be reached). The composer holds eight files; the rest wait
+for room. A share with nothing Mewla can use says so once, where attachment
+errors show. iOS, Mewla for Mac and the web do not receive shares yet.
+
 ## Follow the Work
 
 **The state control.** Next to **Brain** in the header, it says how things

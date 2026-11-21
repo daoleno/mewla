@@ -82,7 +82,9 @@ Brain and a Session draw the same rows (`ui/chat`, soft-final SPEC §1.7):
 - **Composer**: a pasted picture or file becomes a chip (`onFiles`); Esc
   leaves an open message edit on every hardware keyboard; text written into
   a draft from elsewhere (Ask Brain about this) joins what is typed, below
-  it (`writeIntoDraft`).
+  it (`writeIntoDraft`). What another app shares to Mewla (Android) comes
+  into Brain's composer the same way: files as chips that upload at once,
+  text below the draft, nothing sent by itself (`ui/more/files/shareIn.ts`).
 
 **Work states.** Each state is a 13 pt glyph plus a word in soft type.
 
