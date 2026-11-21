@@ -131,7 +131,7 @@ Release notes leave out maintainer identity. It lives in tracked files instead:
 | Fact | Source |
 | --- | --- |
 | Version | `client/ui/nsh.json` `version`, mirrored in `daemon/cmd/mewla/version.go` |
-| Android package | `com.daoleno.mewla` (`client/ui/nsh.json` `id`, `client/android/app/build.gradle.kts`) |
+| Android package | `ai.mewla.app` (`client/ui/nsh.json` `id`, `client/android/app/build.gradle.kts`) |
 | Android `versionCode` and iOS `CFBundleVersion` | Derived from the version (below); `client/ios/project.yml` carries the iOS values |
 | Android ABI | `arm64-v8a` only (`scripts/android-release-apk.sh` `-Pmewla.abis=arm64-v8a`, `native/terminal-vt/native.lock.json`) |
 | iOS Preview bundle, marketing version and build number | See [iOS CI](ios-ci-release.md#signed-release-and-testflight) |
@@ -262,7 +262,7 @@ The build job then prints the planned Play API calls with `scripts/google-play-u
 
 Do these once, in order. Steps 1–4 and 6 are in Play Console or Google Cloud; nothing here needs a code change.
 
-1. **Create the app.** Play Console → *Create app*: name `Mewla`, default language, *App*, *Free*, accept the declarations. The package name `com.daoleno.mewla` is fixed by the first uploaded bundle.
+1. **Create the app.** Play Console → *Create app*: name `Mewla`, default language, *App*, *Free*, accept the declarations. The package name `ai.mewla.app` is fixed by the first uploaded bundle.
 2. **Prepare Play App Signing with the existing key.** You choose the signing key when you create the first release (step 6), but get the export ready now. In *Test and release → App integrity → Play app signing*, or in the first release's signing dialog, choose *Use existing app signing key from Java keystore* (wording varies: *Export and upload a key from Java keystore*). Download `pepk.jar` and the encryption public key it offers, then on the machine that holds the release keystore:
 
    ```bash

@@ -11,7 +11,7 @@
 # BUILD_JOB (the job that uploads it, so its failure ends the wait). Exit 0 only if all of it holds.
 set -euo pipefail
 : "${VERSION:?}" "${OUT:?}"
-PKG="${PKG:-com.daoleno.mewla}"
+PKG="${PKG:-ai.mewla.app}"
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT"
 log() { echo "[$(date +%T)] $*" | tee -a "$OUT/launch.log"; }

@@ -348,7 +348,7 @@ describe("notifications", () => {
     expect(framesOf(app.host.posts(), "app_state")[0]).toMatchObject({ app_state: "active" });
     // Other requests go out on connecting too (pending device approvals): find the token one.
     const tokenRequest = app.requests().find((r) => r.url === "https://exp.host/--/api/v2/push/getExpoPushToken");
-    expect(JSON.parse(tokenRequest?.body ?? "{}")).toMatchObject({ type: "fcm", deviceId: "install-1", appId: "com.daoleno.mewla", deviceToken: "fcm-token" });
+    expect(JSON.parse(tokenRequest?.body ?? "{}")).toMatchObject({ type: "fcm", deviceId: "install-1", appId: "ai.mewla.app", deviceToken: "fcm-token" });
   }, 20_000);
 
   test("a tapped calendar push opens its item, and reports the tap to the computer", async () => {

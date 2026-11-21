@@ -17,7 +17,7 @@ Read the relevant code and directory instructions before editing. Complete autho
 
 - Install: client/scripts/fetch-nsh.sh (NSH into ~/.nsh); bun install (only the Screen viewer's noVNC).
 - App: cd client && bun test core; cd client/ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test after TS/TSX edits.
-- Android: client/scripts/dev-android.sh (hot reload), or cd client/android && ./gradlew assemblePreviewDebug (Java 17; libghostty-vt from scripts/build-libghostty.sh). iOS: client/scripts/ios-project.sh, then Xcode.
+- Android: client/scripts/dev-android.sh (hot reload), or cd client/android && ./gradlew assembleProductionDebug (Java 17; libghostty-vt from scripts/build-libghostty.sh). iOS: client/scripts/ios-project.sh, then Xcode.
 - Daemon: bun run daemon:build; cd daemon && go test ./... before daemon/protocol/auth/terminal/work/session changes.
 - cd daemon && go run ./cmd/mewla-dev starts a hot-reloading daemon. Editing watched Go files can restart it; check live watchers before changes.
 - Before pushing to main, run `scripts/ci-local.py` (the jobs your diff touches; `--all` for everything). It runs the commands of .github/workflows/ci.yml, so it also fails on a stale client/ui/more/settings/licenses/licenses.json or Screen viewer bundle, or a node_modules that differs from bun.lock (bun install does not prune; delete the listed directories from node_modules). After pushing, wait for the CI run on your commit to go green before calling the work done. If main is already red from someone else's commit, say so and do not pile on.

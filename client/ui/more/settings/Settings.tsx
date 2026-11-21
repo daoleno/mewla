@@ -13,6 +13,7 @@ import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen
 import type { PageNav } from "../routes";
 import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
+import { OldAppRow } from "../../update/OldAppRow";
 import { markAppUpdateSeen } from "../../update/hint";
 import { appUpdateWaiting } from "../../update/update";
 import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
@@ -213,6 +214,7 @@ export function Settings(props: { nav: PageNav }) {
         <Row lead={tile("info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
         <Row testID="settings-whats-new" lead={tile("bulb")} title="What's new" chevron onPress={() => openWhatsNew()} />
         <If when={!appUpdateWaiting()}><AboutUpdateRow /></If>
+        <OldAppRow />
         <Row lead={tile("shield-check")} title="Privacy Policy" chevron onPress={() => void openUrl(PRIVACY_URL)} />
         <Row lead={tile("help")} title="Support" chevron onPress={() => void openUrl(SUPPORT_URL)} />
         <Row testID="settings-licenses" lead={tile("book")} title="Open-source Licenses" chevron onPress={() => props.nav.push({ name: "settings-licenses" })} />

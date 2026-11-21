@@ -1,6 +1,6 @@
 {
   "name": "Mewla web terminal preview",
-  "id": "com.daoleno.mewla.webterminal",
+  "id": "ai.mewla.app.tests.webterminal",
   "version": "0.0.0",
   "appearance": "system",
   "capabilities": {

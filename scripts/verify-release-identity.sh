@@ -29,7 +29,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-EXPECTED_PACKAGE="com.daoleno.mewla"
+# The identifiers (scripts/lib/release_identity.py) are the one source; every copy below is checked against them.
+EXPECTED_PACKAGE="$(python3 "$ROOT/scripts/lib/release_identity.py" package)"
 IFS=$'\t' read -r EXPECTED_VERSION EXPECTED_VERSION_CODE EXPECTED_IOS_BUILD_NUMBER < <(
   python3 - "$ROOT" <<'PY'
 import sys
@@ -132,12 +133,44 @@ if nsh.get("version") != exp_version:
 if nsh.get("id") != exp_package:
     errors.append(f"client/ui/nsh.json id: got {nsh.get('id')!r} want {exp_package!r}")
 
+# Every hard-coded copy of an identifier equals the source's (docs/identifiers.md): a drifted one is a daemon that
+# labels its job one way and a bundle that names it another, or an update row that asks for an app that is not there.
+sys.path.insert(0, str(root / "scripts" / "lib"))
+import release_identity as ids
+
+def must_contain(path, needle, problem):
+    text = (root / path).read_text(encoding="utf-8")
+    if needle not in text:
+        errors.append(f"{path}: {problem} ({needle!r})")
+
+must_contain("client/core/update/appUpdate.ts", f'export const ANDROID_PACKAGE = "{ids.PACKAGE}";', "the update row's own app id")
+must_contain("daemon/macapp/macapp.go", f'BundleID = "{ids.PACKAGE}"', "the Mac bundle id")
+must_contain("daemon/macapp/macapp.go", f'LegacyBundleID = "{ids.LEGACY_PACKAGE}"', "the old Mac bundle id the daemon replaces")
+must_contain("daemon/cmd/mewla/boot_launchd.go", f'bootLaunchdLabel = "{ids.DAEMON_LABEL}"', "the LaunchAgent label")
+must_contain("daemon/cmd/mewla/boot_launchd.go", f'bootLaunchdLegacyLabel = "{ids.LEGACY_DAEMON_LABEL}"', "the old LaunchAgent label")
+must_contain("client/macos/src/agent.rs", f'pub const LABEL: &str = "{ids.DAEMON_LABEL}";', "the app's LaunchAgent label")
+must_contain("client/macos/src/agent.rs", f'const LEGACY_LABEL: &str = "{ids.LEGACY_DAEMON_LABEL}";', "the old LaunchAgent label the app takes over")
+must_contain("client/macos/src/main.rs", f'options.app_id == "{ids.PACKAGE}"', "the app id that registers the daemon")
+must_contain("client/macos/package.sh", f'id="{ids.DEV_PACKAGE}"', "Mewla Dev's bundle id")
+must_contain("client/macos/package.sh", f'id="{ids.PACKAGE}"', "the Mac app's bundle id")
+must_contain("client/macos/package.sh", f"<key>Label</key><string>{ids.DAEMON_LABEL}</string>", "the bundled LaunchAgent's label")
+must_contain("client/macos/package.sh", f"<string>{ids.PACKAGE}</string></array>", "the bundled LaunchAgent's associated app")
+must_contain("daemon/agentuse/mewlaext.go", f'const NativeHostName = "{ids.NATIVE_HOST}"', "Chrome's native host name")
+must_contain("daemon/agentuse/mewlaext.go", f'const LegacyNativeHostName = "{ids.LEGACY_NATIVE_HOST}"', "the old native host name")
+must_contain("daemon/agentuse/extension/background.js", f"const HOST = '{ids.NATIVE_HOST}';", "the name the extension asks Chrome for")
+must_contain("client/android/app/build.gradle.kts", f'"{ids.LEGACY_PACKAGE}" + (if (variant.flavorName', "the id the app's handover looks for")
+must_contain("client/android/app/build.gradle.kts", 'applicationIdSuffix = ".dev"', "the debug build is ai.mewla.app.dev")
+must_contain("client/ios/project.yml", f"MEWLA_APP_ID: {ids.PACKAGE}", "the iOS bundle id")
+must_contain("client/ios/project.yml", f"CFBundleURLName: {ids.PACKAGE},", "the iOS URL name")
+if ids.IOS_LIVE_BUNDLE_ID != ids.PACKAGE + ".live" or ids.APP_GROUP != "group." + ids.PACKAGE or ids.DEV_PACKAGE != ids.PACKAGE + ".dev":
+    errors.append("release_identity.py: the extension, the group and Mewla Dev must derive from the app id")
+
 # Android: the production identity is the shipped package; the version code is
 # release_identity.py's rule, computed by Gradle from nsh.json.
 gradle = (root / "client/android/app/build.gradle.kts").read_text(encoding="utf-8")
 for needle, problem in (
     (f'applicationId = "{exp_package}"', f"applicationId must be {exp_package}"),
-    (f'namespace = "{exp_package}"', f"namespace must be {exp_package}"),
+    ('namespace = "com.daoleno.mewla"', "namespace is the source package (not an identifier) and stays com.daoleno.mewla"),
     ('uiDir.resolve("nsh.json")', "must read the version from client/ui/nsh.json"),
     ("major * 1_000_000 + minor * 10_000 + patch * 100 + (beta ?: 99)", "versionCode must follow scripts/lib/release_identity.py"),
     ("versionCode = mewlaVersionCode", "versionCode must be the derived code"),
@@ -362,8 +395,9 @@ if stage:
             if ident.get("version") != exp_version:
                 errors.append(f"stage identity version: got {ident.get('version')!r}")
             and_id = ident.get("android") or {}
-            if and_id.get("package") != exp_package:
-                errors.append(f"stage identity package: got {and_id.get('package')!r}")
+            # `package` is the id the builds before the move look for, so they find this release (update.ts).
+            if and_id.get("package") != ids.LEGACY_PACKAGE:
+                errors.append(f"stage identity package: got {and_id.get('package')!r}, want the legacy {ids.LEGACY_PACKAGE!r}")
             if and_id.get("application_id") != exp_package:
                 errors.append(f"stage identity application_id: got {and_id.get('application_id')!r}")
             if int(and_id.get("version_code", -1)) != exp_vc:

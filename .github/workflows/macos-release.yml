@@ -141,7 +141,7 @@ jobs:
           printf '%s' "$UPDATE_KEY" > "$RUNNER_TEMP/update.secret"; chmod 600 "$RUNNER_TEMP/update.secret"
           # What `nsh update-manifest` reads the id, version and the key's public half from; the apps' own is the one that counts.
           mkdir -p "$RUNNER_TEMP/entry"
-          python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"github":"daoleno/mewla","publicKey":open(sys.argv[2]).read().strip()}}, open(sys.argv[3],"w"))' "$version" client/macos/update-public-key.txt "$RUNNER_TEMP/entry/nsh.json"
+          python3 -I -c 'import json,sys; json.dump({"id":"ai.mewla.app","version":sys.argv[1],"updater":{"github":"daoleno/mewla","publicKey":open(sys.argv[2]).read().strip()}}, open(sys.argv[3],"w"))' "$version" client/macos/update-public-key.txt "$RUNNER_TEMP/entry/nsh.json"
           "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/update.secret" --base-url "https://github.com/daoleno/mewla/releases/download/v$version" --out "$out" "$out/Mewla-$version-macos-aarch64.zip"
           rm -f "$RUNNER_TEMP/update.secret"
           cat "$out/latest.json"

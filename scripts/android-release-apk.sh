@@ -2,7 +2,7 @@
 # Build the Android release of the NSH client (client/android): the arm64-v8a
 # sideload APK (GitHub channel: Phone use, in-app update), or with --aab the
 # Google Play App Bundle (Play channel: neither, no REQUEST_INSTALL_PACKAGES).
-# Both are the production identity com.daoleno.mewla, version and versionCode
+# Both are the production identity ai.mewla.app, version and versionCode
 # from client/ui/nsh.json (scripts/lib/release_identity.py).
 #
 # Prerequisites:

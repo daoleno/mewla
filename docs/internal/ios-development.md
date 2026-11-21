@@ -57,7 +57,7 @@ open client/ios/Mewla.xcodeproj
 
 With `--dev`, launch with `-devServer ws://127.0.0.1:8790/ws` and run `nsh dev --server-only client/ui`. Preview builds pass `MEWLA_APP_ID=com.daoleno.mewla.preview`.
 
-The app uses bundle identifier `com.daoleno.mewla` and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
+The app uses bundle identifier `ai.mewla.app` and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
 
 ## Pair and validate
 

@@ -37,4 +37,19 @@ describe("the app starts once per process", () => {
     expect(transportsSeen(app)).toBe(once);
     expect(app.value("id:composer")).toBe("half a thought");
   }, 30_000);
+
+  test("the new app of a move takes the pairing the old one staged, once, and the old one is told", async () => {
+    const staged = JSON.stringify({
+      version: 1,
+      secure: { "mewla.device.v3.id": "phone-1", "mewla.device.v3.name": "Pixel", "mewla.device.v3.seed": "a".repeat(64), "mewla.device.v3.public-key": "b".repeat(64) },
+      storage: { "mewla:v3:servers": paired["mewla:v3:servers"], "mewla:v1:current_server_id": "s1", "mewla:onboarded": "true" },
+    });
+    const host = phoneHost({ brain }, { "handover.take": () => staged, "handover.taken": () => null });
+    const app = await open(APP, { platform: "android", storage: {}, host });
+    // Paired as it was: the computer's home, not a scan.
+    await app.waitFor("id:composer", { timeout: 10_000 });
+    expect(app.host.calls().filter((call) => call.name === "handover.taken")).toHaveLength(1);
+    expect(JSON.parse(app.storage()["mewla:v3:servers"])[0]).toMatchObject({ id: "s1", name: "Desk" });
+    expect(app.host.calls().filter((call) => call.name === "secure.set").map((call) => call.data)).toContainEqual({ key: "mewla.device.v3.seed", value: "a".repeat(64) });
+  }, 30_000);
 });

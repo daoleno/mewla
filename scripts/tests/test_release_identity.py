@@ -117,7 +117,70 @@ class SourcesAgreeTests(unittest.TestCase):
     def test_package_is_the_shipped_identity(self):
         manifest = json.loads((ROOT / release_identity.SOURCE).read_text(encoding="utf-8"))
         self.assertEqual(manifest["id"], release_identity.PACKAGE)
-        self.assertEqual(release_identity.PACKAGE, "com.daoleno.mewla")
+        self.assertEqual(release_identity.PACKAGE, "ai.mewla.app")
+
+    def test_every_identifier_derives_from_the_one_app_id(self):
+        ids = release_identity
+        self.assertEqual(ids.DEV_PACKAGE, "ai.mewla.app.dev")
+        self.assertEqual(ids.IOS_LIVE_BUNDLE_ID, "ai.mewla.app.live")
+        self.assertEqual(ids.APP_GROUP, "group.ai.mewla.app")
+        self.assertEqual(ids.DAEMON_LABEL, "ai.mewla.daemon")
+        self.assertEqual(ids.NATIVE_HOST, "ai.mewla.browser")
+        # What the builds before the move are called, which a release and an update still have to name.
+        self.assertEqual(ids.LEGACY_PACKAGE, "com.daoleno.mewla")
+        self.assertEqual(ids.LEGACY_DAEMON_LABEL, "com.daoleno.mewla.daemon")
+        self.assertEqual(ids.LEGACY_NATIVE_HOST, "com.mewla.browser")
+        values = ids.identity("0.4.19")
+        for field in ("package", "legacy_package", "dev_package", "daemon_label", "native_host", "app_group", "ios_bundle_id", "ios_live_bundle_id"):
+            self.assertIn(field, values)
+        self.assertEqual(values["ios_bundle_id"], ids.PACKAGE)
+
+    def test_no_file_names_the_old_personal_prefix_except_where_it_must(self):
+        """The old ids live only in the legacy constants, the source namespaces and the history (docs/identifiers.md)."""
+        import subprocess
+
+        tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.splitlines()
+        old_ids = re.compile(r"com\.daoleno\.(?:mewla|zen)\b(?!\.(?:[A-Z]|[a-z]+\.[A-Z]))")
+        # Kotlin source packages, class names and the JNI symbols that follow them are not identifiers.
+        namespace = re.compile(r"com\.daoleno\.mewla\.[a-z_]+(?:\.[A-Za-z_]+)*")
+        allowed_files = {
+            "scripts/lib/release_identity.py",        # the legacy constants
+            "scripts/tests/test_release_identity.py",  # this test
+            "scripts/verify-release-identity.sh",       # checks the legacy constants
+            "scripts/stage-release.sh",                 # says what `package` is for
+            "daemon/macapp/macapp.go",                  # LegacyBundleID
+            "daemon/cmd/mewla/boot_launchd.go",         # the old label and the move
+            "daemon/cmd/mewla/boot_launchd_test.go",
+            "daemon/agentuse/mewlaext.go",              # LegacyNativeHostName (com.mewla.browser)
+            "client/macos/src/agent.rs",                # the old label it takes over
+            "client/android/app/build.gradle.kts",      # the id the handover looks for, the namespace
+            "client/android/appupdate/src/main/AndroidManifest.xml",
+            "client/android/appupdate/src/main/java/com/daoleno/mewla/appupdate/Handover.kt",
+            "client/android/app/google-services.json",  # Firebase's entries, until the owner adds the new ids
+            "client/core/update/appUpdate.test.ts",      # a release made for the old app
+            "client/core/update/controller.test.ts",
+            "client/core/crash.test.ts",                  # crash reports of the old app
+            "client/ui/crash/CrashReports.test.tsx",
+            "daemon/brain/claude_queued_paste_echo_test.go",
+            "client/android/app/src/test/java/com/daoleno/mewla/share/ShareRulesTest.kt",
+            "client/scripts/release-upgrade.sh",         # the old app of a move
+            "docs/ios-ci-release.md",                    # the old team's Preview record, until the new team ships
+            "docs/identifiers.md",
+        }
+        offenders = []
+        for path in tracked:
+            if path.startswith(("docs/releases/", "release-notes/")) or path.endswith(("CHANGELOG.md", "bun.lock", "licenses.json", ".png", ".svg", ".webp", ".ttf", ".otf")):
+                continue
+            if path in allowed_files or path.endswith((".kt", ".java", ".cpp", ".pro", "build.gradle.kts")) and "/android/" in path:
+                continue
+            try:
+                text = (ROOT / path).read_text(encoding="utf-8")
+            except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+                continue
+            for number, line in enumerate(text.splitlines(), 1):
+                if old_ids.search(namespace.sub("", line)):
+                    offenders.append(f"{path}:{number}: {line.strip()[:100]}")
+        self.assertEqual(offenders, [], "the old personal prefix is back; see docs/identifiers.md")
 
 
 if __name__ == "__main__":

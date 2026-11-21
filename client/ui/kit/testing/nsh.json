@@ -1,6 +1,6 @@
 {
   "name": "Mewla kit tests",
-  "id": "com.daoleno.mewla.kittests",
+  "id": "ai.mewla.app.tests.kit",
   "version": "0.0.0",
   "appearance": "system",
   "capabilities": {

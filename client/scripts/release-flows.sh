@@ -8,10 +8,10 @@
 # The first-run walk and the scanned QR stay a person's, once per release; release-launch.sh opens the scanner.
 # release-artifacts.yml runs it after release-launch.sh on the same emulator. Inputs: OUT (evidence directory); MEWLA (the daemon
 # binary) or DAEMON_ARTIFACT (this run's artifact holding mewla-linux-amd64) with DAEMON_JOB; APK, or ARTIFACT with BUILD_JOB
-# (see release-launch.sh; GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID); PKG (default com.daoleno.mewla), PORT (9943).
+# (see release-launch.sh; GH_TOKEN, GITHUB_REPOSITORY, GITHUB_RUN_ID); PKG (default ai.mewla.app), PORT (9943).
 set -euo pipefail
 : "${OUT:?}"
-PKG="${PKG:-com.daoleno.mewla}"
+PKG="${PKG:-ai.mewla.app}"
 PORT="${PORT:-9943}"
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT"

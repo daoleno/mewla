@@ -1,6 +1,6 @@
 {
   "name": "Mewla update tests",
-  "id": "com.daoleno.mewla.updatetests",
+  "id": "ai.mewla.app.tests.update",
   "version": "0.0.0",
   "appearance": "system",
   "capabilities": {

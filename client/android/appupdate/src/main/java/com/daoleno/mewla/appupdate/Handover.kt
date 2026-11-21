@@ -3,6 +3,7 @@ package com.daoleno.mewla.appupdate
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
@@ -71,4 +72,35 @@ class HandoverProvider : ContentProvider() {
   override fun insert(uri: Uri, values: ContentValues?): Uri? = null
   override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
   override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
+}
+
+/**
+ * The new app's side: what the app it replaces (the id before the move) staged, taken once, and the old app's
+ * removal. Everything answers "nothing" for an id that is this app's own, an app that is not installed, one that is
+ * not signed with the same key, or one built before the move: the person then pairs by scanning, as on a new phone.
+ */
+object HandoverClient {
+  fun staged(context: Context, legacyId: String): String? = call(context, legacyId, Handover.GET)?.getString(Handover.JSON)
+
+  fun taken(context: Context, legacyId: String) {
+    call(context, legacyId, Handover.TAKEN)
+  }
+
+  fun installed(context: Context, legacyId: String): Boolean = legacyId != context.packageName && runCatching {
+    context.packageManager.getPackageInfo(legacyId, 0)
+  }.isSuccess
+
+  /** The system's own uninstall dialog for the old app. */
+  fun removeIntent(legacyId: String): Intent =
+    Intent(Intent.ACTION_DELETE, Uri.parse("package:$legacyId")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+  private fun call(context: Context, legacyId: String, method: String): Bundle? {
+    if (legacyId == context.packageName) return null
+    return try {
+      context.contentResolver.call(Uri.parse("content://$legacyId.handover"), method, null, null)
+    } catch (_: Exception) {
+      // Not installed, not visible, another signature (SecurityException), or an old build without the provider.
+      null
+    }
+  }
 }

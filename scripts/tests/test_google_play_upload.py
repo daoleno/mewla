@@ -32,7 +32,7 @@ class GooglePlayUploadTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def args(self, *extra):
-        return ["--aab", str(self.aab), "--package", "com.daoleno.mewla", "--version-code", "54", *extra]
+        return ["--aab", str(self.aab), "--package", "ai.mewla.app", "--version-code", "54", *extra]
 
     def test_dry_run_prints_plan_without_credentials(self):
         out = io.StringIO()

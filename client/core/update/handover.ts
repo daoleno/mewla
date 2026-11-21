@@ -58,3 +58,16 @@ function isMoveable(secure: Record<string, string>, storage: Record<string, stri
 function isStrings(value: unknown): value is Record<string, string> {
   return typeof value === "object" && value !== null && Object.values(value).every((item) => typeof item === "string");
 }
+
+/**
+ * The new app takes what the old one staged, into a store that holds no device key and no computer (a fresh
+ * install). An app that is already paired keeps what it has: the person scanned first, and that is the truth.
+ * "imported": the phone is paired as it was; "kept": it was paired already.
+ */
+export async function importHandover(bundle: HandoverBundle, secure: KeyValueStore, storage: KeyValueStore): Promise<"imported" | "kept"> {
+  const [id] = DEVICE_SECURE_KEYS;
+  if ((await secure.getItem(id)) || (await storage.getItem(SERVER_KEYS.servers))) return "kept";
+  for (const [key, value] of Object.entries(bundle.secure)) await secure.setItem(key, value);
+  for (const [key, value] of Object.entries(bundle.storage)) await storage.setItem(key, value);
+  return "imported";
+}

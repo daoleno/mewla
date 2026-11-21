@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import com.daoleno.mewla.BuildConfig
 import com.daoleno.mewla.appupdate.AppUpdater
+import com.daoleno.mewla.appupdate.HandoverClient
 import com.daoleno.mewla.appupdate.UpdateRequest
 import com.longbridge.nsh.NshHostReply
 import com.longbridge.nsh.NshView
@@ -63,6 +64,14 @@ class UpdateHost(private val activity: Activity, private val nsh: NshView) {
     }
     // A move to another app: what pairs this phone, staged for the new app to take (appupdate/Handover.kt).
     nsh.handle("handover.stage") { data, reply -> answer(reply) { vault.stage(field(data, "json")); null } }
+    // The new app of a move: what the old one staged (null when none), taken once; whether the old app is still
+    // installed, and the system's uninstall dialog for it.
+    nsh.handle("handover.take") { _, reply -> answer(reply) { HandoverClient.staged(activity, BuildConfig.LEGACY_APP_ID) } }
+    nsh.handle("handover.taken") { _, reply -> answer(reply) { HandoverClient.taken(activity, BuildConfig.LEGACY_APP_ID); null } }
+    nsh.handle("handover.legacyInstalled") { _, reply -> answer(reply) { HandoverClient.installed(activity, BuildConfig.LEGACY_APP_ID) } }
+    nsh.handle("handover.removeLegacy") { _, reply ->
+      onMain { answer(reply) { activity.startActivity(HandoverClient.removeIntent(BuildConfig.LEGACY_APP_ID)); null } }
+    }
     nsh.handle("update.install") { data, reply ->
       onMain { answer(reply) { activity.startActivity(updater.installIntent(field(data, "fileName"))); null } }
     }

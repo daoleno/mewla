@@ -5,7 +5,7 @@ Mewla deliberately uses two different Apple artifacts because CI validation and 
 | Path | Trigger | Signing | Artifact | Intended use |
 | --- | --- | --- | --- | --- |
 | iOS native CI | release tag push or manual `ci.yml` dispatch | none | `Mewla.app` for Apple Silicon iOS Simulator | Compile/link validation on macOS; not installable on an iPhone |
-| iOS signed production | manual `workflow_dispatch` with `app_identity=production` (default) | `app-store-connect` environment | `Mewla` / `com.daoleno.mewla` App Store Connect IPA | Canonical formal release path; never automatic |
+| iOS signed production | manual `workflow_dispatch` with `app_identity=production` (default) | `app-store-connect` environment | `Mewla` / `ai.mewla.app` App Store Connect IPA | Canonical formal release path; never automatic |
 | iOS signed Preview | dispatched by `release-artifacts.yml` once a release is published, or manual `workflow_dispatch` with `app_identity=preview` | `app-store-connect-preview` environment | `Mewla` / `com.daoleno.mewla.preview` App Store Connect IPA | Automatic TestFlight path plus explicit manual recovery/testing |
 | Android release | release tag push or the release workflow's dispatch; manual reviewed recovery/build | Android release keystore | arm64 signed APK | Direct sideload and automated GitHub Release attachment |
 
@@ -45,7 +45,7 @@ Required dispatch inputs:
 | `app_identity` | Closed choice: `production` (default) or `preview`; it atomically selects the iOS identity contract, including the bundle ID, artifact name, manifest identity, and protected GitHub Environment |
 | `destination` | `artifact-only` (default) or `testflight` |
 
-The app is the NSH client's iOS host: `client/scripts/fetch-nsh.sh --ios` installs the pinned NativeShell framework, `client/scripts/ios-project.sh` generates `client/ios/Mewla.xcodeproj` with xcodegen, and `xcodebuild` archives the `Mewla` scheme. The identities are the Expo app's, so the App Store and TestFlight builds replace those installs in place: production `com.daoleno.mewla` and Preview `com.daoleno.mewla.preview` (`scripts/lib/release_identity.py`), passed to `xcodebuild` as `MEWLA_APP_ID`, from which the extension (`<bundle>.live`) and App Group (`group.<bundle>`) follow. The workflow does not accept a free-form display name or bundle ID; the workflow default is canonical production, and both install as `Mewla`.
+The app is the NSH client's iOS host: `client/scripts/fetch-nsh.sh --ios` installs the pinned NativeShell framework, `client/scripts/ios-project.sh` generates `client/ios/Mewla.xcodeproj` with xcodegen, and `xcodebuild` archives the `Mewla` scheme. The identities are the Expo app's, so the App Store and TestFlight builds replace those installs in place: production `ai.mewla.app` and Preview `com.daoleno.mewla.preview` (`scripts/lib/release_identity.py`), passed to `xcodebuild` as `MEWLA_APP_ID`, from which the extension (`<bundle>.live`) and App Group (`group.<bundle>`) follow. The workflow does not accept a free-form display name or bundle ID; the workflow default is canonical production, and both install as `Mewla`.
 
 The version is `client/ui/nsh.json` `version`. The marketing version is that version without `-beta.N`, and `CFBundleVersion` follows from it by the rule in [CI release](ci-release.md): `X·1 000 000 + Y·10 000 + Z·100 + 99` for `X.Y.Z`, `+ N` for `X.Y.Z-beta.N` (0.3.2 is build 30299), above every build the Expo app uploaded (140 at 0.3.1). `client/ios/project.yml` carries both values for local builds, plus `MEWLA_APP_VERSION` (the version itself, `-beta.N` included); release preparation moves them with the version, and the release passes them to `xcodebuild` as `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` and `MEWLA_APP_VERSION`, which apply to the app and its extension alike.
 
@@ -88,7 +88,7 @@ Production keeps the existing protected `app-store-connect` Environment. Create 
 | --- | --- | --- | --- |
 | `ZEN_APPLE_CERTIFICATE_BASE64` | yes | yes | PKCS#12 containing the Apple Distribution certificate and private key |
 | `ZEN_APPLE_CERTIFICATE_PASSWORD` | yes | yes | PKCS#12 password |
-| `ZEN_APPLE_PROVISIONING_PROFILE_BASE64` | yes | yes | App Store distribution profile for the environment's exact bundle ID (`com.daoleno.mewla` for production; `com.daoleno.mewla.preview` for Preview) |
+| `ZEN_APPLE_PROVISIONING_PROFILE_BASE64` | yes | yes | App Store distribution profile for the environment's exact bundle ID (`ai.mewla.app` for production; `com.daoleno.mewla.preview` for Preview) |
 | `ZEN_APPLE_TEAM_ID` | yes | yes | Apple Developer Team identifier for that environment, cross-checked against the profile |
 | `ZEN_ASC_KEY_ID` | no | yes | App Store Connect API key ID |
 | `ZEN_ASC_API_KEY_BASE64` | no | yes | Base64 form of the Individual API `.p8` private key |
@@ -102,7 +102,7 @@ Apple secrets are scoped to the validation and specific signing/upload steps rat
 Before the first run, a maintainer must complete these Apple-side operations:
 
 1. Enroll the owning team in the Apple Developer Program and accept current agreements.
-2. Register the explicit App ID `com.daoleno.mewla`.
+2. Register the explicit App ID `ai.mewla.app` (and `ai.mewla.app.live`, App Group `group.ai.mewla.app`).
 3. Create the matching app record in App Store Connect.
 4. Create an Apple Distribution certificate and an App Store provisioning profile for that App ID.
 5. Create an Individual App Store Connect API key for a user with permission to upload builds; store only its key ID and `.p8` in the environment secrets, and set the public App Store Connect app ID as `ZEN_ASC_APP_ID` in environment variables.

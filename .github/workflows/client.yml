@@ -144,8 +144,8 @@ jobs:
       # it back to compare its bytes (full access): granted to the test host so no prompt waits on nobody.
       - name: Let the test host use Photos
         run: |
-          xcrun simctl privacy "$SIM" grant photos-add com.daoleno.mewla
-          xcrun simctl privacy "$SIM" grant photos com.daoleno.mewla
+          xcrun simctl privacy "$SIM" grant photos-add ai.mewla.app
+          xcrun simctl privacy "$SIM" grant photos ai.mewla.app
       # TerminalTests saves the terminal it drew as out/terminal.png, PictureSaveTests the share sheet as
       # out/share-sheet-ios.png.
       - name: Unit tests (the host and the terminal)

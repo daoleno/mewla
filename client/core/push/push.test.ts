@@ -52,7 +52,7 @@ function fakeHost(granted: boolean, answer = true) {
     rotate: (next) => void (token = next),
     permission: async () => (calls.push("permission"), { granted }),
     requestPermission: async () => (calls.push("request"), answer),
-    deviceToken: async () => ({ type: "fcm", token, deviceId: "ABC-INSTALL", appId: "com.daoleno.mewla", development: false }),
+    deviceToken: async () => ({ type: "fcm", token, deviceId: "ABC-INSTALL", appId: "ai.mewla.app", development: false }),
   };
   return host;
 }
@@ -95,7 +95,7 @@ describe("the Expo push token", () => {
     };
     expect(await expoPushToken(host, storage, fetch)).toBe("ExponentPushToken[fcm-1]");
     expect(await expoPushToken(host, storage, fetch)).toBe("ExponentPushToken[fcm-1]");
-    expect(bodies).toEqual([{ type: "fcm", deviceId: "abc-install", development: false, appId: "com.daoleno.mewla", deviceToken: "fcm-1", projectId: "1b76d386-969b-4841-ae68-f32895ad2301" }]);
+    expect(bodies).toEqual([{ type: "fcm", deviceId: "abc-install", development: false, appId: "ai.mewla.app", deviceToken: "fcm-1", projectId: "1b76d386-969b-4841-ae68-f32895ad2301" }]);
     host.rotate("fcm-2");
     expect(await expoPushToken(host, storage, fetch)).toBe("ExponentPushToken[fcm-2]");
     expect(bodies).toHaveLength(2);
