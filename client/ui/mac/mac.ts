@@ -5,7 +5,7 @@ import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWor
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready } from "../session";
-import { nav, openBrainTerminal, openPage } from "../shell/nav";
+import { nav, openBrainTerminal, openPage, openSession } from "../shell/nav";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
@@ -30,7 +30,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -218,6 +218,8 @@ export function startMac(): void {
           if (script.perch && !script.quickSend) togglePerch();
           // A page and the window's size for the captures beside w-cal, w-screen, w-mac, w-small and w-full.
           if (script.open) openPage(({ calendar: { name: "calendar" }, screen: { name: "screen" }, computer: { name: "computer" } } as const)[script.open]);
+          // A Session's page (the fidelity captures' busy desk, macos-fidelity.yml).
+          if (script.session) openSession(script.session);
           if (script.size) Window.get("main")?.setBounds({ size: { width: script.size[0], height: script.size[1] } });
           if (script.fullScreen) Window.get("main")?.setMode("fullScreen");
           // `minimize` seconds later the window goes to the Dock, which keeps the app's icon (the run reads the policy).

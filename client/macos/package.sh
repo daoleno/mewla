@@ -14,6 +14,8 @@
 # holds the public half of. Mewla Dev has none. A proof can give either its own: --updater-url <https or loopback
 # latest.json URL> --updater-key <base64 public key>, and --version to be a version other than nsh.json's.
 # The archive is named for the updater's platform (macos-aarch64): `nsh update-manifest` reads that from its name.
+# --fixture (with --dev only): Mewla Dev on the soft-final mock's scenario (client/ui/fixture/MacFixtureApp.tsx), a busy
+# desk for the fidelity captures (macos-fidelity.yml); never a release.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -23,6 +25,7 @@ dev=0
 version_override=""
 updater_url=""
 updater_key=""
+fixture=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --daemon) daemon="${2:?}"; shift 2 ;;
@@ -31,12 +34,14 @@ while [[ $# -gt 0 ]]; do
     --version) version_override="${2:?}"; shift 2 ;;
     --updater-url) updater_url="${2:?}"; shift 2 ;;
     --updater-key) updater_key="${2:?}"; shift 2 ;;
+    --fixture) fixture=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 [[ -x "$daemon" ]] || { echo "--daemon: no executable at '$daemon'" >&2; exit 2; }
 file "$daemon" | grep -q 'Mach-O 64-bit.*arm64' || { echo "--daemon is not a macOS arm64 binary" >&2; exit 2; }
 
+[[ $fixture == 0 || $dev == 1 ]] || { echo "--fixture goes with --dev" >&2; exit 2; }
 if [[ $dev == 1 ]]; then name="Mewla Dev"; id="com.daoleno.mewla.dev"; else name="Mewla"; id="com.daoleno.mewla"; fi
 version=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/client/ui/nsh.json")
 [[ -z "$version_override" ]] || version="$version_override"
@@ -60,7 +65,13 @@ if version:
 config.setdefault("tailwind", {})["fontSize"] = json.load(open(density))["fontSize"]
 json.dump(config, open(path, "w"), indent=2)
 PY
-"$nsh" build --release -o "$work/nsh" "$work/src/ui"
+entry="$work/src/ui"
+if [[ $fixture == 1 ]]; then
+  # Beside nsh.json, which `nsh build` reads next to the entry.
+  printf 'import "./fixture/MacFixtureApp";\n' > "$work/src/ui/MacFixture.tsx"
+  entry="$work/src/ui/MacFixture.tsx"
+fi
+"$nsh" build --release -o "$work/nsh" "$entry"
 rm -f "$work/nsh/bundle.js.map"
 python3 -I - "$work/nsh/app.json" "$id" "$name" <<'PY'
 import json, sys

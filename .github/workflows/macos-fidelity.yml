@@ -1,61 +1,111 @@
 name: Mewla for Mac fidelity
 
-# Probe: what a runner's display can show (modes, a HiDPI virtual display), a neutral desktop, and whether `open`
-# makes an app the active one. No app build.
+# The Mac app beside its design, at the design's scale (client/macos/scripts/fidelity): Mewla Dev and Mewla Dev on the
+# mock's scenario (a busy desk), each surface launched as a person launches it, on a 1512 × 982 pt HiDPI display (a
+# 14" MacBook Pro's), a neutral desktop and the Dock hidden, in light and dark. Captures only: it asserts nothing.
+# Runs on a push to a mac-audit/ branch; the captures are its artifact.
 
 on:
   push:
     branches: ["mac-audit/**"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  probe:
+  captures:
+    name: Fidelity captures
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Displays as the runner has them
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Zig, the terminal engine and the web VT from main's cache
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          lib: darwin_arm64
+          web: "true"
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      - name: Rust
         run: |
-          swift client/macos/scripts/fidelity/modes.swift
-          system_profiler SPDisplaysDataType || true
-          mkdir -p "$RUNNER_TEMP/probe"
-          screencapture -x "$RUNNER_TEMP/probe/0-runner.png"
-      - name: A HiDPI virtual display
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            client/macos/target
+          key: macos-app-v1-${{ hashFiles('client/macos/Cargo.toml', 'client/macos/Cargo.lock') }}
+          restore-keys: macos-app-v1-
+      - name: Build the daemon
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
+          ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
+      - name: Package Mewla Dev, and Mewla Dev on the mock's scenario
+        run: |
+          client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app" --dev
+          client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/fixture" --dev --fixture
+          ditto -x -k "$RUNNER_TEMP/app/Mewla-Dev-"*-macos-aarch64.zip "$RUNNER_TEMP/run-app"
+          ditto -x -k "$RUNNER_TEMP/fixture/Mewla-Dev-"*-macos-aarch64.zip "$RUNNER_TEMP/run-fixture"
+      - name: A stub agent (no agent on a runner)
+        run: sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+      - name: The display, the desktop, the computer's name
         run: |
           set -x
-          clang -fobjc-arc -framework Foundation -framework CoreGraphics client/macos/scripts/fidelity/vdisplay.m -o "$RUNNER_TEMP/vdisplay"
-          nohup "$RUNNER_TEMP/vdisplay" 1512 982 > "$RUNNER_TEMP/probe/vdisplay.out" 2> "$RUNNER_TEMP/probe/vdisplay.err" &
-          echo $! > "$RUNNER_TEMP/vdisplay.pid"
-          for i in $(seq 1 20); do grep -q "^display" "$RUNNER_TEMP/probe/vdisplay.out" && break; sleep 1; done
-          cat "$RUNNER_TEMP/probe/vdisplay.out" "$RUNNER_TEMP/probe/vdisplay.err" || true
-          swift client/macos/scripts/fidelity/modes.swift
-          screencapture -x "$RUNNER_TEMP/probe/1-main.png" || true
-          for d in 1 2; do screencapture -x -D $d "$RUNNER_TEMP/probe/1-display$d.png" || true; done
-          ls -la "$RUNNER_TEMP/probe"
-      - name: A neutral desktop, the Dock hidden
-        run: |
-          python3 -I client/macos/scripts/fidelity/solid.py "$RUNNER_TEMP/desk-light.png" 64 64 222 224 228
-          osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk-light.png\"" || echo "wallpaper: refused"
+          F=client/macos/scripts/fidelity
+          clang -fobjc-arc -framework Foundation -framework CoreGraphics "$F/vdisplay.m" -o "$RUNNER_TEMP/vdisplay"
+          nohup "$RUNNER_TEMP/vdisplay" 1512 982 > "$RUNNER_TEMP/vdisplay.out" 2> "$RUNNER_TEMP/vdisplay.err" &
+          for i in $(seq 1 20); do grep -q "^display" "$RUNNER_TEMP/vdisplay.out" && break; sleep 1; done
+          cat "$RUNNER_TEMP/vdisplay.out"
+          grep -q "1512x982 pt, 3024x1964 px" "$RUNNER_TEMP/vdisplay.out"
           defaults write com.apple.dock autohide -bool true; defaults write com.apple.dock autohide-delay -float 1000; killall Dock || true
-          sleep 3
-          screencapture -x "$RUNNER_TEMP/probe/2-desk.png" || true
-      - name: Does open make an app active
+          # What a person's Mac is called (the runner's is its host name): the pane header shows it.
+          sudo scutil --set ComputerName "MacBook Pro"
+          python3 -I "$F/solid.py" "$RUNNER_TEMP/desk-light.png" 64 64 222 224 228
+          python3 -I "$F/solid.py" "$RUNNER_TEMP/desk-dark.png" 64 64 44 46 50
+      - name: Captures
         run: |
-          open -a TextEdit
-          sleep 4
-          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' || true
-          screencapture -x "$RUNNER_TEMP/probe/3-textedit.png" || true
-          # The same app started as a plain process (as macos-app.yml starts Mewla Dev).
-          osascript -e 'quit app "TextEdit"' || true; sleep 2
-          /System/Applications/TextEdit.app/Contents/MacOS/TextEdit > /dev/null 2>&1 &
-          sleep 4
-          osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' || true
-          screencapture -x "$RUNNER_TEMP/probe/4-textedit-exec.png" || true
-          kill %1 || true
+          F=client/macos/scripts/fidelity
+          OUT="$RUNNER_TEMP/captures"; mkdir -p "$OUT"
+          APP="$RUNNER_TEMP/run-app/Mewla Dev.app"; FIX="$RUNNER_TEMP/run-fixture/Mewla Dev.app"
+          for theme in light dark; do
+            dark=$([ "$theme" = dark ] && echo true || echo false)
+            osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $dark"
+            osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk-$theme.png\""
+            sleep 2
+            # Mewla Dev on this runner's daemon: a first run, then each surface on the same install.
+            "$F/capture.sh" "$APP" "$OUT" $theme firstrun '{}' fresh
+            "$F/capture.sh" "$APP" "$OUT" $theme menu '{}' keep menu
+            "$F/capture.sh" "$APP" "$OUT" $theme perch '{"perch":true}' keep
+            "$F/capture.sh" "$APP" "$OUT" $theme pair '{"pairPhone":true}' keep
+            for page in general connections agents access pet; do
+              "$F/capture.sh" "$APP" "$OUT" $theme settings-$page "{\"settings\":\"$page\"}" keep
+            done
+            "$F/capture.sh" "$APP" "$OUT" $theme shortcut '{"shortcutOffer":true}' keep
+            "$F/capture.sh" "$APP" "$OUT" $theme terminal '{"terminal":true}' keep
+            "$F/capture.sh" "$APP" "$OUT" $theme grant '{"grant":"asked"}' keep
+            "$F/capture.sh" "$APP" "$OUT" $theme mac '{"open":"computer"}' keep
+            sudo mv /usr/local/bin/claude /usr/local/bin/claude.aside
+            "$F/capture.sh" "$APP" "$OUT" $theme noagent '{}' fresh
+            sudo mv /usr/local/bin/claude.aside /usr/local/bin/claude
+            # The busy desk (the mock's scenario).
+            "$F/capture.sh" "$FIX" "$OUT" $theme busy-home '{}' fresh
+            "$F/capture.sh" "$FIX" "$OUT" $theme busy-session '{"session":"ratelimit"}' keep
+            "$F/capture.sh" "$FIX" "$OUT" $theme busy-perch '{"perch":true}' keep
+            "$F/capture.sh" "$FIX" "$OUT" $theme busy-cal '{"open":"calendar"}' keep
+            "$F/capture.sh" "$FIX" "$OUT" $theme busy-small '{"size":[760,620]}' keep
+          done
+          ls "$OUT" | head -200
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: fidelity-probe-${{ github.run_id }}
-          path: ${{ runner.temp }}/probe
+          name: mewla-macos-fidelity-${{ github.run_id }}
+          path: ${{ runner.temp }}/captures
