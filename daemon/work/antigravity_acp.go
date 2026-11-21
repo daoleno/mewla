@@ -801,6 +801,19 @@ func (r *ProviderConversationReader) loadAntigravityConversationForWorker(worker
 // newest conversation in its folder written since it launched. Unbound until
 // agy has stored the first turn.
 func resolveAntigravityTranscriptIdentity(worker classifier.Worker) HostTranscriptIdentity {
+	return resolveAntigravityIdentity(worker, false)
+}
+
+// ResolveAntigravityWorkerTranscript is the same for a Worker, where the folder
+// is shared more often than a Brain's: two agy Workers started in one folder
+// cannot be told apart by "newest since launch", so with more than one
+// candidate the Worker is left unbound until its resume id or the folder says
+// which one it is. A wrong link is worse than none.
+func ResolveAntigravityWorkerTranscript(worker classifier.Worker) HostTranscriptIdentity {
+	return resolveAntigravityIdentity(worker, true)
+}
+
+func resolveAntigravityIdentity(worker classifier.Worker, unique bool) HostTranscriptIdentity {
 	unbound := HostTranscriptIdentity{Provider: WorkerProviderAntigravity}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -823,8 +836,8 @@ func resolveAntigravityTranscriptIdentity(worker classifier.Worker) HostTranscri
 		// agy starts a new conversation for an id it does not know.
 	}
 	if strings.TrimSpace(worker.Cwd) != "" {
-		if found, ok, err := FindAntigravityConversation(home, worker.Cwd, antigravityLaunchTime(worker)); err == nil && ok {
-			if identity, ok := bound(found.ID); ok {
+		if found, err := findAntigravityConversations(home, worker.Cwd, antigravityLaunchTime(worker)); err == nil && len(found) > 0 && (!unique || len(found) == 1) {
+			if identity, ok := bound(found[0].ID); ok {
 				return identity
 			}
 		}

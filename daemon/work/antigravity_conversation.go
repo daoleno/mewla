@@ -130,22 +130,34 @@ func GetAntigravityConversation(home, id string) (AntigravityConversation, bool,
 // launch is never returned, so a new Worker cannot bind to the person's earlier
 // one in the same folder.
 func FindAntigravityConversation(home, cwd string, startedAt time.Time) (AntigravityConversation, bool, error) {
-	conversations, err := ListAntigravityConversations(home)
-	if err != nil {
+	found, err := findAntigravityConversations(home, cwd, startedAt)
+	if err != nil || len(found) == 0 {
 		return AntigravityConversation{}, false, err
 	}
+	return found[0], true, nil
+}
+
+// findAntigravityConversations is every top-level conversation in cwd last
+// written at or after startedAt, newest first.
+func findAntigravityConversations(home, cwd string, startedAt time.Time) ([]AntigravityConversation, error) {
+	conversations, err := ListAntigravityConversations(home)
+	if err != nil {
+		return nil, err
+	}
 	want := cleanAntigravityPath(cwd)
+	var out []AntigravityConversation
 	for _, conversation := range conversations {
 		if conversation.ModifiedAt.Before(startedAt) {
 			continue
 		}
 		for _, dir := range conversation.CWDs {
 			if dir == want {
-				return conversation, true, nil
+				out = append(out, conversation)
+				break
 			}
 		}
 	}
-	return AntigravityConversation{}, false, nil
+	return out, nil
 }
 
 func cleanAntigravityPath(path string) string {

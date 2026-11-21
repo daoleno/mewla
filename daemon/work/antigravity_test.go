@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
@@ -207,5 +208,50 @@ func writeAntigravitySummaries2(t *testing.T, home, id, clock, uris string) {
 	if _, err := db.Exec("INSERT INTO conversation_summaries (conversation_id, preview, last_modified_time, workspace_uris, status, parent_conversation_id, not_fully_idle) VALUES (?,?,?,?,?,?,?)",
 		id, "now", "2026-11-22 "+clock+".25+00:00", uris, "CASCADE_RUN_STATUS_RUNNING", "", true); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResolveAntigravityWorkerTranscript(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cwd := t.TempDir()
+	uri := func(dir string) string { b, _ := json.Marshal([]string{"file://" + dir}); return string(b) }
+	const first = "d03fe13b-79b6-4b0b-ab9e-62b8efbcff60"
+	const second = "e03fe13b-79b6-4b0b-ab9e-62b8efbcff60"
+	writeAntigravitySummaries(t, home)
+	if err := os.MkdirAll(filepath.Join(AntigravityDataDir(home), "conversations"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{first, second} {
+		if err := os.WriteFile(antigravityConversationPath(home, id), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	started := time.Date(2026, 11, 22, 3, 0, 0, 0, time.UTC)
+	worker := classifier.Worker{ID: "s1", Command: "agy", Cwd: cwd, StartedAt: started, Name: "agy"}
+
+	if got := ResolveAntigravityWorkerTranscript(worker); got.Bound() {
+		t.Fatalf("no conversation yet, got %+v", got)
+	}
+	writeAntigravitySummaries2(t, home, first, "03:10:00", uri(cwd))
+	got := ResolveAntigravityWorkerTranscript(worker)
+	if !got.Bound() || got.SessionID != first || got.Provider != WorkerProviderAntigravity {
+		t.Fatalf("one conversation since launch must bind, got %+v", got)
+	}
+	// A second Worker in the same folder makes "newest since launch" a guess:
+	// the Worker stays unbound, where the Brain host's own lookup still takes
+	// the newest.
+	writeAntigravitySummaries2(t, home, second, "03:11:00", uri(cwd))
+	if got := ResolveAntigravityWorkerTranscript(worker); got.Bound() {
+		t.Fatalf("two conversations in the folder must not bind a Worker, got %+v", got)
+	}
+	if got := resolveAntigravityTranscriptIdentity(worker); !got.Bound() {
+		t.Fatalf("the Brain host lookup keeps taking the newest, got %+v", got)
+	}
+	// The id on the command line is exact, whatever else the folder holds.
+	resumed := worker
+	resumed.Command = "agy --conversation " + first
+	if got := ResolveAntigravityWorkerTranscript(resumed); got.SessionID != first {
+		t.Fatalf("resume id must bind, got %+v", got)
 	}
 }
