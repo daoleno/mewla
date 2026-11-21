@@ -74,8 +74,13 @@ fi
 # machine's own business). Never longer than 10 minutes: a stuck download is a failure, not a hang.
 install_browser() {
   local engine="$1" args=()
-  compgen -G "$PLAYWRIGHT_BROWSERS_PATH/$engine-*/INSTALLATION_COMPLETE" > /dev/null && return 0
-  [[ -z "${GITHUB_ACTIONS:-}" ]] || args+=(--with-deps)
+  # On a runner the libraries (apt) come with every run: a restored browser cache holds the browsers, never the libraries
+  # (WebKit then fails with "libevent-2.1.so.7: cannot open shared object file"); the download itself is skipped when present.
+  if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+    compgen -G "$PLAYWRIGHT_BROWSERS_PATH/$engine-*/INSTALLATION_COMPLETE" > /dev/null && return 0
+  else
+    args+=(--with-deps)
+  fi
   log "installing $engine into $PLAYWRIGHT_BROWSERS_PATH"
   timeout 600 bun "$core/cli.js" install "${args[@]}" "$engine"
 }
