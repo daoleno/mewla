@@ -42,6 +42,7 @@ const pageOf = tab => {
 
 const port = { sent: [], onMessage: event(), onDisconnect: event(), postMessage(message) { this.sent.push(message); } };
 let manifestVersion = '0.4.1';
+let refuseInput = '';
 const chromeEvents = {
   windowsFocus: event(), windowsRemoved: event(), tabsCreated: event(), tabsUpdated: event(), tabsActivated: event(),
   tabsZoom: event(), tabsRemoved: event(), debuggerEvent: event(), debuggerDetach: event(),
@@ -90,13 +91,26 @@ globalThis.chrome = {
     setZoom: async (id, factor) => { record('tabs.setZoom', id, factor); zoom.set(id, factor || 1); },
   },
   tabGroups: { update: async () => {} },
-  debugger: { onEvent: chromeEvents.debuggerEvent, onDetach: chromeEvents.debuggerDetach, detach: async () => {}, attach: async () => {}, sendCommand: async () => ({}) },
+  debugger: {
+    onEvent: chromeEvents.debuggerEvent, onDetach: chromeEvents.debuggerDetach, detach: async () => {}, attach: async () => {},
+    // The page's offset in its window takes a while to come back, as a real page's evaluation does.
+    sendCommand: async (target, method, params) => {
+      if (method === 'Runtime.evaluate') {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return { result: { value: [0, TOP_BAR] } };
+      }
+      if (refuseInput) throw new Error(refuseInput);
+      record('debugger.sendCommand', target, method, params);
+      return {};
+    },
+  },
 };
 // The relay's WebSocket to the daemon opens at once.
+const sockets = [];
 globalThis.WebSocket = class {
   static OPEN = 1;
   readyState = 0;
-  constructor() { queueMicrotask(() => { this.readyState = 1; this.onopen?.(); }); }
+  constructor() { sockets.push(this); queueMicrotask(() => { this.readyState = 1; this.onopen?.(); }); }
   send() {}
   close() { this.readyState = 3; }
 };
@@ -104,6 +118,7 @@ globalThis.WebSocket = class {
 await import(pathToFileURL(process.argv[2]).href);
 
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); };
+const settleInput = async () => { await new Promise(resolve => setTimeout(resolve, 200)); await settle(); };
 const hostMessage = async message => { port.onMessage.fire(message); await settle(); };
 const told = type => port.sent.filter(message => message.type === type);
 const lastTold = type => told(type).at(-1);
@@ -145,6 +160,49 @@ await hostMessage({ type: 'ping' });
 assert.deepEqual(lastTold('pong'), { type: 'pong', sessions: ['phone'], version: '0.4.1' });
 await hostMessage({ type: 'connect', id: 'phone', relayUrl: 'ws://127.0.0.1:1/relay' });
 assert.equal(lastTold('error').message, 'already connected');
+
+// ---- the person's input from Screen ----------------------------------------------------------------------
+// 2026-11-21: a click's page offset takes a moment; typing right after it reached the page first, into no
+// field. Events reach the page in the order they came, a click at the page's own point.
+// The agent's browser tools attach the window's tab, as Playwright does through the relay.
+sockets.at(-1).onmessage({ data: JSON.stringify({ id: 1, method: 'chrome.debugger.attach', params: [{ tabId: agent.tabId }, '1.3'] }) });
+await settle();
+calls.length = 0;
+const mouse = type => ({ type: 'input', id: 'phone', input: { method: 'Input.dispatchMouseEvent', params: { type, x: 200, y: 100 + TOP_BAR, button: 'left', clickCount: 1 } } });
+const key = (type, text) => ({ type: 'input', id: 'phone', input: { method: 'Input.dispatchKeyEvent', params: { type, key: text, text } } });
+for (const message of [mouse('mousePressed'), mouse('mouseReleased'), key('keyDown', 'a'), key('keyUp', 'a'), key('keyDown', 'b')])
+  port.onMessage.fire(message);
+await settleInput();
+const sent = callsOf('debugger.sendCommand').map(call => [call.args[1], call.args[2].type, call.args[2].key ?? '']);
+assert.deepEqual(sent, [
+  ['Input.dispatchMouseEvent', 'mousePressed', ''], ['Input.dispatchMouseEvent', 'mouseReleased', ''],
+  ['Input.dispatchKeyEvent', 'keyDown', 'a'], ['Input.dispatchKeyEvent', 'keyUp', 'a'], ['Input.dispatchKeyEvent', 'keyDown', 'b'],
+], 'the keys reached the page before the click');
+assert.deepEqual([callsOf('debugger.sendCommand')[0].args[2].x, callsOf('debugger.sendCommand')[0].args[2].y], [200, 100]);
+assert.deepEqual(callsOf('debugger.sendCommand')[0].args[0], { tabId: agent.tabId });
+assert.equal(told('input').length, 0, 'input that reached the page was reported as a problem');
+
+// Input that cannot reach the page is said once, and so is its coming back.
+refuseInput = 'Cannot access a chrome:// URL';
+port.onMessage.fire(key('keyDown', 'c'));
+port.onMessage.fire(key('keyUp', 'c'));
+await settleInput();
+assert.deepEqual(told('input'), [{ type: 'input', id: 'phone', message: 'Cannot access a chrome:// URL' }]);
+refuseInput = '';
+port.onMessage.fire(key('keyDown', 'd'));
+await settleInput();
+assert.deepEqual(told('input').at(-1), { type: 'input', id: 'phone' });
+// The page in front is not one the tools hold (the person opened a tab of their own there).
+const own = makeTab(agent.windowId);
+tabs.get(agent.tabId).active = false;
+port.onMessage.fire(key('keyDown', 'e'));
+await settleInput();
+assert.deepEqual(told('input').at(-1), { type: 'input', id: 'phone', message: "the page in front is not one the agent's browser tools hold" });
+tabs.delete(own.id);
+tabs.get(agent.tabId).active = true;
+// A window the extension does not have.
+await hostMessage({ type: 'input', id: 'nobody', input: key('keyDown', 'g').input });
+assert.deepEqual(told('input').at(-1), { type: 'input', id: 'nobody', message: 'the agent window is gone' });
 
 // ---- laying the window out for the phone ---------------------------------------------------------------
 calls.length = 0;

@@ -633,6 +633,32 @@ describe("Screen: a Mac's agent browser windows", () => {
     expect(app.shows("id:stage-bar")).toBe(false);
   });
 
+  test("input that cannot reach the window's page says so over the picture with its one fix, and goes when it reaches it (2026-11-21)", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true, video: "webrtc" }) }, { platform: "android" }));
+    await app.waitFor("id:display-mh-signin");
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    await app.host.send("app.viewer", { type: "connected", width: 800, height: 500 });
+    expect(app.shows("id:stage-input-issue")).toBe(false);
+    await app.host.send("app.socketPush", { message: { type: "input", problem: "the page in front is not one the agent's browser tools hold" } });
+    await app.waitFor("id:stage-input-issue");
+    expect(app.texts()).toContain("This page isn't taking your input");
+    expect(app.texts()).toContain("Ask the agent to open this page again.");
+    await app.host.send("app.socketPush", { message: { type: "input", problem: "" } });
+    await app.waitUntil(() => !app.shows("id:stage-input-issue"));
+  });
+
+  test("a locked Mac says so over its window with Unlock, which opens the Mac's own screen (2026-11-21)", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: json({ displays: [window("mh-signin", "SignIn")], available: true, video: "webrtc" }) }, { platform: "android" }));
+    await app.waitFor("id:display-mh-signin");
+    await app.waitUntil(() => opened(app, DISPLAY_VIEWER).length === 1);
+    await app.host.send("app.viewer", { type: "connected", width: 800, height: 500 });
+    await app.host.send("app.socketPush", { message: { type: "state", locked: true } });
+    await app.waitFor("id:stage-locked");
+    expect(app.texts().some((text) => text.endsWith(" is locked"))).toBe(true);
+    await app.press("text:Unlock");
+    await app.waitUntil(() => opened(app).length === 1);
+  });
+
   test("the last window closing hands the page to the Mac's own screen", async () => {
     let list = [window("mh-signin", "SignIn")];
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json(base), [`GET ${DISPLAY}`]: () => json({ displays: list, available: true, video: "webrtc" }) }));

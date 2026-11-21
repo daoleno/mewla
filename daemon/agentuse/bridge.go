@@ -106,6 +106,15 @@ func (b *Bridge) PageInput(id string, in PageInput) error {
 	return host.send(hostMessage{Type: "input", ID: id, Input: &in})
 }
 
+// SetInputProblem installs what hears why the person's input from Screen
+// cannot reach a window's page (its connection id, the reason, which the
+// extension says), and "" once it reaches it again.
+func (b *Bridge) SetInputProblem(hear func(id, problem string)) {
+	b.mu.Lock()
+	b.inputProblem = hear
+	b.mu.Unlock()
+}
+
 // openWindow is an agent's window the extension has open.
 type openWindow struct {
 	ID       string `json:"id"`
@@ -206,6 +215,9 @@ type Bridge struct {
 	host      *bridgeHost
 	agentHost *bridgeHost
 	waiting   map[string]chan hostMessage
+	// inputProblem hears why the person's input from Screen cannot reach a
+	// window's page (SetInputProblem).
+	inputProblem func(id, problem string)
 	// replies wait for the extension's answers to reflows, by request.
 	replies map[string]chan hostMessage
 	// open are the agent browser's windows, by connection id, with the Worker.
@@ -435,6 +447,13 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 			b.reflowReply(m)
 		case "page":
 			b.pageHost(m)
+		case "input":
+			b.mu.Lock()
+			hear := b.inputProblem
+			b.mu.Unlock()
+			if hear != nil {
+				hear(m.ID, m.Message)
+			}
 		case "connected", "error", "closed":
 			if m.Type != "connected" {
 				b.release(m.ID)

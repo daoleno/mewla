@@ -45,6 +45,9 @@ type AgentWindows struct {
 	// (the extension); without it, or for an older one, input goes in the
 	// background through the window server, which Chrome may not take.
 	page func(key string, in PageInput) error
+	// viewing keeps the display on for one view until ctx ends, except while
+	// the computer is locked, and tells obs the lock (Service.holdWhileViewing).
+	viewing func(ctx context.Context, obs *Observer)
 
 	idleAfter  time.Duration
 	idleClosed func(worker, name, why string)
@@ -101,6 +104,11 @@ type windowOwner struct {
 	during   bool // the person's input landed while a call ran
 	input    vdisplay.Input
 	gone     chan struct{} // closed when its last window goes
+	// problem is why the person's input cannot reach the window's page now
+	// ("" when it can); troubles are the views that hear it change.
+	problem   string
+	troubles  map[int]func(string)
+	nextTrack int
 }
 
 type windowsClosed struct {
@@ -135,6 +143,10 @@ func (s *Service) AgentWindows() *AgentWindows {
 	defer s.agentMu.Unlock()
 	if s.agentWindows == nil {
 		s.agentWindows = newAgentWindows(viewer)
+		// A person looking at a window an agent left (a sign-in, long after the
+		// agent's turn) keeps the display on, as on the Mac's own screen: a
+		// sleeping display or a lock leaves the page unpainted.
+		s.agentWindows.viewing = s.holdWhileViewing
 	}
 	return s.agentWindows
 }
@@ -241,6 +253,39 @@ func (a *AgentWindows) rectOf(worker string) (image.Rectangle, bool) {
 		return list[0].rect, true
 	}
 	return image.Rectangle{}, false
+}
+
+// InputProblem is why the person's input from Screen cannot reach the page of
+// the window with key (its browser said so), or "" once it reaches it again.
+// The views of its Worker hear it.
+func (a *AgentWindows) InputProblem(key, problem string) {
+	a.mu.Lock()
+	w := a.windows[key]
+	a.mu.Unlock()
+	if w != nil {
+		a.setProblem(w.worker, problem)
+	}
+}
+
+func (a *AgentWindows) setProblem(worker, problem string) {
+	a.mu.Lock()
+	owner := a.owners[worker]
+	if owner == nil || owner.problem == problem {
+		a.mu.Unlock()
+		return
+	}
+	owner.problem = problem
+	var hear []func(string)
+	for _, f := range owner.troubles {
+		hear = append(hear, f)
+	}
+	a.mu.Unlock()
+	if problem != "" {
+		log.Printf("screen: the person's input does not reach the page of %s: %s", worker, problem)
+	}
+	for _, f := range hear {
+		f(problem)
+	}
 }
 
 // Forget closes a Worker's windows and takes them off the list.
@@ -538,6 +583,31 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 		let()
 		return nil, err
 	}
+	// The lock, as the display is kept on for this view: heard at once, and
+	// on every change, by whoever listens (Locked).
+	var lockMu sync.Mutex
+	var locked, lockKnown bool
+	var hearLock func(bool)
+	if a.viewing != nil {
+		a.viewing(ctx, &Observer{Locked: func(now bool) {
+			lockMu.Lock()
+			locked, lockKnown = now, true
+			hear := hearLock
+			lockMu.Unlock()
+			if hear != nil {
+				hear(now)
+			}
+		}})
+	}
+	lockListen := func(hear func(bool)) {
+		lockMu.Lock()
+		hearLock = hear
+		now, known := locked, lockKnown
+		lockMu.Unlock()
+		if known {
+			hear(now)
+		}
+	}
 	view := &windowView{
 		inner:  session,
 		bounds: bounds,
@@ -555,6 +625,24 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 				return errWindowClosed
 			}
 			return send(key, in)
+		}
+	}
+	// Input that cannot reach the page (the window server's events are not
+	// taken by a window behind others) is said, not dropped in silence.
+	view.trouble = func(problem string) { a.setProblem(worker, problem) }
+	track := 0
+	trouble := func(hear func(string)) {
+		a.mu.Lock()
+		owner.nextTrack++
+		track = owner.nextTrack
+		if owner.troubles == nil {
+			owner.troubles = map[int]func(string){}
+		}
+		owner.troubles[track] = hear
+		now := owner.problem
+		a.mu.Unlock()
+		if now != "" {
+			hear(now)
 		}
 	}
 	holding := false // guarded by a.mu
@@ -585,6 +673,9 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 			_ = session.Close()
 			release()
 			hold(false)
+			a.mu.Lock()
+			delete(owner.troubles, track)
+			a.mu.Unlock()
 			let()
 		})
 	}
@@ -612,8 +703,10 @@ func (a *AgentWindows) View(worker string) (*vdisplay.Viewer, error) {
 		Input: func(src io.Reader) error {
 			return vdisplay.Relay(sessionInput{view}, src, observe)
 		},
-		Hold:  hold,
-		Close: closeView,
+		Hold:    hold,
+		Close:   closeView,
+		Trouble: trouble,
+		Locked:  lockListen,
 	}, nil
 }
 
@@ -629,6 +722,10 @@ type windowView struct {
 	viewer agentDisplayViewer
 	// page sends input to the window's page through its browser, when it can.
 	page func(PageInput) error
+	// trouble says why the person's input cannot reach the page.
+	trouble func(problem string)
+	// refused: the last send to the page failed here (not in the browser).
+	refused bool
 
 	mu      sync.Mutex
 	place   image.Rectangle // where the window really is, looked up now and then
@@ -725,8 +822,22 @@ func (v *windowView) toPage(events ...PageInput) bool {
 	for _, in := range events {
 		if err := v.page(in); err != nil {
 			v.note("input to the page went the other way: %v", err)
+			v.mu.Lock()
+			v.refused = true
+			v.mu.Unlock()
+			if v.trouble != nil {
+				v.trouble(err.Error())
+			}
 			return false
 		}
+	}
+	// The browser takes it again: what it cannot do with it, it says itself.
+	v.mu.Lock()
+	cleared := v.refused
+	v.refused = false
+	v.mu.Unlock()
+	if cleared && v.trouble != nil {
+		v.trouble("")
 	}
 	return true
 }

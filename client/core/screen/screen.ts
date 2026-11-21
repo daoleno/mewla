@@ -213,6 +213,8 @@ export interface ScreenConnectionHandlers {
   streamStats?(stats: ScreenStreamStats): void;
   /** An agent display's browser window was laid out for this view, or put back (the display viewer's `fit`). */
   reflow?(state: StageReflow): void;
+  /** Why the person's input cannot reach what an agent display shows; "" once it can again. */
+  inputProblem?(problem: string): void;
   /** WebRTC signalling from the computer, for the viewer page. */
   signal?(signal: ScreenSignal): void;
   /**
@@ -289,7 +291,7 @@ export class ScreenConnection {
         this.finish();
         return;
       }
-      let message: { type?: string; t?: number; error?: string; locked?: unknown };
+      let message: { type?: string; t?: number; error?: string; locked?: unknown; problem?: unknown };
       try {
         message = JSON.parse(event.data);
       } catch {
@@ -303,7 +305,8 @@ export class ScreenConnection {
         if (stats) this.handlers.streamStats?.(stats);
         // The lock rides on stats too, in case a state message was dropped.
         if (typeof message.locked === "boolean") this.handlers.locked?.(message.locked);
-      } else if (message.type === "reflow") {
+      } else if (message.type === "input") this.handlers.inputProblem?.(typeof message.problem === "string" ? message.problem : "");
+      else if (message.type === "reflow") {
         const state = parseReflow(message as Record<string, unknown>);
         if (state) this.handlers.reflow?.(state);
       } else if ((message.type === "rtc" || message.type === "ice") && isSignal(message)) this.fromComputer(message);

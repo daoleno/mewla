@@ -28,3 +28,15 @@ export function displayIssue(error: unknown, server: string): DisplayIssue | nul
   }
   return issue("That didn't finish", "If it keeps failing, check Connection details in the options menu.");
 }
+
+/**
+ * Why the person's taps and keys do not reach the page an agent display shows (the daemon's
+ * `{"type":"input","problem"}`), as a state and the one thing that fixes it; null when they do.
+ */
+export function inputIssue(problem: string, server: string): DisplayIssue | null {
+  if (!problem) return null;
+  const issue = (detail: string): DisplayIssue => ({ title: "This page isn't taking your input", detail, tone: "warning", diagnostic: problem });
+  if (/too old/i.test(problem)) return issue(`Reload Mewla's extension in Chrome on ${server}.`);
+  if (/isn't connected|isn't running/i.test(problem)) return issue(`Open Chrome on ${server}.`);
+  return issue("Ask the agent to open this page again.");
+}

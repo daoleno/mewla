@@ -133,4 +133,10 @@ type Viewer struct {
 	Fit func(width, height int, dpr float64) Reflow
 	// Notify, when set, hears every change of how the display is shown.
 	Notify func(func(Reflow))
+	// Trouble, when set, hears why the person's input cannot reach what the
+	// view shows, and "" once it can again; it hears the present one at once.
+	Trouble func(func(problem string))
+	// Locked, when set, hears whether the computer is locked (a locked one
+	// paints none of the view's page): at once, and on every change.
+	Locked func(func(locked bool))
 }
