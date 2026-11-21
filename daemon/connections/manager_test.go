@@ -66,6 +66,14 @@ func mustHandle(t *testing.T, m *Manager, q Request) Response {
 	return r
 }
 
+// edit changes records the way the manager does: under its lock. A test that
+// writes a record without it races the background refresh a Handle started.
+func (m *Manager) edit(change func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	change()
+}
+
 // addNotion adds a Notion account, the REST service the generic account tests
 // run on. Its identity is the name the fixture's /users/me answers with.
 func addNotion(t *testing.T, m *Manager, name, secret string) *Account {

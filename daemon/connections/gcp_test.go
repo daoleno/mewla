@@ -162,8 +162,10 @@ func TestGCPAccountsHideEmptyConfigsAndFollowCredentialStore(t *testing.T) {
 	if r.Account.Name != "same@example.com" || r.Account.Project != "project-a" || !r.Account.Active || r.Account.Enabled {
 		t.Fatal(r.Account)
 	}
-	r.Account.Enabled = true
-	m.setGroup(r, "write", true)
+	m.edit(func() {
+		r.Account.Enabled = true
+		m.setGroup(r, "write", true)
+	})
 	(*configs)[0].Properties["core"]["project"] = "new-project"
 	if err := m.syncGCPProfiles(context.Background(), true); err != nil {
 		t.Fatal(err)
@@ -273,7 +275,7 @@ func TestGCPRunBothAuthorizationGates(t *testing.T) {
 	if _, err := m.Handle(context.Background(), q); err == nil {
 		t.Fatal("writes disabled")
 	}
-	m.setGroup(r, "write", true)
+	m.edit(func() { m.setGroup(r, "write", true) })
 	if _, err := m.Handle(context.Background(), q); err == nil {
 		t.Fatal("missing task authorization")
 	}

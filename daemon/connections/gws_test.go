@@ -454,7 +454,7 @@ func TestGWSConnectFlowEndToEnd(t *testing.T) {
 	if _, err := m.Handle(context.Background(), send); err == nil {
 		t.Fatal("send ran with writes disabled")
 	}
-	m.setGroup(r, "write", true)
+	m.edit(func() { m.setGroup(r, "write", true) })
 	if _, err := m.Handle(context.Background(), send); err == nil {
 		t.Fatal("send ran without task authorization")
 	}

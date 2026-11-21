@@ -115,8 +115,7 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 	if err == nil && secret == "" {
 		err = errAuth
 	}
-	snapshot := *r
-	snapshot.Account = cloneAccount(r.Account)
+	snapshot := r.detached()
 	var sensitive []string
 	if err == nil {
 		sensitive = m.sensitiveValues(r, secret)
