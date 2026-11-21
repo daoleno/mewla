@@ -80,6 +80,10 @@ for w in list {
 screencapture -x -D 1 "$out/$theme-$name.png" || true
 cat "$D"/data/logs/* 2>/dev/null | grep -E "dev script|window:|terminal:|error|Error" | tail -40 >> "$out/$theme-$name-log.txt" || true
 head -8 "$out/$theme-$name-log.txt"
+# Its daemon's own logs for the runs that wait on Brain's host (why a host is replaced while the app attaches).
+if [[ "$name" == terminal || "$name" == firstrun* ]]; then
+  for f in "$D"/state/logs/*.log; do [[ -f "$f" ]] && { echo "== $f"; tail -400 "$f"; }; done > "$out/$theme-$name-daemon.txt" 2>&1 || true
+fi
 
 # Quit (its daemon, its child, stops with it), then make sure nothing of this run is left.
 [[ -n "$pid" ]] && kill -TERM "$pid" 2>/dev/null || true

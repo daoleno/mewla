@@ -263,11 +263,17 @@ describe("Mewla for Mac", () => {
     await wide.waitFor("id:left-pane", { timeout: 15_000 });
   }, 60_000);
 
-  test("a page the left pane opens (This Mac) has no ‹ Back: the left pane is the way back", async () => {
+  test("a page the left pane opens (Calendar) has no ‹ Back: the left pane is the way back", async () => {
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ open: "calendar" }) });
     await app.waitFor("id:left-pane", { timeout: 15_000 });
-    await app.waitUntil(() => app.texts().some((text) => /^Today\b/.test(text) || text === "Calendar"), { timeout: 10_000 });
+    await app.waitFor("id:calendar-page", { timeout: 10_000 });
     expect(app.count("id:page-back")).toBe(0);
+  }, 30_000);
+
+  test("Brain's thread in the window sits in the mock's column (700 at most), its header the window's width", async () => {
+    const app = await open(APP, { platform: "macos", width: 760, height: 620, storage: paired, host: macHost({}) });
+    await app.waitFor("id:mac-thread-column", { timeout: 15_000 });
+    expect(app.shows("id:home-header")).toBe(true);
   }, 30_000);
 
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {

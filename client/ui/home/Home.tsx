@@ -381,6 +381,17 @@ function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
   );
 }
 
+/**
+ * Brain's thread and composer in Mewla for Mac's window (win.css `.col`): at most 700 wide, centred, 24 in from its
+ * edges (the rows' own 16 and 8 more), at every width, one column or two; the header above runs the window's width.
+ * Elsewhere the page's own column holds them.
+ */
+function ThreadColumn(props: { on: boolean; children: JSX.Element }) {
+  return <If when={props.on} else={<>{props.children}</>}>
+    <View testID="mac-thread-column" class="w-full flex-1 self-center px-2" style={{ maxWidth: 700 }}>{props.children}</View>
+  </If>;
+}
+
 /** Brain's Brain host sheet (the tray's Switch executor, the computer page's Switch). */
 const hostSheetOpen = signal(false);
 
@@ -517,6 +528,8 @@ export function Home(props: { perch?: PerchHome } = {}) {
       return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path, full) : Promise.reject(new Error("No computer yet."));
     },
   };
+  // Mewla for Mac's window: the header runs the window's width, the thread and the composer sit in the column.
+  const macColumn = density() === "window";
   // The capsule header on a phone (SPEC §11); wide (an open iPhone Duo too) keeps its own header (crossing the gate switches them).
   const phone = mobile && platform.idiom === "phone";
   const capsuled = () => phone && !wide();
@@ -540,16 +553,18 @@ export function Home(props: { perch?: PerchHome } = {}) {
     wasShown = shown;
   });
   return (
-    <NavPage title="Brain" column="reading" headerVisible={false} header={<View />} rail={[
+    <NavPage title="Brain" column="reading" frame={macColumn ? false : undefined} headerVisible={false} header={<View />} rail={[
       { id: "stop", transient: true, icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping Brain" : "Stop Brain", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
       { id: "brain-menu", icon: "more-horizontal", label: "Brain's menu", onPress: () => menuOpen.set(true), ref: menuAnchor.ref },
     ]}>
       <CapsulePage>
         {/* With the side rail up (an open iPhone Duo on its side, beside the pane) nothing is left for the header. */}
         <If when={!capsuled() && !rail()}><If when={props.perch} else={<HomeHeader />}>{(perch) => perch().header()}</If></If>
-        <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
-        <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
-        <If when={!routedBrainThread()}><Composer text={text} editor={editor} /></If>
+        <ThreadColumn on={macColumn}>
+          <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
+          <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
+          <If when={!routedBrainThread()}><Composer text={text} editor={editor} /></If>
+        </ThreadColumn>
         <If when={capsuled()}><BrainCapsule capsule={capsule} /></If>
         <If when={!wide()}><Tray top={capsuled() ? inset : undefined} onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
           onUseExecutor={(id) => {
