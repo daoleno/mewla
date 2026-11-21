@@ -3838,6 +3838,18 @@ func (s *Server) broadcastEvents(ctx context.Context) {
 	}
 }
 
+// ProviderAvailabilityChanged runs when an agent family's provider became
+// unavailable or answers again: Brain's lane delivers what it held, and every
+// client gets the snapshot whose provider_outages shows or clears the line in
+// Brain's Chat.
+func (s *Server) ProviderAvailabilityChanged() {
+	if s.brain == nil {
+		return
+	}
+	s.brain.ProviderAvailabilityChanged()
+	s.broadcastBrainSnapshot()
+}
+
 func (s *Server) broadcastBrainSnapshot() {
 	if s.brain == nil {
 		return

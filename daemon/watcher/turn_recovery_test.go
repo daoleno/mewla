@@ -245,7 +245,7 @@ func stalledPollItem(now, settled time.Time, providerID string, failure *Provide
 	}
 }
 
-func TestSuperviseDelegatedTurnsResumesThenEscalatesExactlyOnceAcrossRestart(t *testing.T) {
+func TestSuperviseDelegatedTurnsResumesAcrossRestartAndNeverReportsATransientErrorLost(t *testing.T) {
 	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
 	submits := []string{}
 	drop := &ProviderActivityError{Code: "server_error", Message: "API Error: Connection lost mid-response."}
@@ -291,17 +291,68 @@ func TestSuperviseDelegatedTurnsResumesThenEscalatesExactlyOnceAcrossRestart(t *
 		exhausted.now = settled.Add(time.Hour + time.Duration(i)*time.Minute)
 		w.superviseDelegatedTurns([]probedPollWorker{exhausted})
 	}
-	if len(submits) != 5 || len(ledger.stalls) != 1 {
-		t.Fatalf("exhaustion: submits=%d stalls=%+v, want 5 and exactly one stall", len(submits), ledger.stalls)
+	// 2026-11-21: a two-hour rate limit spent this budget in 27 minutes and
+	// every Worker was reported lost, which let its Work close. A transient
+	// error is held instead: once the budget is spent the Turn is resumed
+	// again after the last backoff step, once, and never escalated.
+	if len(submits) != 6 || len(ledger.stalls) != 0 {
+		t.Fatalf("exhaustion: submits=%d stalls=%+v, want one more resume and no stall", len(submits), ledger.stalls)
 	}
-	stall := ledger.stalls[0]
-	if stall.Reason != "retries_exhausted" || stall.Attempts != 5 || stall.WorkID != "work-1" ||
-		!strings.Contains(stall.Summary, "after 5 automatic resumes") || !strings.Contains(stall.Summary, "Connection lost") ||
-		!strings.Contains(stall.Summary, "Last output: ● Writing the renderer") {
-		t.Fatalf("stall = %+v", stall)
+	if got := ledger.records[5].Attempt; got != 6 {
+		t.Fatalf("held resume numbering = %+v", ledger.records)
 	}
 	if len(ledger.ambiguous) != 1 || ledger.ambiguous[0] != "turn:never-signalled" {
-		t.Fatalf("stale prompt fence was not released before escalation: %v", ledger.ambiguous)
+		t.Fatalf("stale prompt fence was not released: %v", ledger.ambiguous)
+	}
+}
+
+func TestATurnHeldThroughAProviderOutageIsResumedOnlyByTheFamilysProbeAndAtOnceOnRecovery(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	limit := &ProviderActivityError{Code: "rate_limit", HTTPStatus: 429, Message: "API Error: Request rejected (429) · cooling down"}
+	start := time.Date(2026, 11, 20, 23, 3, 0, 0, time.UTC)
+	availability := w.availability()
+	// Two refusals of the family (any Sessions) make an outage.
+	availability.observe("claude", refused(start.Add(-time.Minute)), start)
+	availability.observe("claude", refused(start), start)
+	if _, ok := w.ProviderOutage("claude"); !ok {
+		t.Fatal("setup: no outage")
+	}
+	poll := func(at time.Time) {
+		item := stalledPollItem(at, start, "a1", limit)
+		item.workerSnap.Command = "claude --session-id held"
+		w.superviseDelegatedTurns([]probedPollWorker{item})
+		for index := range ledger.records {
+			if ledger.records[index].At.After(at) || ledger.records[index].At.Before(start.Add(-time.Hour)) {
+				ledger.records[index].At = at // pin wall-clock records to the poll clock
+			}
+		}
+	}
+	// Two hours of polls every 15 s: the ordinary 30 s/2 m/5 m backoff does
+	// not run; only the family's probes go out (5, 10, 20, 30, 30, 30 min).
+	for at := start.Add(15 * time.Second); at.Before(start.Add(2 * time.Hour)); at = at.Add(15 * time.Second) {
+		poll(at)
+	}
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("a Turn held through an outage was reported lost: %+v", ledger.stalls)
+	}
+	if len(submits) < 4 || len(submits) > 7 {
+		t.Fatalf("resumes during a 2 h outage = %d, want one per probe interval", len(submits))
+	}
+	held := len(submits)
+	// The provider answers again (any Session of the family): the held Turn
+	// is resumed on the next poll, without waiting for the next probe.
+	recovered := start.Add(2*time.Hour + time.Minute)
+	availability.observe("claude", answered(recovered), recovered)
+	poll(recovered.Add(15 * time.Second))
+	if len(submits) != held+1 {
+		t.Fatalf("recovery did not resume the held Turn: %d -> %d", held, len(submits))
+	}
+	for index, record := range ledger.records {
+		if record.Attempt != index+1 {
+			t.Fatalf("held resumes must keep counting up across quiet gaps: %+v", ledger.records)
+		}
 	}
 }
 

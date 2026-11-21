@@ -1113,6 +1113,45 @@ func (e *Engine) ReleaseReview(id WorkID, handlerToken TurnToken) (*State, error
 	})
 }
 
+// ReplayInterruptedReview ends a delivered handling whose Host turn the
+// provider refused (a rate limit, an overload, a dropped connection) and makes
+// the same review claimable again, in one commit: Brain never read it, so it
+// is not "handled", and nothing between the two steps can see it as read.
+// It is the one case where delivered input is delivered again; the caller
+// gates the next claim on the provider answering.
+func (e *Engine) ReplayInterruptedReview(id WorkID, handlerToken TurnToken, reason string) (*State, error) {
+	if strings.TrimSpace(reason) == "" {
+		return nil, fmt.Errorf("%w: reason required", ErrInvalidCommand)
+	}
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		if st.Review == nil || st.Review.Handler == nil || st.Review.Handler.HandlerToken != handlerToken {
+			return nil, ErrReviewLease
+		}
+		h := st.Review.Handler
+		if h.DeliveredAt == nil || h.EndedAt != nil {
+			return nil, ErrReviewLease
+		}
+		release := "release:" + e.newID()
+		return []Event{
+			{
+				WorkID: id, Kind: KReviewReleased, SourceID: release, At: now,
+				Payload: ReviewReleasedPayload{EventID: st.Review.EventID, HandlerToken: handlerToken},
+			},
+			{
+				WorkID: id, Kind: KReviewDeliveryResolved,
+				SourceID: "delivery-resolution:" + st.Review.EventID + ":" + string(handlerToken), At: now,
+				Payload: ReviewDeliveryResolvedPayload{
+					EventID: st.Review.EventID, HandlerToken: handlerToken,
+					Action: ReviewDeliveryReplay, Actor: ActorRuntime, Reason: reason,
+				},
+			},
+		}, nil
+	})
+}
+
 const (
 	ReviewDeliveryMarkDelivered = "mark_delivered"
 	ReviewDeliveryDiscard       = "discard"

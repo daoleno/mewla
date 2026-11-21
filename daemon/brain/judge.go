@@ -20,6 +20,12 @@ import (
 // subscription.
 const judgeModel = "sonnet"
 
+// ErrNoJudge means Brain's Host agent has no closure judge: the headless judge
+// runs Claude Code only. It is the one judge failure that lets a result Brain
+// read close without a verdict (settleWithoutJudge); any other failure decides
+// nothing.
+var ErrNoJudge = errors.New("no closure judge for this Host agent")
+
 // headlessJudge asks a cheap model through the user's own agent CLI, run once
 // the way Watch's judgment runs it: print mode in an empty directory with no
 // tools, hooks, MCP servers or saved session, and only the user's own
@@ -40,7 +46,7 @@ func (j *headlessJudge) Judge(ctx context.Context, brief string) (JudgeVerdict, 
 	executor := j.executor()
 	fields := strings.Fields(executor.Command)
 	if len(fields) == 0 || work.InferWorkerProvider(executor.Command) != "claude" {
-		return JudgeVerdict{}, fmt.Errorf("headless judge supports Claude Code; Brain runs %q", executor.Command)
+		return JudgeVerdict{}, fmt.Errorf("%w: the headless judge supports Claude Code; Brain runs %q", ErrNoJudge, executor.Command)
 	}
 	if err := os.MkdirAll(j.scratch, 0o700); err != nil {
 		return JudgeVerdict{}, err

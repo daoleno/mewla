@@ -248,6 +248,65 @@ func decideTurnRecovery(
 	return turnRecoveryDecision{action: turnRecoveryResume, attempt: len(episode) + 1, reason: ProviderErrorSummary(*failure)}
 }
 
+// holdTransientTurn keeps a Turn cut off by a transient provider error (rate
+// limit, overload, 5xx, dropped connection) held instead of lost: a provider
+// outage is not an outcome, so it never escalates to Brain as a lost turn and
+// never lets the Work close or the Session be reclaimed.
+//
+//   - While the agent family's provider is unavailable (provider_availability.go)
+//     the Turn is resumed only when the family's probe is granted: one
+//     request per probe interval for every held Session together, whatever
+//     this Turn's own backoff says. Counting episodes here would restart the
+//     backoff burst after every quiet half hour.
+//   - While the provider seems available the ordinary backoff runs; once its
+//     budget is spent the Turn is resumed again after the last backoff step
+//     (its next refusal starts or extends the outage).
+//
+// The first Activity of the family that settles without an error ends the
+// outage, and every held Turn is resumed on the next poll.
+func holdTransientTurn(
+	policy TurnRecoveryPolicy,
+	now time.Time,
+	fromTurn string,
+	records []TurnRecovery,
+	decision turnRecoveryDecision,
+	unavailable bool,
+	probe func() (bool, time.Time),
+) turnRecoveryDecision {
+	exhausted := decision.action == turnRecoveryEscalate && decision.reason == "retries_exhausted"
+	if !unavailable && !exhausted {
+		return decision
+	}
+	attempt := 1
+	var last time.Time
+	for _, record := range records {
+		if record.FromTurnID == fromTurn && record.Attempt >= attempt {
+			attempt = record.Attempt + 1
+		}
+		if record.At.After(last) {
+			last = record.At
+		}
+	}
+	reason := "held: the provider is unavailable"
+	if decision.reason != "" && decision.reason != "retries_exhausted" {
+		reason = decision.reason
+	}
+	if unavailable {
+		if granted, next := probe(); !granted {
+			return turnRecoveryDecision{action: turnRecoveryWait, due: next}
+		}
+		return turnRecoveryDecision{action: turnRecoveryResume, attempt: attempt, reason: reason}
+	}
+	due := last
+	if len(policy.Backoff) > 0 {
+		due = last.Add(policy.Backoff[len(policy.Backoff)-1])
+	}
+	if now.Before(due) {
+		return turnRecoveryDecision{action: turnRecoveryWait, due: due}
+	}
+	return turnRecoveryDecision{action: turnRecoveryResume, attempt: attempt, reason: reason}
+}
+
 // ProviderErrorSummary is a compact one-line description of a provider error.
 func ProviderErrorSummary(failure ProviderActivityError) string {
 	parts := []string{}
@@ -503,6 +562,12 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		decision, compaction := decideCompaction(policy, stall.settledAt, failure, compactedAt, item.workerSnap.Command, records)
 		if !compaction {
 			decision = decideTurnRecovery(policy, item.now, settledAt, deadline, item.provider.Error, records)
+			if item.provider.Error != nil && ClassifyProviderError(*item.provider.Error) == ProviderErrorTransient {
+				family := workerProviderFamily(item.workerSnap.Command)
+				_, unavailable := w.ProviderOutage(family)
+				decision = holdTransientTurn(policy, item.now, stall.turnID, records, decision, unavailable,
+					func() (bool, time.Time) { return w.ProviderProbe(family, item.now) })
+			}
 		}
 		if stall.stopped && decision.reason == "idle" {
 			decision.reason = "stopped"

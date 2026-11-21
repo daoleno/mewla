@@ -396,7 +396,11 @@ type Watcher struct {
 	approvalHolds         func(sessionID string) bool // whether a permission hook holds the Session's dialog
 	recovery              *turnRecoverySupervisor
 	recoveryOnce          sync.Once
-	providerSignals       map[string]providerActivitySignal
+	// providerAvailability is each agent family's provider outage state
+	// (provider_availability.go), fed by every provider observation.
+	providerAvailability *providerAvailability
+	availabilityOnce     sync.Once
+	providerSignals      map[string]providerActivitySignal
 	// tmuxScratchDir is the private TMUX_TMPDIR of agent Sessions: a plain
 	// tmux an agent runs keeps its server there, never on the person's own
 	// tmux server.
@@ -1732,6 +1736,7 @@ func (w *Watcher) ProbeProviderEvidence(sessionID string) (ProviderActivityObser
 		return ProviderActivityObservation{}, false, nil
 	}
 	observation := probe.ObserveProviderActivity(*worker, time.Now().UTC())
+	w.noteProviderObservation(worker.Command, observation)
 	return observation, providerFactRelevant(observation), nil
 }
 
@@ -2218,6 +2223,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		provider := ProviderActivityObservation{}
 		if providerProbe != nil && pendingErr == nil && (item.workerSnap.Hidden || hasPending || (hasTurn && turnErr == nil && !TurnImmutable(turn.Status))) {
 			provider = providerProbe.ObserveProviderActivity(item.workerSnap, item.now)
+			w.noteProviderObservation(item.workerSnap.Command, provider)
 		}
 		if hasPending && providerFactRelevant(provider) {
 			for _, pending := range pendingList {

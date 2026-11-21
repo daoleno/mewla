@@ -672,6 +672,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		InputReadyBudget: work.DefaultScheduledInputReadyBudget,
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
+	// A provider outage holds Brain's lane and shows one line in Chat; its end
+	// delivers what was held and clears the line.
+	w.SetProviderAvailabilityListener(srv.ProviderAvailabilityChanged)
 	srv.SetResourceSampler(resourceSampler)
 	// What is news to this person since an update (the app's What's New); an existing install is
 	// one someone already paired with.

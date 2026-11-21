@@ -103,6 +103,9 @@ type Service struct {
 	hostChangedAt    time.Time
 	hostStartFailure *hostStartFailure
 	lastHostHeal     time.Time
+	// laneHold runs the Host lane again when an unavailable provider's next
+	// probe is due (provider_outage.go).
+	laneHold hostLaneHold
 
 	// sessionConversationHook overrides the provider conversation reader for
 	// the Session projection surface. Tests inject sanitized fixtures; nil
@@ -525,8 +528,8 @@ func (s *Service) ReconcileSignalSystemStartup(workers []*classifier.Worker, lim
 		if !live {
 			// The delivered lease ends without a disposition; the same
 			// unresolved action remains visible for explicit recovery (row 16).
-			if _, _, err := s.store.EndReviewDelivery(
-				handling.WorkID, handling.HandlingID, handling.ProviderTurnID,
+			if _, err := s.endHostHandling(
+				handling.WorkID, handling.HandlingID, handling.ProviderTurnID, handling.DeliveryHostSessionID,
 			); err != nil {
 				return false, err
 			}
@@ -823,6 +826,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
 	snapshot.AgentInstalls = s.agentInstalls(snapshot.HostProblem, snapshot.ExecutorStates)
+	snapshot.ProviderOutages = s.ProviderOutages()
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(snapshot.Workers)
@@ -873,6 +877,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
 	snapshot.AgentInstalls = s.agentInstalls(snapshot.HostProblem, snapshot.ExecutorStates)
+	snapshot.ProviderOutages = s.ProviderOutages()
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(snapshot.Workers)
@@ -1392,6 +1397,12 @@ func (s *Service) reconcileHostLaneLocked() (bool, error) {
 	} else if pending {
 		return false, nil
 	}
+	// While the Host's provider refuses every request, a delivery would only
+	// spend a turn that fails: the lane holds until it answers, sending one
+	// probe per interval (provider_outage.go).
+	if s.hostLaneHeld(hostID) {
+		return false, nil
+	}
 	// Steps 5-8: select one fair review-required Work, claim
 	// its current action atomically, submit once through the receipt ledger,
 	// and mark delivered only from the accepted receipt. Claims are leases:
@@ -1575,7 +1586,7 @@ func (s *Service) reconcileReviewLeasesLocked() error {
 			// A missed terminal edge or superseding admitted turn ends only
 			// this handling. Delivery remains consumed, never replayed.
 			if found && watcher.TurnImmutable(turn.Status) || currentFound && current.TurnID != claimed.ProviderTurnID {
-				if _, _, err := s.store.EndReviewDelivery(claimed.WorkID, claimed.HandlingID, claimed.ProviderTurnID); err != nil {
+				if _, err := s.endHostHandling(claimed.WorkID, claimed.HandlingID, claimed.ProviderTurnID, claimed.DeliveryHostSessionID); err != nil {
 					return err
 				}
 			}
@@ -2119,8 +2130,8 @@ func (s *Service) ObserveHostSessionEvent(event watcher.SessionEvent) (bool, err
 					if !ended {
 						break
 					}
-					_, handlingEnded, err = s.store.EndReviewDelivery(
-						handling.WorkID, handling.HandlingID, handling.ProviderTurnID,
+					handlingEnded, err = s.endHostHandling(
+						handling.WorkID, handling.HandlingID, handling.ProviderTurnID, handling.DeliveryHostSessionID,
 					)
 					if err != nil {
 						return false, err

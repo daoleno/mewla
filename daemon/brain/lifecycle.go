@@ -2960,9 +2960,11 @@ func (s *Store) ConsumeReviewDelivery(workID, claimToken, providerTurnID string)
 
 // EndReviewDelivery ends exactly the admitted review lease without a typed
 // disposition (Host turn ended or Host died after delivery). The delivered
-// bytes remain permanently consumed and are never replayed (I7). Ending the
-// handling is what lets the Host lane pass settle the Work (settle.go): a
-// result Brain read and left without a follow-up is accepted by default.
+// bytes remain permanently consumed and are never replayed (I7), with one
+// exception: a Host turn the provider refused never let Brain read them, and
+// Service.endHostHandling replays those instead (ReplayInterruptedReviewDelivery).
+// Ending the handling is what lets the Host lane pass settle the Work
+// (settle.go).
 func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (WorkReviewAction, bool, error) {
 	workID = strings.TrimSpace(workID)
 	handlingID = strings.TrimSpace(handlingID)
@@ -3007,6 +3009,51 @@ func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (Wo
 	action, _ := reviewActionFromReview(database, database.BrainWork[itemIndex].Review)
 	s.broadcastWorkChange(workID)
 	return action, true, nil
+}
+
+// ReplayInterruptedReviewDelivery ends the exact delivered handling whose Host
+// turn the provider refused before Brain could act on it, and makes the same
+// review claimable again (lifecycle ReplayInterruptedReview). Brain never read
+// it: unlike EndReviewDelivery it does not count as handled, so the Work is
+// not settled on it, and Brain receives it once the provider answers again
+// (the Host lane gates claims on the provider's availability). It reports
+// whether it replayed; anything else about the lease is left alone.
+func (s *Store) ReplayInterruptedReviewDelivery(workID, handlingID, providerTurnID, reason string) (bool, error) {
+	workID = strings.TrimSpace(workID)
+	handlingID = strings.TrimSpace(handlingID)
+	providerTurnID = strings.TrimSpace(providerTurnID)
+	if workID == "" || handlingID == "" || providerTurnID == "" {
+		return false, nil
+	}
+	now := s.nowUTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return false, err
+	}
+	itemIndex := reviewLeaseByCapability(database, workID, handlingID, providerTurnID)
+	if itemIndex < 0 {
+		return false, nil
+	}
+	lease := database.BrainWork[itemIndex].Review.Lease
+	if lease.DeliveredAt == nil || lease.HandlingEndedAt != nil {
+		return false, nil
+	}
+	if st, stateErr := s.fsmState(workID); stateErr == nil && followUpInFlight(st) {
+		return false, nil
+	}
+	if _, err := s.fsm.ReplayInterruptedReview(lifecycle.WorkID(workID), lifecycle.TurnToken(providerTurnID), reason); err != nil {
+		return false, err
+	}
+	if err := s.fsmSyncWorkLocked(&database, workID, now); err != nil {
+		return false, err
+	}
+	if err := s.persistPresentationLocked(database); err != nil {
+		return false, err
+	}
+	s.broadcastWorkChange(workID)
+	return true, nil
 }
 
 // LiveReviewHandling returns the delivered, un-ended handling of one Work: the
