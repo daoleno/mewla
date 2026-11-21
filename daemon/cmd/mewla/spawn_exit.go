@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
@@ -55,3 +56,39 @@ func spawnExitError(workerID, command string, exit watcher.SessionExit) error {
 type agentExitedError struct{ message string }
 
 func (e *agentExitedError) Error() string { return e.message }
+
+// blockedCauseError is a spawn failure for an agent that is up but stopped at a
+// screen that waits for a person (first-run setup, a sign-in, a permission
+// dialog), carrying what the Session itself says it is waiting for. It keeps
+// the failure it wraps: errors.Is and the input outcome still see through it.
+type blockedCauseError struct {
+	err     error
+	summary string
+}
+
+func (e *blockedCauseError) Error() string {
+	return e.err.Error() + " (the Session is waiting on its screen: " + e.summary + ")"
+}
+
+func (e *blockedCauseError) Unwrap() error { return e.err }
+
+// withBlockedCause says why a spawn's first prompt could not land when the
+// Session sits at a screen that waits for a person (first-run setup, a sign-in,
+// a permission dialog): what the classifier reads off that screen, the same
+// summary the Session shows, for every agent. The screen is read directly: a
+// Worker with a delegated turn pending is listed as running whatever its
+// screen says. Any other screen, or no Session, leaves the error as it is.
+func (a *controlApp) withBlockedCause(workerID, command string, err error) error {
+	if a == nil || a.watcher == nil || err == nil {
+		return err
+	}
+	content, captureErr := a.watcher.CapturePaneContent(workerID)
+	if captureErr != nil || strings.TrimSpace(content) == "" {
+		return err
+	}
+	state, summary := classifier.Classify(true, strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n"), command)
+	if state != classifier.StateBlocked || strings.TrimSpace(summary) == "" {
+		return err
+	}
+	return &blockedCauseError{err: err, summary: strings.TrimSpace(summary)}
+}

@@ -748,6 +748,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 				a.recordSpawnWorkFailure(ownedWork, launchErr, autoCreatedWork)
 				return control.ErrorResponse("agent_exited", launchErr.Error())
 			}
+			sendErr = a.withBlockedCause(workerID, createOpts.Command, sendErr)
 		}
 		if sendErr != nil && !a.keepSpawnAdmissionPending(workerID, sendErr) {
 			if errors.Is(sendErr, brain.ErrWorkAttemptConflict) {
