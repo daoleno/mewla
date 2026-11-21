@@ -33,7 +33,7 @@ lead and gives you a remote. Open source, self-hosted, in beta.
 ## How it works
 
 1. **Say it once.** "Ship atlas-notes v1.4 this week: fix the sync bug, tidy
-   the settings copy, write release notes." In the app, or from Telegram.
+   the settings copy, write release notes." In the app.
 2. **Brain splits it into Work** and picks an agent for each part, following
    `routing.md`, a file you edit.
 3. **Real agents do it**, each in its own terminal on your computer. Read any of them as
@@ -104,7 +104,7 @@ Known issues: [Releases](docs/releases/README.md#known-issues).
 ## Documentation
 
 - **Get it running:** [Get started](docs/get-started.md) · [Install and update](docs/install-daemon.md) · [Connect and pair](docs/connect-and-pair.md)
-- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications and Telegram](docs/notifications.md) · [Calendar](docs/calendar.md) · [Extensions](docs/extensions.md) · [Screen](docs/screen.md) · [Phone use](docs/phone.md) · [Your other computers](docs/computers.md)
+- **Use it:** [Sessions](docs/sessions.md) · [Brain and Work](docs/brain-and-work.md) · [Notifications](docs/notifications.md) · [Calendar](docs/calendar.md) · [Extensions](docs/extensions.md) · [Screen](docs/screen.md) · [Phone use](docs/phone.md) · [Your other computers](docs/computers.md)
 - **Configure it:** [Agents and models](docs/executors.md) · [Usage and resources](docs/usage-and-resources.md)
 - **Reference:** [Commands](docs/cli.md) · [Security and privacy](docs/security-and-privacy.md) · [Troubleshooting](docs/troubleshooting.md)
 

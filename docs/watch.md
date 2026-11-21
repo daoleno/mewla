@@ -220,7 +220,7 @@ mewla watch problem label j_1a2b3c4d5e6f not --note "flaky runner, not our code"
 
 ## Reaching you
 
-Watch writes to Brain the way a message from Telegram or another computer
+Watch writes to Brain the way a message from another computer
 does, and only while Watch is on. Brain decides what to do and what to tell
 you; Watch never speaks in your conversation itself, and what it hands Brain
 stays out of the thread. The rules live in Brain's `policies/watch.md`.

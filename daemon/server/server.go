@@ -53,7 +53,6 @@ import (
 	"github.com/daoleno/mewla/daemon/screencast"
 	skillmgmt "github.com/daoleno/mewla/daemon/skills"
 	"github.com/daoleno/mewla/daemon/stats"
-	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/terminal"
 	"github.com/daoleno/mewla/daemon/trigger"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -148,7 +147,6 @@ type Server struct {
 	profiles                   *modelprofiles.Owner
 	calendar                   *calendar.Store
 	calendarScheduler          *calendar.Scheduler
-	telegram                   *telegramchannel.Manager
 	computers                  *computers.Manager
 	openRequests               openRequestsCache
 	outsideAgents              *outsideagents.Manager
@@ -269,10 +267,6 @@ func (s *Server) SetCalendar(store *calendar.Store, scheduler *calendar.Schedule
 	if store != nil {
 		s.calendarSubID, s.calendarSub = store.Subscribe()
 	}
-}
-
-func (s *Server) SetTelegram(manager *telegramchannel.Manager) {
-	s.telegram = manager
 }
 
 func (s *Server) closeEventSubscriptions() {
@@ -1115,8 +1109,6 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleConnections(conn, raw)
 	case "list_worker_sessions", "set_active_worker", "create_session", "kill_worker":
 		s.handleSessionLifecycleMessage(conn, raw)
-	case "telegram_connection_status", "telegram_connection_configure", "telegram_connection_bind", "telegram_connection_enable", "telegram_connection_disable", "telegram_connection_revoke", "telegram_connection_remove":
-		s.handleTelegramMessage(conn, raw)
 	case "client_diagnostic":
 		s.handleClientDiagnostic(conn, raw)
 	case "link_ping":
@@ -1427,58 +1419,6 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			"request_id": raw.RequestID,
 			"worker_id":  raw.WorkerID,
 		})
-	}
-}
-
-func (s *Server) handleTelegramMessage(conn *websocket.Conn, raw clientMessage) {
-	switch raw.Type {
-	case "telegram_connection_status":
-		s.sendTelegramStatus(conn, raw.RequestID)
-	case "telegram_connection_configure":
-		if s.telegram == nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "telegram_unavailable", "Telegram connection is unavailable.")
-			break
-		}
-		configureCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		_, err := s.telegram.Configure(configureCtx, raw.Credential)
-		cancel()
-		if err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "telegram_configure_failed", err.Error())
-			break
-		}
-		s.sendTelegramStatus(conn, raw.RequestID)
-	case "telegram_connection_bind":
-		if s.telegram == nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "telegram_unavailable", "Telegram connection is unavailable.")
-			break
-		}
-		challenge, err := s.telegram.BeginBinding()
-		if err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "telegram_bind_failed", err.Error())
-			break
-		}
-		s.sendJSON(conn, map[string]any{"type": "telegram_binding_challenge", "request_id": raw.RequestID, "challenge": challenge})
-	case "telegram_connection_enable", "telegram_connection_disable", "telegram_connection_revoke", "telegram_connection_remove":
-		if s.telegram == nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "telegram_unavailable", "Telegram connection is unavailable.")
-			break
-		}
-		var err error
-		switch raw.Type {
-		case "telegram_connection_enable":
-			err = s.telegram.Enable()
-		case "telegram_connection_disable":
-			err = s.telegram.Disable()
-		case "telegram_connection_revoke":
-			err = s.telegram.RevokeOwner()
-		case "telegram_connection_remove":
-			err = s.telegram.Remove()
-		}
-		if err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "telegram_mutation_failed", "Telegram connection could not be updated.")
-			break
-		}
-		s.sendTelegramStatus(conn, raw.RequestID)
 	}
 }
 
@@ -1888,18 +1828,6 @@ func (s *Server) openableTerminal(id string) (watcher.TerminalTarget, error) {
 		return watcher.TerminalTarget{}, unavailable
 	}
 	return target, nil
-}
-
-func (s *Server) sendTelegramStatus(conn *websocket.Conn, requestID string) {
-	if s.telegram == nil {
-		s.sendErrorWithRequestID(conn, requestID, "telegram_unavailable", "Telegram connection is unavailable.")
-		return
-	}
-	s.sendJSON(conn, map[string]any{
-		"type":       "telegram_connection_status",
-		"request_id": requestID,
-		"connection": s.telegram.Status(),
-	})
 }
 
 // sendWorkerSessionList sends the full list, current as of the seq it carries.

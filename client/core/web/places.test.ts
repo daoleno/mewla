@@ -110,7 +110,6 @@ describe("sub-pages have URLs of their own (parity #47)", () => {
   const pages: WebPlace[] = [
     { key: "settings", page: { name: "settings-computer", id: "s 1" } },
     { key: "settings", page: { name: "settings-providers" } },
-    { key: "settings", page: { name: "settings-telegram" } },
     { key: "settings", page: { name: "settings-license", id: "react" } },
     { key: "friends", page: { name: "friends-post", id: "p1" } },
     { key: "friends", page: { name: "friends-person", id: "u/2" } },

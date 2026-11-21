@@ -525,7 +525,7 @@ var daemonCommands = map[string]bool{
 	"pair": true, "web": true, "devices": true, "attach": true, "worker": true,
 	"brain": true, "memory": true, "calendar": true, "service": true,
 	"connections": true, "watch": true, "friends": true, "providers": true,
-	"telegram": true, "agents": true, "computers": true, "screen": true,
+	"agents": true, "computers": true, "screen": true,
 	"resources": true, "gcloud": true, "aws": true, "gws": true,
 	"agent-use": true,
 }

@@ -272,8 +272,7 @@ statistics and channel projections. Usage statistics retain validated sparse
 metadata under `~/.cache/mewla/usage-v1` across restarts; source identity, size,
 modification time and timezone invalidate entries. This disposable cache never
 contains transcript bodies. A summary younger than five minutes can serve a
-quick restart; normal periodic collection resumes afterwards. Telegram polling
-preserves its durable state file when no facts change, and Brain presentation
+quick restart; normal periodic collection resumes afterwards. Brain presentation
 reuses provider readers for unchanged transcript sources.
 
 The cost of these loops is read syscalls and bytes read, not CPU, and it must not

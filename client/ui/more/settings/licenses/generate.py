@@ -53,7 +53,7 @@ sections = [
         {"name": "Pi Coding Agent mark", "license": "MIT", "url": "https://pi.dev", "text": text("Pi-mark-MIT.txt")},
         # The named products' marks in ui/kit/marks.ts.
         {"name": "Simple Icons", "version": "16.31.0", "license": "CC0-1.0", "url": "https://simpleicons.org", "text": text("simple-icons-CC0.txt"),
-         "note": "The marks of Telegram, GitHub, Notion, Linear, Node.js, Go, Docker, Python, PostgreSQL, Sentry, Vercel, Cloudflare, Figma and Tailscale. The marks stay their owners' trademarks."},
+         "note": "The marks of GitHub, Notion, Linear, Node.js, Go, Docker, Python, PostgreSQL, Sentry, Vercel, Cloudflare, Figma and Tailscale. The marks stay their owners' trademarks."},
         # Multicolour marks drawn from each vendor's own SVG (ui/kit/marks.ts notes the file per mark).
         {"name": "Google product logos", "license": "Trademark", "url": "https://cloud.google.com/icons",
          "note": "The Google Chrome, Google (G) and Google Cloud marks from gstatic.com/images/branding/productlogos, and Vertex AI from the Google Cloud icons. Trademarks of Google LLC, drawn unchanged to name the product. Terms: https://about.google/brand-resource-center/"},

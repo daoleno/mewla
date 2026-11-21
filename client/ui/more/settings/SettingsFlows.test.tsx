@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { pressUntil, typeUntil } from "../../testing/fixtures";
+import { pressUntil } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -108,58 +108,6 @@ describe("Computer page", () => {
   });
 });
 
-const bound = { state: "connected", enabled: true, bot_username: "mewla_bot", owner_hint: "@me", binding_pending: false };
-
-describe("Telegram", () => {
-  test("a status that did not load offers Retry, never the token form", async () => {
-    let fail = true;
-    const s = setup({ page: { name: "settings-telegram" } }, (type) => {
-      if (type !== "telegram_connection_status") return null;
-      return fail ? { error: "Telegram is not configured on this daemon build" } : { connection: bound };
-    });
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:telegram-retry");
-    expect(app.shows("id:telegram-token")).toBe(false);
-    fail = false;
-    await app.press("id:telegram-retry");
-    await app.waitFor("id:telegram-open");
-    expect(app.shows("id:telegram-retry")).toBe(false);
-  });
-
-  test("away from the computer nothing can be changed, but the chat still opens", async () => {
-    const s = setup({ page: { name: "settings-telegram" } }, (type) => (type === "telegram_connection_status" ? { connection: bound } : null));
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:telegram-disconnect");
-    expect(app.enabled("id:telegram-disconnect")).toBe(true);
-    await app.host.send("app.daemonState", "waiting");
-    await app.waitFor("id:telegram-offline");
-    expect(app.enabled("id:telegram-disconnect")).toBe(false);
-    expect(app.enabled("id:telegram-open")).toBe(true);
-  });
-
-  test("a token the computer refused says why", async () => {
-    const s = setup({ page: { name: "settings-telegram" } }, (type) => {
-      if (type === "telegram_connection_status") return { connection: { state: "disabled", enabled: false, binding_pending: false } };
-      if (type === "telegram_connection_configure") return { error: "Telegram rejected the token: Unauthorized" };
-      return null;
-    });
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:telegram-token");
-    await typeUntil(app, "id:telegram-token", "123:bad", "id:telegram-verify");
-    await app.press("id:telegram-verify");
-    await app.waitFor("text:Telegram setup failed");
-    expect(app.texts()).toContain("Telegram rejected the token: Unauthorized");
-  });
-
-  test("a disconnected bot can still be opened from its row", async () => {
-    const s = setup({ page: { name: "settings-telegram" } }, (type) => (type === "telegram_connection_status" ? { connection: { ...bound, enabled: false } } : null));
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("id:telegram-reconnect");
-    await app.press("id:telegram-open-row");
-    await app.waitUntil(() => app.openedUrls().includes("https://t.me/mewla_bot"));
-  });
-});
-
 const connection = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
   id,
   name,
@@ -255,12 +203,6 @@ describe("Model Providers", () => {
 });
 
 describe("Settings rows", () => {
-  test("Telegram says it is unavailable while the computer is away", async () => {
-    const s = setup({ page: { name: "settings" }, state: "waiting" }, none, { network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
-    const app = await open(HARNESS, s.options);
-    await app.waitFor("text:Unavailable");
-  });
-
   test("license text can be selected and copied", async () => {
     const s = setup({ page: { name: "settings-licenses" } }, none);
     const app = await open(HARNESS, s.options);

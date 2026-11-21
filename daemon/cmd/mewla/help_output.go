@@ -81,7 +81,6 @@ var commandGroups = map[string]bool{
 	"screen":         true,
 	"service":        true,
 	"service tunnel": true,
-	"telegram":       true,
 	"watch":          true,
 	"worker":         true,
 }

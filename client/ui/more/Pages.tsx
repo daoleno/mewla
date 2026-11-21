@@ -18,7 +18,6 @@ import { License, Licenses } from "./settings/Licenses";
 import { OutsideAgents } from "./settings/OutsideAgents";
 import { ProviderEditor, ProviderModels, Providers } from "./settings/Providers";
 import { restoreAppearance, Settings } from "./settings/Settings";
-import { Telegram } from "./settings/Telegram";
 import { Stats, StatsDay, StatsModel } from "./stats/Stats";
 
 restoreAppearance();
@@ -36,7 +35,6 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
   switch (route.name) {
     case "settings": return <Settings nav={props.nav} />;
     case "settings-computer": return <Computer id={route.id} nav={props.nav} onPair={props.onPair} />;
-    case "settings-telegram": return <Telegram />;
     case "settings-providers": return <Providers nav={props.nav} />;
     case "settings-provider-editor": return <ProviderEditor client={route.client} connectionId={route.connectionId} retry={route.retry} nav={props.nav} />;
     case "settings-provider-models": return <ProviderModels connectionId={route.connectionId} />;

@@ -27,7 +27,6 @@ import (
 	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
-	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/trigger"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
@@ -92,21 +91,12 @@ type controlApp struct {
 	agentUse          *agentuse.Service
 	whatsNew          *whatsnew.Store
 	profiles          *modelprofiles.Owner
-	telegram          telegramControlManager
 	threadRuntimeSet  func(string, modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error)
 	stateDir          string
 	watch             *watch.Collector
 	// addr is the address the daemon serves HTTP on (daemon_status).
 	addr      string
 	restarter *inPlaceRestarter
-}
-
-type telegramControlManager interface {
-	Configure(context.Context, string) (telegramchannel.Status, error)
-	BeginBinding() (telegramchannel.BindingChallenge, error)
-	Enable() error
-	Disable() error
-	Status() telegramchannel.Status
 }
 
 const delegatedInitialReadinessBudget = 45 * time.Second
@@ -358,29 +348,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			}
 		}
 		return control.Response{OK: true, Enrollments: []enrollment.Request{item}}
-	case "telegram_setup":
-		return a.handleTelegramSetup(req)
-	case "telegram_status":
-		if a == nil || a.telegram == nil {
-			return control.ErrorResponse("telegram_unavailable", "Telegram is not configured.")
-		}
-		status := a.telegram.Status()
-		return control.Response{OK: true, TelegramStatus: &status}
-	case "telegram_enable", "telegram_disable":
-		if a == nil || a.telegram == nil {
-			return control.ErrorResponse("telegram_unavailable", "Telegram is not configured.")
-		}
-		var err error
-		if req.Type == "telegram_enable" {
-			err = a.telegram.Enable()
-		} else {
-			err = a.telegram.Disable()
-		}
-		if err != nil {
-			return control.ErrorResponse("telegram_mutation_failed", "Telegram connection could not be updated.")
-		}
-		status := a.telegram.Status()
-		return control.Response{OK: true, TelegramStatus: &status}
 	case "provider_list":
 		return a.handleProviderList()
 	case "provider_upsert":
@@ -407,30 +374,6 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return control.ErrorResponse(modelprofiles.CodeProfileInvalid, "profile wire removed; use provider connection APIs")
 	default:
 		return control.ErrorResponse("unknown_request", fmt.Sprintf("Unknown control request: %s", req.Type))
-	}
-}
-
-func (a *controlApp) handleTelegramSetup(req control.Request) control.Response {
-	if a == nil || a.telegram == nil {
-		return control.ErrorResponse("telegram_unavailable", "Telegram is not configured.")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	credential := req.Credential
-	req.Credential = ""
-	status, err := a.telegram.Configure(ctx, credential)
-	credential = ""
-	cancel()
-	if err != nil {
-		return control.ErrorResponse("telegram_configure_failed", err.Error())
-	}
-	binding, err := a.telegram.BeginBinding()
-	if err != nil {
-		return control.ErrorResponse("telegram_bind_failed", err.Error())
-	}
-	return control.Response{
-		OK:              true,
-		TelegramStatus:  &status,
-		TelegramBinding: &binding,
 	}
 }
 

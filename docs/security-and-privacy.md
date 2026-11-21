@@ -174,11 +174,10 @@ All paths are under the state directory, `~/.mewla` by default.
 | `trusted-devices.json` | Public keys of paired devices |
 | `pairing-tokens.json` | Unused pairing codes until they expire |
 | `addresses.json` | Addresses the daemon can be reached at |
-| `uploads/` | Files sent from the app or Telegram: at most 2 GiB per file and 8 GiB in total, deleted after seven days. A message can only attach files that are in this folder: any other path (elsewhere on disk, `..`, or a link out of the folder) is refused before an agent sees it |
+| `uploads/` | Files sent from the app: at most 2 GiB per file and 8 GiB in total, deleted after seven days. A message can only attach files that are in this folder: any other path (elsewhere on disk, `..`, or a link out of the folder) is refused before an agent sees it |
 | `brain/` | Brain's database (`brain/state/brain.db`: its conversation, Work and events) and its workspace (`brain/workspace/`) |
 | `work/` | Work files |
 | `calendar/` | Calendar items (`calendar.db`) |
-| `telegram/` | Telegram binding and delivery state (`state.db`); the bot token is in its own private file |
 | `worktrees/`, `t/` | Worker scratch space and temporary files |
 | `session-host/` | The session host's switch and log (see [The session host](#the-session-host)) |
 
@@ -236,7 +235,6 @@ The daemon connects out only for features you use:
 | Expo push service | Sending a push notification to your phone |
 | The model provider you selected | Requests from Codex and Claude Code through the local gateway |
 | Connected extension services | Calls Brain or Workers make. For Hyperliquid, the addresses Brain reads (public on Hyperliquid), the API wallet's address when you add a key to find its account, and, for trades, orders signed with that wallet; the key itself never leaves the server. For AWS, the installed CLI calls AWS using its own local profile and cache. Mewla checks command permissions and task authorization; local programs can also use the shared ~/.aws credentials directly |
-| Telegram Bot API | When Telegram is connected |
 | Cloudflare | When you start a Quick Tunnel |
 
 Mewla sends no telemetry.

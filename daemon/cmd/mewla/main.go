@@ -61,7 +61,6 @@ import (
 	"github.com/daoleno/mewla/daemon/setup"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
-	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -217,8 +216,6 @@ func run(args []string, stderr io.Writer) error {
 			return runFriendsCommand(args[1:], stderr)
 		case "providers":
 			return runProvidersCommand(args[1:], stderr)
-		case "telegram":
-			return runTelegramCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
 		case "agents":
@@ -753,10 +750,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		printEnrollmentRequest(stderr, cfg.stateDir, request)
 	})
 	controlHandler.enrollments = enrollmentManager
-	telegramManager, err := telegramchannel.NewManagerWithOptions(authManager.StorageDir(), brainService, telegramchannel.Options{Attachments: srv.AttachmentStore()})
-	if err != nil {
-		return fmt.Errorf("initialize Telegram connection: %w", err)
-	}
+	removeTelegramState(authManager.StorageDir(), stderr)
 	// Agents on this computer use the user's own Chrome when it is ready;
 	// nothing to configure, one switch in the app.
 	agentUse, err := agentuse.New(authManager.StorageDir(), true)
@@ -1103,8 +1097,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	})
 	// The agents' browser losing the person's sign-ins says so in Chat too.
 	browserManager.SetSignInsLost(brainService.NoteAgentBrowserSignInsLost)
-	srv.SetTelegram(telegramManager)
-	controlHandler.telegram = telegramManager
 	srv.SetModelProfiles(profileOwner)
 	// Native-settings reads and writes follow the thread Codex announced for the
 	// Session, not one chosen by folder among the app-server's loaded threads.
@@ -1231,10 +1223,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 				brainService.RunWaitEnds(ctx)
 				return nil
 			},
-		},
-		{
-			name: "Telegram connection",
-			run:  telegramManager.Run,
 		},
 		{
 			name: "Computers",
@@ -3152,7 +3140,6 @@ Agents and tools
   connections  Plugins shared by Brain and Workers
   calendar     List, create, update, cancel or run scheduled Brain work
   watch        Inspect what Watch collects about your projects
-  telegram     Set up the Telegram channel to Brain
   service      List or register services Workers can see
   agents       Let Claude Code, Codex or another MCP agent hand work to Brain
   resources    Print this computer's resource pressure

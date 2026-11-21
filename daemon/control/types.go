@@ -23,7 +23,6 @@ import (
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/statedir"
-	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/trigger"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
@@ -218,8 +217,6 @@ type Response struct {
 	ThreadRuntime        *modelprofiles.ThreadRuntimeSelection    `json:"thread_runtime,omitempty"`
 	SessionRoute         *modelprofiles.WireSessionSnapshot       `json:"session_route,omitempty"`
 	Binding              *modelprofiles.WireBinding               `json:"binding,omitempty"`
-	TelegramStatus       *telegramchannel.Status                  `json:"telegram_status,omitempty"`
-	TelegramBinding      *telegramchannel.BindingChallenge        `json:"telegram_binding,omitempty"`
 	ServiceTunnel        *watcher.ServiceTunnel                   `json:"service_tunnel,omitempty"`
 	ServiceSnapshot      *watcher.SessionServiceSnapshot          `json:"service_snapshot,omitempty"`
 	Service              *watcher.ManagedServiceDescriptor        `json:"service,omitempty"`

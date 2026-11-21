@@ -110,8 +110,8 @@ func assistantItems(items []TimelineItem) []TimelineItem {
 }
 
 // TestHostTranscriptCaptureMaterializesWithoutSubscriber is the regression for
-// Telegram Brain replies that never appeared while no App WebSocket
-// subscription was open. Nothing in this test opens a subscription: the
+// Brain replies that never appeared while no App WebSocket subscription was
+// open. Nothing in this test opens a subscription: the
 // daemon-owned capture pass must append provider assistant rows to the durable
 // canonical timeline on its own, exactly once per provider event, and an
 // unchanged source must not repeat store work.

@@ -141,5 +141,5 @@ Session or Work.
 
 - Keep the daemon running across reboots: [Install and update](install-daemon.md#keep-it-running)
 - Reach it from anywhere, add a tablet or a browser: [Connect and pair](connect-and-pair.md)
-- Get a push only when something needs you, or talk to Brain from Telegram: [Notifications and Telegram](notifications.md)
+- Get a push only when something needs you: [Notifications](notifications.md)
 - Choose models and keys, or lock agents down: [Agents and models](executors.md)

@@ -42,7 +42,7 @@ describe("the light update hint", () => {
     expect(app.shows("text:Update available")).toBe(true);
     expect(app.shows("text:v0.4.4")).toBe(true);
     expect(app.count("id:app-update")).toBe(1);
-    expect(app.texts().indexOf("Update available")).toBeLessThan(app.texts().indexOf("Channels"));
+    expect(app.texts().indexOf("Update available")).toBeLessThan(app.texts().indexOf("Agents"));
     await app.press("id:app-update-action");
     await app.waitUntil(() => app.host.posts().some((post) => post.name === "app.appUpdatePressed"));
     // Back on the computer page the row keeps its dot until the update is in; home's cat lets it go.

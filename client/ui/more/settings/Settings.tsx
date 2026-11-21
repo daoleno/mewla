@@ -4,9 +4,9 @@ import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatu
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { phoneAvailable, phoneStateWord } from "../../phone";
-import { daemon, daemonState } from "../daemon";
+import { daemon } from "../daemon";
 import { Page, Row, RowButton, Section, SwitchRow } from "../../kit/kit";
-import { StateLine, tile } from "../../kit/RowTile";
+import { tile } from "../../kit/RowTile";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../../pets/pets";
 import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
@@ -15,7 +15,6 @@ import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
 import { markAppUpdateSeen } from "../../update/hint";
 import { appUpdateWaiting } from "../../update/update";
-import { loadTelegram, telegramRow, telegramRowLabel } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
 export type Appearance = "system" | "light" | "dark";
@@ -80,22 +79,10 @@ export const SUPPORT_URL = "https://mewla.ai/support/";
  * (which one is in use, pairing, each one's details) are on the cat's computer page.
  */
 export function Settings(props: { nav: PageNav }) {
-  // Telegram is read again whenever Settings is shown again: back from a page above it, or the app back in front.
   const depth = untracked(() => {
     const routes = props.nav.routes?.() ?? [];
     const at = routes.findIndex((route) => route.name === "settings");
     return at >= 0 ? at + 1 : routes.length;
-  });
-  let shownAs = "";
-  effect(() => {
-    const top = (props.nav.routes?.().length ?? depth) === depth;
-    const key = `${top && lifecycle() === "active"}|${current()?.id ?? ""}`;
-    untracked(() => {
-      if (key === shownAs) return;
-      shownAs = key;
-      if (!key.startsWith("true|")) return;
-      loadTelegram();
-    });
   });
   // Shown with this app's update row on top: the cat's dot for that version goes.
   effect(() => {
@@ -127,29 +114,10 @@ export function Settings(props: { nav: PageNav }) {
   effect(() => {
     if (lifecycle() === "active") untracked(readAlertCapabilities);
   });
-  effect(() => {
-    if (daemon() && daemonState() === "connected") untracked(loadTelegram);
-  });
   return (
     <Page display title="Settings" testID="settings">
       {/* While this app's update waits, its row comes first (About is at the page's end); then it is About's again. */}
       <If when={appUpdateWaiting()}><Section testID="settings-update"><AboutUpdateRow /></Section></If>
-      <Section title="Channels">
-        <Row
-          testID="settings-telegram"
-          lead={{ kind: "mark", mark: "telegram" }}
-          title="Telegram"
-          subtitle={current() ? telegramRow().subtitle : "No current server"}
-          disabled={!current()}
-          // While the first read runs the value stays empty: an endless spinner here kept the app from ever going quiet.
-          trailing={<If when={current()}><If when={!telegramRow().loading}><If when={telegramRow().connect} else={<If when={telegramRow().tone && telegramRow().label}><StateLine testID="settings-telegram-state" tone={telegramRow().tone!} label={telegramRow().label!} /></If>}><RowButton testID="settings-telegram-connect" label="Connect" accessibilityLabel="Connect Telegram" onPress={() => props.nav.push({ name: "settings-telegram" })} /></If></If></If>}
-          accessibilityLabel={current() ? telegramRowLabel() : "Telegram, No current server"}
-          accessibilityHint={current() ? "Open Telegram details and actions" : undefined}
-          chevron={Boolean(current()) && !telegramRow().connect}
-          onPress={current() ? () => props.nav.push({ name: "settings-telegram" }) : undefined}
-        />
-      </Section>
-
       <Section title="Agents">
         <Row
           testID="settings-providers"

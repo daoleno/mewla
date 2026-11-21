@@ -189,7 +189,7 @@ preference.
   message waits in the queue and goes out by itself; one that could not be
   delivered shows a "!" you tap to send it again.
   Other actions (New chat, a Work action) fail with a toast.
-- Settings holds Servers, Channels (Telegram), Agents (Model Providers),
+- Settings holds Servers, Agents (Model Providers),
   Appearance and About. Browser stays hidden from the menu.
 - **One home per destination.** Every screen you can go to (Calendar,
   Plugins, Skills, Stats, Resources, Settings) has exactly one entry point:

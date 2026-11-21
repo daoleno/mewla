@@ -20,7 +20,7 @@ import (
 )
 
 // Watch reaches Brain through Brain's ordinary input, like a message from
-// Telegram or another computer: one receipt-deduplicated envelope. Brain
+// another computer: one receipt-deduplicated envelope. Brain
 // decides what to do and what to tell the user; Watch never writes to the
 // user's conversation itself.
 //
