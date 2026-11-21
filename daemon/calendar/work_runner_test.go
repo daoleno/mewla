@@ -824,7 +824,7 @@ func TestSchedulerRestartDuringHandoffFailsClosedWithoutDuplicate(t *testing.T) 
 	if len(finished.Runs) != 1 || finished.Runs[0].Status != StatusFailed {
 		t.Fatalf("restart recovery = %#v, want exactly one failed occurrence", finished)
 	}
-	if finished.Runs[0].Result != "" || !strings.Contains(finished.Runs[0].FailureReason, "Mewla restarted while this ran") {
+	if finished.Runs[0].Result != "" || !strings.Contains(finished.Runs[0].FailureReason, "Session is gone") {
 		t.Fatalf("restart failure = %#v", finished.Runs[0])
 	}
 	if failedResults := reopened.ScheduledResults("thread-1", 0); len(failedResults) != 1 ||

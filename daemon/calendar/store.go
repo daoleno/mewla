@@ -686,6 +686,46 @@ func (s *Store) RecordLaunch(id, runID, workID, workerSession string) (Item, err
 	return cloneItem(item), nil
 }
 
+// SetRunHold records (or, with nil, clears) the hold of a running run.
+func (s *Store) SetRunHold(id, runID string, hold *RunHold) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.items[id]
+	if !ok {
+		return Item{}, ErrNotFound
+	}
+	original := cloneItem(item)
+	item = cloneItem(item)
+	idx := -1
+	for n := range item.Runs {
+		if item.Runs[n].ID == runID {
+			idx = n
+			break
+		}
+	}
+	if idx < 0 {
+		return Item{}, fmt.Errorf("calendar run not found")
+	}
+	if item.Runs[idx].Status != StatusRunning {
+		return cloneItem(item), nil
+	}
+	if hold != nil {
+		copied := *hold
+		copied.Refused = append([]string(nil), hold.Refused...)
+		hold = &copied
+	}
+	item.Runs[idx].Held = hold
+	item.UpdatedAt = s.now().UTC()
+	item.Revision++
+	s.items[id] = item
+	if err := s.persistLocked(); err != nil {
+		s.items[id] = original
+		return Item{}, err
+	}
+	s.broadcast(item)
+	return cloneItem(item), nil
+}
+
 func (s *Store) FinishRun(id, runID, result, failure string) (Item, error) {
 	status, result, failure, err := normalizeTerminalPayload(result, failure)
 	if err != nil {

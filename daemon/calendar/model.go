@@ -121,6 +121,10 @@ type Run struct {
 	ResultPreview  string `json:"result_preview,omitempty"`
 	FailureReason  string `json:"failure_reason,omitempty"`
 	PreviousStatus Status `json:"previous_status,omitempty"`
+	// Held is set while the run's agent is refused by its model provider (a
+	// rate limit, an overload, a dropped network): the run waits for it to
+	// answer instead of failing (held.go).
+	Held *RunHold `json:"held,omitempty"`
 }
 
 // MaxSummaryRunes bounds Summary: it is a line, not a description.

@@ -480,6 +480,16 @@ func (s *Scheduler) run(ctx context.Context, id string, manual bool) (Item, erro
 	}
 	defer s.endLaunch(id)
 
+	if manual {
+		// Run now on a run held for its provider replaces it with a fresh one.
+		if current, err := s.store.Get(id); err == nil {
+			if held, ok := heldActive(current); ok {
+				if _, err := s.store.FinishRun(id, held.ID, "", "Replaced by Run now while its model provider was refusing requests."); err != nil {
+					return Item{}, err
+				}
+			}
+		}
+	}
 	item, run, err := s.store.Claim(id, manual)
 	if err != nil {
 		return Item{}, err
@@ -542,8 +552,14 @@ func (s *Scheduler) reconcile(ctx context.Context, item Item) {
 		return
 	} // Explicitly remain running when this architecture cannot prove a terminal state.
 	status, result, failure, known := inspector.InspectScheduledAction(ctx, item, *active)
+	if status != StatusCompleted {
+		// A run whose agent the provider refused is held, not failed (held.go).
+		if holder, ok := s.runner.(ActionHolder); ok && s.reconcileHeld(ctx, holder, item, *active) {
+			return
+		}
+	}
 	if !known {
-		s.finish(item, *active, "", "Mewla restarted while this ran and lost track of it. It was not started again, so it would not run twice.")
+		s.finish(item, *active, "", "Its agent's Session is gone and it had not written its result. It was not started again, so it would not run twice.")
 		return
 	}
 	switch status {
