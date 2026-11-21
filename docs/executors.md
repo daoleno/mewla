@@ -258,10 +258,10 @@ once and sign in with Google OAuth in the browser; Mewla never types a
 credential. Gemini 4 Neon and the other models of your plan appear in
 `agy models`. `mewla doctor` runs `agy models` to see whether it is signed in.
 
-Antigravity runs Workers from Brain, Calendar and the app. Mewla never picks it as
-Brain's agent by itself, even when it is the only agent that is ready, and the
-app's Brain picker does not offer it; `mewla brain use agy` runs Brain on it
-when you choose to.
+Antigravity runs Workers from Brain, Calendar and the app, and can be Brain's own
+agent (`mewla brain use agy`, or the Brain menu's Switch executor). It is the
+last choice when Brain picks an agent by itself: it hosts Brain on its own only
+when no other agent is ready, because it has the fewest of the things below.
 
 Its Chat is read by asking `agy acp`, agy's Agent Client Protocol server, to
 replay the conversation (`session/load`). Mewla does not parse agy's

@@ -629,9 +629,6 @@ type WorkerExecutor struct {
 	Command      string             `json:"command,omitempty"`
 	Capabilities WorkerCapabilities `json:"capabilities"`
 	Host         bool               `json:"host,omitempty"`
-	// HostByChoiceOnly marks an agent Mewla never picks or offers as Brain's host:
-	// Brain runs on it only when the person says so (`mewla brain use`).
-	HostByChoiceOnly bool `json:"host_by_choice_only,omitempty"`
 	// ConfigDir is the absolute config directory of a separate sign-in; Command
 	// then starts with the environment variable that selects it. BareCommand is
 	// Command without that prefix, for finding the program.
@@ -667,12 +664,6 @@ func ExpandConfigDir(dir string) string {
 	}
 	return filepath.Clean(dir)
 }
-
-// HostByChoiceOnly reports whether Mewla leaves Brain's host on this provider to
-// the person. Antigravity's conversation is read by replaying it through
-// `agy acp`, which can refuse a Worker's result while agy is writing (see
-// docs/executors.md), so Brain on it is a knowing choice.
-func HostByChoiceOnly(provider string) bool { return provider == WorkerProviderAntigravity }
 
 // WorkerExecutors returns all configured executors as portable executor records.
 func (c *ExecutorConfig) WorkerExecutors() []WorkerExecutor {
@@ -728,14 +719,13 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 		}
 	}
 	return WorkerExecutor{
-		ID:               id,
-		Name:             firstNonEmpty(strings.TrimSpace(executor.Name), id),
-		Provider:         provider,
-		Command:          command,
-		Capabilities:     workerCapabilities(provider),
-		HostByChoiceOnly: HostByChoiceOnly(provider),
-		ConfigDir:        configDir,
-		BareCommand:      bare,
+		ID:           id,
+		Name:         firstNonEmpty(strings.TrimSpace(executor.Name), id),
+		Provider:     provider,
+		Command:      command,
+		Capabilities: workerCapabilities(provider),
+		ConfigDir:    configDir,
+		BareCommand:  bare,
 	}
 }
 

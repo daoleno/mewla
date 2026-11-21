@@ -209,15 +209,3 @@ func writeAntigravitySummaries2(t *testing.T, home, id, clock, uris string) {
 		t.Fatal(err)
 	}
 }
-
-func TestAntigravityExecutorIsHostByChoiceOnly(t *testing.T) {
-	cfg, err := LoadExecutors(filepath.Join(t.TempDir(), "none.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	agy, _ := cfg.WorkerExecutor("agy")
-	claude, _ := cfg.WorkerExecutor("claude")
-	if !agy.HostByChoiceOnly || claude.HostByChoiceOnly {
-		t.Fatalf("agy = %v, claude = %v", agy.HostByChoiceOnly, claude.HostByChoiceOnly)
-	}
-}

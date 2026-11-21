@@ -4103,7 +4103,7 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 				return executor
 			}
 		}
-		for _, id := range hostdeps.HostAgentOrder() {
+		for _, id := range hostdeps.AgentOrder() {
 			if executor, ok := s.execs.WorkerExecutor(id); ok {
 				return executor
 			}
@@ -4171,7 +4171,7 @@ func SetHostAuthProbe(probe func(executorID string) HostAuthState) {
 // start without a terminal lands here and logs the pick once.
 func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 	var installed []work.WorkerExecutor
-	for _, id := range hostdeps.HostAgentOrder() {
+	for _, id := range hostdeps.AgentOrder() {
 		executor, ok := s.execs.WorkerExecutor(id)
 		if !ok {
 			continue
@@ -4311,7 +4311,7 @@ func (s *Service) installedAlternativeHosts(current string) []string {
 		return nil
 	}
 	var installed []string
-	for _, id := range hostdeps.HostAgentOrder() {
+	for _, id := range hostdeps.AgentOrder() {
 		if id == current {
 			continue
 		}
@@ -4336,7 +4336,7 @@ func (s *Service) verifiedAlternativeHost(current string) string {
 	if s == nil || s.execs == nil {
 		return ""
 	}
-	for _, id := range hostdeps.HostAgentOrder() {
+	for _, id := range hostdeps.AgentOrder() {
 		if id == current {
 			continue
 		}

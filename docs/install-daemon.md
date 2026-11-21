@@ -10,7 +10,7 @@ running as a service, updates, the app builds and uninstalling.
 - `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS); on Windows,
   PowerShell
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
-  `cursor-agent`, `grok`, `pi`, `agy` (Antigravity; runs Workers, and Brain only by `mewla brain use agy`) or `opencode` (OpenCode 2; `mewla doctor` names
+  `cursor-agent`, `grok`, `pi`, `agy` (Antigravity) or `opencode` (OpenCode 2; `mewla doctor` names
   the upgrade command when it finds OpenCode 1). One is enough. On Linux and
   macOS, `mewla` offers Claude Code and Codex when none is ready; on Windows,
   install one yourself. `mewla` asks which one Brain uses when several are
