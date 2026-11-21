@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -222,5 +223,40 @@ func TestGCPInstallSupportNamesWindows(t *testing.T) {
 	}
 	if message, _ := gcpInstallSupport("linux/amd64"); message != "" {
 		t.Fatalf("linux installs by itself: %q", message)
+	}
+}
+
+// On a Mac whose only Python is Apple's 3.9 the installer dies in a TypeError; the person is told what to install.
+func TestGCPInstallOnMacWithOldPythonSaysSo(t *testing.T) {
+	gcpHostOS = "darwin"
+	defer func() { gcpHostOS = runtime.GOOS }()
+	payload := "verified fixture archive"
+	sum := sha256.Sum256([]byte(payload))
+	pkg := gcpArchive{"darwin-arm", hex.EncodeToString(sum[:])}
+	client := &http.Client{Transport: gcpInstallTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(payload)), Header: http.Header{}}, nil
+	})}
+	python := "3.9"
+	run := func(_ context.Context, binary string, args, _ []string) (cloudOutput, error) {
+		switch filepath.Base(binary) {
+		case "tar":
+			os.MkdirAll(filepath.Join(args[3], "google-cloud-sdk", "bin"), 0700)
+			return cloudOutput{}, nil
+		case "install.sh":
+			return cloudOutput{ExitCode: 1, Stderr: "TypeError: unsupported operand type(s) for |: 'type' and 'type'\n"}, nil
+		case "python3":
+			return cloudOutput{Stdout: python + "\n"}, nil
+		}
+		t.Fatalf("unexpected process %s", binary)
+		return cloudOutput{}, nil
+	}
+	err := installGCPArchive(context.Background(), t.TempDir(), pkg, client, run)
+	if err == nil || !strings.Contains(err.Error(), "Python 3.10 or newer") || !strings.Contains(err.Error(), "3.9") {
+		t.Fatalf("an old Python is not named: %v", err)
+	}
+	python = "3.12"
+	err = installGCPArchive(context.Background(), t.TempDir(), pkg, client, run)
+	if err == nil || !strings.Contains(err.Error(), "TypeError") {
+		t.Fatalf("a new enough Python must leave the installer's own words: %v", err)
 	}
 }
