@@ -19,6 +19,8 @@ type gcpInstallTransport func(*http.Request) (*http.Response, error)
 
 func (f gcpInstallTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestGCPInstallFailureCleanupAndRetry(t *testing.T) {
+	gcpHostOS = "linux" // these fixtures are the Linux archive (it carries its Python); the same tests run on a Mac
+	defer func() { gcpHostOS = runtime.GOOS }()
 	for _, fault := range []string{"offline", "blocked", "checksum", "interrupted-download", "partial-install", "interrupted-previous-install", "publish"} {
 		t.Run(fault, func(t *testing.T) {
 			dir := t.TempDir()
@@ -190,6 +192,8 @@ func TestCloudInstallRetryAndManualCheckWithoutRestart(t *testing.T) {
 
 // A bootstrap step that fails says what the tool said, so the card, the sign-in and the command show a cause.
 func TestGCPInstallStepFailureNamesTheTool(t *testing.T) {
+	gcpHostOS = "linux"
+	defer func() { gcpHostOS = runtime.GOOS }()
 	payload := "verified fixture archive"
 	sum := sha256.Sum256([]byte(payload))
 	pkg := gcpArchive{"linux-x86_64", hex.EncodeToString(sum[:])}
