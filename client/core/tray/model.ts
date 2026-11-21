@@ -30,7 +30,7 @@ export type OneTap =
 export interface TrayRequest {
   /** Stable while the request is open: the thread card and the tray row share it. */
   key: string;
-  kind: "choice" | "prompt" | "approval" | "attention" | "work" | "alert" | "device" | "trigger";
+  kind: "choice" | "prompt" | "approval" | "attention" | "work" | "alert" | "device" | "trigger" | "grant";
   where: RequestWhere;
   /** The question, or what is asked ("Run git push?"). */
   title: string;
@@ -185,6 +185,8 @@ export interface TrayInput {
   alerts: readonly { id: string; title: string }[];
   /** New devices asking the current computer to let them in (ui/enrollment `deviceRequests`). */
   devices?: readonly { id: string; name: string }[];
+  /** A Mac grant a Worker waits for (Brain's thread's permission card, `m-perm`), while it is open: it needs you. */
+  grants?: readonly { id: string; title: string; reason: string }[];
   /** Triggers that need the person (core/triggers `triggersNeedingYou`): failing, or paused themselves. */
   triggers?: readonly { id: string; title: string; ask: string }[];
   /** The Works the computer's Triggers fire into: their Trigger row is where they live, so the tray lists one only
@@ -262,7 +264,7 @@ function titleOf(worker: Worker): string {
  * A request of a Session that works for Brain's delegated Work shows in Brain's thread too, so its
  * row leads there; one of a Session the person started is only in that Session.
  */
-export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "devices" | "triggers" | "answered" | "now">): TrayRequest[] {
+export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "brainChoice" | "currentWork" | "alerts" | "devices" | "triggers" | "grants" | "answered" | "now">): TrayRequest[] {
   const out: TrayRequest[] = [];
   if (input.brainChoice) {
     out.push({ key: `brain-choice:${input.brainChoice.callId}`, kind: "choice", where: "brain", title: input.brainChoice.question || "Brain asks", ask: input.brainChoice.question || "Brain asks", source: "Brain", workerId: input.brainHost?.id });
@@ -294,6 +296,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
   for (const alert of input.alerts) out.push({ key: `alert:${alert.id}`, kind: "alert", where: "alert", title: alert.title, source: "Calendar", itemId: alert.id });
   for (const trigger of input.triggers ?? []) out.push({ key: `trigger:${trigger.id}:${trigger.ask}`, kind: "trigger", where: "trigger", title: trigger.title, ask: trigger.ask, source: trigger.title, triggerId: trigger.id, opens: true });
   for (const device of input.devices ?? []) out.push({ key: `device:${device.id}`, kind: "device", where: "device", title: "Approve new device", source: device.name, deviceId: device.id });
+  for (const grant of input.grants ?? []) out.push({ key: `grant:${grant.id}`, kind: "grant", where: "brain", title: grant.title, ask: grant.title, source: "Brain" });
   const answered = input.answered;
   return answered?.size ? out.filter((request) => !answered.has(request.key)) : out;
 }

@@ -252,6 +252,24 @@ describe("Mewla for Mac", () => {
     await app.waitFor("id:session-state", { timeout: 10_000 });
   }, 40_000);
 
+  test("under 1024 the window is one column (w-small), at 1024 two panes: a Mac window is never a foldable held on its side", async () => {
+    const narrow = await open(APP, { platform: "macos", width: 760, height: 620, storage: paired, host: macHost({}) });
+    await narrow.waitFor("id:composer", { timeout: 15_000 });
+    expect(narrow.shows("id:left-pane")).toBe(false);
+    const first = await open(APP, { platform: "macos", width: 720, height: 560, storage: paired, host: macHost({}) });
+    await first.waitFor("id:composer", { timeout: 15_000 });
+    expect(first.shows("id:left-pane")).toBe(false);
+    const wide = await open(APP, { platform: "macos", width: 1024, height: 700, storage: paired, host: macHost({}) });
+    await wide.waitFor("id:left-pane", { timeout: 15_000 });
+  }, 60_000);
+
+  test("a page the left pane opens (This Mac) has no ‹ Back: the left pane is the way back", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ open: "calendar" }) });
+    await app.waitFor("id:left-pane", { timeout: 15_000 });
+    await app.waitUntil(() => app.texts().some((text) => /^Today\b/.test(text) || text === "Calendar"), { timeout: 10_000 });
+    expect(app.count("id:page-back")).toBe(0);
+  }, 30_000);
+
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host });

@@ -2,7 +2,7 @@ import { computed, platform, safeArea, signal, Storage, windowSize } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
 import { railEdge } from "../../core/shell/rail";
 import { screenDockWidth } from "../../core/screen/float";
-import { clampPaneWidth, MAC_PANE_WIDTH, nextWide, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
+import { clampPaneWidth, MAC_PANE_WIDTH, nextWide, WIDE_MIN_WIDTH, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 import { isMacApp } from "../mac/app";
 
 /**
@@ -20,6 +20,9 @@ export const usableWidth = computed(() => windowSize().width - safeArea().left -
 let lastWide: { wide: boolean; width: number } | null = null;
 export const wide = computed(() => {
   const width = usableWidth();
+  // A Mac window is wide from 1024 only (DESIGN-MAC.md §2.3): under it the one column with the capsule header
+  // (w-small). The foldable's "760 on its side" is a turned device; a Mac window wider than tall is not one.
+  if (isMacApp()) return width >= WIDE_MIN_WIDTH;
   // A height-only shrink at the same width (Android 14 resizing over the keyboard) keeps the pane (core/web/places.ts nextWide).
   const now = nextWide(lastWide, { width, height: windowSize().height });
   lastWide = { wide: now, width };

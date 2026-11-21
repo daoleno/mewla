@@ -19,6 +19,7 @@ import { deviceRequests } from "../enrollment/state";
 import { currentIssue } from "../more/settings/computers";
 import { currentDiagnosis } from "../computer/computers";
 import { brain, brainThread, connection, current, onTransport, shownConnection, workers } from "../session";
+import { grantRequestTimelineItem, grantTitle } from "../../core/timeline/grantRequestModel";
 
 const SORT_KEY = "mewla:tray:sort";
 
@@ -112,6 +113,23 @@ function today(): TrayTodayInput[] {
   });
 }
 
+/**
+ * The permission cards in Brain's thread still waiting on the person (asked, System Settings opened, or a restart):
+ * each needs you, in the tray and on the menu bar cat, until it seals (DESIGN-MAC.md §2.4, `m-perm`; Brain 11-22).
+ */
+const grantKey = computed(() => {
+  const latest = new Map<string, ReturnType<typeof grantRequestTimelineItem>>();
+  for (const event of brainThread().conversation?.events ?? []) {
+    const item = grantRequestTimelineItem(event);
+    if (item) latest.set(item.id, item);
+  }
+  const open = [...latest.values()].filter((item) => item && (item.state === "asked" || item.state === "opened" || item.state === "restart"))
+    .map((item) => ({ id: item!.id, title: grantTitle(item!.permission), reason: item!.reason }));
+  // A string, equal while the open cards are: Brain's reply streaming in reruns this, never the tray (FrameBurst.test).
+  return JSON.stringify(open);
+});
+const openGrants = computed((): { id: string; title: string; reason: string }[] => JSON.parse(grantKey()));
+
 /** Home's tray and state control, from the current computer's state (one model: the pill and the tray agree). */
 export const tray = computed(() => {
   const snapshot = brain();
@@ -138,6 +156,7 @@ export const tray = computed(() => {
     triggers: triggersNeedingYou(triggers(), clock().now),
     triggerWorkIds: triggers().map((trigger) => trigger.work_id),
     devices: deviceRequests().map((request) => ({ id: request.id, name: request.deviceName })),
+    grants: openGrants(),
     opened: opened(),
     sort: traySort(),
     // The elapsed-time clock (every second), so a row's "● 16s" and the Working line agree.

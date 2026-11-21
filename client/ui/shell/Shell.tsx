@@ -135,8 +135,18 @@ function page(route: Route, index: () => number): JSX.Element {
  * mark itself (SPEC §1.3). Around the stack, not each page: a NavStack's page must be its NavPage.
  */
 function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
-  return <PageStack.Provider value={{ canGoBack: () => props.nav.routes().length > 1, back: () => props.nav.pop() }}>{props.children}</PageStack.Provider>;
+  const canGoBack = () => {
+    const routes = props.nav.routes();
+    if (routes.length < 2) return false;
+    // On the Mac's wide window the left pane is the way back from the pages its rows open over Brain (w-session,
+    // w-cal draw no Back); This Mac keeps its ‹ (w-mac), and a page opened from a page keeps it too.
+    return !(isMacApp() && wide() && routes.length === 2 && PANE_PAGES.has((routes[1] as { name: string }).name));
+  };
+  return <PageStack.Provider value={{ canGoBack, back: () => props.nav.pop() }}>{props.children}</PageStack.Provider>;
 }
+
+/** The pages the Mac's left pane opens with its rows (a Session, a Work, Calendar and its items, All Sessions). */
+const PANE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "calendar", "item", "trigger", "run", "workFile", "allSessions"]);
 
 function Stack() {
   return (

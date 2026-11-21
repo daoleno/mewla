@@ -7,7 +7,8 @@
 #
 # fresh (the default) starts on new state, data and storage (a first run); keep reuses the last run's. `menu` opens
 # the menu bar cat's menu (a right-click) before the capture. Writes <out>/<theme>-<name>.png, -windows.txt, -log.txt,
-# and for a first run a burst <theme>-<name>-t<seconds>.png from launch.
+# and for a first run a burst <theme>-<name>-t<seconds>.png from launch. FIDELITY_WINDOW=<w>x<h> opens the main window at
+# that size (MEWLA_APP_WINDOW_SIZE); without it the window opens as a person's would (its first size, then the kept one).
 set -uo pipefail
 app="$1"; out="$2"; theme="$3"; name="$4"; script="$5"; mode="${6:-fresh}"; menu="${7:-}"
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -25,9 +26,9 @@ seen=$(cat "$D"/data/logs/* 2>/dev/null | grep -c "dev script: connected" || tru
 # As a person opens it: LaunchServices activates it. Its environment names its own state, port and data.
 open -n -a "$app" --env MEWLA_APP_STATE_ROOT="$D/state" --env MEWLA_APP_DATA_DIR="$D/data" \
   --env MEWLA_APP_ADDR=127.0.0.1:19877 --env MEWLA_APP_PHONE_ADDRESS=http://127.0.0.1:19877 \
-  --env MEWLA_APP_DEV_SCRIPT="$script"
+  --env MEWLA_APP_DEV_SCRIPT="$script" ${FIDELITY_WINDOW:+--env MEWLA_APP_WINDOW_SIZE="$FIDELITY_WINDOW"}
 t0=$(python3 -c 'import time; print(time.time())')
-if [[ "$name" == firstrun* ]]; then
+if [[ "$name" == firstrun ]]; then
   # The first seconds of a first run (the waking state), then ready.
   for t in 1 2 3 4 6 9; do
     while python3 -c "import time,sys; sys.exit(0 if time.time()-$t0 < $t else 1)"; do sleep 0.2; done
