@@ -64,7 +64,7 @@ the owner's dev server (8790). It takes `/home/daoleno/.mewla/t/0g-heavy.lock` o
 at `down`. `client/scripts/phone.sh -h` lists the verbs: `reset` (back to the snapshot, paired, Brain open: 11.8 s), `shot`, `tap`, `shows`,
 `share-file` / `share-text` (a share from another app, about 1 s), `install` (incremental debug build), `run VERB -- VERB...`
 (up, the verbs, down). Waiting for the heavy lock is not in those numbers: other jobs hold it, and a start waited 19 min for it once.
-`open-with` is untested. adb must stay the shell user: a share started as root is refused ("Cannot read this file"), and the script stops with that message.
+`phone.sh flow all` runs the journeys in `client/scripts/flows/` (send a message, open Calendar, share a picture in), each after a `reset`. **Known:** a `reset` took 11.8 s ten times in a row on one emulator and 137–168 s three times on another, always waiting for the app to show Brain after the snapshot restore; the cause is not found (the daemon logs an `app_crash` for a font asset read 135 s after the app comes to the front), so treat a slow reset as this fault, not as a failure of your change. `open-with` is untested. adb must stay the shell user: a share started as root is refused ("Cannot read this file"), and the script stops with that message.
 
 A fault the owner found gets its test in the fixing commit: headless if it can be, a scene in `scripts/shots/` if it is
 layout, a `phone.sh` flow if only Android shows it. What no lane sees (terminal drawing, Screen, the QR camera, the Chrome
