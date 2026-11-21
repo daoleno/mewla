@@ -144,6 +144,11 @@ type Service struct {
 	// leaveChrome: another Mewla on this computer gives agents the person's
 	// Chrome (LeaveChromeAlone).
 	leaveChrome atomic.Bool
+	// hostMu guards hostDirs (the Chrome profile folders the native host is registered in) and newHostName (an
+	// extension that asks for NativeHostName has connected: the old name's manifest is retired).
+	hostMu      sync.Mutex
+	hostDirs    map[string]bool
+	newHostName bool
 }
 
 // LeaveChromeAlone is for a daemon beside an installed Mewla (Mewla Dev): the
@@ -162,6 +167,7 @@ func (s *Service) Bridge() *Bridge {
 	defer s.mu.Unlock()
 	if s.bridge == nil {
 		s.bridge = NewBridge(s.dir)
+		s.bridge.onHostVersion = s.retireLegacyNativeHost
 	}
 	return s.bridge
 }

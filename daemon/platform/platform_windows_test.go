@@ -237,6 +237,25 @@ func TestSetUserRegistryDefault(t *testing.T) {
 	}
 }
 
+func TestDeleteUserRegistryKey(t *testing.T) {
+	parent := `Software\MewlaPlatformTest`
+	key := parent + `\` + strconv.FormatInt(time.Now().UnixNano(), 10)
+	t.Cleanup(func() { _ = registry.DeleteKey(registry.CURRENT_USER, parent) })
+	if err := SetUserRegistryDefault(key, `C:\a\host.json`); err != nil {
+		t.Fatal(err)
+	}
+	for round := 0; round < 2; round++ {
+		// The second round: a key that is not there is deleted already.
+		if err := DeleteUserRegistryKey(key); err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		if k, err := registry.OpenKey(registry.CURRENT_USER, key, registry.QUERY_VALUE); err == nil {
+			k.Close()
+			t.Fatalf("round %d: the key remains", round)
+		}
+	}
+}
+
 // Over SSH the daemon is started as the logon task starts it, under
 // `conhost --headless`. Given standard handles (Go gives a child the null
 // device for each one it lacks), that console host ends at once and the

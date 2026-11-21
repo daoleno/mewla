@@ -230,6 +230,9 @@ type Bridge struct {
 	reloadAsked map[string]bool
 	// bundled is the version of the extension this daemon carries; tests set it.
 	bundled string
+	// onHostVersion, when set, is told the version of each extension that says hello (the service retires the old
+	// native host name once one that asks for the new name has connected).
+	onHostVersion func(version string)
 	// listening, when set (tests), is told once the socket accepts connections:
 	// its file exists from bind, before listen, and a client dialling then is refused.
 	listening func()
@@ -425,6 +428,9 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 			host.version = m.Version
 			b.mu.Unlock()
 			if m.Type == "hello" {
+				if b.onHostVersion != nil {
+					b.onHostVersion(m.Version)
+				}
 				if agent {
 					_ = host.send(hostMessage{Type: "role", Agent: true})
 					b.takeBack(host, m.Windows)

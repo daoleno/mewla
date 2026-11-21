@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -61,4 +62,13 @@ func SetUserRegistryDefault(key, value string) error {
 		return nil
 	}
 	return k.SetStringValue("", value)
+}
+
+// DeleteUserRegistryKey deletes HKEY_CURRENT_USER\key (a key with no subkeys); a key that is not there is deleted.
+func DeleteUserRegistryKey(key string) error {
+	err := registry.DeleteKey(registry.CURRENT_USER, key)
+	if err == nil || errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	return err
 }

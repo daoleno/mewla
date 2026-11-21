@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -64,8 +65,16 @@ func installedMewlaExtension(userDataDir string) (profile string, ids []string, 
 	return profile, ids, profile != ""
 }
 
-// NativeHostName is the name the extension asks Chrome for.
-const NativeHostName = "com.mewla.browser"
+// NativeHostName is the name the extension asks Chrome for: scripts/lib/release_identity.py's NATIVE_HOST.
+const NativeHostName = "ai.mewla.browser"
+
+// LegacyNativeHostName is what the extension asked for before 11-21 (extension 0.4.1 and earlier). Its manifest
+// stays where an earlier daemon wrote it, so an extension Chrome has not reloaded still connects (and is told to
+// reload); it goes once an extension that asks for NativeHostName has connected (Service.retireLegacyNativeHost).
+const LegacyNativeHostName = "com.mewla.browser"
+
+// nativeHostNameVersion is the first extension version that asks for NativeHostName.
+const nativeHostNameVersion = "0.4.2"
 
 // OpenShimEnv, set to the state directory, makes Mewla's executable act as
 // the program the browser tools start in place of Chrome (see openShim).
@@ -141,6 +150,9 @@ func (s *Service) installNativeHost(userDataDir, mewla string, extensionIDs []st
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
+	if !agent {
+		s.rememberNativeHostDir(userDataDir)
+	}
 	name, flag := "native-host", ""
 	if agent {
 		name, flag = "native-host-agent", " --agent"
@@ -162,7 +174,55 @@ func (s *Service) installNativeHost(userDataDir, mewla string, extensionIDs []st
 	if err != nil {
 		return err
 	}
-	return s.registerNativeHost(userDataDir, agent, append(raw, '\n'))
+	if err := s.registerNativeHost(userDataDir, agent, append(raw, '\n')); err != nil {
+		return err
+	}
+	if !agent {
+		s.retireLegacyNativeHostIn(userDataDir)
+	}
+	return nil
+}
+
+// rememberNativeHostDir keeps the Chrome profile folders this service registered the host in, so the old name's
+// manifest can be taken out of each when the time comes.
+func (s *Service) rememberNativeHostDir(dir string) {
+	s.hostMu.Lock()
+	defer s.hostMu.Unlock()
+	if s.hostDirs == nil {
+		s.hostDirs = map[string]bool{}
+	}
+	s.hostDirs[dir] = true
+}
+
+// retireLegacyNativeHost is told the version of an extension that just connected. One that asks for NativeHostName
+// proves Chrome runs the new files, so no extension needs the old name any more: its manifest is removed from every
+// profile folder registered, and from the ones registered later.
+func (s *Service) retireLegacyNativeHost(extensionVersion string) {
+	if versionOlder(extensionVersion, nativeHostNameVersion) {
+		return
+	}
+	s.hostMu.Lock()
+	s.newHostName = true
+	dirs := make([]string, 0, len(s.hostDirs))
+	for dir := range s.hostDirs {
+		dirs = append(dirs, dir)
+	}
+	s.hostMu.Unlock()
+	for _, dir := range dirs {
+		s.retireLegacyNativeHostIn(dir)
+	}
+}
+
+func (s *Service) retireLegacyNativeHostIn(userDataDir string) {
+	s.hostMu.Lock()
+	retire := s.newHostName
+	s.hostMu.Unlock()
+	if !retire {
+		return
+	}
+	if err := s.removeLegacyNativeHost(userDataDir); err != nil {
+		log.Printf("agent use: couldn't remove the old native host %s: %v", LegacyNativeHostName, err)
+	}
 }
 
 // writeIfChanged writes path unless it already holds raw.

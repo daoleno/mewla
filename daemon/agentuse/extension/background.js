@@ -22,7 +22,7 @@
  */
 import { debugLog, drivenAt, openRelayConnection } from './relay.js';
 
-const HOST = 'com.mewla.browser';
+const HOST = 'ai.mewla.browser';
 const NON_DEBUGGABLE_SCHEMES = ['chrome:', 'edge:', 'devtools:', 'chrome-extension:'];
 const isNonDebuggableUrl = url => !!url && NON_DEBUGGABLE_SCHEMES.some(s => url.startsWith(s));
 

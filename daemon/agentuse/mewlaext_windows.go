@@ -4,6 +4,7 @@ package agentuse
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -28,6 +29,21 @@ func nativeHostLauncher(mewla, stateDir, flag string) []byte {
 // it reads no folder in the profile, only this key's default value, the
 // manifest's path. HKEY_CURRENT_USER needs no administrator rights.
 var nativeHostsKey = `Software\Google\Chrome\NativeMessagingHosts\` + NativeHostName
+
+// legacyNativeHostsKey is the key of the name before 11-21 (LegacyNativeHostName).
+var legacyNativeHostsKey = `Software\Google\Chrome\NativeMessagingHosts\` + LegacyNativeHostName
+
+// removeLegacyNativeHost deletes the old name's key and the manifest it pointed at.
+func (s *Service) removeLegacyNativeHost(_ string) error {
+	if err := platform.DeleteUserRegistryKey(legacyNativeHostsKey); err != nil {
+		return err
+	}
+	err := os.Remove(filepath.Join(s.dir, LegacyNativeHostName+".json"))
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
 
 // registerNativeHost writes the manifest beside the launcher, in Mewla's
 // state, and points Chrome's key at it.

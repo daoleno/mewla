@@ -42,3 +42,12 @@ func (s *Service) openShim(mewla string) (string, []string, error) {
 
 // startChromeProcess starts Chrome for the extension or a fix.
 func startChromeProcess(cmd *exec.Cmd) error { return cmd.Start() }
+
+// removeLegacyNativeHost takes the old name's manifest out of the profile folder.
+func (s *Service) removeLegacyNativeHost(userDataDir string) error {
+	err := os.Remove(filepath.Join(userDataDir, "NativeMessagingHosts", LegacyNativeHostName+".json"))
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
