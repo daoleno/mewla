@@ -1867,7 +1867,7 @@ func printWorkerUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  mewla worker list --json")
-	fmt.Fprintln(w, "  mewla worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high -cwd /repo -prompt \"Inspect docs\"")
+	fmt.Fprintln(w, "  mewla worker spawn -name \"Review docs\" -executor codex -model gpt-6.2-astra -reasoning high -cwd /repo -prompt \"Inspect docs\"")
 	fmt.Fprintln(w, "  mewla worker capture -id mewla-worker-review-docs:@1 --json")
 	fmt.Fprintln(w, "  mewla worker status -id mewla-worker-review-docs:@1 --json")
 	fmt.Fprintln(w, "  mewla worker progress --status running --phase working --attention none --summary \"Reading files\" --task-class lasting_design --event-kind invariant --lease 300")
