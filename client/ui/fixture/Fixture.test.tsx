@@ -62,4 +62,13 @@ describe("the mock's scenario on the app (the fidelity sheet's fixture)", () => 
     await app.waitFor("id:tool-pictures >> id:chat-image-open", { timeout: 10_000 });
     expect(app.texts().some((text) => text.includes("+38 −12"))).toBe(true);
   }, 30_000);
+
+  test("a message sent to Brain is echoed and answered by the scripted computer", async () => {
+    const app = await fixture();
+    await app.waitFor("id:work-card", { timeout: 10_000 });
+    await app.type("id:composer", "How is the pricing page going?");
+    await app.press("id:send");
+    await app.waitFor("text:On it. I will tell you when the pricing page is ready.", { timeout: 10_000 });
+    expect(app.texts()).toContain("How is the pricing page going?");
+  }, 30_000);
 });

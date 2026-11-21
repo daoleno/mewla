@@ -8,6 +8,6 @@ import { installPlatform, platform } from "../../core/platform";
 import { FakeDaemon } from "../testing/fakeDaemon";
 import { scenario } from "./scenario";
 
-const daemon = new FakeDaemon(scenario());
+const daemon = new FakeDaemon({ ...scenario(), admitsInput: { reply: "On it. I will tell you when the pricing page is ready." } });
 installPlatform({ ...platform(), openSocket: () => daemon.open() });
 host.on<Record<string, unknown>>("app.daemonPush", (frame) => daemon.push(frame as { type: string }));

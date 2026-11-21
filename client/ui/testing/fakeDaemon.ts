@@ -33,7 +33,7 @@ export interface FakeDaemonState {
    * user message whose id is that request id, then `input_sent`. loseFirstAck: the first one is admitted and
    * echoed, but the link drops before its answer (a slow phone), so the app sends it again under the same id.
    */
-  admitsInput?: { loseFirstAck?: boolean };
+  admitsInput?: { loseFirstAck?: boolean; /** The computer's answer to the message: an assistant message in the same conversation, right after the echo. */ reply?: string };
   /**
    * What's New's record as the daemon keeps it (daemon/whatsnew): `whats_new_get` answers it (with `releases`, the
    * computer's notes, when given), `whats_new_seen` adds ids and ends a replay, `whats_new_note` adds an update.
@@ -383,6 +383,10 @@ export class FakeDaemon {
           this.admitted.add(id);
           const echo = { id, seq: ++this.revision, timestamp: new Date().toISOString(), kind: "user_message", role: "user", body: String(frame.text ?? ""), ...(frame.attachments ? { attachments: frame.attachments } : {}) };
           this.conversation({ worker: String(frame.worker_id), upserts: [echo] });
+          if (admits.reply !== undefined) {
+            const answer = { id: `${id}:reply`, seq: ++this.revision, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: admits.reply };
+            this.conversation({ worker: String(frame.worker_id), upserts: [answer] });
+          }
           if (admits.loseFirstAck && !this.ackLost) {
             this.ackLost = true;
             return void setTimeout(() => this.drop(), 0);
