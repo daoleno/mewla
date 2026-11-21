@@ -2128,6 +2128,7 @@ dependencies = [
  "dispatch2",
  "log",
  "nsh-base",
+ "nsh-core",
  "nsh-engine",
  "nsh-platform-apple",
  "nsh-platform-macos",

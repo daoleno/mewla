@@ -54,6 +54,16 @@ fn main() -> std::process::ExitCode {
     // (Mewla Dev's proof runs) opens it at that size whatever was kept.
     let forced = std::env::var("MEWLA_APP_WINDOW_SIZE").ok().as_deref().and_then(parse_size);
     launch.bundle.main_window.get_or_insert_with(Default::default).restore_bounds = forced.is_none();
+    // Its hidden 46 pt title bar and transparency from the first frame (ui/mac/mac.ts sets the same): set only later
+    // by the app, the kept size came back 32 pt shorter on every launch (the fidelity captures of 11-22).
+    let ours = serde_json::json!({
+        "titleBar": { "style": "hidden", "height": 46, "controlsOffset": { "x": 16, "y": 17 } },
+        "transparent": true,
+    });
+    match nsh_core::desktop::MainWindowOptions::from_json(&ours) {
+        Ok(ours) => launch.bundle.main_window.get_or_insert_with(Default::default).attributes.merge(&ours.attributes),
+        Err(err) => log::warn!("main window options: {err}"),
+    }
     options.size = forced.unwrap_or_else(|| first_size(&config.root()));
     // The real app's daemon is its LaunchAgent (agent.rs); Mewla Dev's is its child, on its own state.
     let release = config.state_root.is_none() && options.app_id == "com.daoleno.mewla";

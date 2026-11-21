@@ -23,6 +23,8 @@ serde_json = "1"
 nsh-platform-macos = { version = "=0.6.1", features = ["js", "shader", "editor", "emoji-picker", "highlight", "math", "plot", "rich-editor", "term", "zlib", "crypto", "websocket", "updater", "svg"] }
 nsh-platform-apple = "=0.6.1"
 nsh-engine = "=0.6.1"
+# The main window's launch options (MainWindowOptions: its title bar and kept placement, main.rs).
+nsh-core = "=0.6.1"
 nsh-base = "=0.6.1"
 dispatch2 = "0.3.1"
 objc2-foundation = { version = "0.3.2", features = ["NSString", "NSError"] }
