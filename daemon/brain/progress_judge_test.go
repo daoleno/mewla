@@ -37,11 +37,38 @@ func (f *fakeProgressModel) ask(_ context.Context, system, prompt, schema string
 	return json.RawMessage(answer), 0.01, nil
 }
 
+// fixtureClock is the test's clock: the Service reads it from its own
+// goroutines (the judge loop) while the test moves it, so it is guarded.
+type fixtureClock struct {
+	mu     sync.Mutex
+	moment time.Time
+}
+
+func newFixtureClock() *fixtureClock { return &fixtureClock{moment: time.Now().UTC()} }
+
+func (c *fixtureClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.moment
+}
+
+func (c *fixtureClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.moment = c.moment.Add(d)
+}
+
+func (c *fixtureClock) setClock(t time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.moment = t
+}
+
 type progressJudgeFixture struct {
 	*progressBindingFixture
 	service *Service
 	model   *fakeProgressModel
-	clock   time.Time
+	*fixtureClock
 }
 
 func newProgressJudgeFixture(t *testing.T, answers ...string) *progressJudgeFixture {
@@ -51,8 +78,8 @@ func newProgressJudgeFixture(t *testing.T, answers ...string) *progressJudgeFixt
 	service := newTestService(t, base.store, nil, nil)
 	model := &fakeProgressModel{answers: answers}
 	service.SetProgressAsker(model.ask)
-	f := &progressJudgeFixture{progressBindingFixture: base, service: service, model: model, clock: time.Now().UTC()}
-	service.now = func() time.Time { return f.clock }
+	f := &progressJudgeFixture{progressBindingFixture: base, service: service, model: model, fixtureClock: newFixtureClock()}
+	service.now = func() time.Time { return f.now() }
 	service.progress.loading = func(WorkTranscriptLink) (work.CodexConversation, error) { return work.CodexConversation{}, nil }
 	return f
 }
@@ -129,7 +156,7 @@ func TestAReportedWorkGetsAJudgedPercentageWithoutMovingItsRevision(t *testing.T
 	if f.judgeDue(t) {
 		t.Fatal("judged before the evidence settled")
 	}
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("not judged after the quiet gap")
 	}
@@ -171,16 +198,16 @@ func TestAReportedWorkGetsAJudgedPercentageWithoutMovingItsRevision(t *testing.T
 
 func TestNothingIsJudgedWithoutNewEvidence(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerOneOfThree)
-	f.clock = f.clock.Add(24 * time.Hour)
+	f.advance(24 * time.Hour)
 	if f.judgeDue(t) || len(f.model.prompts) != 0 {
 		t.Fatal("judged on a timer alone")
 	}
 	f.reportVia(t, "running", "working", "first evidence")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("evidence not judged")
 	}
-	f.clock = f.clock.Add(time.Hour)
+	f.advance(time.Hour)
 	if f.judgeDue(t) || len(f.model.prompts) != 1 {
 		t.Fatal("judged again with nothing new")
 	}
@@ -189,19 +216,19 @@ func TestNothingIsJudgedWithoutNewEvidence(t *testing.T) {
 func TestJudgmentsOfOneWorkAreSpacedUnlessItsTurnEnded(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerOneOfThree)
 	f.reportVia(t, "running", "working", "one")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	f.reportVia(t, "running", "working", "two")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if f.judgeDue(t) {
 		t.Fatal("a second report inside the gap was judged at once")
 	}
-	f.clock = f.clock.Add(progressMinGap)
+	f.advance(progressMinGap)
 	if !f.judgeDue(t) {
 		t.Fatal("the held report was never judged")
 	}
 	f.reportVia(t, "done", "reporting", "three: done, RESULT.md written")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("a finished turn waits for the gap")
 	}
@@ -215,7 +242,7 @@ func TestAWorkerThatChecksInOftenIsStillJudgedWhileItRuns(t *testing.T) {
 		if f.judgeDue(t) {
 			t.Fatalf("judged at once after report %d", i+1)
 		}
-		f.clock = f.clock.Add(15 * time.Second)
+		f.advance(15 * time.Second)
 	}
 	f.reportVia(t, "running", "working", "feature 4 committed")
 	if !f.judgeDue(t) {
@@ -226,20 +253,20 @@ func TestAWorkerThatChecksInOftenIsStillJudgedWhileItRuns(t *testing.T) {
 func TestBrainsNextMessageIsJudgedWithoutWaitingOutTheGap(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerOneOfThree, answerReopened)
 	f.reportVia(t, "done", "reporting", "done, RESULT.md written")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("the finished turn was not judged")
 	}
 	// Brain sends it back half a minute later; the Worker's first report on
 	// the new turn is judged within seconds, even while more reports follow,
 	// not two minutes after the last judgment.
-	f.clock = f.clock.Add(10 * time.Second)
+	f.advance(10 * time.Second)
 	f.send(t, "turn:2")
 	f.reportOn(t, "turn:2", "running", "reading", "Fixing the two failing tests")
 	if f.judgeDue(t) {
 		t.Fatal("the new turn was judged before it settled")
 	}
-	f.clock = f.clock.Add(progressTurnSettle)
+	f.advance(progressTurnSettle)
 	f.reportOn(t, "turn:2", "running", "working", "first test fixed")
 	if !f.judgeDue(t) {
 		t.Fatal("the send-back waited for the quiet gap")
@@ -249,7 +276,7 @@ func TestBrainsNextMessageIsJudgedWithoutWaitingOutTheGap(t *testing.T) {
 	}
 	// Further reports on that turn are spaced again.
 	f.reportOn(t, "turn:2", "running", "working", "second test fixed")
-	f.clock = f.clock.Add(progressMaxWait)
+	f.advance(progressMaxWait)
 	if f.judgeDue(t) {
 		t.Fatal("a second report on the new turn skipped the gap")
 	}
@@ -258,10 +285,10 @@ func TestBrainsNextMessageIsJudgedWithoutWaitingOutTheGap(t *testing.T) {
 func TestASentBackWorkGoesDownOnceAndSaysWhy(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerOneOfThree, answerReopened)
 	f.reportVia(t, "running", "working", "merged")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	f.reportVia(t, "done", "reporting", "Brain: two unit tests fail on main")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	p := f.work(t).Progress
 	if p.Stage != ProgressBack || p.Percent >= 59 || p.Back != "Two unit tests fail on main" {
@@ -279,7 +306,7 @@ func TestASentBackWorkGoesDownOnceAndSaysWhy(t *testing.T) {
 func TestAnOpenEndedWorkShowsNoNumber(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerOpenEnded)
 	f.reportVia(t, "running", "working", "watching")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	p := f.work(t).Progress
 	if p.Stage != ProgressUnmeasured || p.ShowsNumber() {
@@ -291,18 +318,18 @@ func TestAFailedJudgmentChangesNothingAndBacksOff(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerOneOfThree)
 	f.model.err = errors.New("model unavailable")
 	f.reportVia(t, "running", "working", "x")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	if p := f.work(t).Progress; p != nil && p.Stage != "" {
 		t.Fatalf("a failed judgment wrote %#v", p)
 	}
 	f.model.err = nil
 	f.reportVia(t, "done", "reporting", "y")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if f.judgeDue(t) {
 		t.Fatal("retried inside the back-off")
 	}
-	f.clock = f.clock.Add(progressRetryAfter)
+	f.advance(progressRetryAfter)
 	if !f.judgeDue(t) {
 		t.Fatal("never retried")
 	}
@@ -315,7 +342,7 @@ func TestAClosedWorkIsNotJudged(t *testing.T) {
 	if _, err := f.store.CloseWork(WorkCloseRequest{WorkID: item.ID, ExpectedRevision: item.Revision, Status: WorkCancelled, Actor: "brain", Reason: "superseded"}); err != nil && !errors.Is(err, ErrWorkCleanupPending) {
 		t.Fatal(err)
 	}
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	if len(f.model.prompts) != 0 {
 		t.Fatal("judged a closed Work")
@@ -386,9 +413,9 @@ func TestAJudgmentLeavesTheWorksSlipAndThreadAlone(t *testing.T) {
 	}
 	before, beforeItems := snapshot()
 	for range 2 {
-		f.clock = f.clock.Add(progressMinGap + progressQuietGap)
+		f.advance(progressMinGap + progressQuietGap)
 		f.service.requestProgress(f.workID, "turn:1", true)
-		f.clock = f.clock.Add(progressQuietGap + time.Second)
+		f.advance(progressQuietGap + time.Second)
 		if !f.judgeDue(t) {
 			t.Fatal("not judged")
 		}

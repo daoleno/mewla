@@ -36,19 +36,19 @@ func (f *progressJudgeFixture) fact(turnID, kind, summary string) watcher.TurnFa
 func TestARestartJudgesNothingWithoutNewEvidence(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownZh)
 	f.reportVia(t, "running", "working", "fix deployed")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	if !f.judgeDue(t) {
 		t.Fatal("not judged")
 	}
 	// A restart: a new Service on the same store, and the watcher replays the turn's facts.
 	restarted := newTestService(t, f.store, nil, nil)
 	restarted.SetProgressAsker(f.model.ask)
-	restarted.now = func() time.Time { return f.clock }
+	restarted.now = func() time.Time { return f.now() }
 	f.service = restarted
 	f.service.seedProgressLastRun()
 	f.noteAndWait(t, f.fact("turn:1", "running", "fix deployed"), true)
 	time.Sleep(50 * time.Millisecond)
-	f.clock = f.clock.Add(time.Hour)
+	f.advance(time.Hour)
 	if f.pending() || f.judgeDue(t) {
 		t.Fatal("a replayed fact was judged again")
 	}
@@ -67,7 +67,7 @@ func TestARestartJudgesNothingWithoutNewEvidence(t *testing.T) {
 func TestAHeartbeatIsNotEvidenceButNewWordsAndTurnsAre(t *testing.T) {
 	f := newProgressJudgeFixture(t, answerShownZh)
 	f.reportVia(t, "running", "working", "tests 10/20")
-	f.clock = f.clock.Add(progressQuietGap + time.Second)
+	f.advance(progressQuietGap + time.Second)
 	f.judgeDue(t)
 	f.noteAndWait(t, f.fact("turn:1", "running", "tests 10/20"), true)
 	time.Sleep(50 * time.Millisecond)
@@ -81,14 +81,14 @@ func TestAHeartbeatIsNotEvidenceButNewWordsAndTurnsAre(t *testing.T) {
 	if !f.pending() {
 		t.Fatal("new words were not evidence")
 	}
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	f.judgeDue(t)
 	// The turn ending is evidence; seeing it ended again is not.
 	f.noteAndWait(t, f.fact("turn:1", "done", ""), false)
 	if !f.pending() {
 		t.Fatal("a turn ending was not evidence")
 	}
-	f.clock = f.clock.Add(progressMinGap + time.Second)
+	f.advance(progressMinGap + time.Second)
 	f.judgeDue(t)
 	f.service.noteProgressFact(f.fact("turn:1", "done", ""), false)
 	time.Sleep(100 * time.Millisecond)

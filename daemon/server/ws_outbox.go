@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/diag"
@@ -22,7 +23,12 @@ import (
 // leg) fails its own writer within this deadline and is disconnected; nobody
 // else waits on it. A slow link that keeps draining is never cut off mid
 // message, however large the message.
-var wsWriteTimeout = 30 * time.Second
+//
+// It is read by every client's writer goroutine, so it is atomic: a test that
+// shortens it (setWSLimits) never races a connection still winding down.
+var wsWriteTimeoutNanos atomic.Int64
+
+func wsWriteTimeout() time.Duration { return time.Duration(wsWriteTimeoutNanos.Load()) }
 
 // wsWriteChunk is the progress unit for wsWriteTimeout: each chunk of a
 // message gets a fresh deadline.
@@ -32,7 +38,14 @@ var wsWriteChunk = 32 << 10
 // behind is closed and reconnects to a fresh snapshot. Producers that wait for
 // room (terminal streams) wait at half the limit, so a busy terminal on a slow
 // link never pushes a broadcast over the edge.
-var wsOutboxLimit = 16 << 20
+var wsOutboxLimitBytes atomic.Int64
+
+func wsOutboxLimit() int { return int(wsOutboxLimitBytes.Load()) }
+
+func init() {
+	wsWriteTimeoutNanos.Store(int64(30 * time.Second))
+	wsOutboxLimitBytes.Store(16 << 20)
+}
 
 var (
 	errOutboxClosed   = errors.New("connection is closed")
@@ -221,10 +234,10 @@ func (o *clientOutbox) enqueue(messageType int, data []byte, waitForRoom bool) e
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if waitForRoom {
-		for !o.closed && o.bytes > 0 && o.bytes+len(data) > wsOutboxLimit/2 {
+		for !o.closed && o.bytes > 0 && o.bytes+len(data) > wsOutboxLimit()/2 {
 			o.cond.Wait()
 		}
-	} else if !o.closed && o.bytes > 0 && o.bytes+len(data) > wsOutboxLimit {
+	} else if !o.closed && o.bytes > 0 && o.bytes+len(data) > wsOutboxLimit() {
 		o.failLocked(errOutboxOverflow)
 	}
 	if o.closed {
@@ -337,7 +350,7 @@ func (o *clientOutbox) bulkReadyLocked() bool {
 // terminal bytes and browser frames are binary and gain little.
 func writeWithProgressDeadline(conn *websocket.Conn, msg outboundMessage) error {
 	conn.EnableWriteCompression(msg.messageType == websocket.TextMessage)
-	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout()))
 	if len(msg.data) <= wsWriteChunk {
 		return conn.WriteMessage(msg.messageType, msg.data)
 	}
@@ -347,14 +360,14 @@ func writeWithProgressDeadline(conn *websocket.Conn, msg outboundMessage) error 
 	}
 	for data := msg.data; len(data) > 0; {
 		n := min(len(data), wsWriteChunk)
-		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout()))
 		if _, err := w.Write(data[:n]); err != nil {
 			_ = w.Close()
 			return err
 		}
 		data = data[n:]
 	}
-	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout()))
 	return w.Close()
 }
 

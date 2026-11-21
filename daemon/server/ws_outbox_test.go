@@ -20,11 +20,9 @@ import (
 // A client that stops reading must not slow broadcast, the other clients or
 // request handling, and it must be disconnected.
 func TestStalledClientCostsOnlyItsOwnConnection(t *testing.T) {
-	previousTimeout, previousLimit := wsWriteTimeout, wsOutboxLimit
 	// The long write timeout shows nobody waits for it; the small queue limit
 	// drops the stalled client.
-	wsWriteTimeout, wsOutboxLimit = 10*time.Second, 1<<20
-	defer func() { wsWriteTimeout, wsOutboxLimit = previousTimeout, previousLimit }()
+	defer setWSLimits(10*time.Second, 1<<20)()
 
 	manager, privateKey, deviceID := sessionFileAuthFixture(t)
 	server := New(manager, watcher.New(time.Second), nil, nil, nil, nil, nil)
@@ -101,9 +99,7 @@ func TestStalledClientCostsOnlyItsOwnConnection(t *testing.T) {
 // The writer gives up on a client that stops reading, without the producer
 // ever touching the socket.
 func TestOutboxDropsAClientThatStopsReading(t *testing.T) {
-	previousTimeout, previousLimit := wsWriteTimeout, wsOutboxLimit
-	wsWriteTimeout, wsOutboxLimit = 200*time.Millisecond, 64<<20
-	defer func() { wsWriteTimeout, wsOutboxLimit = previousTimeout, previousLimit }()
+	defer setWSLimits(200*time.Millisecond, 64<<20)()
 
 	serverConn, _ := upgradedTestPair(t, stalledReaderDialer())
 	outbox := newClientOutbox(serverConn)
@@ -129,9 +125,7 @@ func TestOutboxDropsAClientThatStopsReading(t *testing.T) {
 // A slow link that keeps draining is not dropped, even when one message takes
 // many write timeouts to deliver: the deadline measures progress.
 func TestOutboxKeepsASlowButProgressingClient(t *testing.T) {
-	previousTimeout, previousLimit := wsWriteTimeout, wsOutboxLimit
-	wsWriteTimeout, wsOutboxLimit = 250*time.Millisecond, 64<<20
-	defer func() { wsWriteTimeout, wsOutboxLimit = previousTimeout, previousLimit }()
+	defer setWSLimits(250*time.Millisecond, 64<<20)()
 
 	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
 	if tcp, ok := serverConn.NetConn().(*net.TCPConn); ok {
@@ -171,7 +165,7 @@ func TestOutboxKeepsASlowButProgressingClient(t *testing.T) {
 	if total != len(payload) {
 		t.Fatalf("received %d bytes, want %d", total, len(payload))
 	}
-	if elapsed := time.Since(started); elapsed < 2*wsWriteTimeout {
+	if elapsed := time.Since(started); elapsed < 2*wsWriteTimeout() {
 		t.Fatalf("delivery took %v; the reader was not slow enough to exercise the deadline", elapsed)
 	}
 	if err := outbox.enqueue(websocket.TextMessage, []byte("after"), false); err != nil {
@@ -185,16 +179,14 @@ func TestOutboxKeepsASlowButProgressingClient(t *testing.T) {
 // reader reads nothing until the flood has filled its half and the broadcasts
 // have used all of theirs, so the outcome does not depend on how fast it reads.
 func TestTerminalFloodDoesNotDropASlowReader(t *testing.T) {
-	previousTimeout, previousLimit := wsWriteTimeout, wsOutboxLimit
-	wsWriteTimeout, wsOutboxLimit = 5*time.Second, 1<<20
-	defer func() { wsWriteTimeout, wsOutboxLimit = previousTimeout, previousLimit }()
+	defer setWSLimits(5*time.Second, 1<<20)()
 
 	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
 	outbox := newClientOutbox(serverConn)
 	defer outbox.close()
 
 	const message = 64 << 10
-	floodChunks, broadcasts := 256, wsOutboxLimit/2/message
+	floodChunks, broadcasts := 256, wsOutboxLimit()/2/message
 	flood := make(chan error, 1)
 	go func() {
 		chunk := []byte(strings.Repeat("t", message))
@@ -210,9 +202,9 @@ func TestTerminalFloodDoesNotDropASlowReader(t *testing.T) {
 	// The socket takes a few KB and then nothing more, so the flood fills
 	// its half of the queue and waits there.
 	pending := 0
-	for deadline := time.Now().Add(5 * time.Second); pending != wsOutboxLimit/2; time.Sleep(time.Millisecond) {
+	for deadline := time.Now().Add(5 * time.Second); pending != wsOutboxLimit()/2; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
-			t.Fatalf("terminal flood queued %d bytes, want it to wait at %d", pending, wsOutboxLimit/2)
+			t.Fatalf("terminal flood queued %d bytes, want it to wait at %d", pending, wsOutboxLimit()/2)
 		}
 		outbox.mu.Lock()
 		pending = outbox.bytes
@@ -637,4 +629,13 @@ func TestOutboxAnnouncesAMessageBigOnTheWire(t *testing.T) {
 	if first, second := read(client), read(client); strings.Contains(first, "frame_coming") || second != `{"type":"direct_addresses"}` {
 		t.Fatalf("a message that deflates small went with a notice: %q then %q", first, second)
 	}
+}
+
+// setWSLimits shortens the write timeout and the outbox limit for one test and
+// returns what puts them back.
+func setWSLimits(timeout time.Duration, limit int) (restore func()) {
+	previousTimeout, previousLimit := wsWriteTimeoutNanos.Load(), wsOutboxLimitBytes.Load()
+	wsWriteTimeoutNanos.Store(int64(timeout))
+	wsOutboxLimitBytes.Store(int64(limit))
+	return func() { wsWriteTimeoutNanos.Store(previousTimeout); wsOutboxLimitBytes.Store(previousLimit) }
 }
