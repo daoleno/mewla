@@ -361,6 +361,10 @@ The rules that keep you in charge:
   stays after its turn; its Work card in Brain's thread has a **Take over**
   button that opens Screen at that window with the agent held. It goes when its Worker
   closes, when you close it, or after an hour nobody used it, and you are told.
+  While you look at it the Mac's display stays on, as for its own screen; a
+  locked Mac says so over the window, with **Unlock** (the Mac's own screen).
+  When your taps and keys cannot reach the page, Screen says so with the one
+  thing to do, instead of showing a picture that takes nothing.
 - **Closing a window behind others.** An app's Close menu item (cmd+w) is off
   while the app is behind other windows. The agent then presses the close
   button of the app's key window instead, without bringing anything forward.

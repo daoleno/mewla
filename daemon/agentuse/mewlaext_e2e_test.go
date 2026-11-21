@@ -82,6 +82,9 @@ func TestMewlaExtensionE2E(t *testing.T) {
 			records[who] = append(records[who], r.URL.Query().Get("v"))
 			recMu.Unlock()
 			io.WriteString(w, "ok")
+		case "/signin":
+			// A sign-in an agent leaves for the person.
+			io.WriteString(w, `<title>signin</title><body style="margin:40px"><input id=email aria-label="Email" style="width:300px;height:40px"><br><br><input id=pw type=password aria-label="Password" style="width:300px;height:40px">`)
 		case "/person":
 			io.WriteString(w, `<title>person</title><input id=p autofocus><body>the person's page`)
 		default:
@@ -292,6 +295,130 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	  return tries;
 	}`})
 	t.Logf("a fresh context and a raw CDP session: %s", out)
+
+	// 2026-11-21: a page an agent leaves for the person (a sign-in) after its
+	// last browser call: the person's clicks and keys from Screen reach its
+	// fields, a password field too, through the bridge and the extension.
+	out = mcp.call(t, "browser_navigate", map[string]any{"url": site.URL + "/signin"})
+	if !strings.Contains(out, "signin") {
+		t.Fatalf("navigate to the sign-in: %s", out)
+	}
+	time.Sleep(2 * time.Second) // the agent's turn is over: no browser call from here on
+	bridge.mu.Lock()
+	windowKey := fmt.Sprintf("c%s-%d", bridge.run, bridge.nextID)
+	bridge.mu.Unlock()
+	var signinWS string
+	for _, target := range cdpTargets(t) {
+		if target["type"] == "page" && strings.HasSuffix(fmt.Sprint(target["url"]), "/signin") {
+			signinWS = fmt.Sprint(target["webSocketDebuggerUrl"])
+		}
+	}
+	if signinWS == "" {
+		t.Fatal("the sign-in page is not open")
+	}
+	// Where a field's middle is in window points (what Screen's view sends), from the window's top left.
+	fieldAt := func(id string) (float64, float64) {
+		raw := evalIn(t, signinWS, `(() => { const r = document.getElementById('`+id+`').getBoundingClientRect(); return JSON.stringify([r.left + r.width/2 + (outerWidth - innerWidth), r.top + r.height/2 + (outerHeight - innerHeight)]); })()`)
+		var at [2]float64
+		if err := json.Unmarshal([]byte(raw), &at); err != nil {
+			t.Fatalf("field %s at %q: %v", id, raw, err)
+		}
+		return at[0], at[1]
+	}
+	personClick := func(x, y float64) {
+		for _, kind := range []string{"mousePressed", "mouseReleased"} {
+			if err := bridge.PageInput(windowKey, PageInput{Method: "Input.dispatchMouseEvent", Params: map[string]any{"type": kind, "x": x, "y": y, "button": "left", "clickCount": 1}}); err != nil {
+				t.Fatalf("the person's click: %v", err)
+			}
+		}
+	}
+	personType := func(text string) {
+		for _, r := range text {
+			key := string(r)
+			for _, down := range []bool{true, false} {
+				params := map[string]any{"type": "keyUp", "key": key, "modifiers": 0}
+				if down {
+					params["type"], params["text"] = "keyDown", key
+				}
+				if err := bridge.PageInput(windowKey, PageInput{Method: "Input.dispatchKeyEvent", Params: params}); err != nil {
+					t.Fatalf("the person's key: %v", err)
+				}
+			}
+		}
+	}
+	typedIn := func(field string) string {
+		var v string
+		_ = json.Unmarshal([]byte(evalIn(t, signinWS, `JSON.stringify(document.getElementById('`+field+`').value)`)), &v)
+		return v
+	}
+	waitTyped := func(field, want string) {
+		for i := 0; i < 50 && typedIn(field) != want; i++ {
+			time.Sleep(100 * time.Millisecond)
+		}
+		if got := typedIn(field); got != want {
+			t.Logf("debugger targets: %s", extensionEval(t, `chrome.debugger.getTargets().then(ts => JSON.stringify(ts.filter(x => x.type === 'page').map(x => ({tab: x.tabId, url: x.url, attached: x.attached}))))`))
+			t.Logf("tabs: %s", extensionEval(t, `chrome.tabs.query({}).then(ts => JSON.stringify(ts.map(x => ({id: x.id, win: x.windowId, active: x.active, url: x.url}))))`))
+			t.Fatalf("the person typed %q into %s from Screen; the page has %q (window %s)", want, field, got, windowKey)
+		}
+	}
+	x, y := fieldAt("email")
+	// A tap and typing straight after it (a desktop keyboard, a phone's key bar): the keys come after the click.
+	personClick(x, y)
+	personType("person@example.com")
+	waitTyped("email", "person@example.com")
+	x, y = fieldAt("pw")
+	personClick(x, y)
+	time.Sleep(500 * time.Millisecond)
+	personType("s3cret")
+	waitTyped("pw", "s3cret")
+	t.Logf("the person's click and keys reached the left sign-in page (window %s)", windowKey)
+
+	// A sign-in whose form is a frame of another site (Apple's is), isolated
+	// in a process of its own: the click and the keys reach the frame's field.
+	frameSite := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `<body style="margin:0"><input id=fpw type=password aria-label="Password" style="width:300px;height:40px;margin:30px">`)
+	}))
+	defer frameSite.Close()
+	frameURL := strings.Replace(frameSite.URL, "127.0.0.1", "localhost", 1) + "/frame"
+	out = mcp.call(t, "browser_run_code_unsafe", map[string]any{"code": `async (page) => {
+	  await page.setContent('<title>framed</title><body style="margin:40px"><iframe id=f src="` + frameURL + `" style="width:400px;height:120px;border:0"></iframe>');
+	  await page.frameLocator('#f').getByLabel('Password').waitFor();
+	  return 'ready';
+	}`})
+	if !strings.Contains(out, "ready") {
+		t.Fatalf("the framed sign-in: %s", out)
+	}
+	time.Sleep(time.Second)
+	var topWS, frameWS string
+	for _, target := range cdpTargets(t) {
+		u := fmt.Sprint(target["url"])
+		switch {
+		case target["type"] == "iframe" && strings.HasSuffix(u, "/frame"):
+			frameWS = fmt.Sprint(target["webSocketDebuggerUrl"])
+		case target["type"] == "page" && strings.HasSuffix(u, "/signin"):
+			topWS = fmt.Sprint(target["webSocketDebuggerUrl"])
+		}
+	}
+	if topWS == "" || frameWS == "" {
+		t.Fatalf("the framed sign-in's targets: top %q frame %q (is the frame out of process?)", topWS, frameWS)
+	}
+	var frameAt, fieldIn [2]float64
+	_ = json.Unmarshal([]byte(evalIn(t, topWS, `(() => { const r = document.getElementById('f').getBoundingClientRect(); return JSON.stringify([r.left + (outerWidth - innerWidth), r.top + (outerHeight - innerHeight)]); })()`)), &frameAt)
+	_ = json.Unmarshal([]byte(evalIn(t, frameWS, `(() => { const r = document.getElementById('fpw').getBoundingClientRect(); return JSON.stringify([r.left + r.width/2, r.top + r.height/2]); })()`)), &fieldIn)
+	personClick(frameAt[0]+fieldIn[0], frameAt[1]+fieldIn[1])
+	personType("fr4me")
+	var framed string
+	for i := 0; i < 50; i++ {
+		_ = json.Unmarshal([]byte(evalIn(t, frameWS, `JSON.stringify(document.getElementById('fpw').value)`)), &framed)
+		if framed == "fr4me" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if framed != "fr4me" {
+		t.Fatalf("the person typed %q into a password field in a frame of another site; it has %q", "fr4me", framed)
+	}
+	t.Logf("the person's click and keys reached a password field in a cross-site frame")
 
 	if displayBounds != nil {
 		got := agentWindowBounds(t)

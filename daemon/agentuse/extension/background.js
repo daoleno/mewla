@@ -126,6 +126,11 @@ class AgentWindow {
     this.groupId = undefined;
     this.connection = undefined;
     this.closed = false;
+    // The person's input runs one event at a time, in the order it came: a click's page offset takes a moment,
+    // and the keys typed right after it must not reach the page before it.
+    this._inputs = Promise.resolve();
+    // Why the person's input last could not reach the page ('' when it did), as last told to the daemon.
+    this._inputProblem = '';
     this._onUpdated = (tabId, changeInfo, tab) => {
       if (this.reflowed && changeInfo.url !== undefined && tab.active && (tab.windowId === this.windowId || this.reflowed.popups.has(tab.windowId)))
         tell({ type: 'page', id: this.id, host: hostOf(changeInfo.url) });
@@ -340,13 +345,33 @@ class AgentWindow {
    * The person's input from Mewla's Screen, to this window's page: a DevTools Input command sent through the
    * debugger its tab is attached with, so it reaches that tab only, wherever the window is and whichever app is in
    * front. A mouse event comes in points from the window's top left and goes to the page at the same place.
+   * Events run in order. Input that cannot reach the page is told to the daemon ({type: "input", id, message}),
+   * once until it reaches the page again ({type: "input", id}).
    */
-  async input({ method, params } = {}) {
-    if (!INPUT_METHODS.has(method) || this.windowId === undefined || !this.connection)
+  input(event = {}) {
+    this._inputs = this._inputs
+      .then(() => this._deliver(event))
+      .catch(error => String(error?.message || error))
+      .then(problem => this._tellInput(problem));
+    return this._inputs;
+  }
+
+  _tellInput(problem) {
+    if (problem === this._inputProblem || this.closed)
       return;
+    this._inputProblem = problem;
+    tell(problem ? { type: 'input', id: this.id, message: problem } : { type: 'input', id: this.id });
+  }
+
+  /** Sends one event to the page; answers why it could not, or '' when it went (or belongs to no page). */
+  async _deliver({ method, params } = {}) {
+    if (!INPUT_METHODS.has(method))
+      return '';
+    if (this.windowId === undefined || !this.connection)
+      return "the agent's browser tools let go of this window";
     const [tab] = await chrome.tabs.query({ windowId: this.windowId, active: true }).catch(() => []);
     if (!tab || !this.connection.attachedTabs.has(tab.id))
-      return;
+      return "the page in front is not one the agent's browser tools hold";
     const target = { tabId: tab.id };
     const event = { ...params };
     if (method === 'Input.dispatchMouseEvent') {
@@ -359,9 +384,10 @@ class AgentWindow {
       event.x = Number(event.x) - left;
       event.y = Number(event.y) - top;
       if (event.y < 0 || event.x < 0)
-        return; // on the window's own controls, not the page
+        return ''; // on the window's own controls, not the page
     }
-    await chrome.debugger.sendCommand(target, method, event).catch(error => debugLog('input', error));
+    await chrome.debugger.sendCommand(target, method, event);
+    return '';
   }
 
   async close(reason, quiet) {
@@ -415,9 +441,14 @@ async function onHostMessage(message) {
     case 'disconnect':
       await sessions.get(message.id)?.close('The daemon asked to disconnect');
       return;
-    case 'input':
-      await sessions.get(message.id)?.input(message.input);
+    case 'input': {
+      const session = sessions.get(message.id);
+      if (session)
+        await session.input(message.input);
+      else
+        tell({ type: 'input', id: message.id, message: 'the agent window is gone' });
       return;
+    }
     case 'reflow': {
       const session = sessions.get(message.id);
       if (session)

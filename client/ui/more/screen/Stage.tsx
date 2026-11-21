@@ -1,6 +1,6 @@
 import { cleanup, computed, effect, platform, Scroll, signal, Text, untracked, View, type JSX } from "nsh";
 import { Button, Menu, MenuItem } from "nsh/base";
-import { displayIssue, type DisplayIssue } from "../../../core/screen/displayIssue";
+import { displayIssue, inputIssue, type DisplayIssue } from "../../../core/screen/displayIssue";
 import { displayRoute } from "../../../core/screen/displayRoute";
 import { haltDisplay, listDisplays, resumeDisplay, type AgentDisplay } from "../../../core/screen/screen";
 import { hostLabel, pickStageAgent, stageAgents, type StageAgent } from "../../../core/screen/stage";
@@ -351,14 +351,14 @@ export function StageBody(props: { stage: Stage; platform?: string; serverName: 
               </View>
             );
           }
-          return <StagePicture stage={stage} platform={props.platform} notice={notice} />;
+          return <StagePicture stage={stage} platform={props.platform} serverName={props.serverName} ownScreen={props.ownScreen} notice={notice} />;
         }))(kind())}
       <StageSwitcher stage={stage} serverName={props.serverName} ownScreen={props.ownScreen} />
     </View>
   );
 }
 
-function StagePicture(props: { stage: Stage; platform?: string; notice: () => JSX.Element }) {
+function StagePicture(props: { stage: Stage; platform?: string; serverName: string; ownScreen?: { title: string; open: () => void }; notice: () => JSX.Element }) {
   const stage = props.stage;
   const roomy = () => wide() || platform.desktop;
   return (
@@ -371,6 +371,10 @@ function StagePicture(props: { stage: Stage; platform?: string; notice: () => JS
               const s = untracked(item);
               return (
               <View testID={`display-${untracked(stage.current)?.id ?? ""}`} class="flex-1">
+                {/* A locked Mac paints none of the page, and input that does not reach it is said: never a dead picture. */}
+                <If when={s.locked()} else={<If when={inputIssue(s.inputProblem(), props.serverName)}>{(current) => <View class="px-4"><Notice testID="stage-input-issue" tone="warning" title={current().title} detail={current().detail} /></View>}</If>}>
+                  <View class="px-4"><Notice testID="stage-locked" tone="warning" icon="lock" title={`${props.serverName} is locked`} action={props.ownScreen ? "Unlock" : undefined} onAction={() => props.ownScreen?.open()} /></View>
+                </If>
                 <RemoteView session={s} label={`Display of ${untracked(stage.current)?.name ?? ""}`} modifiers={modifiersFor(props.platform ?? "linux")} typing={stage.typing()} onTypingChange={stage.setTyping} />
                 <If when={s.phase() === "connecting"}><View class="absolute inset-0 items-center justify-center" style={{ pointerEvents: "none" }}><Spinner size={28} tone="onBlackSoft" /></View></If>
                 <If when={s.phase() === "lost"}><View testID="stage-lost" class="absolute inset-0 items-center justify-center gap-3 bg-black px-8">

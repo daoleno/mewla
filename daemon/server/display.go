@@ -117,7 +117,10 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 // the agent off until released or the socket closes. While held, a
 // {"type":"fit","width":w,"height":h,"dpr":d} message lays the agent's browser
 // window out for the person's screen (width 0 puts it back); the socket answers
-// {"type":"reflow","on":bool,"host":"…"} then and whenever that changes.
+// {"type":"reflow","on":bool,"host":"…"} then and whenever that changes. When
+// the person's input cannot reach the page it says {"type":"input","problem":"…"}
+// (an empty problem once it can again), and on a Mac {"type":"state","locked":bool}
+// when the view opens and whenever the lock changes.
 func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	device, ok := s.authenticateRequest(w, r, "mewla-display-view")
 	if !ok {
@@ -152,6 +155,19 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	if view.Notify != nil {
 		view.Notify(func(state vdisplay.Reflow) {
 			sendJSON(map[string]any{"type": "reflow", "on": state.On, "host": state.Host})
+		})
+	}
+	// Input that cannot reach the page is said: {"type":"input","problem":"…"},
+	// and {"type":"input"} once it reaches it again.
+	if view.Trouble != nil {
+		view.Trouble(func(problem string) {
+			sendJSON(map[string]any{"type": "input", "problem": problem})
+		})
+	}
+	// A Mac's agent windows: the lock, as the Mac's own screen says it.
+	if view.Locked != nil {
+		view.Locked(func(locked bool) {
+			sendJSON(map[string]any{"type": "state", "locked": locked})
 		})
 	}
 	// Fits run one at a time, off the read loop (a window change takes the

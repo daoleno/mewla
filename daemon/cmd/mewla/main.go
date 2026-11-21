@@ -984,6 +984,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 		agentWindows.SetPageInput(func(key string, in screen.PageInput) error {
 			return agentUse.Bridge().PageInput(key, agentuse.PageInput{Method: in.Method, Params: in.Params})
 		})
+		// What the extension cannot deliver is said in Screen, not dropped.
+		agentUse.Bridge().SetInputProblem(agentWindows.InputProblem)
 		agentWindows.SetIdleClose(vdisplay.IdleClose, screenClosed)
 		defer agentWindows.Close()
 		srv.SetDisplays(agentWindows)

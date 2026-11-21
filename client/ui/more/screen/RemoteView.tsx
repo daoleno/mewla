@@ -103,6 +103,8 @@ export class RemoteSession {
   readonly stats = signal<ScreenStreamStats | null>(null);
   readonly viewerStats = signal<ViewerStats | null>(null);
   readonly holding = signal(false);
+  /** Why the person's input does not reach what the agent display shows ("" when it does). */
+  readonly inputProblem = signal("");
   /** How an agent display's browser window is shown: laid out for this view while held (reflow sessions). */
   readonly reflow = signal<StageReflow>(NO_REFLOW, { equals: (a, b) => a.on === b.on && a.host === b.host });
   /** The view's size as the viewer measured it. */
@@ -178,6 +180,7 @@ export class RemoteSession {
     this.phase.set("connecting");
     this.reason.set(null);
     this.holding.set(false);
+    this.inputProblem.set("");
     this.rtt.set(null);
     this.stats.set(null);
     this.viewerStats.set(null);
@@ -193,6 +196,7 @@ export class RemoteSession {
         rtt: (ms) => attempt === this.attempt && this.rtt.set(ms),
         locked: (locked) => attempt === this.attempt && this.locked.set(locked),
         reflow: (state) => attempt === this.attempt && this.setReflow(state),
+        inputProblem: (problem) => attempt === this.attempt && this.inputProblem.set(problem),
         streamStats: (stats) => attempt === this.attempt && this.stats.set(stats),
         closed: (reason, outdated) => {
           if (attempt !== this.attempt) return;
