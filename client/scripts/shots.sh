@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lane 1 of "Proving a change" (client/README.md): the app drawn in headless Chrome by `nsh test --target web`,
+# Lane 1, a look at the app without a device: the app drawn in headless Chrome by `nsh test --target web`,
 # no emulator, no device, no model. One command, a few seconds (3 s a picture, 14 s for a three-scene tour): the steps you give it run on the app's fixture
 # (client/ui/fixture: a scripted computer, the soft-final mock's scenario), and every `shot(name)` writes
 # <name>.png as ONE image: phone 390x844 light | phone dark | desktop 1280x800 (a reviewer reads one picture).
