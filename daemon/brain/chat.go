@@ -1,7 +1,9 @@
 package brain
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -41,6 +43,15 @@ func (s *Service) NewChat() (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("brain service is not configured")
 	}
 	executor := s.hostExecutor()
+	// A New chat fails only when no agent at all can run Brain: then nothing
+	// changes and the old chat stays current. When Brain's agent cannot run
+	// but another installed one can, the person still gets the new chat and
+	// the Host comes up on that agent (the default pick, below).
+	if err := s.hostRunnable(executor); err != nil {
+		if _, ok := s.installedHostExecutor(); !ok {
+			return Snapshot{}, err
+		}
+	}
 	if hostSession, err := s.store.HostSession(); err == nil {
 		if id := strings.TrimSpace(hostSession.ID); id != "" {
 			// Explicit NewChat destroys the host; release any managed route.
@@ -61,7 +72,13 @@ func (s *Service) NewChat() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if _, err := s.ensureHostWorker(executor); err != nil {
-		return Snapshot{}, err
+		if !errors.Is(err, ErrHostNotRunnable) {
+			return Snapshot{}, err
+		}
+		// The new chat is current; its Host is started by Host continuity on
+		// an agent that can run, and shows as coming up until then.
+		log.Printf("brain new chat: %v; the Host starts on another installed agent", err)
+		s.noteHostChosen()
 	}
 	return s.Snapshot()
 }
