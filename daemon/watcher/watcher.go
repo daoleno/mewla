@@ -2286,6 +2286,12 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		if providerProbe != nil && pendingErr == nil && (item.workerSnap.Hidden || hasPending || (hasTurn && turnErr == nil && !TurnImmutable(turn.Status))) {
 			provider = providerProbe.ObserveProviderActivity(item.workerSnap, item.now)
 			w.noteProviderObservation(item.workerSnap.Command, provider)
+		} else if providerProbe != nil && w.providerFamilyDown(item.workerSnap.Command) {
+			// While its family's provider refuses requests every Session of
+			// the family is read, for availability only: a Worker that reported
+			// done before its request finished has a settled Turn, and that
+			// request completing is the provider answering again.
+			w.noteProviderObservation(item.workerSnap.Command, providerProbe.ObserveProviderActivity(item.workerSnap, item.now))
 		}
 		if hasPending && providerFactRelevant(provider) {
 			for _, pending := range pendingList {
