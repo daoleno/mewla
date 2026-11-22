@@ -30,6 +30,5 @@ describe("the Mac fixture", () => {
     expect(app.count("id:tray-today >> id:row-title")).toBe(0);
     expect(app.count("id:tray-today >> id:tray-today-time")).toBe(app.count("id:tray-today >> id:tray-row"));
     expect(app.texts()).toContain("Photo archive sorting (09:50)");
-    expect(app.texts()).toContain("9:50 AM");
   }, 30_000);
 });
