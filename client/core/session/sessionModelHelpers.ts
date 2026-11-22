@@ -8,7 +8,7 @@ import type {
   ProvidersSnapshot,
   ThreadRuntimeChoice,
 } from "../providers/types";
-import { normalizeProviderClient, normalizeProviderId } from "../providers/types";
+import { isNativeModelClient, normalizeProviderClient, normalizeProviderId } from "../providers/types";
 
 export type ComposerModelControlPresentation = {
   label: string;
@@ -30,7 +30,7 @@ export type ProviderPickerModelRow = {
 };
 
 function modelEffectChoices(client: string, effects: string[]): string[] {
-  if (client !== "codex" && client !== "dsh") return [];
+  if (client !== "codex" && !isNativeModelClient(client)) return [];
   return ["", ...effects.filter((effect, index) =>
     effect.trim() !== "" && effects.indexOf(effect) === index
   )];

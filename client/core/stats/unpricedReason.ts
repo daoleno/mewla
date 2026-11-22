@@ -6,6 +6,7 @@ export function unpricedReasonLabel(reason: ModelStat["unpricedReason"]): string
     case "missing_rate": return "Some token rates unavailable";
     case "insufficient_context": return "Price found; request context unavailable";
     case "missing_usage": return "Usage details unavailable";
+    case "plan": return "Covered by your Google plan";
     default: return null;
   }
 }

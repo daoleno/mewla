@@ -419,7 +419,7 @@ export function PluginCopyCard(props: { copy: InstalledPluginCopy; selected?: bo
   );
 }
 
-const MANAGED = new Set(["codex", "claude-code", "cursor", "grok", "opencode", "pi"]);
+const MANAGED = new Set(["codex", "claude-code", "cursor", "grok", "opencode", "pi", "antigravity"]);
 export function isManaged(agent: string): agent is ManagedSkillAgent {
   return MANAGED.has(agent);
 }

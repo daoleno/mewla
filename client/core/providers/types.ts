@@ -164,6 +164,15 @@ export function normalizeProviderClient(
   return normalizeProviderId(value).toLowerCase();
 }
 
+/**
+ * An agent whose Session lists and switches its own models (DSH, Antigravity):
+ * its runtime carries the models, not the computer's Providers.
+ */
+export function isNativeModelClient(value: string | null | undefined): boolean {
+  const client = normalizeProviderClient(value);
+  return client === "dsh" || client === "antigravity";
+}
+
 export function isSupportedProviderClient(
   value: string | null | undefined,
 ): value is ProviderClient {

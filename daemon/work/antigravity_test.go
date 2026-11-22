@@ -53,9 +53,16 @@ func TestAntigravityWorkerLaunchIsUnattendedAndSelectsModelById(t *testing.T) {
 	if got != "agy --model gemini-4-neon-high --dangerously-skip-permissions" {
 		t.Fatalf("command = %q", got)
 	}
-	if _, err := cfg.ResolveWorkerCommand("agy", "", "gemini-4-neon-high", "high", true); err == nil ||
-		!strings.Contains(err.Error(), "no per-launch reasoning option") {
-		t.Fatalf("reasoning must be refused (the level is part of the model id), got %v", err)
+	if _, err := cfg.ResolveWorkerCommand("agy", "", "gemini-4-neon-high", "low", true); err == nil ||
+		!strings.Contains(err.Error(), "already names a thinking level; pass its family (gemini-4-neon)") {
+		t.Fatalf("an id with a level and another level contradict each other, got %v", err)
+	}
+	family, err := cfg.ResolveWorkerCommand("agy", "", "gemini-4-neon", "low", true)
+	if err != nil || family != "agy --model gemini-4-neon --effort low --dangerously-skip-permissions" {
+		t.Fatalf("family + thinking level = %q, %v", family, err)
+	}
+	if _, err := cfg.ResolveWorkerCommand("agy", "", "", "max", true); err == nil || !strings.Contains(err.Error(), "accepted: low, medium, high, xhigh") {
+		t.Fatalf("a level agy does not offer must be refused, got %v", err)
 	}
 	for _, command := range []string{
 		"agy -p hi", "agy --print hi", "agy --mode auto", "agy --mode=plan", "agy --sandbox", "agy -c",

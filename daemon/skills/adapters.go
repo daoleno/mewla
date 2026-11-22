@@ -66,9 +66,17 @@ var Adapters = map[Agent]Adapter{
 		Global:  func(home string, _ EnvResolver) string { return filepath.Join(home, ".pi", "agent", "skills") },
 		Project: func(cwd string) string { return filepath.Join(cwd, ".pi", "skills") },
 	},
+	// agy reads ~/.gemini/config/skills/<name>/SKILL.md and, in a project,
+	// .agents/skills (the paths agy 1.5.14 names for its own Skills); the
+	// project root is the shared one Codex also reads.
+	AgentAntigravity: {
+		Agent: AgentAntigravity, Name: "Antigravity",
+		Global:  func(home string, _ EnvResolver) string { return filepath.Join(home, ".gemini", "config", "skills") },
+		Project: func(cwd string) string { return filepath.Join(cwd, ".agents", "skills") },
+	},
 }
 
-var supportedAgents = []Agent{AgentCodex, AgentClaudeCode, AgentCursor, AgentGrok, AgentOpenCode, AgentPi}
+var supportedAgents = []Agent{AgentCodex, AgentClaudeCode, AgentCursor, AgentGrok, AgentOpenCode, AgentPi, AgentAntigravity}
 
 func globalSkillsDir(adapter Adapter, home string, env EnvResolver) string {
 	return filepath.Clean(adapter.Global(home, env))
@@ -131,6 +139,8 @@ func executorKindAgent(kind string) Agent {
 		return AgentOpenCode
 	case "pi":
 		return AgentPi
+	case "antigravity", "agy":
+		return AgentAntigravity
 	default:
 		return ""
 	}
@@ -155,6 +165,8 @@ func inferAgentFromToken(value string) Agent {
 			return AgentOpenCode
 		case base == "pi":
 			return AgentPi
+		case base == "agy":
+			return AgentAntigravity
 		}
 	}
 	return ""

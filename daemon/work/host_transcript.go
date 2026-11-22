@@ -161,6 +161,12 @@ func (r *ProviderConversationReader) LoadByIdentity(identity HostTranscriptIdent
 	case WorkerProviderOpenCode:
 		return r.loadBoundOpenCodeConversation(identity)
 	case WorkerProviderAntigravity:
+		if strings.HasSuffix(identity.Path, ".jsonl") {
+			// The log of Mewla's own Session program.
+			return r.loadBoundFileConversation(identity, antigravitySessionSource, func(path string) (CodexConversation, error) {
+				return r.loadFileConversation(WorkerProviderAntigravity, path, ParseAntigravitySessionLog)
+			})
+		}
 		id := firstNonEmpty(identity.SessionID, strings.TrimSuffix(filepath.Base(identity.Path), ".db"))
 		return r.loadAntigravityConversationByID(id)
 	default:

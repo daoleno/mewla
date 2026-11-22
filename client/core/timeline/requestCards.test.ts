@@ -45,6 +45,15 @@ describe("request cards", () => {
     expect(requestCardsOf(input, { workerId: "d" }).map((c) => c.key)).toEqual(["approval:d:a1"]);
   });
 
+  test("an agent's own question (agy's) is a Needs you card, answered as a choice", () => {
+    const input = cardsInput({
+      workers: [worker("agy", { approvals: [{ id: "q-1", kind: "question", tool: "ask_question", summary: "Which fruit?", options: [{ id: "1", label: "Apple" }, { id: "2", label: "Pear" }] }] })],
+    });
+    const [card] = requestCardsOf(input, { workerId: "agy" });
+    expect(card).toMatchObject({ label: "Needs you", body: { kind: "action", workerId: "agy" } });
+    expect(sealAction(card!, "Pear", false)).toEqual({ verb: "You chose", answer: "Pear" });
+  });
+
   test("a terminal question, filled from the Session's transcript; without it, the terminal answers", () => {
     const prompt = { id: "q", kind: "choice" as const, provider: "claude", title: "", call_id: "t1", questions: [{ question: "Which branch?", options: [] }] };
     const bare = requestCardsOf(cardsInput({ workers: [worker("s", { prompt })] }), { workerId: "s" });

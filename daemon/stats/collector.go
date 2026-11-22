@@ -25,7 +25,7 @@ import (
 )
 
 // Collector scans local Claude Code, Codex CLI, Grok, Cursor Agent, OpenCode,
-// and Pi data files and builds aggregated stats. All reads are read-only —
+// Pi and Antigravity data files and builds aggregated stats. All reads are read-only —
 // it never modifies source files.
 type Collector struct {
 	usageCacheDir         string
@@ -422,6 +422,7 @@ func (c *Collector) refresh() {
 	mergeDateAgg(workerByDate, c.collectCursorAgentStats(home))
 	mergeDateAgg(workerByDate, c.collectOpenCodeStats())
 	mergeDateAgg(workerByDate, c.collectPiStats(home))
+	mergeDateAgg(workerByDate, c.collectAntigravityStats(home))
 
 	// Collect Codex CLI data.
 	codexDaily, codexModelsByDate, codexProjectsByDate := c.collectCodexStats(home)
@@ -1906,6 +1907,9 @@ func buildModelStats(modelAgg map[string]modelAggEntry) []ModelStat {
 		unpricedReason := ""
 		if !costKnown {
 			switch p, exists := currentProviderPricing(provider, rawModelID); {
+			case provider == antigravityStatsProvider:
+				// agy runs on the person's Google plan, not a per-token tariff.
+				unpricedReason = "plan"
 			case known:
 				unpricedReason = "missing_usage"
 			case !exists:

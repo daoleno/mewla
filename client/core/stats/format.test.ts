@@ -94,6 +94,7 @@ describe("Stats numbers", () => {
       "List price",
       "rate limit",
     ]);
+    expect(modelNotes(model({ unpricedReason: "plan", provider: "antigravity" }))).toEqual(["Covered by your Google plan"]);
   });
 
   test("a day's detail and the empty range's title", () => {

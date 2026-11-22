@@ -33,7 +33,7 @@ func helpRequested(args []string) bool {
 		// Everything after the command is the vendor CLI's, except
 		// mewla's own --help right after it.
 		return len(args) == 1 || args[1] == "--help"
-	case "sh", "dsh-session", "agent-event":
+	case "sh", "dsh-session", "agy-session", "agent-event":
 		// Internal commands whose arguments are scripts and payloads.
 		return false
 	}

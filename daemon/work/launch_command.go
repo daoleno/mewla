@@ -26,10 +26,11 @@ var launchModelFlagsByProvider = map[string]launchModelFlags{
 	WorkerProviderPi:     {model: []string{"--model"}, reasoning: []string{"--thinking"}, levels: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}},
 	WorkerProviderGrok:   {model: []string{"--model", "-m"}},
 	WorkerProviderCursor: {model: []string{"--model"}},
-	// agy --model takes a model id from `agy models` (gemini-4-neon-high); the
-	// thinking level is part of that id, so Brain passes no separate reasoning
-	// even though --effort exists: the two would contradict each other.
-	WorkerProviderAntigravity: {model: []string{"--model"}},
+	// agy --model takes a model id from `agy models` (gemini-4-neon-high) or
+	// its family (gemini-4-neon); --effort is the thinking level, the levels
+	// agy's ACP server offers (thought_level). An id that already names a level
+	// takes no -reasoning (withLaunchModel).
+	WorkerProviderAntigravity: {model: []string{"--model"}, reasoning: []string{"--effort"}, levels: []string{"low", "medium", "high", "xhigh"}},
 }
 
 // ResolveWorkerCommand resolves one launch command from the catalog or an
@@ -127,6 +128,13 @@ func withLaunchModel(provider, command, model, reasoning string) (string, error)
 	if provider == WorkerProviderPi && reasoning != "" {
 		if _, level, found := strings.Cut(model, ":"); found && slices.Contains(flags.levels, level) {
 			return "", fmt.Errorf("pi model %q already carries a thinking level; pass the level only with -reasoning", model)
+		}
+	}
+	if provider == WorkerProviderAntigravity && reasoning != "" {
+		for _, level := range flags.levels {
+			if strings.HasSuffix(model, "-"+level) {
+				return "", fmt.Errorf("agy model %q already names a thinking level; pass its family (%s) with -reasoning, or omit -reasoning", model, strings.TrimSuffix(model, "-"+level))
+			}
 		}
 	}
 	fields, ok := shellquote.Fields(command)

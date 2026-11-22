@@ -212,7 +212,7 @@ func (collector *inventoryCollector) scanAllRoots() {
 			label: adapter.Name + " global Skills", scope: ScopeGlobal,
 			agents: []Agent{agent}, deletable: true,
 		})
-		if collector.options.CWD != "" && agent != AgentCodex {
+		if collector.options.CWD != "" && agent != AgentCodex && agent != AgentAntigravity {
 			collector.scanRoot(inventoryRoot{
 				path:  projectSkillsDir(adapter, collector.options.CWD),
 				label: adapter.Name + " project Skills", scope: ScopeProject,
@@ -232,7 +232,7 @@ func (collector *inventoryCollector) scanAllRoots() {
 		for _, root := range sharedProjectSkillRoots(collector.options.CWD, collector.options.Home) {
 			collector.scanRoot(inventoryRoot{
 				path: root, label: "Shared project Skills", scope: ScopeProject,
-				agents: []Agent{AgentCodex, AgentPi}, deletable: true,
+				agents: []Agent{AgentCodex, AgentPi, AgentAntigravity}, deletable: true,
 			})
 			if collector.stopped {
 				return
