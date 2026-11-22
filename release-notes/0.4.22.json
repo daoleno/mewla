@@ -1,0 +1,15 @@
+{
+  "version": "0.4.22",
+  "date": "2026-11-22",
+  "highlights": [
+    {
+      "id": "0.4.22-mewla-for-mac",
+      "title": "Mewla for Mac",
+      "line": "Brain and your Sessions in a Mac window, with the cat in the menu bar.",
+      "media": {"scene": "mac-app"},
+      "try": {"kind": "open", "target": "brain"},
+      "platforms": ["macos"]
+    }
+  ],
+  "fixes": []
+}

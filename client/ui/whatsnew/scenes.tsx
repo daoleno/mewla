@@ -755,6 +755,43 @@ function CalendarDay() {
           </View>
         </View>
         <DayRow time="11:30" title="Plan the launch" line="Reminder" end="next" style={next} />
+/** Mewla for Mac: the cat in the menu bar, a click, and the window with what runs on the left and Brain on the right. */
+function MacApp() {
+  const window = loop(appear(0.3, 12));
+  const reply = loop(appear(0.5, 4));
+  return (
+    <View class="relative h-[150px] w-[256px] gap-2 overflow-hidden">
+      <View class="h-[20px] flex-row items-center gap-2 rounded-[8px] bg-card px-2.5">
+        <Line width={28} strong />
+        <Line width={22} />
+        <Line width={22} />
+        <View class="flex-1" />
+        <View class="relative size-[16px] items-center justify-center">
+          <Icon name="brain" size={13} tone="ink" />
+          <Press at={0.16} style={{ left: -5, top: -5 }} />
+        </View>
+        <Line width={18} />
+      </View>
+      <Card class="flex-1 flex-row overflow-hidden border border-border" style={window}>
+        <View class="w-[86px] gap-1.5 border-r border-border px-2 py-2">
+          <View class="flex-row gap-1">
+            <View class="size-[6px] rounded-full bg-seal" />
+            <View class="size-[6px] rounded-full bg-track" />
+            <View class="size-[6px] rounded-full bg-track" />
+          </View>
+          <View class="flex-row items-center gap-1.5"><Dot tone="seal" /><Line width={52} strong /></View>
+          <View class="flex-row items-center gap-1.5"><Dot tone="ok" /><Line width={48} /></View>
+          <View class="flex-row items-center gap-1.5"><Dot tone="ok" /><Line width={40} /></View>
+          <View class="flex-row items-center gap-1.5"><Dot /><Line width={44} /></View>
+        </View>
+        <View class="flex-1 gap-2 p-2.5">
+          <Text class="text-[11px] font-semibold text-foreground">Brain</Text>
+          <View class="self-end rounded-[12px] bg-accent px-2.5 py-1"><Text class="text-[11px] text-foreground">Ship it tonight?</Text></View>
+          <View class="gap-1.5" style={reply}>
+            <Line width={120} />
+            <Line width={96} />
+          </View>
+        </View>
       </Card>
     </View>
   );
@@ -832,6 +869,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "work-closes": WorkCloses,
   "calendar-day": CalendarDay,
   "triggers-page": TriggersPage,
+  "mac-app": MacApp,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */
