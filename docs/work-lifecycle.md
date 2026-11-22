@@ -335,7 +335,9 @@ Brain gets one Work Event in plain words. A relaunch is a non-actionable
 again in the same conversation and asked it to continue the task."). An agent
 not started again opens the usual `turn_lost` review once, worded with the
 cause and the reason ("Claude Code exited with code 1; not started again: it
-was started again 3 times in the last 30 minutes and ended each time.").
+was started again 3 times in the last 30 minutes and ended each time."). When
+Brain still has an earlier review of the Work (the result the Worker reported
+before it died), the loss opens as soon as that review has left Brain.
 
 The Session carries `relaunch` (`state`: `restarting`, `restarted` or
 `not_restarted`, and a short `line`). The app shows the line on the Session's
