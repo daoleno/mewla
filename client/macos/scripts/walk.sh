@@ -197,9 +197,15 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then
 fi
 sleep 2
 swiftc "$here/check-pair-window.swift" -o "$RUNNER_TEMP/check-pair-window" || exit 1
-# Stop before any other screen capture if the private phone proof fails while a code is visible.
-bun "$here/lan-phone-walk.ts" "$RUNNER_TEMP/check-pair-window" "$out" >> "$log" 2>&1 || { say "FAILED: trusted LAN phone walk"; exit 1; }
-say "ok: consent, exact displayed QR, phone WebSocket after dismissal, restart and LAN off"
+if bun "$here/lan-phone-walk.ts" "$RUNNER_TEMP/check-pair-window" "$out" >> "$log" 2>&1; then
+  say "ok: consent, exact displayed QR, phone WebSocket after dismissal, restart and LAN off"
+else
+  say "FAILED: trusted LAN phone walk"
+  grep -E '^error: QR rejected: url=(true|false), bytes=[0-9]+, declaredAddressBytes=-?[0-9]+, version=([0-9]+|undefined), matchesClipboard=(true|false), clipboardParses=(true|false)$' "$log" || true
+  failed+=("trusted LAN phone walk")
+  # Close the QR window before resuming any public screenshots.
+  quit_app || exit 1
+fi
 
 # 6. Quit Mewla, then open it again: no question this time, the daemon kept running, the window back.
 check "Quit closes the app" quit_app
