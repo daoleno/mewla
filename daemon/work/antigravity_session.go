@@ -188,7 +188,8 @@ type antigravitySessionState struct {
 type AntigravityLogRecord struct {
 	// T: session (agy started on a conversation), user (a message sent to
 	// agy), update (an ACP session/update), turn_end, ask (agy waits on an
-	// answer), answer, agent_exit (agy stopped), note (the program's own words).
+	// answer), answer, agent_exit (agy stopped), note (the program's own words),
+	// agent_turn (agy went on by itself after a turn, starting one of its own).
 	T            string          `json:"t"`
 	At           string          `json:"at"`
 	Conversation string          `json:"conversation,omitempty"`
@@ -615,10 +616,14 @@ type antigravitySession struct {
 	view  *antigravityView
 	link  *antigravityLink
 
-	mu        sync.Mutex
-	agent     *acpClient
-	running   bool
-	turn      string
+	mu      sync.Mutex
+	agent   *acpClient
+	running bool
+	turn    string
+	// agentTurn marks a turn agy started by itself (agentStep); quiet
+	// settles it once agy has gone quiet after reporting the step's usage.
+	agentTurn bool
+	quiet     *time.Timer
 	queue     []antigravityQueued
 	asks      map[string]*antigravityPending
 	models    antigravityModels
@@ -804,6 +809,7 @@ func (s *antigravitySession) agentGone(agent *acpClient, reason string) {
 	}
 	turn, running := s.turn, s.running
 	s.running = false
+	s.endAgentTurnLocked()
 	asks := s.asks
 	s.asks = map[string]*antigravityPending{}
 	s.mu.Unlock()
@@ -1082,6 +1088,14 @@ func (s *antigravitySession) submit(id, text string) error {
 // drain sends the next queued message while agy has no turn running.
 func (s *antigravitySession) drain() {
 	s.mu.Lock()
+	if s.running && s.agentTurn && s.agent != nil && len(s.queue) > 0 {
+		// A message ends the turn agy started by itself: what agy said in it
+		// is in the log, and the message is a turn of its own.
+		turn := s.turn
+		s.mu.Unlock()
+		s.finishTurn(turn, "end_turn", nil, "")
+		return
+	}
 	if s.running || s.agent == nil || len(s.queue) == 0 {
 		s.mu.Unlock()
 		return
@@ -1134,6 +1148,7 @@ func (s *antigravitySession) finishTurn(turn, stop string, usage json.RawMessage
 		return
 	}
 	s.running = false
+	s.endAgentTurnLocked()
 	// A permission request does not outlive its turn.
 	var withdrawn []string
 	for key, pending := range s.asks {
@@ -1163,12 +1178,77 @@ func (s *antigravitySession) finishTurn(turn, stop string, usage json.RawMessage
 func (s *antigravitySession) cancel() bool {
 	s.mu.Lock()
 	agent, running, conversation := s.agent, s.running, s.state.Conversation
+	agentTurn, turn := s.agentTurn, s.turn
 	s.mu.Unlock()
 	if agent == nil || !running {
 		return false
 	}
 	_ = agent.Notify("session/cancel", map[string]any{"sessionId": conversation})
+	if agentTurn {
+		// No prompt answers for a turn agy started; it ends here.
+		s.finishTurn(turn, "cancelled", nil, "")
+	}
 	return true
+}
+
+// antigravityAgentTurnQuiet is how long agy stays quiet after reporting a
+// step's usage before a turn it started by itself counts as settled.
+var antigravityAgentTurnQuiet = 2 * time.Second
+
+// agentStep follows agy working by itself, outside any prompt: a command it
+// left running in the background finishes and agy goes on to answer
+// (measured on agy 1.5.14: the tool's completion, then thoughts and text, then
+// a usage_update, all after the prompt's end_turn). Such work is a turn of its
+// own, reported like any other so Chat, the Session line and a Worker's
+// result follow it; it settles once agy has reported the step's usage and
+// stays quiet. A late tool completion alone belongs to the earlier turn.
+func (s *antigravitySession) agentStep(update antigravityACPUpdate) {
+	s.mu.Lock()
+	if s.agent == nil {
+		s.mu.Unlock()
+		return
+	}
+	if s.agentTurn && s.quiet != nil {
+		s.quiet.Stop()
+		s.quiet = nil
+	}
+	if update.Kind == "usage_update" {
+		if s.agentTurn {
+			turn := s.turn
+			s.quiet = time.AfterFunc(antigravityAgentTurnQuiet, func() { s.finishTurn(turn, "end_turn", nil, "") })
+		}
+		s.mu.Unlock()
+		return
+	}
+	switch update.Kind {
+	case "agent_message_chunk", "agent_thought_chunk", "tool_call", "plan":
+	default:
+		s.mu.Unlock()
+		return
+	}
+	if s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running, s.agentTurn = true, true
+	s.state.Turns++
+	s.turn = fmt.Sprintf("%s:%d", s.state.Conversation, s.state.Turns)
+	turn := s.turn
+	s.mu.Unlock()
+	_ = saveAntigravitySessionState(antigravitySessionStatePath(s.opts.StateDir, s.opts.ID), s.snapshotState())
+	s.log.write(AntigravityLogRecord{T: "agent_turn", Turn: turn})
+	s.link.send(map[string]any{"t": "turn_start", "turn": turn})
+	s.view.status("working")
+}
+
+// endAgentTurnLocked clears an agent-started turn's bookkeeping; the caller
+// holds s.mu.
+func (s *antigravitySession) endAgentTurnLocked() {
+	s.agentTurn = false
+	if s.quiet != nil {
+		s.quiet.Stop()
+		s.quiet = nil
+	}
 }
 
 func (s *antigravitySession) onNotify(method string, params json.RawMessage) {
@@ -1185,6 +1265,12 @@ func (s *antigravitySession) onNotify(method string, params json.RawMessage) {
 	var update antigravityACPUpdate
 	if json.Unmarshal(envelope.Update, &update) != nil {
 		return
+	}
+	s.log.mu.Lock()
+	replaying := s.log.replayed
+	s.log.mu.Unlock()
+	if !replaying {
+		s.agentStep(update)
 	}
 	s.mu.Lock()
 	turn := s.turn
@@ -1212,9 +1298,6 @@ func (s *antigravitySession) onNotify(method string, params json.RawMessage) {
 	}
 	s.log.write(AntigravityLogRecord{T: "update", Turn: turn, Update: envelope.Update})
 	s.view.update(update)
-	s.log.mu.Lock()
-	replaying := s.log.replayed
-	s.log.mu.Unlock()
 	if replaying {
 		return
 	}
@@ -1464,7 +1547,7 @@ func antigravityLoggedTurns(path string) int {
 	}
 	turns := 0
 	for _, record := range records {
-		if record.T == "user" {
+		if record.T == "user" || record.T == "agent_turn" {
 			turns++
 		}
 	}

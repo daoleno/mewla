@@ -120,6 +120,19 @@ func fakeAgyACP() {
 				switch {
 				case strings.Contains(text, "crash"):
 					os.Exit(3)
+				case strings.Contains(text, "background"):
+					// agy 1.5.14 with a command left running: the turn ends,
+					// then the command finishes and agy answers by itself.
+					update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "call_bg", "name": "run_command", "title": "sleep 1; echo bg", "kind": "execute", "status": "in_progress"})
+					update(map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]string{"type": "text", "text": "Running it in the background."}})
+					send(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"stopReason": "end_turn", "usage": map[string]int{"inputTokens": 10, "outputTokens": 2, "totalTokens": 12}}})
+					time.Sleep(150 * time.Millisecond)
+					update(map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "call_bg", "status": "completed", "rawOutput": map[string]string{"output": "bg"}})
+					time.Sleep(50 * time.Millisecond)
+					update(map[string]any{"sessionUpdate": "agent_thought_chunk", "content": map[string]string{"type": "text", "text": "It finished."}})
+					update(map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]string{"type": "text", "text": "bg-done"}})
+					update(map[string]any{"sessionUpdate": "usage_update", "used": 9442, "size": 1048576})
+					return
 				case strings.Contains(text, "permission"):
 					update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "call_1", "name": "run_command", "title": "echo hi", "kind": "execute", "status": "pending"})
 					answer := make(chan string, 1)
@@ -491,5 +504,58 @@ func TestAntigravityModelsSetFullReadsFamilyAndLevel(t *testing.T) {
 	models.setFull("claude-opus-5-5")
 	if models.Current != "claude-opus-5-5" || models.ModelBase != "gemini-4-argon" || models.Effort != "low" {
 		t.Fatalf("an id with no family keeps the rest: %+v", models)
+	}
+}
+
+func TestAntigravitySessionReportsWorkAgyStartsByItself(t *testing.T) {
+	previous := antigravityAgentTurnQuiet
+	antigravityAgentTurnQuiet = 200 * time.Millisecond
+	t.Cleanup(func() { antigravityAgentTurnQuiet = previous })
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", filepath.Join(dir, "agy-calls"))
+	socket := filepath.Join(dir, "events.sock")
+	daemon := newFakeDaemon(t, socket)
+	in, typed := io.Pipe()
+	defer typed.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		_ = RunAntigravitySession(ctx, AntigravitySessionOptions{
+			ID: "agy-0b6a3c1e-0000-4000-8000-00000000bbbb", Cwd: dir, StateDir: stateDir, Binary: os.Args[0], Socket: socket,
+			In: in, Out: io.Discard,
+		})
+	}()
+	// The Session is done writing its files before the folder goes.
+	t.Cleanup(func() { cancel(); typed.Close(); <-finished })
+	daemon.awaitHello()
+	daemon.send(map[string]string{"t": "send", "id": "r1", "text": "run it in the background"})
+	if end := daemon.await("turn_end"); end.Turn != fakeAgyConversation+":1" || end.Stop != "end_turn" {
+		t.Fatalf("the prompt's turn_end = %+v", end)
+	}
+	// What agy does after the command finishes is a turn of its own.
+	if start := daemon.await("turn_start"); start.Turn != fakeAgyConversation+":2" {
+		t.Fatalf("agy's own turn = %+v", start)
+	}
+	if end := daemon.await("turn_end"); end.Turn != fakeAgyConversation+":2" || end.Stop != "end_turn" {
+		t.Fatalf("agy's own turn_end = %+v", end)
+	}
+	conversation, err := ParseAntigravitySessionLog(AntigravitySessionLogPath(stateDir, fakeAgyConversation))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conversation.Activity == nil || conversation.Activity.ID != fakeAgyConversation+":2" || conversation.Activity.Status != ProviderActivityCompleted {
+		t.Fatalf("activity = %+v", conversation.Activity)
+	}
+	last := conversation.Events[len(conversation.Events)-1]
+	if last.Kind != "assistant_message" || !strings.Contains(last.Body, "bg-done") || last.Partial {
+		t.Fatalf("last event = %+v", last)
+	}
+	// A later message is the next turn.
+	daemon.send(map[string]string{"t": "send", "id": "r2", "text": "hello"})
+	if input := daemon.await("input"); input.Turn != fakeAgyConversation+":3" {
+		t.Fatalf("next input = %+v", input)
 	}
 }
