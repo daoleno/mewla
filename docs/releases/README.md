@@ -3,7 +3,8 @@
 Each release ships daemon archives for Linux `amd64`, Linux `arm64`, Apple
 Silicon macOS and Windows x64, a signed Android `arm64` APK, `SHA256SUMS` and a signed update
 manifest. Run `mewla update` to move to the newest one; see
-[Install](../install-daemon.md#update).
+[Install](../install-daemon.md#update). From 0.4.23, each stable release also carries
+[Mewla for Mac](../mac-app.md), signed and notarized, which updates itself from the app.
 
 Stable tags look like `v0.1.15`; beta tags look like `v0.1.0-beta.22`. The
 installer and `mewla update` pick the highest version.

@@ -13,6 +13,11 @@
           "title": "Get started"
         },
         {
+          "source": "docs/mac-app.md",
+          "slug": "mac-app",
+          "title": "Mewla for Mac"
+        },
+        {
           "source": "docs/install-daemon.md",
           "slug": "install",
           "title": "Install and update"

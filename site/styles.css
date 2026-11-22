@@ -131,6 +131,12 @@ picture img{width:100%;height:auto}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .desk{background:linear-gradient(160deg,#3B302C,#252B3A 55%,#1F2E2A)}}
 :root[data-theme="dark"] .desk{background:linear-gradient(160deg,#3B302C,#252B3A 55%,#1F2E2A)}
 
+/* the Mac window, on the same desk the widgets sit on */
+.mac-desk{padding:16px;border-radius:28px;background:linear-gradient(160deg,#E9D8C9,#C9D3E6 55%,#B9C9C2)}
+.mac-desk img{display:block;width:100%;max-width:720px;height:auto;margin:auto;filter:drop-shadow(0 12px 28px rgba(19,20,22,.24))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .mac-desk{background:linear-gradient(160deg,#3B302C,#252B3A 55%,#1F2E2A)}}
+:root[data-theme="dark"] .mac-desk{background:linear-gradient(160deg,#3B302C,#252B3A 55%,#1F2E2A)}
+
 .wide-shots{position:relative}
 .browser{border-radius:18px;overflow:hidden;background:var(--canvas);box-shadow:var(--float)}
 .chrome{display:flex;gap:7px;height:30px;align-items:center;padding:0 14px;background:var(--canvas)}
@@ -161,6 +167,7 @@ picture img{width:100%;height:auto}
 .cmd-card code.more{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%);mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 36px),transparent 100%)}
 .copy{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:12px;color:var(--soft);flex:none}
 .copy.ok{color:var(--add)}
+.step-text{font-size:15px;line-height:22px;color:var(--ink)}
 .small{margin-top:10px;font-size:13px;line-height:18px;color:var(--soft)}
 .mini-term{margin:10px 0 0;border-radius:20px;background:var(--surface);overflow:hidden;color:var(--ink);font-family:var(--mono);font-size:11.5px;line-height:17px;padding:14px 12px;white-space:normal;word-wrap:break-word;overflow-wrap:break-word}
 .mini-term .ln{display:block}
@@ -194,6 +201,7 @@ picture img{width:100%;height:auto}
   .desk .w-needs{grid-column:1/3}
   .desk .w-small{grid-column:3;grid-row:1}
   .chrome{height:36px}
+  .mac-desk{padding:48px;border-radius:32px}
   .fold{position:absolute;right:-8px;bottom:-40px;width:46%;margin:0}
   .wide-shots{margin-right:8px;margin-bottom:40px}
 }
