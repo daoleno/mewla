@@ -92,7 +92,7 @@ describe("agent extensions summaries", () => {
       ["shared", 0, 2],
     ]);
     expect(rows.at(-1)!.agents).toEqual(["codex", "pi"]);
-    expect(empty).toEqual(["cursor", "grok", "opencode"]);
+    expect(empty).toEqual(["cursor", "grok", "opencode", "antigravity"]);
   });
 
   test("labels read as counts, and tool lists read as prose", () => {
