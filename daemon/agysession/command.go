@@ -99,6 +99,9 @@ func Screen(lines []string) (ready, blocked bool, summary string) {
 			if strings.HasPrefix(line, "Allow ") && strings.HasSuffix(line, "?") {
 				return true, true, line
 			}
+			if strings.HasPrefix(line, "Asked: ") {
+				return true, true, strings.TrimPrefix(line, "Asked: ")
+			}
 		}
 	}
 	ready = last == "›" || strings.HasPrefix(last, "› ")

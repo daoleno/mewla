@@ -224,12 +224,18 @@ func (v *antigravityView) ask(ask AntigravityAsk) {
 	copied := ask
 	v.asking = &copied
 	lines := v.flushText()
-	lines = append(lines, "", viewBold+"Allow "+oneLine(ask.Summary, 200)+"?"+viewReset)
+	kind := "permission"
+	if ask.Kind == "question" {
+		kind = "question"
+		lines = append(lines, "", viewBold+"Asked: "+oneLine(ask.Summary, 200)+viewReset)
+	} else {
+		lines = append(lines, "", viewBold+"Allow "+oneLine(ask.Summary, 200)+"?"+viewReset)
+	}
 	for index, option := range ask.Options {
 		lines = append(lines, fmt.Sprintf("  %d. %s", index+1, option.Label))
 	}
 	v.emit(lines...)
-	v.statusLocked("blocked", "permission")
+	v.statusLocked("blocked", kind)
 }
 
 func (v *antigravityView) answered() {
@@ -350,7 +356,7 @@ func (v *antigravityView) runInput(ctx context.Context, in io.Reader, s *antigra
 			asking := v.asking
 			empty := len(v.draft) == 0
 			v.mu.Unlock()
-			if asking != nil && empty && asking.Kind == "permission" {
+			if asking != nil && empty {
 				index := int(value - '1')
 				if index < len(asking.Options) {
 					if err := s.answer(asking.ID, asking.Options[index].ID, "terminal"); err != nil {

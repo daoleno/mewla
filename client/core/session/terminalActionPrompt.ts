@@ -36,6 +36,16 @@ const NEGATIVE_OPTION_RE = /^(?:no|deny|reject|cancel)\b/i;
  * what can be answered, so nothing is read off the screen.
  */
 export function buildApprovalPrompt(approval: WorkerApproval, scopeKey?: string): TerminalActionPrompt {
+  if (approval.kind === "question") {
+    // A question the agent asked (Antigravity's): the question is the card's
+    // title and each option is an answer; none of them allows or refuses.
+    return scopePrompt({
+      id: `approval:${approval.id}`,
+      title: approval.summary?.trim() || "Question",
+      options: approval.options.map((option) => ({ id: option.id, label: option.label, approvalOptionId: option.id })),
+      approvalId: approval.id,
+    }, scopeKey);
+  }
   const options: TerminalActionPromptOption[] = approval.options.map((option) => ({
     id: option.id,
     label: option.label,

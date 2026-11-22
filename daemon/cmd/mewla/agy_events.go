@@ -53,7 +53,12 @@ type agyConn struct {
 	replies map[string]chan work.AntigravityLinkMessage
 	// asking holds the decisions this Session waits on, by id, with the
 	// cancel of the wait on a person or Brain.
-	asking       map[string]context.CancelFunc
+	asking map[string]context.CancelFunc
+	// questions are the questions agy asked with its ask_question tool. agy
+	// ends its turn while one waits (the answer is the next message), and the
+	// hub settles a decision whenever the agent moves, so these are stated
+	// again after every event that would settle them.
+	questions    map[string]agentevents.Approval
 	conversation string
 }
 
@@ -139,7 +144,7 @@ func (a *agyEvents) serve(conn net.Conn) {
 				if workerID == "" {
 					return
 				}
-				c = &agyConn{owner: a, conn: conn, workerID: workerID, session: msg.Session, acks: map[string]chan error{}, replies: map[string]chan work.AntigravityLinkMessage{}, asking: map[string]context.CancelFunc{}}
+				c = &agyConn{owner: a, conn: conn, workerID: workerID, session: msg.Session, acks: map[string]chan error{}, replies: map[string]chan work.AntigravityLinkMessage{}, asking: map[string]context.CancelFunc{}, questions: map[string]agentevents.Approval{}}
 				a.attach(c)
 			}
 			c.conversation = msg.Conversation
@@ -174,8 +179,12 @@ func (a *agyEvents) serve(conn net.Conn) {
 		case "bye":
 			a.hub.Publish(agentevents.Event{WorkerID: c.workerID, Kind: agentevents.KindExit, At: at})
 		default:
-			for _, e := range agyEventsOf(c.workerID, msg, at) {
+			events := agyEventsOf(c.workerID, msg, at)
+			for _, e := range events {
 				a.hub.Publish(e)
+			}
+			if len(events) > 0 {
+				c.restateQuestions(at)
 			}
 		}
 	}
@@ -337,10 +346,16 @@ func (c *agyConn) ask(ask work.AntigravityAsk) {
 	for _, option := range ask.Options {
 		approval.Options = append(approval.Options, agentevents.ApprovalOption{ID: option.ID, Label: option.Label, Scope: option.Scope})
 	}
+	if ask.Kind == "question" {
+		c.mu.Lock()
+		c.questions[ask.ID] = approval
+		c.mu.Unlock()
+	}
 	go func() {
 		defer func() {
 			c.mu.Lock()
 			delete(c.asking, ask.ID)
+			delete(c.questions, ask.ID)
 			c.mu.Unlock()
 			cancel()
 		}()
@@ -362,6 +377,28 @@ func agyDenyOption(ask work.AntigravityAsk) string {
 		}
 	}
 	return "deny"
+}
+
+// restateQuestions puts the questions agy still waits on back on the hub
+// after an event that settled them there (see questions).
+func (c *agyConn) restateQuestions(at time.Time) {
+	c.mu.Lock()
+	var pending []agentevents.Approval
+	for _, approval := range c.questions {
+		pending = append(pending, approval)
+	}
+	c.mu.Unlock()
+	state, _ := c.owner.hub.State(c.workerID)
+	for _, approval := range pending {
+		listed := false
+		for _, have := range state.Approvals {
+			listed = listed || have.ID == approval.ID
+		}
+		if !listed {
+			copied := approval
+			c.owner.hub.Publish(agentevents.Event{WorkerID: c.workerID, Kind: agentevents.KindApprovalRequest, At: at, Approval: &copied})
+		}
+	}
 }
 
 // resolved is a decision the Session settled itself (answered in its
