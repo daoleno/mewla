@@ -272,6 +272,7 @@ func projectAntigravityUpdates(id, cwd, path string, updates []antigravityACPUpd
 		chunkKind string
 		chunkAt   = -1
 		tools     = map[string]int{}
+		questions = map[string]bool{}
 		users     int
 	)
 	at := ""
@@ -320,13 +321,21 @@ func projectAntigravityUpdates(id, cwd, path string, updates []antigravityACPUpd
 			if callID == "" {
 				continue
 			}
+			// agy's question is a request card in Chat (asked, then "You
+			// chose …"), as Claude's is; its tool call is not a row.
+			if update.Name == "ask_question" {
+				questions[callID] = true
+			}
+			if questions[callID] {
+				continue
+			}
 			index, known := tools[callID]
 			if !known {
 				index = appendEvent(CodexConversationEvent{ID: id + ":tool:" + callID, Kind: "tool_call", CallID: callID})
 				tools[callID] = index
 			}
 			event := &conversation.Events[index]
-			event.ToolName = firstNonEmpty(update.Name, event.ToolName)
+			event.ToolName = firstNonEmpty(antigravitySharedToolName(update.Name, update.ToolKind), event.ToolName)
 			event.Title = firstNonEmpty(update.Title, event.Title)
 			if input := firstNonEmptyRaw(update.Args, update.RawInput); input != "" {
 				event.Input = input
@@ -926,4 +935,23 @@ func ApplyAntigravityProgress(conversation *CodexConversation, state string, at 
 func parseAntigravityActivityTime(value string) time.Time {
 	parsed, _ := time.Parse(time.RFC3339Nano, value)
 	return parsed
+}
+
+// antigravitySharedToolName names an agy tool the way Chat names the same
+// action of every agent: agy's run_command is a command like Codex's
+// exec_command, its file writes are edits. Tools Chat already knows by agy's
+// own name (read_file) and any other keep it.
+func antigravitySharedToolName(name, kind string) string {
+	switch strings.TrimSpace(name) {
+	case "":
+		return ""
+	case "run_command":
+		return "exec_command"
+	case "write_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "edit_file":
+		return "write"
+	}
+	if strings.EqualFold(kind, "execute") {
+		return "exec_command"
+	}
+	return name
 }

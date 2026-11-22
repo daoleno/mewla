@@ -64,11 +64,12 @@ func TestProjectAntigravityConversation(t *testing.T) {
 		t.Fatalf("chunks were not merged: %q / %q", conversation.Events[1].Body, conversation.Events[4].Body)
 	}
 	write := conversation.Events[2]
-	if write.ToolName != "write_file" || write.Status != "completed" || write.Command != "" || len(write.Files) != 1 || write.Partial {
+	// agy's tools carry the names Chat gives every agent's same action.
+	if write.ToolName != "write" || write.Status != "completed" || write.Command != "" || len(write.Files) != 1 || write.Partial {
 		t.Fatalf("edit tool = %+v", write)
 	}
 	run := conversation.Events[3]
-	if run.Command != "false" || run.Status != "failed" || run.ExitCode == nil || *run.ExitCode != 1 {
+	if run.ToolName != "exec_command" || run.Command != "false" || run.Status != "failed" || run.ExitCode == nil || *run.ExitCode != 1 {
 		t.Fatalf("command tool = %+v", run)
 	}
 	for index, event := range conversation.Events {

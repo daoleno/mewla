@@ -569,3 +569,33 @@ func TestAntigravitySessionReportsWorkAgyStartsByItself(t *testing.T) {
 		t.Fatalf("next input = %+v", input)
 	}
 }
+
+func TestAntigravitySessionLogShowsAQuestionAnsweredInTheAppOnce(t *testing.T) {
+	records := []AntigravityLogRecord{
+		{T: "session", At: "2026-11-22T06:07:00Z", Conversation: "c"},
+		{T: "user", At: "2026-11-22T06:07:22Z", Turn: "c:1", Text: "Ask me which fruit."},
+		{T: "update", At: "2026-11-22T06:07:30Z", Turn: "c:1", Update: json.RawMessage(`{"sessionUpdate":"tool_call","toolCallId":"q1","name":"ask_question","title":"Run ask_question","status":"pending","args":{"questions":[{"question":"Which fruit?","options":["Apple","Pear"]}]}}`)},
+		{T: "update", At: "2026-11-22T06:07:30Z", Turn: "c:1", Update: json.RawMessage(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Which fruit? [1] Apple [2] Pear"}}`)},
+		{T: "turn_end", At: "2026-11-22T06:07:30Z", Turn: "c:1", Stop: "end_turn"},
+		{T: "answer", At: "2026-11-22T06:08:19Z", Ask: &AntigravityAsk{ID: "q-q1"}, Option: "2", By: "mewla"},
+		{T: "user", At: "2026-11-22T06:08:19Z", Turn: "c:2", Text: "Pear", Answers: "q-q1"},
+		{T: "update", At: "2026-11-22T06:08:19Z", Turn: "c:2", Update: json.RawMessage(`{"sessionUpdate":"tool_call_update","toolCallId":"q1","status":"completed"}`)},
+		{T: "update", At: "2026-11-22T06:08:23Z", Turn: "c:2", Update: json.RawMessage(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"PEAR"}}`)},
+		{T: "turn_end", At: "2026-11-22T06:08:23Z", Turn: "c:2", Stop: "end_turn"},
+	}
+	conversation := projectAntigravitySessionLog("/s/c.jsonl", records)
+	var kinds []string
+	for _, event := range conversation.Events {
+		kinds = append(kinds, event.Kind+":"+event.Body)
+		if event.Kind == "tool_call" {
+			t.Fatalf("agy's question is its card, not a tool row: %+v", event)
+		}
+	}
+	want := "user_message:Ask me which fruit. assistant_message:Which fruit? [1] Apple [2] Pear assistant_message:PEAR"
+	if got := strings.Join(kinds, " "); got != want {
+		t.Fatalf("Chat = %s, want %s", got, want)
+	}
+	if conversation.Activity == nil || conversation.Activity.ID != "c:2" || conversation.Activity.Status != ProviderActivityCompleted {
+		t.Fatalf("the answer's turn is the newest: %+v", conversation.Activity)
+	}
+}
