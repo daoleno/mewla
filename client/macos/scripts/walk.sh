@@ -117,7 +117,7 @@ dmg="$HOME/Downloads/Mewla-macos-arm64.dmg"
 mkdir -p "$HOME/Downloads"
 if [[ "$src" == http* ]]; then
   say "download: $src"
-  curl -fsSL -o "$dmg" -w 'resolved to %{url_effective} (HTTP %{http_code}, %{size_download} bytes)\n' "$src" | tee -a "$log"
+  curl -fsSL -o "$dmg" -w 'download HTTP %{http_code}, %{size_download} bytes\n' "$src" | tee -a "$log"
 else
   cp "$src" "$dmg"
 fi
@@ -195,29 +195,11 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then
   key 36
   paired_by="the cat's menu"
 fi
-sleep 4
-shot 06-pair-from-cat
+sleep 2
 swiftc "$here/check-pair-window.swift" -o "$RUNNER_TEMP/check-pair-window" || exit 1
-check "Pair a phone… from the cat's menu opens the pairing dialog" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-cat.png" title
-check "the cat menu offers a scannable phone link" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-cat.png" qr
-osa -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
-sleep 1
-shot 06-pair-dismissed
-check "the first pairing dialog closed" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-dismissed.png" closed
-# The same from the app's own menu bar: File › Pair a Phone…
-osa -e 'tell application "System Events" to tell process "Mewla" to click menu item "Pair a Phone…" of menu "File" of menu bar item "File" of menu bar 1' >> "$log" 2>&1 \
-  && say "File › Pair a Phone… chosen" || say "File › Pair a Phone… could not be chosen"
-sleep 4
-shot 06-pair-from-file
-check "File › Pair a Phone… opens the pairing dialog" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-file.png" title
-check "the File menu offers a scannable phone link" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-file.png" qr
-pairing=$(bounded 60 swift -e 'import CoreGraphics
-let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
-print(l.filter { ($0[kCGWindowOwnerName as String] as? String) == "Mewla" && ($0[kCGWindowLayer as String] as? Int) == 0 }.count)' 2>/dev/null || echo 0)
-say "windows after Pair a phone… ($paired_by): $pairing"
-both 06-pair
-bounded 30 "/Applications/Mewla.app/Contents/Helpers/mewla" pair -details http://127.0.0.1:9876 2>&1 | grep -c 'mewla://' | sed 's/^/pairing links the daemon gives: /' | tee -a "$log"
-osa -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
+# Stop before any other screen capture if the private phone proof fails while a code is visible.
+bun "$here/lan-phone-walk.ts" "$RUNNER_TEMP/check-pair-window" "$out" >> "$log" 2>&1 || { say "FAILED: trusted LAN phone walk"; exit 1; }
+say "ok: consent, exact displayed QR, phone WebSocket after dismissal, restart and LAN off"
 
 # 6. Quit Mewla, then open it again: no question this time, the daemon kept running, the window back.
 check "Quit closes the app" quit_app
@@ -256,8 +238,6 @@ for surface in 'busy-home {}' 'settings-general {"settings":"general"}' 'setting
 done
 quit_app || true
 
-for f in "$HOME"/.mewla/logs/*.log; do [[ -f "$f" ]] && { echo "== $f"; tail -400 "$f"; }; done > "$out/daemon-logs.txt" 2>&1 || true
-find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | head -5 | while read -r f; do echo "== $f"; tail -80 "$f"; done > "$out/app-logs.txt" 2>&1 || true
 rm -f "$gatekeeper_scpt"
 say "checks failed: ${#failed[@]}${failed:+ (${failed[*]})}"
 [[ ${#failed[@]} -eq 0 ]]
