@@ -197,19 +197,20 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then
 fi
 sleep 4
 shot 06-pair-from-cat
-# The pairing dialog, read through Accessibility: its title in the window.
-pair_texts() { osa -e 'tell application "System Events" to tell process "Mewla" to get value of every static text of entire contents of window 1' 2>&1 | tr ',' '\n'; }
-pair_texts > "$out/06-pair-from-cat-texts.txt"
-check "Pair a phone… from the cat's menu opens the pairing dialog" grep -q "Pair a phone" "$out/06-pair-from-cat-texts.txt"
+swiftc "$here/check-pair-window.swift" -o "$RUNNER_TEMP/check-pair-window" || exit 1
+check "Pair a phone… from the cat's menu opens the pairing dialog" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-cat.png" title
+check "the cat menu offers a scannable phone link" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-cat.png" qr
 osa -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
 sleep 1
+shot 06-pair-dismissed
+check "the first pairing dialog closed" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-dismissed.png" closed
 # The same from the app's own menu bar: File › Pair a Phone…
 osa -e 'tell application "System Events" to tell process "Mewla" to click menu item "Pair a Phone…" of menu "File" of menu bar item "File" of menu bar 1' >> "$log" 2>&1 \
   && say "File › Pair a Phone… chosen" || say "File › Pair a Phone… could not be chosen"
 sleep 4
-pair_texts > "$out/06-pair-from-file-texts.txt"
-check "File › Pair a Phone… opens the pairing dialog" grep -q "Pair a phone" "$out/06-pair-from-file-texts.txt"
-check "the pairing dialog offers its link" grep -q -E "Copy link|Scan with" "$out/06-pair-from-file-texts.txt"
+shot 06-pair-from-file
+check "File › Pair a Phone… opens the pairing dialog" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-file.png" title
+check "the File menu offers a scannable phone link" "$RUNNER_TEMP/check-pair-window" "$out/06-pair-from-file.png" qr
 pairing=$(bounded 60 swift -e 'import CoreGraphics
 let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
 print(l.filter { ($0[kCGWindowOwnerName as String] as? String) == "Mewla" && ($0[kCGWindowLayer as String] as? Int) == 0 }.count)' 2>/dev/null || echo 0)
@@ -232,11 +233,23 @@ both 07-relaunch
 health | tee "$out/health-2.json" >> "$log"; echo >> "$log"
 python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"]; print("same daemon_id across Quit and relaunch")' "$out/health-1.json" "$out/health-2.json" >> "$log" 2>&1 || { say "FAILED: daemon_id changed"; failed+=("daemon_id"); }
 
-# 7. The shipped app's surfaces for the look check: Settings and Calendar, opened by the app's own proof script.
-for surface in 'settings-general {"settings":"general"}' 'settings-access {"settings":"access"}' 'calendar {"open":"calendar"}'; do
+# Populate the installed daemon through its CLI. These named Sessions only wait on the CI Mac.
+cli=/Applications/Mewla.app/Contents/Helpers/mewla
+hold="$RUNNER_TEMP/hold-session.sh"
+printf '#!/bin/sh\nexec sleep 1800\n' > "$hold"
+chmod 700 "$hold"
+for name in 'Review the calendar' 'Check desktop layout' 'Prepare release notes'; do
+  check "create sample Session: $name" "$cli" worker spawn -name "$name" -executor claude -command "$hold" -cwd "$RUNNER_TEMP"
+done
+for item in '10:00 Review release notes' '15:00 Check desktop layout' '23:55 Publish the preview'; do
+  check "create Calendar item: ${item#* }" "$cli" calendar create -kind reminder -date "$(date +%F)" -timezone UTC -time "${item%% *}" -title "${item#* }"
+done
+
+# 7. Capture the signed app at desktop size, including the populated Home and Calendar.
+for surface in 'busy-home {}' 'settings-general {"settings":"general"}' 'settings-access {"settings":"access"}' 'calendar {"open":"calendar"}'; do
   name="${surface%% *}"; script="${surface#* }"
   quit_app || true
-  launch -n --env MEWLA_APP_DEV_SCRIPT="$script" /Applications/Mewla.app
+  launch -n --env MEWLA_APP_WINDOW_SIZE=1280x800 --env MEWLA_APP_DEV_SCRIPT="$script" /Applications/Mewla.app
   for i in $(seq 1 60); do app_up && has_window && break; sleep 1; done
   sleep 10
   both "08-$name"
