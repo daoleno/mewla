@@ -16,7 +16,7 @@ if (!confirmed) throw new Error("daemon did not recognize the paired device");
 console.log("Original device paired and authenticated.");
 
 const mode = process.argv[3];
-if (mode === "--across-takeover" || mode === "--rollback") {
+if (mode === "--across-takeover" || mode === "--rollback" || mode === "--reopen") {
   const home = process.env.HOME!;
   const domain = `gui/${process.getuid!()}`;
   const listing = (label: string) => spawnSync("/bin/launchctl", ["print", `${domain}/${label}`], { encoding: "utf8", timeout: 2500 }).stdout ?? "";
@@ -90,7 +90,14 @@ if (mode === "--across-takeover" || mode === "--rollback") {
   probe.unref();
   await wait(serves, 95, "signed helper never owned the healthy listener with its version and original identity");
   if (!existsSync(oldJob) || !existsSync(priorBundle)) throw new Error("previous installation removed before the original phone authenticated");
-  if (mode === "--rollback") {
+  if (mode === "--rollback" || mode === "--reopen") {
+    if (mode === "--reopen") {
+      execFileSync("/usr/bin/osascript", ["-e", 'quit app "Mewla"']);
+      const app = "/Applications/Mewla.app/Contents/MacOS/Mewla";
+      await wait(() => spawnSync("/usr/bin/pgrep", ["-f", "^" + app + "$"]).status === 1, 30, "app did not quit during the trial");
+      if (!existsSync(home + "/.mewla/mac-app-takeover.pending")) throw new Error("trial was no longer pending");
+      execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
+    }
     // Keep this original phone offline throughout the trial. Its key stays in memory.
     await wait(() => !existsSync(home + "/.mewla/mac-app-takeover.pending") && !installed()
       && listing("com.daoleno.mewla.daemon").includes("\n\tstate = running\n"), 220, "previous daemon was not restored");
@@ -104,4 +111,25 @@ if (mode === "--across-takeover" || mode === "--rollback") {
       && readlinkSync(home + "/.local/bin/mewla") === "/Applications/Mewla.app/Contents/Helpers/mewla", 30, "takeover did not commit after the original phone authenticated");
     console.log("Original phone authenticated before retiring the previous login service and CLI bundle.");
   }
+}
+
+if (mode === "--external") {
+  const { lstatSync } = await import("node:fs");
+  const job = `gui/${process.getuid!()}`;
+  const show = (label: string) => spawnSync("/bin/launchctl", ["print", job + "/" + label], { encoding: "utf8" });
+  const originalPid = () => show("org.example.mewla").stdout?.match(/^\s*pid = (\d+)$/m)?.[1];
+  const old = originalPid();
+  if (!old) throw new Error("external daemon missing before launch");
+  execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
+  for (let i = 0; i < 60; i++) {
+    await Bun.sleep(1000);
+    const linked = lstatSync(process.env.HOME + "/.local/bin/mewla").isSymbolicLink();
+    const registered = ["com.daoleno.mewla.daemon", "com.daoleno.mewla.installed-daemon"].some(s => show(s).status === 0);
+    const sameProcess = old === originalPid();
+    if (linked || registered || !sameProcess) {
+      throw new Error(JSON.stringify({linked, registered, sameProcess, elapsedSeconds: i + 1}));
+    }
+  }
+  if (!(await confirmPairedDevice({serverUrl: paired.url, daemonId: paired.daemonId, daemonPublicKey: paired.daemonPublicKey}))) throw new Error("external phone lost access");
+  console.log("Original external process, CLI and paired phone retained.");
 }
