@@ -3,6 +3,6 @@
   "date": "2026-11-22",
   "highlights": [],
   "fixes": [
-    "On Windows, checking which agents are available no longer opens Cursor windows in the background."
+    "On Windows, listing available agents no longer runs Cursor commands when Cursor is unused."
   ]
 }
