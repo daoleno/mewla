@@ -67,6 +67,11 @@ type AgentEnd struct {
 	// OutOfMemory is set when the kernel's OOM killer ran at the time the
 	// agent was killed (Linux; a likely, not a proven, cause).
 	OutOfMemory bool
+	// ProviderTest is set on an end that waited out its provider's outage
+	// and now holds the family's probe, or reached agentProviderWaitLimit:
+	// it is started again although the outage is not over, and that start
+	// (counted like any other) is the test of the provider.
+	ProviderTest bool
 }
 
 // Cause says how the agent ended, in words: "was killed (SIGKILL)", "exited
@@ -153,6 +158,8 @@ type AgentRelaunchPlan struct {
 	// after it was killed (SIGKILL)", "Not restarted after it exited with code
 	// 1: 3 restarts in 30 minutes".
 	Line string
+	// Provider is the agent family whose outage an AgentEndWait waits on.
+	Provider string
 }
 
 // AgentRelaunch is the durable record of one relaunch.
@@ -352,6 +359,9 @@ type agentRelaunchSupervisor struct {
 	// controlSince is when a relaunch began to wait for the agent's control
 	// server to finish its turn and exit.
 	controlSince map[string]time.Time
+	// providerWait is an end held for its provider's outage (AgentEndWait
+	// from the plan), by Session.
+	providerWait map[string]providerWait
 	oom          oomSamples
 	// submit delivers a continuation once the relaunched agent is ready.
 	submit func(sessionID, command, payload, workID, turnID string, at time.Time) (InputResult, error)
@@ -405,6 +415,66 @@ func (w *Watcher) waitForControl(ledger AgentRelaunchLedger, end AgentEnd, plan 
 	supervisor.mu.Unlock()
 }
 
+// An end held for its provider's outage ends by itself. The outage ends when
+// any Activity of the family completes (provider_availability.go; every
+// Session of the family is read while it lasts). Until then the end asks for
+// the family's one probe request at agentProviderAsks (the last repeating), and
+// holding it is started again: that start is the request. Past
+// agentProviderWaitLimit it is started again anyway. Either start counts toward
+// the relaunch bounds, so an outage that lasts ends as "Stopped after N
+// restarts" with its cause, never as a Worker held for ever. The wait is in
+// memory: a daemon restart forgets it and the outage alike, and plans the end
+// afresh.
+// Asks at about 1, 3 and 7 minutes; the bound comes before a fourth.
+var agentProviderAsks = []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute}
+
+// agentProviderWaitLimit bounds one end's wait for its provider: long enough
+// for a burst of 529s or a short network drop, short of the 30 minutes in which
+// three failed restarts stop a Worker.
+const agentProviderWaitLimit = 10 * time.Minute
+
+type providerWait struct {
+	endedAt  time.Time
+	provider string
+	since    time.Time
+	nextAsk  time.Time
+	asks     int
+}
+
+// providerTest says whether the held end of sessionID is started again now
+// although its provider still refuses requests: past the wait's bound, or
+// holding the family's probe.
+func (w *Watcher) providerTest(sessionID string, endedAt time.Time) bool {
+	supervisor := w.agentRelaunch()
+	now := supervisor.now()
+	supervisor.mu.Lock()
+	wait, held := supervisor.providerWait[sessionID]
+	supervisor.mu.Unlock()
+	if !held || !wait.endedAt.Equal(endedAt) {
+		return false
+	}
+	if _, down := w.availability().outage(wait.provider); !down {
+		return false // it answers again: an ordinary start, and no probe taken
+	}
+	if now.Sub(wait.since) >= agentProviderWaitLimit {
+		log.Printf("agent relaunch: %s waited %s for its provider (%s); started again as the test", sessionID, agentProviderWaitLimit, wait.provider)
+		return true
+	}
+	if now.Before(wait.nextAsk) {
+		return false
+	}
+	if granted, _ := w.ProviderProbe(wait.provider, now); granted {
+		log.Printf("agent relaunch: %s holds %s's probe; started again as the test", sessionID, wait.provider)
+		return true
+	}
+	wait.asks++
+	wait.nextAsk = now.Add(agentProviderAsks[min(wait.asks, len(agentProviderAsks)-1)])
+	supervisor.mu.Lock()
+	supervisor.providerWait[sessionID] = wait
+	supervisor.mu.Unlock()
+	return false
+}
+
 // agentRelaunchStagger is the least time between two Sessions' relaunches.
 const agentRelaunchStagger = 5 * time.Second
 
@@ -447,6 +517,8 @@ const (
 	// (Brain was told to decide). Unlike stopped it stays on a live Session,
 	// until the agent works again.
 	agentLineHalted
+	// agentLineWaiting: ended and held for its provider; nothing runs.
+	agentLineWaiting
 )
 
 // agentRelaunchShown is how long "Restarted after …" stays on a relaunched
@@ -476,6 +548,8 @@ func (s *agentRelaunchSupervisor) line(sessionID string, alive bool, state class
 	switch line.kind {
 	case agentLineRestarting:
 		return classifier.StateRunning, classifier.Relaunch{State: "restarting", Line: line.text}, true
+	case agentLineWaiting:
+		return classifier.StateBlocked, classifier.Relaunch{State: "waiting", Line: line.text}, true
 	case agentLineStopped:
 		if alive {
 			delete(s.lines, sessionID)
@@ -513,6 +587,7 @@ func newAgentRelaunchSupervisor() *agentRelaunchSupervisor {
 		swap:         map[string]*sync.Mutex{},
 		after:        map[string]agentAfterReport{},
 		controlSince: map[string]time.Time{},
+		providerWait: map[string]providerWait{},
 		run:          func(fn func()) { go fn() },
 		now:          time.Now,
 		sleep:        time.Sleep,
@@ -589,6 +664,7 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if item.alive {
 		supervisor.mu.Lock()
 		delete(supervisor.decided, item.id)
+		delete(supervisor.providerWait, item.id)
 		report, untold := supervisor.after[item.id]
 		supervisor.mu.Unlock()
 		if untold && !supervisor.now().Before(report.next) {
@@ -653,6 +729,7 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if end.TurnID == "" {
 		w.readPromptInFlight(&end, pending, provider)
 	}
+	end.ProviderTest = w.providerTest(item.id, exit.EndedAt)
 	plan, err := ledger.PlanAgentRelaunch(end)
 	if err != nil {
 		log.Printf("agent relaunch: plan for %s: %v", item.id, err)
@@ -660,6 +737,9 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	}
 	supervisor.mu.Lock()
 	supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan}
+	if wait, held := supervisor.providerWait[item.id]; plan.Action != AgentEndWait || (held && !wait.endedAt.Equal(exit.EndedAt)) {
+		delete(supervisor.providerWait, item.id)
+	}
 	supervisor.mu.Unlock()
 	if plan.Action != AgentEndRelaunch && plan.Action != AgentEndWait {
 		// Final: kept on the Session for any later daemon.
@@ -668,10 +748,15 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	}
 	switch plan.Action {
 	case AgentEndWait:
-		log.Printf("agent relaunch: %s %s", item.id, plan.Words)
-		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineRestarting, text: plan.Line})
+		// Held, nothing running: the waiting look, not a working one.
+		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineWaiting, text: plan.Line})
+		now := supervisor.now()
 		supervisor.mu.Lock()
-		supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan, recheck: supervisor.now().Add(agentEndWaitEvery)}
+		supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan, recheck: now.Add(agentEndWaitEvery)}
+		if _, held := supervisor.providerWait[item.id]; !held {
+			supervisor.providerWait[item.id] = providerWait{endedAt: exit.EndedAt, provider: plan.Provider, since: now, nextAsk: now.Add(agentProviderAsks[0])}
+			log.Printf("agent relaunch: %s %s", item.id, plan.Words)
+		}
 		supervisor.mu.Unlock()
 		return true, ""
 	case AgentEndRelaunch:

@@ -137,9 +137,11 @@ not start one. While the outage lasts:
   own message stays, and so does any refusal that is not transient.
 
 The first Activity of that family that settles without an error ends the outage
-at once. Mewla sends nothing extra to find out, so it notices on the next probe
-or the next request a person makes, up to one probe interval after the provider
-is back. Then the line clears, the lane delivers what it held, and every held Turn is
+at once. While the outage lasts every Session of the family is read for this,
+including one whose Turn already settled (a Worker that reports done before its
+request finishes). Mewla sends nothing extra to find out, so it notices on the
+next probe, the next request a person makes or the next request any Worker of
+the family finishes, up to one probe interval after the provider is back. Then the line clears, the lane delivers what it held, and every held Turn is
 continued in its own Session on the next poll. Persistent errors (sign-in,
 billing, a bad request) are not an outage, and an unclassified error keeps the
 rows above.
@@ -330,8 +332,18 @@ with no action from the person or Brain, when all of these hold:
   Agent and Grok record none, so they are reported, not restarted;
 - its provider is not refusing every request. During a provider outage
   (`providerAvailability`) the end is held back, uses no try and shows
-  "Waiting for Claude Code's provider". It is planned again every 30 s and
-  started as soon as the provider answers;
+  "Waiting for Claude Code's provider" in the waiting look (state `waiting`,
+  the Session `blocked`: no running dot, nothing asked of the person). It is
+  planned again every 30 s and started as soon as the provider answers. The
+  wait also ends by itself: at about 1, 3 and 7 minutes it asks
+  for the family's one probe request, and holding it, it is started again as
+  that request. At 10 minutes it is started again anyway. Either start counts
+  toward the bounds below like any other, and Brain's event says the provider
+  was still refusing requests and the start is the test. So an outage that
+  lasts ends as "Stopped after 3 restarts" with its cause, never as a Worker
+  held for ever. A Worker already at a bound is reported at once, not held. The
+  wait is in memory: a daemon restart forgets it with the outage itself and
+  plans the end afresh;
 - it has been started again fewer than 3 times in the last 30 minutes (after 0,
   10 s and 30 s). The task also has a lifetime bound: at most 5 relaunches for
   one Turn and the continuations and re-sent prompts that carry it on, however
@@ -447,12 +459,13 @@ last 30 minutes and ended each time."). When Brain still has an earlier review
 of the Work (the result the Worker reported before it died), the loss opens as
 soon as that review has left Brain.
 
-The Session carries `relaunch` (`state`: `restarting`, `restarted` or
-`stopped`, and a short `line` in a person's words). The app shows the line on
+The Session carries `relaunch` (`state`: `restarting`, `waiting`, `restarted`
+or `stopped`, and a short `line` in a person's words). The app shows the line on
 the Session's row and the Work card ("Restarted after a crash", "… after
 running out of memory", "… after an update", "Stopped after 3 restarts",
 "Waiting for Claude Code's provider"). It shows the state word (Restarting,
-Restarted, Stopped) in the Session header. The exact signal or exit code is in
+Waiting, Restarted, Stopped) in the Session header; a waiting Worker's card row
+ends in "Waiting" with no dot. The exact signal or exit code is in
 Brain's event and the daemon log, never in the app. A line stays until the
 agent shows something newer (restarted: work, a request, or 10 minutes).
 

@@ -37,9 +37,12 @@ export type WorkerStatus = 'running' | 'blocked' | 'done' | 'failed' | 'unknown'
 
 export type WorkerCapabilities = WorkerSessionCapabilities;
 
-/** A Session's agent ended while its Work was open: Mewla is starting it again, started it again, or would not. */
+/**
+ * A Session's agent ended while its Work was open: Mewla is starting it again, waits for its provider to start it
+ * (nothing runs meanwhile), started it again, or would not.
+ */
 export interface WorkerRelaunch {
-  state: 'restarting' | 'restarted' | 'stopped';
+  state: 'restarting' | 'waiting' | 'restarted' | 'stopped';
   line: string;
 }
 
@@ -690,6 +693,6 @@ function normalizeTimestamp(
 function normalizeRelaunch(value: { state?: unknown; line?: unknown } | undefined): WorkerRelaunch | undefined {
   const state = value?.state;
   const line = typeof value?.line === 'string' ? value.line.trim() : '';
-  if (!line || (state !== 'restarting' && state !== 'restarted' && state !== 'stopped')) return undefined;
+  if (!line || (state !== 'restarting' && state !== 'waiting' && state !== 'restarted' && state !== 'stopped')) return undefined;
   return { state, line };
 }

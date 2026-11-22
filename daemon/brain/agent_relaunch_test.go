@@ -605,17 +605,45 @@ func TestAgentRelaunchWaitsOutAProviderOutage(t *testing.T) {
 	f.service.watcher = outage
 	end := killedEnd(time.Now())
 	plan, err := f.service.PlanAgentRelaunch(end)
-	if err != nil || plan.Action != watcher.AgentEndWait || plan.Line != "Waiting for Claude Code's provider" ||
+	if err != nil || plan.Action != watcher.AgentEndWait || plan.Line != "Waiting for Claude Code's provider" || plan.Provider != "claude" ||
 		plan.Words != "Claude Code was killed (SIGKILL); it is started again once its provider answers (rate limit)." {
 		t.Fatalf("during the outage: plan = %+v, %v", plan, err)
 	}
 	if records, _, _ := f.store.agentRelaunches(f.item.ID, "worker"); len(records) != 0 {
 		t.Fatalf("a wait used a try: %+v", records)
 	}
+	// The end the watcher starts as the test (its probe, or the wait's
+	// bound) is an ordinary relaunch, and Brain hears the outage was on.
+	test := end
+	test.ProviderTest = true
+	plan, err = f.service.PlanAgentRelaunch(test)
+	if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.Attempt != 1 ||
+		!strings.HasSuffix(plan.Words, " Its provider was still refusing requests (rate limit); this start is the test of it.") {
+		t.Fatalf("the test start: plan = %+v, %v", plan, err)
+	}
 	outage.unavailable = false
 	plan, err = f.service.PlanAgentRelaunch(end)
 	if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.Attempt != 1 || plan.After != 0 {
 		t.Fatalf("after the outage: plan = %+v, %v", plan, err)
+	}
+}
+
+// A Worker past its bound during an outage is stopped at once with its cause,
+// not held first: the outage only delays a restart that would happen.
+func TestAgentRelaunchPastItsBoundIsNotHeldForAnOutage(t *testing.T) {
+	f := newRelaunchFixture(t)
+	f.service.watcher = &outageWatcher{fakeWatcher: f.fw, unavailable: true}
+	base := time.Now().UTC()
+	for attempt := 1; attempt <= agentRelaunchLimit; attempt++ {
+		at := base.Add(time.Duration(attempt-agentRelaunchLimit-1) * time.Minute)
+		if err := f.service.RecordAgentRelaunch(watcher.AgentRelaunch{WorkID: f.item.ID, SessionID: "worker", Attempt: attempt, Cause: "was killed (SIGKILL)",
+			EndedAt: at, Outcome: "idle", Words: "w", At: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := f.service.PlanAgentRelaunch(killedEnd(base))
+	if err != nil || plan.Action != watcher.AgentEndReport || plan.Line != "Stopped after 3 restarts" {
+		t.Fatalf("plan = %+v, %v", plan, err)
 	}
 }
 
