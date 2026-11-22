@@ -157,6 +157,8 @@ try {
   const resumed = await phoneSocket(phone.url, phone.daemonId);
   await roundTrip(resumed, "after-restart");
   console.log("Restart retained LAN and the original paired phone authenticated again.");
+  for (let cycle = 1; cycle <= 4; cycle++) {
+  console.log("Off check observation cycle " + cycle);
   osa('tell application "System Events" to keystroke "," using command down');
   try {
     await until("Connections settings did not open", () => {
@@ -165,10 +167,16 @@ try {
       return false;
     });
     console.log("Settings showed the phone routes on its Connections page.");
-    captureSettings("before");
-    await observeOff("before click");
-    if (startupChoice() !== "lan") throw new Error("expected saved LAN consent before opt-out");
-    console.log(pressButton("Settings", "mac-lan-off"));
+    await until("old OCR click missing", () => inspect("click", "Turn off LAN").status === 0);
+    const click = performance.now();
+    await observeOff("immediately after original press");
+    await wait(2000);
+    await observeOff(`after original press ${Math.round(performance.now()-click)}ms`);
+    captureSettings("after-original-" + cycle);
+    if (startupChoice() === "lan") {
+      console.log("Off check original press left saved LAN enabled");
+      console.log(pressButton("Settings", "mac-lan-off"));
+    }
     const start = performance.now();
     await until("off action did not persist and recover both listeners", async () => {
       const ok = await observeOff(`${Math.round(performance.now() - start)}ms`);
@@ -179,6 +187,19 @@ try {
   } catch (error) {
     captureSettings("at-failure");
     throw error;
+  }
+  if (cycle < 4) {
+    osa('tell application "System Events" to keystroke "w" using command down');
+    fromFile();
+    await until("reopen consent", () => inspect("consent").status === 0);
+    console.log(pressButton("Mewla", "pair-lan-allow"));
+    await until("consented listener did not recover", httpLAN, 120);
+    await until("consented QR did not open", () => inspect("qr").status === 0);
+    esc();
+    execFileSync("launchctl", ["kickstart", "-k", daemonJob], { timeout: 60_000 });
+    await until("phone did not authenticate in repeated walk", async () => !!(await confirmPairedDevice(known).catch(() => null)), 90);
+    await roundTrip(await phoneSocket(phone.url, phone.daemonId), "after-restart-" + cycle);
+  }
   }
   await proveOff("Turn off LAN closed the plain HTTP route.");
   execFileSync("launchctl", ["kickstart", "-k", daemonJob], { timeout: 60_000 });
