@@ -2,7 +2,9 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -51,7 +53,11 @@ func (c *macLANControl) set(operation string) control.Response {
 
 // The native host uses the owner's private control socket. Only an app-managed
 // daemon handles the change, and the CLI waits for the new listener to answer.
-func runMacLAN(args []string) error {
+func runMacLAN(args []string, output io.Writer) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		fmt.Fprintln(output, "usage: mewla mac-lan on|off")
+		return flag.ErrHelp
+	}
 	if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
 		return errors.New("usage: mewla mac-lan on|off")
 	}

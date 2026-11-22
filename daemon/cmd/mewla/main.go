@@ -174,7 +174,7 @@ func run(args []string, stderr io.Writer) error {
 		case "pair":
 			return runPairCommand(args[1:], stderr)
 		case "mac-lan":
-			return runMacLAN(args[1:])
+			return runMacLAN(args[1:], stderr)
 		case "web":
 			return runWebCommand(args[1:], stderr)
 		case "doctor":
