@@ -486,6 +486,16 @@ func TestWithAgentToolsHandsAgyTheToolsThroughItsSession(t *testing.T) {
 	if _, ok := AntigravitySessionLaunchCommand(command, "/opt/mewla", "/state"); !ok {
 		t.Fatal("the launch with tools is no longer taken over")
 	}
+	// The launch adapter makes the Session program's command before the tools
+	// are added; the program takes them as its own flag.
+	bridge, ok := AntigravitySessionLaunchCommand("agy --dangerously-skip-permissions", "/opt/mewla", "/state")
+	if !ok {
+		t.Fatal("a plain agy launch is taken over")
+	}
+	withTools := WithAgentTools(bridge, "/opt/mewla", "/state", AgentTools{Chrome: true})
+	if !strings.HasPrefix(withTools, bridge+" --mcp-config ") || !strings.Contains(withTools, `"mewla_chrome"`) {
+		t.Fatalf("the Session program's command with tools = %s", withTools)
+	}
 	if kept := WithAgentTools("agy -p hi", "/opt/mewla", "/state", AgentTools{Chrome: true}); kept != "agy -p hi" {
 		t.Fatalf("print mode got tools it cannot take: %s", kept)
 	}

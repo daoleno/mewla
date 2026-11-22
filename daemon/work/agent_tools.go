@@ -106,9 +106,10 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 	switch InferWorkerProvider(command) {
 	case WorkerProviderAntigravity:
 		// agy takes MCP servers per session over ACP; Mewla's Session program
-		// (which every plain agy launch becomes) hands them on. A launch it
-		// does not take over gets none: agy's terminal UI has no such flag.
-		if _, ok := parseAntigravityLaunch(command); !ok {
+		// (which every plain agy launch becomes, before or after the tools
+		// are added: the launch adapter runs first) hands them on. A launch
+		// it does not take over gets none: agy's terminal UI has no such flag.
+		if _, ok := parseAntigravityLaunch(command); !ok && !IsAntigravitySessionCommand(command) {
 			return command
 		}
 		entries := map[string]any{}
