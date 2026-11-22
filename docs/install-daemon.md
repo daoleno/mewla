@@ -18,7 +18,9 @@ running as a service, updates, the app builds and uninstalling.
 
 ## Install the daemon
 
-On an Apple Silicon Mac, [Mewla for Mac](mac-app.md) is the app and the daemon in
+**Existing Mac CLI users should keep their installation and wait before opening the 0.4.23 Mac app. It can stop the running daemon and disconnect paired phones.**
+
+On a fresh Apple Silicon Mac, [Mewla for Mac](mac-app.md) is the app and the daemon in
 one download, with no terminal step. Everywhere else, and on a Mac you reach only
 through a terminal:
 
