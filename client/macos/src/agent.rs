@@ -11,6 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use core_foundation::{base::TCFType, bundle::CFBundle, url::CFURLRef};
 use objc2_foundation::NSString;
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 
@@ -19,6 +20,11 @@ const MANAGED_MARK: &str = "<!-- Managed by mewla boot install -->";
 
 unsafe extern "C" {
     fn getuid() -> u32;
+}
+
+#[link(name = "CoreServices", kind = "framework")]
+unsafe extern "C" {
+    fn LSRegisterURL(url: CFURLRef, update: u8) -> i32;
 }
 
 /// What happened, for the log.
@@ -83,6 +89,13 @@ fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {
     let managed = std::fs::read_to_string(old_app.join("Contents/Info.plist")).map(|info| info.contains("MewlaManagedBundle")).unwrap_or(false);
     if managed && std::fs::remove_dir_all(&old_app).is_ok() {
         said.push(format!("removed {}", old_app.display()));
+        // Both bundles have the same identifier. Refresh the surviving app's location before
+        // SMAppService asks launchd to resolve its bundle-relative executable.
+        if let Some(url) = CFBundle::main_bundle().bundle_url() {
+            // SAFETY: url owns a valid CFURL for the duration of the call.
+            let status = unsafe { LSRegisterURL(url.as_concrete_TypeRef(), 1) };
+            said.push(format!("Launch Services registered this app after takeover: {status}"));
+        }
     }
 }
 
@@ -127,6 +140,10 @@ fn link_cli(home: &Path, cli: &Path, said: &mut Vec<String>) {
 fn launchd_program(target: &str) -> Option<String> {
     let out = Command::new("/bin/launchctl").args(["print", target]).output().ok().filter(|o| o.status.success())?;
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    // Registration can succeed while every spawn exits EX_CONFIG. Only accept a running job.
+    if !text.lines().any(|line| line == "\tstate = running") {
+        return None;
+    }
     text.lines().map(str::trim).find(|line| line.starts_with("program = ") || line.starts_with("program identifier = ")).map(str::to_owned)
 }
 

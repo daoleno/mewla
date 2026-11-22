@@ -12,6 +12,9 @@ on:
         description: "Mewla Dev (com.daoleno.mewla.dev), which installs beside Mewla"
         type: boolean
         default: true
+      takeover_run:
+        description: "Only verify takeover with the signed build A from this release proof run"
+        type: string
   push:
     branches: ["mac-app/**"]
 
@@ -21,6 +24,7 @@ permissions:
 jobs:
   app:
     name: Build Mewla for Mac
+    if: ${{ !inputs.takeover_run }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -248,6 +252,10 @@ jobs:
   takeover:
     name: Mewla takes over a boot-installed daemon
     needs: app
+    if: ${{ !cancelled() && (needs.app.result == 'success' || inputs.takeover_run != '') }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -255,8 +263,10 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v4
         with:
-          name: mewla-macos-${{ github.sha }}
+          name: ${{ inputs.takeover_run && format('mewla-macos-proof-a-{0}', inputs.takeover_run) || format('mewla-macos-{0}', github.sha) }}
           path: ${{ runner.temp }}/zips
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.takeover_run || github.run_id }}
       - name: Today's install (install.sh, mewla boot install) with a paired device
         run: |
           set -euo pipefail
@@ -266,20 +276,13 @@ jobs:
           mewla boot install
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break; sleep 1; done
           curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-before.json"
-          link=$(mewla pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
-          (cd client && bun macos/scripts/pair-proof.ts "$link")
-          mewla devices list | tee "$RUNNER_TEMP/devices-before.txt"
           launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state"
       - name: Install and open Mewla
         run: |
           set -euo pipefail
           ditto -x -k "$RUNNER_TEMP/zips/Mewla-"[0-9]*-macos-aarch64.zip /Applications
-          open -g /Applications/Mewla.app
-          for i in $(seq 1 200); do
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
-              && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
-            sleep 1
-          done
+          link=$("$HOME/.local/bin/mewla" pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
+          (cd client && bun macos/scripts/pair-proof.ts "$link" --across-takeover)
           launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
           # A daemon that did not come up: why launchd could not spawn it (the job, launchd's own log, its BTM entry).
           if ! curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1; then
@@ -301,7 +304,6 @@ jobs:
           ls -l "$HOME/.local/bin/mewla"
           [[ "$(readlink "$HOME/.local/bin/mewla")" == "/Applications/Mewla.app/Contents/Helpers/mewla" ]]
           mewla devices list | tee "$RUNNER_TEMP/devices-after.txt"
-          diff <(cut -f1 "$RUNNER_TEMP/devices-before.txt") <(cut -f1 "$RUNNER_TEMP/devices-after.txt")
           pgrep -fl "mewla.*serve|Helpers/mewla" || true
           [[ $(pgrep -f "/Applications/Mewla.app/Contents/Helpers/mewla serve" | wc -l) -eq 1 ]]
           if pgrep -f "$HOME/Applications/Mewla.app" >/dev/null; then echo "the old daemon still runs"; exit 1; fi
@@ -334,6 +336,7 @@ jobs:
   # The release's key and source are the real ones; here a throwaway key and a loopback URL stand in for them.
   update:
     name: Mewla updates itself, and its daemon with it
+    if: ${{ !inputs.takeover_run }}
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -486,6 +489,7 @@ jobs:
   # `notarytool history`. Nothing is submitted or created. The Developer ID certificate is the owner's to add.
   notary:
     name: The release's Apple key reaches the notary service
+    if: ${{ !inputs.takeover_run }}
     runs-on: macos-26
     # Where the iOS release's App Store Connect key lives.
     environment: app-store-connect-preview
