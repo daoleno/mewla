@@ -1,5 +1,7 @@
 package agentevents
 
+import "errors"
+
 import "sync"
 
 // Adapter is one agent's side of the contract. Core code holds adapters only
@@ -21,10 +23,13 @@ type Launch struct {
 	// Control is the socket of the agent's own control server, when the launch
 	// starts one for Mewla to attach to; empty for an agent followed by hooks.
 	Control string
-	// Reattached marks a relaunch that attaches to the control server that is
-	// still running (Relauncher): its turn runs on there, untouched.
-	Reattached bool
 }
+
+// ErrControlBusy is a Relauncher's answer while the ended agent's control
+// server still runs: it is finishing the turn it had, and will not take a new
+// client or let another server take the conversation. The relaunch waits for
+// it to exit; that is no try.
+var ErrControlBusy = errors.New("its control server is still finishing its turn")
 
 // Relauncher is an adapter whose agent is started again differently from a
 // fresh launch (agent relaunch): command is the agent's resume of its

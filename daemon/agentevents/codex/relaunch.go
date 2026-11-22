@@ -17,13 +17,15 @@ import (
 
 // A Codex Worker is a TUI attached to an app-server of its own: the
 // app-server runs the thread and its turns, the TUI only shows them. When the
-// Worker's program ends and Mewla starts it again (agent relaunch), only what
-// died comes back:
-//   - the app-server still answers on the Worker's control socket: a TUI is
-//     attached to it again (`codex resume <thread> --remote <socket>`) and the
-//     app-server and its turn are left alone;
-//   - it does not: a new app-server is started and the TUI resumes the same
-//     thread through it, the way a fresh Codex Worker is launched.
+// Worker's program ends and Mewla starts it again (agent relaunch):
+//   - while the old app-server still answers on the Worker's control socket,
+//     nothing is started (ErrControlBusy). An app-server whose TUI is gone
+//     drains: it finishes the turn it runs, refuses every new client ("Server
+//     is draining", seen with 0.170.0) and exits; until then it is also the
+//     thread's one writer, so no other app-server can resume it. Its turn is
+//     left alone and reports itself;
+//   - once it is gone, a new app-server is started and the TUI resumes the
+//     same thread through it, the way a fresh Codex Worker is launched.
 // Never a bare `codex resume`, which would run the thread outside any
 // app-server Mewla can send to, approve through or interrupt.
 
@@ -31,8 +33,8 @@ import (
 const controlAnswerTimeout = time.Second
 
 // PrepareRelaunch wraps command, `codex resume <thread> [flags]`, for the
-// Worker whose control socket was control. Launch.Reattached says the TUI
-// attaches to the app-server that is still running.
+// Worker whose control socket was control, or answers ErrControlBusy while
+// that app-server still runs.
 func (a Adapter) PrepareRelaunch(command, control string) (agentevents.Launch, error) {
 	if a.Inline {
 		command = InlineTUI(command, ReadConfig(a.ConfigPath))
@@ -44,10 +46,7 @@ func (a Adapter) PrepareRelaunch(command, control string) (agentevents.Launch, e
 	tui, server := splitResumeArgs(rest)
 	control = strings.TrimSpace(control)
 	if control != "" && controlAnswers(control) {
-		return agentevents.Launch{
-			Command: "exec " + resumeTUI(program, thread, control, tui),
-			Control: control, Reattached: true,
-		}, nil
+		return agentevents.Launch{}, agentevents.ErrControlBusy
 	}
 	if a.ControlDir == "" {
 		return agentevents.Launch{}, fmt.Errorf("Codex has no control directory to start its app-server in")

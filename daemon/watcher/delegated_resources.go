@@ -189,7 +189,9 @@ type agentSurvivor struct {
 	PID     int
 	Command string // redacted (survivorCommand)
 	Started time.Time
-	// args is the full command line, never shown: it tells the agent's own
-	// helpers (its control server) from what the agent started.
+	// args is the full command line and ppid the parent, never shown: they
+	// tell the agent's own helpers (its control server and what it runs)
+	// from what the agent started.
 	args []string
+	ppid int
 }

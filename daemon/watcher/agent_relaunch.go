@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/google/uuid"
 )
@@ -235,9 +236,37 @@ func (w *Watcher) agentSurvivors(sessionID, control string) []agentSurvivor {
 	if control == "" {
 		return survivors
 	}
+	return withoutControlServer(survivors, control)
+}
+
+// withoutControlServer drops the agent's control server (the process whose
+// command line names its socket) and everything it runs (a Codex app-server's
+// MCP servers, its code-mode host, a command of the turn it is finishing).
+func withoutControlServer(survivors []agentSurvivor, control string) []agentSurvivor {
+	parent := map[int]int{}
+	server := map[int]bool{}
+	for _, survivor := range survivors {
+		parent[survivor.PID] = survivor.ppid
+		if strings.Contains(strings.Join(survivor.args, " "), control) {
+			server[survivor.PID] = true
+		}
+	}
+	servedBy := func(pid int) bool {
+		for hops := 0; pid > 1 && hops < 64; hops++ {
+			if server[pid] {
+				return true
+			}
+			next, known := parent[pid]
+			if !known {
+				return false
+			}
+			pid = next
+		}
+		return false
+	}
 	out := survivors[:0]
 	for _, survivor := range survivors {
-		if !strings.Contains(strings.Join(survivor.args, " "), control) {
+		if !servedBy(survivor.PID) {
 			out = append(out, survivor)
 		}
 	}
@@ -320,7 +349,10 @@ type agentRelaunchSupervisor struct {
 	swap map[string]*sync.Mutex
 	// after holds reports made after a relaunch that Brain does not have yet.
 	after map[string]agentAfterReport
-	oom   oomSamples
+	// controlSince is when a relaunch began to wait for the agent's control
+	// server to finish its turn and exit.
+	controlSince map[string]time.Time
+	oom          oomSamples
 	// submit delivers a continuation once the relaunched agent is ready.
 	submit func(sessionID, command, payload, workID, turnID string, at time.Time) (InputResult, error)
 	run    func(func())
@@ -332,6 +364,45 @@ type agentRelaunchSupervisor struct {
 	// agents' host) the agents do not all start, load and resume at once.
 	nextStart   time.Time
 	lastStarter string
+}
+
+// agentControlWaitLimit bounds how long a relaunch waits for the agent's old
+// control server to finish its turn and exit. Past it Brain is told; the
+// server is not stopped (it may still be doing the task's work).
+const agentControlWaitLimit = 30 * time.Minute
+
+// waitForControl holds the end while the agent's control server finishes its
+// turn: planned again every agentEndWaitEvery, no try used, and reported to
+// Brain once past agentControlWaitLimit.
+func (w *Watcher) waitForControl(ledger AgentRelaunchLedger, end AgentEnd, plan AgentRelaunchPlan) {
+	supervisor := w.agentRelaunch()
+	now := supervisor.now()
+	supervisor.mu.Lock()
+	since, waiting := supervisor.controlSince[end.SessionID]
+	if !waiting {
+		since = now
+		supervisor.controlSince[end.SessionID] = since
+	}
+	supervisor.mu.Unlock()
+	if now.Sub(since) >= agentControlWaitLimit {
+		supervisor.mu.Lock()
+		delete(supervisor.controlSince, end.SessionID)
+		supervisor.mu.Unlock()
+		w.decideAgentEnd(ledger, end, AgentRelaunchPlan{
+			Action: AgentEndReport, WorkID: plan.WorkID, TurnID: plan.TurnID, PendingTurnID: plan.PendingTurnID,
+			Words: strings.TrimSpace(plan.Agent+" "+end.Cause()) + fmt.Sprintf("; not started again: its app-server is still running %d minutes later and holds the conversation.", int(agentControlWaitLimit/time.Minute)),
+			Line:  "Not restarted: its app-server is still running",
+		})
+		return
+	}
+	if !waiting {
+		log.Printf("agent relaunch: %s %s; waiting for its app-server to finish its turn and exit", end.SessionID, end.Cause())
+	}
+	supervisor.setLine(end.SessionID, agentRelaunchLine{kind: agentLineRestarting, text: "Restarting after its turn ends"})
+	supervisor.mu.Lock()
+	supervisor.decided[end.SessionID] = agentEndDecision{endedAt: end.Exit.EndedAt,
+		plan: AgentRelaunchPlan{Action: AgentEndWait, WorkID: plan.WorkID, TurnID: plan.TurnID}, recheck: now.Add(agentEndWaitEvery)}
+	supervisor.mu.Unlock()
 }
 
 // agentRelaunchStagger is the least time between two Sessions' relaunches.
@@ -435,15 +506,16 @@ func (s *agentRelaunchSupervisor) line(sessionID string, alive bool, state class
 
 func newAgentRelaunchSupervisor() *agentRelaunchSupervisor {
 	return &agentRelaunchSupervisor{
-		decided: map[string]agentEndDecision{},
-		running: map[string]*agentRelaunchRun{},
-		held:    map[string]agentRelaunchHeld{},
-		lines:   map[string]agentRelaunchLine{},
-		swap:    map[string]*sync.Mutex{},
-		after:   map[string]agentAfterReport{},
-		run:     func(fn func()) { go fn() },
-		now:     time.Now,
-		sleep:   time.Sleep,
+		decided:      map[string]agentEndDecision{},
+		running:      map[string]*agentRelaunchRun{},
+		held:         map[string]agentRelaunchHeld{},
+		lines:        map[string]agentRelaunchLine{},
+		swap:         map[string]*sync.Mutex{},
+		after:        map[string]agentAfterReport{},
+		controlSince: map[string]time.Time{},
+		run:          func(fn func()) { go fn() },
+		now:          time.Now,
+		sleep:        time.Sleep,
 	}
 }
 
@@ -733,7 +805,17 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 	plan = fresh
 	survivors := w.agentSurvivors(end.SessionID, end.Control)
 	plan.Words = strings.TrimSuffix(plan.Words, ".") + "." + survivorWords(survivors, supervisor.now())
-	reattached, err := w.replaceEndedSession(end, plan)
+	err = w.replaceEndedSession(end, plan)
+	if errors.Is(err, agentevents.ErrControlBusy) {
+		// The agent's control server is finishing its turn: waited for, no
+		// try; the turn reports itself, and the agent starts once it is gone.
+		w.waitForControl(ledger, end, plan)
+		finish("")
+		return
+	}
+	supervisor.mu.Lock()
+	delete(supervisor.controlSince, end.SessionID)
+	supervisor.mu.Unlock()
 	if errors.Is(err, errHostCannotRespawn) {
 		// Not the agent's failure, and no try: say it once and leave the
 		// ended Session as it is.
@@ -776,16 +858,7 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		Cause: end.Cause(), ExitCode: end.Exit.Code, ExitSignal: end.Exit.Signal, EndedAt: end.Exit.EndedAt,
 		FromTurnID: plan.TurnID, Outcome: "idle", Name: plan.Agent, Words: plan.Words, At: supervisor.now().UTC(),
 	}
-	if reattached {
-		// Only the agent's screen had died: its control server kept the
-		// conversation and any turn running. Nothing is sent to it.
-		record.Outcome = "reattached"
-		record.Words = strings.TrimSpace(plan.Agent+" "+end.Cause()) + "; Mewla attached it again to its app-server, which kept the conversation"
-		if plan.TurnID != "" {
-			record.Words += " and its turn running, so nothing was sent to it"
-		}
-		record.Words += "." + survivorWords(survivors, supervisor.now())
-	} else if plan.TurnID != "" {
+	if plan.TurnID != "" {
 		turnID := "turn:" + uuid.NewString()
 		at := supervisor.now().UTC()
 		result, submitErr := supervisor.submit(
@@ -843,24 +916,24 @@ func (w *Watcher) sessionClosedDuring(sessionID string, err error) bool {
 
 // replaceEndedSession starts plan's launch in place of the ended Session,
 // under the same id and resource unit.
-func (w *Watcher) replaceEndedSession(end AgentEnd, plan AgentRelaunchPlan) (reattached bool, err error) {
+func (w *Watcher) replaceEndedSession(end AgentEnd, plan AgentRelaunchPlan) error {
 	sessionID := end.SessionID
 	supervisor := w.agentRelaunch()
 	backend := w.sessions()
 	delegated, unit := backend.delegatedResource(sessionID)
 	if !delegated {
-		return false, fmt.Errorf("Session %s is not a delegated Session", sessionID)
+		return fmt.Errorf("Session %s is not a delegated Session", sessionID)
 	}
 	manager := w.resourceManager()
 	var resource *delegatedResourceSpec
 	if unit != "" {
 		reuser, ok := manager.(delegatedResourceReuser)
 		if !ok {
-			return false, fmt.Errorf("this computer cannot keep the Worker's resource unit across a relaunch")
+			return fmt.Errorf("this computer cannot keep the Worker's resource unit across a relaunch")
 		}
 		spec, err := reuser.Reuse(unit)
 		if err != nil {
-			return false, err
+			return err
 		}
 		// Nothing the dead agent left running is stopped (a server the Worker
 		// was told to leave up, a deploy half-way): relaunchAgent tells the
@@ -883,7 +956,7 @@ func (w *Watcher) replaceEndedSession(end AgentEnd, plan AgentRelaunchPlan) (rea
 	}
 	prepared, err := w.prepareSessionCreate("", opts)
 	if err != nil {
-		return false, err
+		return err
 	}
 	lock := supervisor.swapLock(sessionID)
 	lock.Lock()
@@ -906,10 +979,10 @@ func (w *Watcher) replaceEndedSession(end AgentEnd, plan AgentRelaunchPlan) (rea
 	err = backend.replace(sessionID, prepared.spec)
 	w.inventoryMu.Unlock()
 	if err != nil {
-		return false, err
+		return err
 	}
 	w.registerCreatedSession(sessionID, prepared.cwd, prepared.opts, supervisor.now().UTC())
-	return prepared.reattached, nil
+	return nil
 }
 
 // restartingLine is the line while the agent is about to start again:

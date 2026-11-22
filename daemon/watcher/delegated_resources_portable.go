@@ -408,7 +408,7 @@ func (m *portableDelegatedResourceManager) Survivors(unit string) ([]agentSurviv
 			continue
 		}
 		started, _ := workerproc.StartTime(pid)
-		out = append(out, agentSurvivor{PID: pid, Command: survivorCommand(args), Started: started, args: args})
+		out = append(out, agentSurvivor{PID: pid, Command: survivorCommand(args), Started: started, args: args, ppid: process.PPID})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].Started.Equal(out[j].Started) {
