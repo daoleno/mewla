@@ -17,7 +17,7 @@ these; one installed, signed-in CLI is enough:
 | `grok` | `grok --no-alt-screen --permission-mode bypassPermissions` | Bypassed |
 | `pi` | `pi` | None; Pi is always permissive |
 | `opencode` | `opencode` (OpenCode 2 only) | None: Mewla adds `--auto` |
-| `agy` (Antigravity) | `agy` | None: Mewla adds `--dangerously-skip-permissions` and trusts the Worker's folder for that launch |
+| `agy` (Antigravity) | `agy` | None: Mewla adds `--dangerously-skip-permissions` |
 | `dsh` | `dsh` | Opens the DSH web harness, not a terminal agent |
 
 A Session's type follows the program that actually runs: a Cursor Session using
@@ -115,7 +115,7 @@ configuration says:
 | Claude Code | `--permission-mode bypassPermissions`: no per-action approval, and nothing reviews what it runs. An explicit `bypassPermissions` or `--dangerously-skip-permissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected for delegated work |
 | Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
-| Antigravity | `--dangerously-skip-permissions`, and one inline `--settings` for the launch that trusts the Worker's folder and opens agy's tool and plan review gates. Nothing is written to your `~/.gemini`. A `--mode`, `--sandbox`, `-p` or `--continue` in the command is refused for delegated work |
+| Antigravity | `--dangerously-skip-permissions`, handed to `agy acp`. A command Mewla cannot run through `agy acp` (a flag beyond `--model`, `--effort`, `--mode`, `--conversation`, `--add-dir` and the permission switch) starts agy's own interface instead, with one inline `--settings` for the launch that trusts the Worker's folder and opens agy's tool and plan review gates. Nothing is written to your `~/.gemini`. A `--mode`, `--sandbox`, `-p` or `--continue` in the command is refused for delegated work |
 | OpenCode | `--auto` |
 | Pi | Nothing: it has no approval gate. Calendar may add `--no-extensions` |
 
@@ -259,28 +259,45 @@ credential. Gemini 4 Neon and the other models of your plan appear in
 `agy models`. `mewla doctor` runs `agy models` to see whether it is signed in.
 
 Antigravity runs Workers from Brain, Calendar and the app, and can be Brain's own
-agent (`mewla brain use agy`, or the Brain menu's Switch executor). It is the
-last choice when Brain picks an agent by itself: it hosts Brain on its own only
-when no other agent is ready, because it has the fewest of the things below.
+agent (`mewla brain use agy`, or the Brain menu's Switch executor); the
+conversation moves with Brain when it switches, as with any other agent.
 
-Its Chat is read by asking `agy acp`, agy's Agent Client Protocol server, to
-replay the conversation (`session/load`). Mewla does not parse agy's
+Mewla runs every agy it starts (a New session, a Worker, Brain's own agent)
+through agy's Agent Client Protocol server, `agy acp`, the public, versioned
+protocol agy offers to editors. The Session's program is `mewla agy-session`:
+it holds `agy acp` in the Session's terminal, sends it the messages, keeps the
+conversation in a log of its own
+(`<state>/provider-sessions/antigravity/<conversation>.jsonl`), and reports
+every turn's start, end and token use, agy's tool calls, approvals and
+questions to the daemon over a local socket. It is in the Session's terminal,
+not in the daemon, so a daemon restart does not touch it: agy goes on with its
+turn, and the program connects again and says what is still true (the
+conversation, a turn still running, a decision still waiting). If agy itself
+exits, the program starts it again on the same conversation (up to three times
+in two minutes) and applies the Session's model, thinking level and mode
+again, which agy does not keep with a conversation.
+
+What this gives agy is what Claude Code and Codex have: Chat follows the
+conversation as it happens; a message is confirmed delivered when agy takes
+it; Stop cancels the turn; agy's approvals and its questions (its
+`ask_question` tool) are answered in the app, or by Brain first for a Worker
+it delegated; the Model sheet lists agy's model families and thinking levels
+and a change applies at once; Stats counts each turn's tokens (agy runs on
+your Google plan, so no price is shown); Mewla's browser and computer tools
+reach agy as MCP servers given with the session. When agy carries on by itself
+after a turn (a command it left running in the background finishes and it
+answers), that is a turn of its own.
+
+One thing differs from Claude Code: the Terminal shows Mewla's view of the
+conversation, with a line to type on (Enter sends, Ctrl-C stops a turn, a
+digit answers a waiting question), not agy's own full-screen interface. agy
+offers no way to follow its full-screen interface turn by turn, and its hooks
+are read only from `~/.gemini/config/hooks.json` or a repository's
+`.agents/hooks.json` (the inline `--settings` hooks are deprecated), and
+Mewla writes nothing into your `~/.gemini`. The conversation is agy's own:
+`agy --conversation <id>` opens it in agy's interface at any time. An agy you
+start yourself in a terminal and Mewla adopts is followed as before: its Chat
+is replayed by `agy acp` (`session/load`) when its conversation file changes,
+and messages are typed into it. Mewla does not parse agy's
 `conversations/<id>.db`: those are undocumented protobuf blobs and agy updates
-itself daily, while ACP is a public, versioned protocol. The conversation file
-is only watched for a change, so an unchanged conversation is not replayed
-again. Mewla asks for the one conversation it started and never lists the
-others. If agy no longer answers the way Mewla expects (another protocol
-version, no `session/load`, a failing replay), Chat says why ("This chat can't be
-read: ...") and the Terminal keeps working.
-
-Compared with Claude Code as Brain's agent, Antigravity has no hooks Mewla can
-set, so a message is confirmed delivered when it shows in the replayed
-conversation, not by a hook; it has no per-launch way to answer a tool approval
-from the app (Brain runs with `--dangerously-skip-permissions`, as Workers do;
-an approval prompt that still appears is seen on the screen and answered in the
-Terminal); its turns have no timestamps in the replay, so Mewla stamps what it
-sees and takes a turn's start and end from the status agy reports to its
-terminal (OSC 7501), the only signal that covers a whole turn. Resume uses agy's own `--conversation <id>`;
-Mewla reads the id from agy's `conversation_summaries.db`, because agy never
-accepts an id it did not create. agy updates itself in the background and has no
-switch for it.
+itself daily. agy updates itself in the background and has no switch for it.
