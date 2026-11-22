@@ -103,6 +103,10 @@ func newChatWithInstalled(t *testing.T, installed ...string) (*Service, *Store, 
 // a new chat and has it; the Host shows as coming up, not as a failure.
 func TestNewChatWhenBrainsAgentCannotRunStillStartsTheChat(t *testing.T) {
 	service, store, fw, _ := newChatWithInstalled(t, "codex")
+	// The daemon has run past the start grace: only New chat's own choice
+	// of a Host makes it show as coming up.
+	processStartedAt = processStartedAt.Add(-time.Hour)
+	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
 	snapshot, err := service.NewChat()
 	if err != nil {
 		t.Fatalf("New chat with another agent installed: %v", err)
@@ -110,13 +114,25 @@ func TestNewChatWhenBrainsAgentCannotRunStillStartsTheChat(t *testing.T) {
 	if thread, _ := store.ChatThreadID(); thread == "brain_old" || thread == "" {
 		t.Fatalf("current chat = %q, want the new one", thread)
 	}
+	if snapshot.HostExecutor == nil || snapshot.HostExecutor.ID != "codex" {
+		t.Fatalf("Host executor = %+v, want codex", snapshot.HostExecutor)
+	}
 	if snapshot.HostProblem != nil {
 		t.Fatalf("the Host is coming up, not a problem: %+v", snapshot.HostProblem)
 	}
+	// Host continuity brings the Host up on codex.
+	if _, err := service.EnsureHostSnapshot(); err != nil {
+		t.Fatalf("Host continuity: %v", err)
+	}
+	codex := false
 	for _, created := range fw.created {
 		if strings.HasPrefix(created.opts.Command, "claude") {
 			t.Fatalf("launched the agent that cannot run: %+v", created)
 		}
+		codex = codex || strings.HasPrefix(created.opts.Command, "codex")
+	}
+	if !codex {
+		t.Fatalf("no codex Host started: %+v", fw.created)
 	}
 }
 
