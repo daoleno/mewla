@@ -268,16 +268,6 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	if base := s.workerLaunchEnv.Load(); base != nil && *base != nil {
 		env = mergeStringMaps(env, (*base)())
 	}
-	if routes := s.sessionRoutes(); routes != nil {
-		routeCommand, routeEnv, routed, routeErr := routes.ResumeLaunch(sessionID, command)
-		if routeErr != nil {
-			return reportAgentEnd(plan, name, cause, "its model route can't be restored ("+routeErr.Error()+")", "Not restarted: no model route"), nil
-		}
-		if routed {
-			command = firstNonEmpty(routeCommand, command)
-			env = mergeStringMaps(env, routeEnv)
-		}
-	}
 	history, at, err := s.store.agentRelaunches(item.ID, sessionID)
 	if err != nil {
 		return watcher.AgentRelaunchPlan{}, err
@@ -322,6 +312,18 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		plan.Line = "Waiting for " + name + "'s provider"
 		return plan, nil
 	}
+	// The model route is restored only for a start that happens (it may open
+	// the route's listener), not on every recheck of a wait.
+	if routes := s.sessionRoutes(); routes != nil {
+		routeCommand, routeEnv, routed, routeErr := routes.ResumeLaunch(sessionID, command)
+		if routeErr != nil {
+			return reportAgentEnd(plan, name, cause, "its model route can't be restored ("+routeErr.Error()+")", "Not restarted: no model route"), nil
+		}
+		if routed {
+			command = firstNonEmpty(routeCommand, command)
+			env = mergeStringMaps(env, routeEnv)
+		}
+	}
 	plan.Action = watcher.AgentEndRelaunch
 	plan.Command, plan.Env, plan.PrepareWorkspace = command, env, work.PrepareDelegatedWorkspace
 	plan.Conversation, plan.Attempt = token, recent+1
@@ -340,7 +342,7 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		plan.Words += "."
 	}
 	if down {
-		plan.Words += " Its provider was still refusing requests (" + firstNonEmpty(outage.Kind, "unavailable") + "); this start is the test of it."
+		plan.Words += " Its provider was still refusing requests (" + firstNonEmpty(outage.Kind, "unavailable") + ") when it was started."
 	}
 	plan.Line = "Restarted after " + short
 	return plan, nil
