@@ -33,6 +33,20 @@ if (mode === "--across-takeover" || mode === "--rollback") {
   const priorBundle = home + "/Applications/Mewla.app";
   execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
   const installed = () => listing("com.daoleno.mewla.installed-daemon");
+  const snapshot = async () => {
+    const s = installed();
+    const jobState = s.match(/^\tstate = (.+)$/m)?.[1] ?? "absent";
+    const lastExit = s.match(/^\tlast exit code = (.*)$/m)?.[1] ?? "none";
+    const jobProgram = s.match(/^\tprogram(?: identifier)? = (.*)$/m)?.[1] ?? "none";
+    const h = await fetch("http://127.0.0.1:9876/health", {signal: AbortSignal.timeout(1000)}).then(r => r.json()).catch(() => null);
+    return JSON.stringify({jobState, jobProgram, lastExit, version:h?.version, identity:h?.daemon_id === paired.daemonId});
+  };
+  let prior = "";
+  const probe = setInterval(async () => {
+    const next = await snapshot();
+    if (next !== prior) { console.log("Trial observation", next); prior = next; }
+  }, 1000);
+  probe.unref();
   await wait(() => {
     const s = installed();
     return s.includes("\n\tstate = running\n") && s.includes("program = /Applications/Mewla.app/Contents/Helpers/mewla");
