@@ -428,7 +428,9 @@ func (m *Manager) Handle(parent context.Context, q Request) (response Response, 
 				delete(m.cloud.checked, key)
 			}
 			m.mu.Unlock()
-			m.refreshCloudProfiles()
+			// Once this request is done with the account: a check that began now would take its baseline before
+			// the refresh below changed the record, and its answer (the CLI is there) would be dropped as stale.
+			defer m.refreshCloudProfiles()
 		}
 	}
 	// Installation waits outside the account lock and command deadline.
