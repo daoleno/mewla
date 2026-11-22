@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
-	"github.com/daoleno/mewla/daemon/codextrust"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/shellquote"
 )
@@ -57,8 +56,11 @@ func (a Adapter) PrepareRelaunch(command, control string) (agentevents.Launch, e
 	if err := platform.EnsureSocketDir(socket); err != nil {
 		return agentevents.Launch{}, err
 	}
-	launch := program + " app-server --listen unix://" + shellquote.Word(socket) +
-		codextrust.Forwarded(rest) + forwardedMCP(rest) + server
+	// The app-server is what calls the model, so it carries the launch's
+	// whole config: its model, a Model Profile route's provider and base URL
+	// (routes.ResumeLaunch puts them on the TUI), the folder trust and MCP
+	// servers.
+	launch := program + " app-server --listen unix://" + shellquote.Word(socket) + forwardedConfig(rest) + server
 	wrapped := launch + " > " + shellquote.Word(ControlLogPath(socket)) + " 2>&1 & echo $! > " + shellquote.Word(ControlPidPath(socket)) + "; "
 	if a.Mewla != "" {
 		wrapped += shellquote.Word(a.Mewla) + " codex-server-wait " + shellquote.Word(socket) + "; "
@@ -156,6 +158,32 @@ func splitResumeArgs(rest string) (tui, server string) {
 		server += " -c " + shellquote.Word(entry)
 	}
 	return strings.Join(keep, " "), server
+}
+
+// forwardedConfig is every -c/--config of the TUI arguments, and its model as
+// a config value, as app-server options.
+func forwardedConfig(tuiArgs string) string {
+	fields, ok := shellquote.Fields(tuiArgs)
+	if !ok {
+		return ""
+	}
+	var out strings.Builder
+	for index := 0; index < len(fields); index++ {
+		field := fields[index]
+		switch {
+		case (field == "--config" || field == "-c") && index+1 < len(fields):
+			index++
+			out.WriteString(" -c " + shellquote.Word(fields[index]))
+		case strings.HasPrefix(field, "--config="):
+			out.WriteString(" -c " + shellquote.Word(strings.TrimPrefix(field, "--config=")))
+		case (field == "--model" || field == "-m") && index+1 < len(fields):
+			index++
+			out.WriteString(" -c " + shellquote.Word(`model="`+fields[index]+`"`))
+		case strings.HasPrefix(field, "--model="):
+			out.WriteString(" -c " + shellquote.Word(`model="`+strings.TrimPrefix(field, "--model=")+`"`))
+		}
+	}
+	return out.String()
 }
 
 // controlAnswers says an app-server still listens on socket.
