@@ -109,7 +109,7 @@ function busyItems(): Item[] {
   items.push(daily("Garden sensor review", "07:40", ["Soil dry in bed 2", "All beds fine", "Sensor 4 battery low"]));
   items.push(daily("Library update check", "09:10", ["Nothing new", "One minor update, applied"]));
   items.push(daily("Spare room thermostat check", "09:10", ["Holding 19°C", "Holding 20°C"],
-    Date.now() > at("09:10").getTime() ? { outcome: "failed", result_preview: "The thermostat did not report in." } : undefined));
+    Date.now() > at("09:10").getTime() ? { outcome: "failed", result_preview: "**The thermostat did not report in.** Holding 19°C until it answers" } : undefined));
   items.push(daily("Photo archive sorting (09:50)", "09:50", ["212 sorted, 3 duplicates", "180 sorted"], undefined, true));
   items.push(daily("Photo archive sorting (15:20)", "15:20", ["96 sorted", "140 sorted, 1 unreadable"], undefined, true));
   items.push(daily("Photo archive sorting (21:40)", "21:40", ["64 sorted", "77 sorted"], undefined, true));
@@ -191,7 +191,7 @@ function trigger(title: string, every: number, fired: [number, string, number?][
 function busyTriggers(): Item[] {
   return [
     trigger("Home server disk health", 300, [[-2, "19:35", 2], [0, "06:05"]], {
-      failing: true, failures: 3, failing_since: iso(Date.now() - 14 * MIN), last_failure: "the disk did not answer", state: "failing",
+      failing: true, failures: 3, failing_since: iso(Date.now() - 14 * MIN), last_failure: "exit status 1\nthe disk did not answer", state: "failing",
       instruction: "Read the disk report, say in the thread which drive is at risk, and open a Work to replace it if one is failing.",
     }),
     trigger("New issues on the garden app", 600, [[-1, "17:05"], [0, "01:20"], [0, "02:40"], [0, "04:15"], [0, "05:50"], [0, "07:30"], [0, "08:55"], [0, "10:18", 2]]),
