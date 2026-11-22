@@ -405,27 +405,35 @@ review of the Work, the report is asked again every 10 s until Brain has it.
 
 **Codex.** A Codex Worker is a TUI attached to its own app-server. The
 app-server runs the thread and its turns, and Mewla sends, approves and
-interrupts through it. A Codex relaunch is never a bare `codex resume`, and
-brings back only what died (`agentevents/codex/relaunch.go`):
+interrupts through it. A Codex relaunch is never a bare `codex resume`
+(`agentevents/codex/relaunch.go`):
 
-- The app-server still answers on the Worker's control socket (checked at
-  launch time). A TUI is attached to it again (`codex resume <thread> --remote
-  <socket>`). The app-server and its turn are left alone, and nothing is sent:
-  the turn goes on and reports itself. The record's outcome is `reattached`.
-  A remote resume refuses permission flags ("Permission overrides are not
-  supported when resuming a remote task", `--add-dir` too), so they stay off
-  the TUI. The thread keeps the permissions it ran with.
-- The app-server died too. It shares the TUI's terminal and process group, so
-  the TUI's death usually takes it along. A new app-server is started the way a
-  fresh Codex Worker's is (trust, MCP servers, permissions moved onto it as
-  `-c approval_policy=… -c sandbox_mode=…`). The TUI resumes the same thread
-  through it (`--remote`). The Worker's control socket becomes the new one, and
-  structured send, approvals, interrupt and events follow it there. The new
-  app-server gets the launch's whole config: its model, the folder trust, the
-  MCP servers, and a Model Profile route's `model_provider` and
-  `openai_base_url` (`routes.ResumeLaunch` puts them on the TUI). The turn
-  died with the app-server, so a Turn in flight gets its continuation through
-  that new app-server, like any other agent.
+- While the old app-server still answers on the Worker's control socket,
+  nothing is started. Seen live with Codex 0.170.0: a SIGKILL of the TUI leaves
+  its app-server running. The app-server then drains: it finishes the turn it
+  runs, refuses any new client ("Server is draining", so a TUI cannot attach
+  to it again) and exits. Until it exits it is also the thread's one writer,
+  so another app-server cannot resume the thread ("already has an active
+  writer"). The relaunch waits, uses no try, and shows "Restarting after its
+  turn ends". The turn goes on and reports itself through the app-server
+  (structured events, approvals and the Worker's own progress report). The
+  wait is planned again every 30 s. After 30 minutes Brain is told
+  ("its app-server is still running …"), and the app-server is not stopped.
+- Once it is gone (or when it died with the TUI), a new app-server is started
+  the way a fresh Codex Worker's is: trust, MCP servers, the model, a Model
+  Profile route's `model_provider` and `openai_base_url`, and the permission
+  flags as `-c approval_policy=… -c sandbox_mode=…` (a remote resume refuses
+  them on the TUI: "Permission overrides are not supported when resuming a
+  remote task"). The TUI resumes the same thread through it (`codex resume
+  <thread> --remote <socket>`). The Worker's control socket becomes the new
+  one, and structured send, approvals, interrupt and events follow it there.
+  A Turn still in flight then (one the app-server died in, or one that ended
+  without the Worker's report) gets its continuation through that new
+  app-server, like any other agent.
+
+The app-server and everything it runs (its MCP servers, the command of the
+turn it is finishing) are the agent's own, so they are left out of the
+survivor list.
 
 **Staggering.** After a mass death (an out-of-memory sweep, say), relaunches
 of different Sessions start at least 5 s apart. A Session's own retries are
