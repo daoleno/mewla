@@ -3,7 +3,7 @@ import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
 import { effect, Scroll, signal, Text, View } from "nsh";
 import {
-  itemSummary, kindLabel, mergeRunResults, nextLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel,
+  itemSummary, kindLabel, mergeRunResults, nextLine, plainLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel,
   type CalendarItem, type CalendarRun,
 } from "../../core/calendar/model";
 import { codexAsset } from "../../core/session/sessionRequests";
@@ -174,7 +174,7 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
               <RunMark run={run()!} />
               <Text testID="run-word" class="text-sm text-muted-foreground">{`${runWhen(run()!, item()!, clock())} · ${runWord(run()!)}${run()!.manual ? " · Run by you" : ""}`}</Text>
             </View>
-            <If when={run()!.status === "failed"} else={<If when={run()!.result} else={<Text class="text-base text-muted-foreground">{run()!.result_preview ? `${run()!.result_preview}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}><View onLayout={({ bounds }) => resultWidth.set(bounds.size.width)}>
+            <If when={run()!.status === "failed"} else={<If when={run()!.result} else={<Text class="text-base text-muted-foreground">{run()!.result_preview ? `${plainLine(run()!.result_preview)}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}><View onLayout={({ bounds }) => resultWidth.set(bounds.size.width)}>
                     <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} width={resultWidth} onOpen={() => viewing.set(pictureKey(props.runId, image.src))} />} />
                   </View></If>}><View selectable><Text class="text-base text-warning">{run()!.failure_reason || "It failed without saying why."}</Text></View></If>
             {/* Its Session while the computer lists it, as the Expo app's run sheet did (parity #45). */}

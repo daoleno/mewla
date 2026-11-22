@@ -67,6 +67,19 @@ describe("runs", () => {
     expect(runPreview(runs[0])).toBe("Linked Work/agent is no longer observable after restart; Mewla did not relaunch it to avoid duplicate execution.");
     expect(runPreview(run("x", "completed", 27, { result: "## X1\n\n![cover](/a.png)\n\n- I built a cat." }))).toBe("X1");
   });
+  test("a result's one-line preview is plain words whatever Markdown starts it (gate 0.4.21)", () => {
+    const done = (result_preview: string) => runPreview(run("x", "completed", 27, { result_preview }));
+    expect(done("**Disk space check failed.** The check could not run")).toBe("Disk space check failed. The check could not run");
+    expect(done("*Nothing* new, _again_ today")).toBe("Nothing new, again today");
+    expect(done("`df -h` says 91% used")).toBe("df -h says 91% used");
+    expect(done("See [the report](https://example.com/r) for more")).toBe("See the report for more");
+    expect(done("## Disk report")).toBe("Disk report");
+    expect(done("- 3 drives checked")).toBe("3 drives checked");
+    expect(done("1. First the cache")).toBe("First the cache");
+    expect(runPreview(run("x", "completed", 27, { result: "---\n\n**Bold** start.\n\nMore." }))).toBe("Bold start.");
+    expect(runPreview(run("x", "failed", 27, { failure_reason: "**The key** was refused. More." }))).toBe("The key was refused.");
+    expect(done("snake_case_name stays * as is")).toBe("snake_case_name stays * as is");
+  });
   test("finds the run still at work", () => {
     expect(activeRun(yunying)).toBeUndefined();
     expect(activeRun({ runs: [...yunying.runs!, run("r", "running", 27, { worker_session: "%3" })] })?.worker_session).toBe("%3");

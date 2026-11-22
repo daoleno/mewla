@@ -300,6 +300,26 @@ describe("the Calendar tab", () => {
     expect(app.texts().some((text) => / · Done$/.test(text))).toBe(false);
   }, 20_000);
 
+  test("a result that starts with Markdown reads as plain words on its row, in its item's Runs and on its run page (gate 0.4.21)", async () => {
+    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const md = "**Disk space check failed.** The check could not run because the disk did not answer.";
+    const check = item("Disk space check", -1, {
+      kind: "scheduled_action", due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
+      runs: [{ id: "r-md", scheduled_for: at, started_at: at, finished_at: at, status: "completed", outcome: "failed", result_preview: md.slice(0, 60) }],
+    });
+    const app = await calendarApp({ calendar_items: [check] });
+    await app.waitFor("id:calendar-item-Disk space check", SLOW);
+    expect(app.texts().some((text) => text.startsWith("Failed · Disk space check failed. The check could not run"))).toBe(true);
+    expect(app.texts().some((text) => text.includes("**"))).toBe(false);
+    await app.host.send("links.open", { url: "mewla://calendar?id=Disk space check" });
+    await app.waitFor("id:run-r-md", SLOW);
+    expect(app.texts().some((text) => text.includes("**"))).toBe(false);
+    expect(app.texts().some((text) => text.startsWith("Disk space check failed. The check could not run"))).toBe(true);
+    await app.press("id:run-r-md");
+    await app.waitFor("id:calendar-run-page", SLOW);
+    expect(app.texts().some((text) => text.includes("**"))).toBe(false);
+  }, 20_000);
+
   test("a running item opens its Session while the computer lists it, and its page once the Session has gone (parity #45)", async () => {
     const run = { id: "r1", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w1" };
     const gone = { id: "r2", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w-gone" };

@@ -1,3 +1,4 @@
+import { markdownPreview } from "../timeline/taskNotificationCardModel";
 import type { DateFormat } from "./format";
 import type { Zones } from "./zones";
 
@@ -159,15 +160,16 @@ export function activeRun(item: Pick<CalendarItem, "runs">): CalendarRun | undef
   return runsNewestFirst(item).find((run) => run.status === "running");
 }
 
-/** One line of what a run produced, or why it failed. */
+/** Text an agent wrote, as one plain line: its first paragraph without Markdown's marks (a result's preview). */
+export function plainLine(text: string | undefined): string {
+  return markdownPreview(text ?? "", 10_000);
+}
+
+/** One line of what a run produced, or why it failed, in plain words. */
 export function runPreview(run: CalendarRun): string {
-  if (run.status === "failed") return firstSentence(run.failure_reason, 160);
-  if (run.result_preview) return run.result_preview;
-  const line = (run.result ?? "")
-    .split("\n")
-    .map((value) => value.replace(/^[#>\s]+/, "").replace(/^[-*+]\s+/, "").trim())
-    .find((value) => value && !value.startsWith("![") && !/^[-*_=|:\s]+$/.test(value));
-  return firstSentence(line, 160);
+  if (run.status === "failed") return firstSentence(plainLine(run.failure_reason), 160);
+  if (run.result_preview) return plainLine(run.result_preview);
+  return firstSentence(plainLine(run.result), 160);
 }
 
 /** "Tue, Oct 27, 8:30 PM": when a run was due, in the item's zone. */
