@@ -6,7 +6,8 @@
       "highlights": [],
       "fixes": [
         "New session dims an agent this computer does not have, instead of failing after you start.",
-        "On a wide screen Brain's row stays selected while a terminal is open."
+        "On a wide screen Brain's row stays selected while a terminal is open.",
+        "Sessions on Antigravity now have Chat, approvals, questions and model switching in the app."
       ]
     },
     {
