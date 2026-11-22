@@ -201,6 +201,7 @@ if bun "$here/lan-phone-walk.ts" "$RUNNER_TEMP/check-pair-window" "$out" >> "$lo
   say "ok: consent, exact displayed QR, phone WebSocket after dismissal, restart and LAN off"
 else
   say "FAILED: trusted LAN phone walk"
+  grep -E '^Decoded QR: url=(true|false), characters=[0-9]+, bytes=[0-9]+, declaredAddressBytes=-?[0-9]+, version=([0-9]+|undefined)$' "$log" || true
   grep -E '^error: QR rejected: url=(true|false), bytes=[0-9]+, declaredAddressBytes=-?[0-9]+, version=([0-9]+|undefined), matchesClipboard=(true|false), clipboardParses=(true|false)$' "$log" || true
   failed+=("trusted LAN phone walk")
   # Close the QR window before resuming any public screenshots.

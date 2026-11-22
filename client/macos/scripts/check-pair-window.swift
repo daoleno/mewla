@@ -3,7 +3,7 @@ import Vision
 import CoreGraphics
 import ImageIO
 
-// The scan command writes only to the simulated phone's private pipe.
+// The scan command writes only inside the simulated phone's private directory.
 let request = VNRecognizeTextRequest()
 let barcode = VNDetectBarcodesRequest()
 barcode.symbologies = [.qr]
@@ -25,10 +25,13 @@ case "consent": exit(title && !link && lines.contains("allow trusted lan") ? 0 :
 case "scan":
     guard title, let qr, let value = qr.payloadStringValue,
           lines.contains(where: { $0.range(of: #"(1[0-5]|[0-9]):[0-5][0-9] left"#, options: .regularExpression) != nil }) else { exit(1) }
-    print(value)
+    try value.write(toFile: CommandLine.arguments[3], atomically: true, encoding: .utf8)
 case "click":
     let target = CommandLine.arguments[3].lowercased()
-    guard let found = request.results?.first(where: { $0.topCandidates(1).first?.string.lowercased() == target }) else { exit(1) }
+    guard let found = request.results?.first(where: {
+        guard let text = $0.topCandidates(1).first?.string.lowercased() else { return false }
+        return text == target || text.hasSuffix(" " + target)
+    }) else { exit(1) }
     let screen = CGDisplayBounds(CGMainDisplayID())
     let box = found.boundingBox
     let point = CGPoint(x: screen.minX + screen.width * box.midX, y: screen.minY + screen.height * (1 - box.midY))
