@@ -760,7 +760,7 @@ func TestHostAgentRelaunchLeavesWhatTheAgentStartedRunning(t *testing.T) {
 	t.Cleanup(func() { _ = syscall.Kill(server, syscall.SIGKILL) })
 	ledger := &relaunchLedger{
 		turn: TurnSnapshot{SessionID: id, TurnID: "turn:live", Status: TurnRunning}, hasTurn: true,
-		plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", TurnID: "turn:live", Cwd: cwd, Command: "exec sleep 308", Attempt: 1, Agent: "sleep",
+		plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", TurnID: "turn:live", Command: "exec sleep 308", Attempt: 1, Agent: "sleep",
 			Words: "sleep was killed (SIGKILL); Mewla started it again in the same conversation and asked it to continue the task."},
 	}
 	h.w.SetTurnLedger(ledger)
@@ -782,6 +782,9 @@ func TestHostAgentRelaunchLeavesWhatTheAgentStartedRunning(t *testing.T) {
 		t.Fatalf("the relaunch stopped the server the agent left running: %v", err)
 	}
 	_, records, _, _ := ledger.snapshot()
+	if records[0].Outcome != "continued" {
+		t.Fatalf("record = %+v", records[0])
+	}
 	if !strings.Contains(records[0].Words, "Still running from before: setsid sleep 391") && !strings.Contains(records[0].Words, "Still running from before: sleep 391") {
 		t.Fatalf("record words = %q", records[0].Words)
 	}
@@ -789,5 +792,41 @@ func TestHostAgentRelaunchLeavesWhatTheAgentStartedRunning(t *testing.T) {
 	defer mu.Unlock()
 	if len(sent) != 1 || !strings.Contains(sent[0], "Mewla stopped nothing") || !strings.Contains(sent[0], "sleep 391 (running ") {
 		t.Fatalf("continuation = %q", sent)
+	}
+}
+
+// Two agents that end together are not started together: the second
+// relaunch waits the stagger.
+func TestHostAgentRelaunchesAfterAMassDeathAreStaggered(t *testing.T) {
+	h := newHostHarness(t)
+	first, firstPID := startDelegatedAgent(t, h)
+	second, secondPID := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 309", Attempt: 1}}
+	h.w.SetTurnLedger(ledger)
+	supervisor := h.w.agentRelaunch()
+	var mu sync.Mutex
+	var waits []time.Duration
+	supervisor.sleep = func(d time.Duration) {
+		mu.Lock()
+		waits = append(waits, d)
+		mu.Unlock()
+	}
+	killAgent(t, h.w, first, firstPID)
+	killAgent(t, h.w, second, secondPID)
+	h.w.poll()
+	waitUntil(t, 10*time.Second, "both relaunched", func() bool {
+		_, records, _, _ := ledger.snapshot()
+		return len(records) == 2
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	staggered := 0
+	for _, wait := range waits {
+		if wait > agentRelaunchStagger-time.Second && wait <= agentRelaunchStagger {
+			staggered++
+		}
+	}
+	if staggered != 1 {
+		t.Fatalf("waits = %v, want one of about %v", waits, agentRelaunchStagger)
 	}
 }
