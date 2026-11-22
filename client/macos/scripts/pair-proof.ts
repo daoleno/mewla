@@ -92,9 +92,13 @@ if (mode === "--across-takeover" || mode === "--rollback" || mode === "--reopen"
   if (!existsSync(oldJob) || !existsSync(priorBundle)) throw new Error("previous installation removed before the original phone authenticated");
   if (mode === "--rollback" || mode === "--reopen") {
     if (mode === "--reopen") {
-      execFileSync("/usr/bin/osascript", ["-e", 'quit app "Mewla"']);
-      const app = "/Applications/Mewla.app/Contents/MacOS/Mewla";
-      await wait(() => spawnSync("/usr/bin/pgrep", ["-f", "^" + app + "$"]).status === 1, 30, "app did not quit during the trial");
+      // Interrupt the trial coordinator on this disposable Mac, leaving both
+      // launchd services alone. A normal Quit Apple event may request consent.
+      const app = "^/Applications/Mewla[.]app/Contents/MacOS/Mewla( |$)";
+      const pid = execFileSync("/usr/bin/pgrep", ["-f", app], { encoding: "utf8" }).trim();
+      if (!/^\d+$/.test(pid)) throw new Error("cannot identify a single installed app process");
+      process.kill(Number(pid), "SIGKILL");
+      await wait(() => spawnSync("/usr/bin/pgrep", ["-f", app]).status === 1, 30, "app still running after interruption");
       if (!existsSync(home + "/.mewla/mac-app-takeover.pending")) throw new Error("trial was no longer pending");
       execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
     }
