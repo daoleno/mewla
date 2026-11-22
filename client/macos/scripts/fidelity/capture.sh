@@ -44,8 +44,10 @@ done
 pid=$(pgrep -nf "$exe" || true)
 sleep "${FIDELITY_SETTLE:-8}"
 if [[ "$name" == *terminal* ]]; then
-  for i in $(seq 1 40); do cat "$D"/data/logs/* 2>/dev/null | grep -qE "terminal: (opened|error)" && break; sleep 1; done
-  sleep 4
+  # The grid's first paint: an error on the way is not the end (the app follows Brain's host when the daemon
+  # replaces it, as it does on a runner whose stub agent never takes the activation). After 40 s, whatever shows.
+  for i in $(seq 1 40); do cat "$D"/data/logs/* 2>/dev/null | grep -qE "terminal: first paint" && break; sleep 1; done
+  sleep 2
 fi
 if [[ "$name" == *grant* ]]; then
   "$app/Contents/Helpers/mewla" agent-use need chrome --reason "A Worker needs your Chrome to check the release." --state-dir "$D/state" --json >/dev/null 2>&1 || true

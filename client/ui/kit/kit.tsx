@@ -175,10 +175,17 @@ export function SearchField(props: { value: string; placeholder: string; onChang
 }
 
 /** A small ghost button on a row (Connect, Set up, Fix, Sign in): 36 high, radius 12, on the canvas, 15/600 (SPEC §10.4). */
-export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string; testID?: string }) {
+export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; accessibilityLabel?: string; testID?: string }) {
+  // `busy`: the label fades for the 16 pt ring from `wait.quiet` (SPEC §16.2 pattern 5), the button keeps its size.
+  const ring = delayed(() => Boolean(props.busy));
   return (
-    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled} onPress={props.onPress} hitSlop={4} class="h-9 items-center justify-center rounded-xl bg-background px-3.5 active:opacity-70 disabled:opacity-40">
-      <Text class="text-sub font-semibold">{props.label}</Text>
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled || props.busy} onPress={props.onPress} hitSlop={4} class={`h-9 items-center justify-center rounded-xl bg-background px-3.5 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
+      <Text class="text-sub font-semibold" style={{ opacity: ring() ? 0 : 1 }}>{props.label}</Text>
+      <If when={ring()}>
+        <View testID={props.testID ? `${props.testID}-ring` : undefined} class="absolute inset-0 items-center justify-center" style={{ pointerEvents: "none" }}>
+          <Spinner size={16} label={props.label} tone="soft" />
+        </View>
+      </If>
     </Button>
   );
 }
