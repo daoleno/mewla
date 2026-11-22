@@ -14,15 +14,15 @@ func TestAgentRelaunchLine(t *testing.T) {
 	now := time.Date(2026, 11, 22, 1, 0, 0, 0, time.UTC)
 	s := newAgentRelaunchSupervisor()
 
-	s.setLine("a", agentRelaunchLine{kind: agentLineRestarting, text: restartingLine("Restarted after SIGKILL")})
+	s.setLine("a", agentRelaunchLine{kind: agentLineRestarting, text: restartingLine("Restarted after a crash")})
 	if state, line, ok := s.line("a", false, classifier.StateFailed, now); !ok || state != classifier.StateRunning ||
-		line != (classifier.Relaunch{State: "restarting", Line: "Restarting after SIGKILL"}) {
+		line != (classifier.Relaunch{State: "restarting", Line: "Restarting after a crash"}) {
 		t.Fatalf("restarting = %v %+v %v", state, line, ok)
 	}
 
-	s.setLine("a", agentRelaunchLine{kind: agentLineRestarted, text: "Restarted after SIGKILL", until: now.Add(agentRelaunchShown)})
+	s.setLine("a", agentRelaunchLine{kind: agentLineRestarted, text: "Restarted after a crash", until: now.Add(agentRelaunchShown)})
 	if state, line, ok := s.line("a", true, classifier.StateDone, now); !ok || state != classifier.StateDone ||
-		line != (classifier.Relaunch{State: "restarted", Line: "Restarted after SIGKILL"}) {
+		line != (classifier.Relaunch{State: "restarted", Line: "Restarted after a crash"}) {
 		t.Fatalf("restarted idle = %v %+v %v", state, line, ok)
 	}
 	if _, _, ok := s.line("a", true, classifier.StateRunning, now); ok {
@@ -32,14 +32,14 @@ func TestAgentRelaunchLine(t *testing.T) {
 		t.Fatal("the restarted line came back after the agent showed work")
 	}
 
-	s.setLine("b", agentRelaunchLine{kind: agentLineRestarted, text: "Restarted after exit 1", until: now.Add(agentRelaunchShown)})
+	s.setLine("b", agentRelaunchLine{kind: agentLineRestarted, text: "Restarted after an update", until: now.Add(agentRelaunchShown)})
 	if _, _, ok := s.line("b", true, classifier.StateDone, now.Add(agentRelaunchShown+time.Second)); ok {
 		t.Fatal("the restarted line outlived its time")
 	}
 
-	s.setLine("c", agentRelaunchLine{kind: agentLineStopped, text: "Gave up after 3 restarts"})
+	s.setLine("c", agentRelaunchLine{kind: agentLineStopped, text: "Stopped after 3 restarts"})
 	if state, line, ok := s.line("c", false, classifier.StateDone, now); !ok || state != classifier.StateFailed ||
-		line != (classifier.Relaunch{State: "not_restarted", Line: "Gave up after 3 restarts"}) {
+		line != (classifier.Relaunch{State: "stopped", Line: "Stopped after 3 restarts"}) {
 		t.Fatalf("stopped = %v %+v %v", state, line, ok)
 	}
 	if _, _, ok := s.line("c", true, classifier.StateDone, now); ok {
@@ -58,10 +58,11 @@ func TestAgentEndShortCause(t *testing.T) {
 		end  AgentEnd
 		want string
 	}{
-		{AgentEnd{Exit: SessionExit{Signal: "KILL"}}, "SIGKILL"},
+		{AgentEnd{Exit: SessionExit{Signal: "KILL"}}, "a crash"},
 		{AgentEnd{Exit: SessionExit{Signal: "SIGKILL"}, OutOfMemory: true}, "running out of memory"},
-		{AgentEnd{Exit: SessionExit{Code: code(1)}}, "exit 1"},
-		{AgentEnd{}, "it ended"},
+		{AgentEnd{Exit: SessionExit{Code: code(1)}}, "a crash"},
+		{AgentEnd{Exit: SessionExit{Code: code(143)}}, "a crash"},
+		{AgentEnd{}, "a crash"},
 	} {
 		if got := test.end.ShortCause(); got != test.want {
 			t.Fatalf("%+v = %q, want %q", test.end, got, test.want)

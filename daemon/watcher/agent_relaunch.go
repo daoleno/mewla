@@ -70,19 +70,14 @@ func (e AgentEnd) Cause() string {
 	return "ended"
 }
 
-// ShortCause is Cause for a Session's line: "SIGKILL", "exit 1", "running
-// out of memory".
+// ShortCause is Cause in a person's words, for the Session's line in the
+// app: "running out of memory", else "a crash". The exact signal or exit
+// code stays in Cause, for Brain and the log.
 func (e AgentEnd) ShortCause() string {
-	signal := strings.ToUpper(strings.TrimPrefix(strings.TrimSpace(e.Exit.Signal), "SIG"))
-	switch {
-	case e.OutOfMemory:
+	if e.OutOfMemory {
 		return "running out of memory"
-	case signal != "":
-		return "SIG" + signal
-	case e.Exit.Code != nil:
-		return fmt.Sprintf("exit %d", *e.Exit.Code)
 	}
-	return "it ended"
+	return "a crash"
 }
 
 // Clean reports an exit with code 0 and no signal: the agent ended itself.
@@ -270,7 +265,7 @@ func (s *agentRelaunchSupervisor) line(sessionID string, alive bool, state class
 			delete(s.lines, sessionID)
 			return state, classifier.Relaunch{}, false
 		}
-		return classifier.StateFailed, classifier.Relaunch{State: "not_restarted", Line: line.text}, true
+		return classifier.StateFailed, classifier.Relaunch{State: "stopped", Line: line.text}, true
 	case agentLineRestarted:
 		if !alive || now.After(line.until) {
 			delete(s.lines, sessionID)

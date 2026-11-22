@@ -44,11 +44,11 @@ describe("the Workers of a Work", () => {
   });
 
   test("a Worker whose agent ended says it was restarted, or why not, over its last report", () => {
-    const restarted = session("worker:@c", { status: "done", summary: "said hello", phase: "reporting", relaunch: { state: "restarted", line: "Restarted after SIGKILL" } });
-    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", restarted]]), NOW)[0]!.summary).toBe("Restarted after SIGKILL");
+    const restarted = session("worker:@c", { status: "done", summary: "said hello", phase: "reporting", relaunch: { state: "restarted", line: "Restarted after a crash" } });
+    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", restarted]]), NOW)[0]!.summary).toBe("Restarted after a crash");
     // The line says it failed: no "Failed ·" before it.
-    const gaveUp = session("worker:@c", { status: "failed", relaunch: { state: "not_restarted", line: "Gave up after 3 restarts" } });
-    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", gaveUp]]), NOW)[0]).toMatchObject({ state: "failed", stateLabel: undefined, summary: "Gave up after 3 restarts" });
+    const gaveUp = session("worker:@c", { status: "failed", relaunch: { state: "stopped", line: "Stopped after 3 restarts" } });
+    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", gaveUp]]), NOW)[0]).toMatchObject({ state: "failed", stateLabel: undefined, summary: "Stopped after 3 restarts" });
   });
 
   test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {

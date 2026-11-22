@@ -228,7 +228,7 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	if recent >= agentRelaunchLimit {
 		minutes := int(agentRelaunchWindow / time.Minute)
 		return reportAgentEnd(plan, name, cause, fmt.Sprintf("it was started again %d times in the last %d minutes and ended each time", recent, minutes),
-			fmt.Sprintf("Gave up after %d restarts", recent)), nil
+			fmt.Sprintf("Stopped after %d restarts", recent)), nil
 	}
 	plan.Action = watcher.AgentEndRelaunch
 	plan.Command, plan.Env, plan.PrepareWorkspace = command, env, work.PrepareDelegatedWorkspace
