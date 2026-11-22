@@ -739,6 +739,21 @@ func outagePlans(w *Watcher) func(AgentEnd) AgentRelaunchPlan {
 	}
 }
 
+// lockedClock is a test clock the relaunch goroutines read while the test
+// moves it.
+type lockedClock struct {
+	mu sync.Mutex
+	at time.Time
+}
+
+func (c *lockedClock) now() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.at }
+func (c *lockedClock) add(d time.Duration) time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.at = c.at.Add(d)
+	return c.at
+}
+
 func startOutage(w *Watcher, at time.Time) {
 	w.noteProviderObservation("claude", refused(at.Add(-time.Minute)))
 	w.noteProviderObservation("claude", refused(at))
@@ -757,10 +772,11 @@ func TestHostAgentHeldForAnOutageComesBackWhenAnotherWorkerIsAnswered(t *testing
 	at := time.Now().UTC()
 	startOutage(h.w, at)
 	supervisor := h.w.agentRelaunch()
-	supervisor.now = func() time.Time { return at }
+	clock := &lockedClock{at: at}
+	supervisor.now = clock.now
 	killAgent(t, h.w, id, pid)
 	h.w.poll()
-	if state, relaunch, ok := supervisor.line(id, false, "", at); !ok || state != classifier.StateBlocked || relaunch.State != "waiting" {
+	if state, relaunch, ok := supervisor.line(id, false, "", clock.now()); !ok || state != classifier.StateBlocked || relaunch.State != "waiting" {
 		t.Fatalf("held: state %q line %+v", state, relaunch)
 	}
 	// Another Claude Worker's Turn settled (done) before its request finished.
@@ -773,7 +789,7 @@ func TestHostAgentHeldForAnOutageComesBackWhenAnotherWorkerIsAnswered(t *testing
 	if _, down := h.w.ProviderOutage("claude"); down {
 		t.Fatal("the other Worker's answer did not end the outage")
 	}
-	at = answer.Add(agentEndWaitEvery)
+	clock.add(answer.Add(agentEndWaitEvery).Sub(clock.now()))
 	h.w.poll()
 	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
 	_, records, reported, plans := ledger.snapshot()
@@ -799,17 +815,18 @@ func TestHostAgentHeldForAnOutageThatNeverEndsIsStartedAtTheBound(t *testing.T) 
 		t.Fatal("setup: the first probe was not granted")
 	}
 	supervisor := h.w.agentRelaunch()
-	supervisor.now = func() time.Time { return at }
+	clock := &lockedClock{at: at}
+	supervisor.now = clock.now
 	killAgent(t, h.w, id, pid)
 	h.w.poll()
 	for step := agentEndWaitEvery; step < agentProviderWaitLimit; step += agentEndWaitEvery {
-		at = at.Add(agentEndWaitEvery)
+		clock.add(agentEndWaitEvery)
 		h.w.poll()
 		if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
 			t.Fatalf("started at %s, before the bound: %+v", step, records)
 		}
 	}
-	at = at.Add(agentEndWaitEvery)
+	clock.add(agentEndWaitEvery)
 	h.w.poll()
 	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
 	_, records, reported, plans := ledger.snapshot()
@@ -831,16 +848,17 @@ func TestHostAgentHeldForAnOutageIsStartedWithTheFamilysProbe(t *testing.T) {
 	at := time.Now().UTC()
 	startOutage(h.w, at)
 	supervisor := h.w.agentRelaunch()
-	supervisor.now = func() time.Time { return at }
+	clock := &lockedClock{at: at}
+	supervisor.now = clock.now
 	killAgent(t, h.w, id, pid)
 	h.w.poll()
 	// The family's first probe is due five minutes into the outage; the
 	// end's asks at 1, 3 and 7 minutes find it at 7.
 	started := time.Duration(0)
 	for step := agentEndWaitEvery; step <= agentProviderWaitLimit; step += agentEndWaitEvery {
-		at = at.Add(agentEndWaitEvery)
+		clock.add(agentEndWaitEvery)
 		h.w.poll()
-		if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
+		if _, _, _, plans := ledger.snapshot(); plans[len(plans)-1].ProviderTest {
 			started = step
 			break
 		}
