@@ -111,7 +111,15 @@ const (
 	AgentEndRelaunch AgentEndAction = "relaunch"
 	// AgentEndReport: not started again; Brain is told once, with Words.
 	AgentEndReport AgentEndAction = "report"
+	// AgentEndWait: the agent's provider is refusing every request (a
+	// provider outage): the end is held back and no try is used; it is
+	// planned again after agentEndWaitEvery.
+	AgentEndWait AgentEndAction = "wait"
 )
+
+// agentEndWaitEvery is how often an end waiting out a provider outage is
+// planned again.
+const agentEndWaitEvery = 30 * time.Second
 
 // AgentRelaunchPlan is the ledger's decision for one ended agent.
 type AgentRelaunchPlan struct {
@@ -251,6 +259,8 @@ type agentEndDecision struct {
 	// an earlier review of its Work to leave Brain; asked again at nextTell.
 	untold   *AgentEnd
 	nextTell time.Time
+	// recheck is when a wait (AgentEndWait) is planned again.
+	recheck time.Time
 }
 
 // agentEndTellEvery is how often a not-started-again report that waits behind
@@ -282,6 +292,31 @@ type agentRelaunchSupervisor struct {
 	now    func() time.Time
 	// sleep waits before a relaunch with a backoff.
 	sleep func(time.Duration)
+	// nextStart and lastStarter space relaunches of different Sessions by
+	// agentRelaunchStagger: after a mass death (an OOM sweep, a reboot of the
+	// agents' host) the agents do not all start, load and resume at once.
+	nextStart   time.Time
+	lastStarter string
+}
+
+// agentRelaunchStagger is the least time between two Sessions' relaunches.
+const agentRelaunchStagger = 5 * time.Second
+
+// startSlot reserves sessionID's start and says how long to wait for it. A
+// Session's own successive relaunches are spaced by their backoff instead.
+func (s *agentRelaunchSupervisor) startSlot(sessionID string) time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	slot := now
+	if s.lastStarter != sessionID && s.nextStart.After(now) {
+		slot = s.nextStart
+	}
+	if next := slot.Add(agentRelaunchStagger); next.After(s.nextStart) {
+		s.nextStart = next
+	}
+	s.lastStarter = sessionID
+	return slot.Sub(now)
 }
 
 type agentRelaunchHeld struct {
@@ -453,6 +488,12 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	supervisor.mu.Lock()
 	decision, seen := supervisor.decided[item.id]
 	supervisor.mu.Unlock()
+	if seen && decision.endedAt.Equal(exit.EndedAt) && decision.plan.Action == AgentEndWait {
+		if supervisor.now().Before(decision.recheck) {
+			return true, ""
+		}
+		seen = false // planned again below
+	}
 	if seen && decision.endedAt.Equal(exit.EndedAt) {
 		if decision.untold != nil && !supervisor.now().Before(decision.nextTell) {
 			w.tellAgentEnd(ledger, *decision.untold, decision.plan)
@@ -496,12 +537,19 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	supervisor.mu.Lock()
 	supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan}
 	supervisor.mu.Unlock()
-	if plan.Action != AgentEndRelaunch {
+	if plan.Action != AgentEndRelaunch && plan.Action != AgentEndWait {
 		// Final: kept on the Session for any later daemon.
 		w.storeAgentEnd(item.id, agentEndRecord{EndedAt: exit.EndedAt, Action: plan.Action, WorkID: plan.WorkID,
 			TurnID: end.TurnID, Pending: plan.PendingTurnID, Words: plan.Words, Line: plan.Line})
 	}
 	switch plan.Action {
+	case AgentEndWait:
+		log.Printf("agent relaunch: %s %s", item.id, plan.Words)
+		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineRestarting, text: plan.Line})
+		supervisor.mu.Lock()
+		supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan, recheck: supervisor.now().Add(agentEndWaitEvery)}
+		supervisor.mu.Unlock()
+		return true, ""
 	case AgentEndRelaunch:
 		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineRestarting, text: restartingLine(plan.Line)})
 		supervisor.mu.Lock()
@@ -612,6 +660,9 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 	}
 	if plan.After > 0 {
 		supervisor.sleep(plan.After)
+	}
+	if wait := supervisor.startSlot(end.SessionID); wait > 0 {
+		supervisor.sleep(wait)
 	}
 	// What was true when the agent ended may not be now: the Work may have
 	// closed or the Worker been closed while we waited.

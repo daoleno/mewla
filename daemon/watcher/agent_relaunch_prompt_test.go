@@ -72,3 +72,49 @@ func TestDelegatedPromptIsKeptForItsTurn(t *testing.T) {
 		t.Fatal("the older prompt outlived the newer one")
 	}
 }
+
+// A Turn whose agent is being, or was just, started again is not a stall:
+// its old process is gone on purpose and its continuation is on its way, so
+// the stall supervisor sends nothing for it (M4).
+func TestStallSupervisorLeavesARelaunchedTurnAlone(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	drop := &ProviderActivityError{Code: "server_error", Message: "API Error: Connection lost mid-response."}
+	start := time.Date(2026, 10, 12, 1, 0, 0, 0, time.UTC)
+	w := newRecoveryWatcher(ledger, &submits)
+	relaunch := w.agentRelaunch()
+	relaunch.now = func() time.Time { return start }
+	item := stalledPollItem(start.Add(DefaultTurnRecoveryPolicy().Backoff[0]), start, "a1", drop)
+	relaunch.held[item.id] = agentRelaunchHeld{turnID: item.turn.TurnID, until: start.Add(time.Hour)}
+	w.superviseDelegatedTurns([]probedPollWorker{item})
+	if len(submits) != 0 || len(ledger.records) != 0 {
+		t.Fatalf("a relaunched Turn was resumed as a stall: submits %v records %+v", submits, ledger.records)
+	}
+	// Once the hold ends, the same stall is the supervisor's again.
+	delete(relaunch.held, item.id)
+	w.superviseDelegatedTurns([]probedPollWorker{item})
+	if len(submits) != 1 {
+		t.Fatalf("after the hold: submits %v", submits)
+	}
+}
+
+// Relaunches of different Sessions are spaced; one Session's own retries are
+// not held behind themselves.
+func TestRelaunchStartsAreStaggeredAcrossSessions(t *testing.T) {
+	s := newAgentRelaunchSupervisor()
+	at := time.Date(2026, 11, 22, 3, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return at }
+	// c's own retry (its backoff already spaced it) starts at once, and the
+	// next Session still waits its turn behind c's first slot.
+	waits := []time.Duration{s.startSlot("a"), s.startSlot("b"), s.startSlot("c"), s.startSlot("c"), s.startSlot("e")}
+	want := []time.Duration{0, agentRelaunchStagger, 2 * agentRelaunchStagger, 0, 3 * agentRelaunchStagger}
+	for i := range want {
+		if waits[i] != want[i] {
+			t.Fatalf("waits = %v, want %v", waits, want)
+		}
+	}
+	at = at.Add(time.Minute)
+	if wait := s.startSlot("d"); wait != 0 {
+		t.Fatalf("a start after a quiet minute waited %v", wait)
+	}
+}
