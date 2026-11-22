@@ -19,11 +19,26 @@ log="$out/walk.txt"
 : > "$log"
 failed=()
 say() { echo "$*" | tee -a "$log"; }
+# <seconds> <command...>: the command, killed if it is still running then (an AppleScript waiting on a prompt, a
+# detach the Finder holds up). macOS has no timeout(1).
+bounded() {
+  local secs="$1"; shift
+  "$@" &
+  local pid=$!
+  ( sleep "$secs"; kill -9 "$pid" 2>/dev/null ) &
+  local guard=$!
+  wait "$pid"; local rc=$?
+  kill "$guard" 2>/dev/null; wait "$guard" 2>/dev/null
+  return $rc
+}
+osa() { bounded 20 osascript "$@"; }
+# Opening the app as a double-click does, in the background: `open` waits while Gatekeeper's question is up.
+launch() { open "$@" > /dev/null 2>&1 & }
 check() { local what="$1"; shift; if "$@" >> "$log" 2>&1; then say "ok: $what"; else say "FAILED: $what"; failed+=("$what"); fi; }
-shot() { screencapture -x -D 1 "$out/$1.png" 2>/dev/null || screencapture -x "$out/$1.png" || true; say "capture: $1.png"; }
+shot() { bounded 20 screencapture -x -D 1 "$out/$1.png" 2>/dev/null || bounded 20 screencapture -x "$out/$1.png" || true; say "capture: $1.png"; }
 # The app's on-screen windows (layer 0), each alone: <name>-w<number>.png, and their bounds in <name>-windows.txt.
 windows() {
-  swift -e '
+  bounded 90 swift -e '
 import CoreGraphics
 let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
 for w in list where (w[kCGWindowOwnerName as String] as? String) == "Mewla" && (w[kCGWindowLayer as String] as? Int) == 0 {
@@ -31,27 +46,27 @@ for w in list where (w[kCGWindowOwnerName as String] as? String) == "Mewla" && (
   print(w[kCGWindowNumber as String]!, "\(b["X"]!),\(b["Y"]!) \(b["Width"]!)x\(b["Height"]!)", w[kCGWindowName as String] ?? "")
 }' > "$out/$1-windows.txt" 2>&1 || true
   while read -r number _; do
-    [[ "$number" =~ ^[0-9]+$ ]] && screencapture -x -o -l "$number" "$out/$1-w$number.png" || true
+    [[ "$number" =~ ^[0-9]+$ ]] && bounded 20 screencapture -x -o -l "$number" "$out/$1-w$number.png" || true
   done < "$out/$1-windows.txt"
   say "windows ($1): $(tr '\n' ';' < "$out/$1-windows.txt")"
 }
-appearance() { osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1" >/dev/null 2>&1 || true; sleep 3; }
+appearance() { osa -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1" >/dev/null 2>&1 || true; sleep 3; }
 both() { appearance false; shot "$1-light"; windows "$1-light"; appearance true; shot "$1-dark"; windows "$1-dark"; appearance false; }
 app_pid() { pgrep -f '/Applications/Mewla.app/Contents/MacOS/Mewla' | head -1; }
 app_up() { local p; p=$(app_pid); [[ -n "$p" ]] && [[ "$(ps -o state= -p "$p" | tr -d ' ')" != T* ]]; }
-has_window() { swift -e 'import CoreGraphics
+has_window() { bounded 60 swift -e 'import CoreGraphics
 let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
 print(l.contains { ($0[kCGWindowOwnerName as String] as? String) == "Mewla" && ($0[kCGWindowLayer as String] as? Int) == 0 } ? "yes" : "no")' 2>/dev/null | grep -q yes; }
 up_with_window() { app_up && has_window; }
-health() { curl -fsS http://127.0.0.1:9876/health 2>/dev/null; }
+health() { curl -m 5 -fsS http://127.0.0.1:9876/health 2>/dev/null; }
 quit_app() {
-  osascript -e 'quit app "Mewla"' >/dev/null 2>&1 || true
+  osa -e 'quit app "Mewla"' >/dev/null 2>&1 || true
   for i in $(seq 1 30); do [[ -z "$(app_pid)" ]] && return 0; sleep 1; done
   return 1
 }
 # Gatekeeper's question, wherever it is shown: the window with an Open button. Captured, then answered Open.
 answer_gatekeeper() {
-  osascript <<'OSA' 2>&1
+  bounded 20 osascript <<'OSA' 2>&1
 tell application "System Events"
   repeat with p in (every process)
     try
@@ -75,7 +90,7 @@ return ""
 OSA
 }
 press_open() {
-  osascript -e 'tell application "System Events" to repeat with p in (every process)
+  osa -e 'tell application "System Events" to repeat with p in (every process)
 try
 if (count of windows of p) > 0 then
 if (name of every button of window 1 of p) contains "Open" then
@@ -106,7 +121,7 @@ check "Gatekeeper accepts the image (spctl)" spctl -a -t open --context context:
 check "the image's notarization ticket is stapled" xcrun stapler validate "$dmg"
 
 # 2. Double-click the image: LaunchServices mounts it and the Finder shows the app beside Applications.
-open "$dmg"
+bounded 60 open "$dmg"
 for i in $(seq 1 60); do [[ -d /Volumes/Mewla/Mewla.app ]] && break; sleep 1; done
 check "the image opens with the app and Applications" test -d /Volumes/Mewla/Mewla.app -a -L /Volumes/Mewla/Applications
 sleep 4
@@ -114,7 +129,7 @@ shot 01-image-open
 check "Gatekeeper accepts the app in the image" spctl -a -t exec -vv /Volumes/Mewla/Mewla.app
 
 # 3. Drag Mewla onto Applications: the Finder's copy (it keeps the image's quarantine).
-if ! osascript -e 'tell application "Finder" to duplicate (POSIX file "/Volumes/Mewla/Mewla.app" as alias) to (path to applications folder)' >> "$log" 2>&1; then
+if ! osa -e 'tell application "Finder" to duplicate (POSIX file "/Volumes/Mewla/Mewla.app" as alias) to (path to applications folder)' >> "$log" 2>&1; then
   say "the Finder's copy was not allowed to this shell; copied as the Finder copies (ditto, quarantine kept)"
   ditto /Volumes/Mewla/Mewla.app /Applications/Mewla.app
 fi
@@ -124,10 +139,11 @@ say "quarantine on the installed app: $(xattr -p com.apple.quarantine /Applicati
 say "version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' /Applications/Mewla.app/Contents/Info.plist)"
 check "Gatekeeper accepts the installed app (spctl)" spctl -a -t exec -vv /Applications/Mewla.app
 codesign -dv --verbose=2 /Applications/Mewla.app 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" | tee -a "$log"
-hdiutil detach /Volumes/Mewla >/dev/null 2>&1 || hdiutil detach -force /Volumes/Mewla >/dev/null 2>&1 || true
+osa -e 'tell application "Finder" to eject disk "Mewla"' >/dev/null 2>&1 || bounded 30 hdiutil detach /Volumes/Mewla >/dev/null 2>&1 || bounded 30 hdiutil detach -force /Volumes/Mewla >/dev/null 2>&1 || true
+say "the image is $( [[ -d /Volumes/Mewla ]] && echo "still mounted" || echo ejected)"
 
 # 4. The first launch, as a double-click in Applications: Gatekeeper asks once; the person presses Open.
-open /Applications/Mewla.app
+launch /Applications/Mewla.app
 asked=""
 for i in $(seq 1 60); do
   app_up && break
@@ -153,36 +169,36 @@ sleep 15
 both 04-first-run
 
 # 5. Pair a phone…: the menu bar cat's menu (a right-click), its row, the pairing window with the link.
-pos=$(osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to get {position, size} of menu bar item 1 of menu bar 2" 2>&1 || true)
+pos=$(osa -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to get {position, size} of menu bar item 1 of menu bar 2" 2>&1 || true)
 say "the cat in the menu bar: $pos"
 read -r x y w h < <(tr -d ',' <<<"$pos")
 paired_by=""
 if [[ "$x" =~ ^[0-9]+$ ]]; then
-  swift "$here/fidelity/click.swift" right $((x + w / 2)) $((y + h / 2)) || true
+  bounded 90 swift "$here/fidelity/click.swift" right $((x + w / 2)) $((y + h / 2)) || true
   sleep 2
   shot 05-cat-menu
-  if osascript -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to click menu item \"Pair a phone…\" of menu 1 of menu bar item 1 of menu bar 2" >> "$log" 2>&1; then
+  if osa -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to click menu item \"Pair a phone…\" of menu 1 of menu bar item 1 of menu bar 2" >> "$log" 2>&1; then
     paired_by="the cat's menu"
   else
-    key() { osascript -e "tell application \"System Events\" to key code $1" >/dev/null 2>&1 || true; }
+    key() { osa -e "tell application \"System Events\" to key code $1" >/dev/null 2>&1 || true; }
     # The menu is open: its fourth row (Open Mewla, Quick chat, a separator, Pair a phone…) by the keyboard.
     key 125; key 125; key 125; key 36
     paired_by="the cat's menu, by the keyboard"
   fi
 fi
 sleep 4
-pairing=$(swift -e 'import CoreGraphics
+pairing=$(bounded 60 swift -e 'import CoreGraphics
 let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
 print(l.filter { ($0[kCGWindowOwnerName as String] as? String) == "Mewla" && ($0[kCGWindowLayer as String] as? Int) == 0 }.count)' 2>/dev/null || echo 0)
 say "windows after Pair a phone… ($paired_by): $pairing"
 both 06-pair
-"/Applications/Mewla.app/Contents/Helpers/mewla" pair -details http://127.0.0.1:9876 2>&1 | grep -c 'mewla://' | sed 's/^/pairing links the daemon gives: /' | tee -a "$log"
-osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
+bounded 30 "/Applications/Mewla.app/Contents/Helpers/mewla" pair -details http://127.0.0.1:9876 2>&1 | grep -c 'mewla://' | sed 's/^/pairing links the daemon gives: /' | tee -a "$log"
+osa -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
 
 # 6. Quit Mewla, then open it again: no question this time, the daemon kept running, the window back.
 check "Quit closes the app" quit_app
 check "the daemon keeps running after Quit" health
-open /Applications/Mewla.app
+launch /Applications/Mewla.app
 sleep 3
 q=$(answer_gatekeeper)
 [[ -z "$q" ]] && say "ok: no Gatekeeper question on the second launch" || { say "FAILED: asked again: $q"; failed+=("asked again"); }
@@ -197,7 +213,7 @@ python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]);
 for surface in 'settings-general {"settings":"general"}' 'settings-access {"settings":"access"}' 'calendar {"open":"calendar"}'; do
   name="${surface%% *}"; script="${surface#* }"
   quit_app || true
-  open -n --env MEWLA_APP_DEV_SCRIPT="$script" /Applications/Mewla.app
+  launch -n --env MEWLA_APP_DEV_SCRIPT="$script" /Applications/Mewla.app
   for i in $(seq 1 60); do app_up && has_window && break; sleep 1; done
   sleep 10
   both "08-$name"
