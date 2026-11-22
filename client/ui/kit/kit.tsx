@@ -174,13 +174,15 @@ export function SearchField(props: { value: string; placeholder: string; onChang
   );
 }
 
-/** A small ghost button on a row (Connect, Set up, Fix, Sign in): 36 high, radius 12, on the canvas, 15/600 (SPEC §10.4). */
+/** A small ghost button on a row (Connect, Set up, Fix, Sign in, Allow…): 36 high, radius 12, on the canvas, 15/600 (SPEC §10.4); 30 on the Mac's well. */
 export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; accessibilityLabel?: string; testID?: string }) {
   // `busy`: the label fades for the 16 pt ring from `wait.quiet` (SPEC §16.2 pattern 5), the button keeps its size.
   const ring = delayed(() => Boolean(props.busy));
+  // Mewla for Mac (mac.css `.btn` in the window): 30 high, radius 9, 13/600, on the well, the same grey in a group and on a page.
+  const size = dense({ phone: { box: "h-9 rounded-xl bg-background px-3.5", text: "text-sub" }, window: { box: "h-[30px] rounded-[9px] bg-accent px-[14px]", text: "text-[13px] leading-[17px]" } });
   return (
-    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled || props.busy} onPress={props.onPress} hitSlop={4} class={`h-9 items-center justify-center rounded-xl bg-background px-3.5 active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
-      <Text class="text-sub font-semibold" style={{ opacity: ring() ? 0 : 1 }}>{props.label}</Text>
+    <Button testID={props.testID} accessibilityLabel={props.accessibilityLabel ?? props.label} disabled={props.disabled || props.busy} onPress={props.onPress} hitSlop={4} class={`${size.box} items-center justify-center active:opacity-70 ${props.busy ? "" : "disabled:opacity-40"}`}>
+      <Text class={`${size.text} font-semibold`} style={{ opacity: ring() ? 0 : 1 }}>{props.label}</Text>
       <If when={ring()}>
         <View testID={props.testID ? `${props.testID}-ring` : undefined} class="absolute inset-0 items-center justify-center" style={{ pointerEvents: "none" }}>
           <Spinner size={16} label={props.label} tone="soft" />
