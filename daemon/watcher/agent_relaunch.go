@@ -158,8 +158,9 @@ type AgentRelaunchLedger interface {
 	// ReportAgentEnd tells Brain once that an ended agent is not started
 	// again, for a Worker that has no Turn whose death the Turn ledger will
 	// report itself (an idle Worker, or a relaunched one that never became
-	// ready).
-	ReportAgentEnd(end AgentEnd, plan AgentRelaunchPlan) error
+	// ready). told is false while an earlier review of the Work is still
+	// with Brain: the report is asked again until Brain has it.
+	ReportAgentEnd(end AgentEnd, plan AgentRelaunchPlan) (told bool, err error)
 }
 
 // AgentContinuationPrompt is what a relaunched agent that was in a Turn is
@@ -180,7 +181,15 @@ const agentRelaunchHold = 10 * time.Minute
 type agentEndDecision struct {
 	endedAt time.Time
 	plan    AgentRelaunchPlan
+	// untold is the end of a Worker not started again whose report waits for
+	// an earlier review of its Work to leave Brain; asked again at nextTell.
+	untold   *AgentEnd
+	nextTell time.Time
 }
+
+// agentEndTellEvery is how often a not-started-again report that waits behind
+// an earlier review is asked again.
+const agentEndTellEvery = 10 * time.Second
 
 type agentRelaunchRun struct {
 	// swapping is set while the old Session is replaced: the Session may
@@ -379,6 +388,9 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	decision, seen := supervisor.decided[item.id]
 	supervisor.mu.Unlock()
 	if seen && decision.endedAt.Equal(exit.EndedAt) {
+		if decision.untold != nil && !supervisor.now().Before(decision.nextTell) {
+			w.tellAgentEnd(ledger, *decision.untold, decision.plan)
+		}
 		return decision.plan.Action == AgentEndRelaunch, decision.plan.Words
 	}
 	end := AgentEnd{
@@ -411,13 +423,34 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineStopped, text: plan.Line})
 		if end.TurnID == "" {
 			// No Turn will carry this death to Brain: the ledger tells it once.
-			if err := ledger.ReportAgentEnd(end, plan); err != nil {
-				log.Printf("agent relaunch: report %s: %v", item.id, err)
-			}
+			w.tellAgentEnd(ledger, end, plan)
 		}
 		return false, plan.Words
 	}
 	return false, ""
+}
+
+// tellAgentEnd reports an agent not started again to Brain; while an earlier
+// review of its Work is still with Brain, the report is kept and asked again.
+func (w *Watcher) tellAgentEnd(ledger AgentRelaunchLedger, end AgentEnd, plan AgentRelaunchPlan) {
+	supervisor := w.agentRelaunch()
+	told, err := ledger.ReportAgentEnd(end, plan)
+	if err != nil {
+		log.Printf("agent relaunch: report %s: %v", end.SessionID, err)
+	}
+	supervisor.mu.Lock()
+	defer supervisor.mu.Unlock()
+	decision, ok := supervisor.decided[end.SessionID]
+	if !ok || !decision.endedAt.Equal(end.Exit.EndedAt) {
+		return
+	}
+	decision.untold = nil
+	if !told {
+		kept := end
+		decision.untold = &kept
+		decision.nextTell = supervisor.now().Add(agentEndTellEvery)
+	}
+	supervisor.decided[end.SessionID] = decision
 }
 
 // relaunchAgent starts the ended agent again in its Session and conversation.
@@ -499,7 +532,7 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		// update prompt) is Brain's to see now.
 		if presence, err := w.ProbeSession(end.SessionID); err == nil && presence == SessionPresencePresent && !w.SessionExited(end.SessionID) {
 			plan.Words = strings.TrimSpace(plan.Words + " It was started again but did not become ready for input.")
-			if err := ledger.ReportAgentEnd(end, plan); err != nil {
+			if _, err := ledger.ReportAgentEnd(end, plan); err != nil {
 				log.Printf("agent relaunch: report %s: %v", end.SessionID, err)
 			}
 		}
