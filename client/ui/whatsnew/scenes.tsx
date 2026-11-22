@@ -715,6 +715,103 @@ function WorkCloses() {
   );
 }
 
+/** A Calendar row: the time, the title over one quiet line, how it went at the end. */
+function DayRow(props: { time: string; title: string; line?: string; warn?: boolean; end?: "done" | "failed" | "next"; dim?: boolean; style?: Record<string, unknown> }) {
+  return (
+    <View class="flex-row items-center gap-2 px-3 py-[5px]" style={props.style}>
+      <Text class="w-[34px] text-[11px] text-muted-foreground" style={{ opacity: props.dim ? 0.55 : 1 }}>{props.time}</Text>
+      <View class="flex-1" style={{ opacity: props.dim ? 0.55 : 1 }}>
+        <Text class="text-[12px] font-semibold text-foreground">{props.title}</Text>
+        <If when={props.line}>{(line) => <Text class={`text-[10px] ${props.warn ? "text-warning" : "text-muted-foreground"}`}>{line()}</Text>}</If>
+      </View>
+      <If when={props.end === "done"}><Icon name="check-circle" size={14} tone="ok" /></If>
+      <If when={props.end === "failed"}><Icon name="alert-circle" size={14} tone="warning" /></If>
+      <If when={props.end === "next"}><Icon name="chevron-right" size={13} tone="faint" /></If>
+    </View>
+  );
+}
+
+/** Calendar: today as a day, what ran and how it went above the now line, what is next below it. */
+function CalendarDay() {
+  const head = loop(appear(0.02, 4));
+  const first = loop(appear(0.1, 6));
+  const second = loop(appear(0.22, 6));
+  const now = loop(appear(0.36, 0));
+  const next = loop(appear(0.46, 6));
+  return (
+    <View class="w-[256px] gap-2">
+      <View class="flex-row items-baseline justify-between px-1" style={head}>
+        <Text class="text-[18px] font-bold text-foreground">3 today</Text>
+        <Text class="text-[11px] text-muted-foreground">Sunday</Text>
+      </View>
+      <Card class="overflow-hidden border border-border py-1">
+        <DayRow time="8:00" title="Send the weekly report" line="Done · Sent to the team" end="done" dim style={first} />
+        <DayRow time="9:30" title="Back up the photos" line="Failed · the disk is full" warn end="failed" style={second} />
+        <View class="h-[20px] flex-row items-center gap-2 px-3" style={now}>
+          <Text class="w-[34px] text-[11px] font-bold text-foreground">10:44</Text>
+          <View class="flex-1 flex-row items-center">
+            <View class="rounded-full bg-foreground" style={{ width: 6, height: 6, marginRight: -3 }} />
+            <View class="flex-1 bg-foreground" style={{ height: 1.5 }} />
+          </View>
+        </View>
+        <DayRow time="11:30" title="Plan the launch" line="Reminder" end="next" style={next} />
+      </Card>
+    </View>
+  );
+}
+
+/** Triggers: one row on Today says how many watch and when one needs you; a tap opens their own page. */
+function TriggersPage() {
+  const row = loop([{ offset: 0, opacity: 1, translateY: 0 }, { offset: 0.3, opacity: 1, translateY: 0 }, { offset: 0.38, opacity: 0, translateY: -8 }, { offset: 0.96, opacity: 0, translateY: -8 }, { offset: 1, opacity: 1, translateY: 0 }]);
+  const page = loop([{ offset: 0, opacity: 0, translateY: 14 }, { offset: 0.34, opacity: 0, translateY: 14 }, { offset: 0.44, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  const ask = loop(appear(0.5, 6));
+  const rest = loop(appear(0.62, 6));
+  const tile = (icon: IconName, seal?: boolean) => (
+    <View class="size-[26px] items-center justify-center rounded-[8px] bg-tile">
+      <Icon name={icon} size={14} tone="ink" />
+      <If when={seal}><View class="absolute -right-0.5 -top-0.5 rounded-full border-2 border-card"><View class="size-[7px] rounded-full bg-seal" /></View></If>
+    </View>
+  );
+  return (
+    <View class="relative h-[150px] w-[256px]">
+      <View class="absolute inset-x-0 top-0" style={row}>
+        <View class="mb-2 px-1"><Text class="text-[18px] font-bold text-foreground">3 today</Text></View>
+        <Card class="flex-row items-center gap-2 border border-border px-3 py-2">
+          {tile("eye", true)}
+          <View class="flex-1">
+            <Text class="text-[12px] font-semibold text-foreground">Triggers</Text>
+            <Text class="text-[10px] text-muted-foreground">18 watching<Text class="text-seal-ink">{" · 1 needs you"}</Text></Text>
+          </View>
+          <Icon name="chevron-right" size={13} tone="faint" />
+          <Press at={0.24} style={{ right: 6, top: 14 }} />
+        </Card>
+      </View>
+      <View class="absolute inset-x-0 top-0 gap-2" style={page}>
+        <View class="px-1"><Text class="text-[18px] font-bold text-foreground">Triggers</Text></View>
+        <Card class="gap-1.5 border border-border px-3 py-2" style={ask}>
+          <View class="flex-row items-center gap-1.5">
+            <View class="size-[7px] rounded-full bg-seal" />
+            <Text class="flex-1 text-[12px] font-semibold text-foreground">Nightly build</Text>
+            <Text class="text-[10px] text-seal-ink">2 h</Text>
+          </View>
+          <Text class="text-[10px] text-muted-foreground">Its check keeps failing.</Text>
+          <View class="flex-row gap-1.5">
+            <View class="rounded-full bg-accent px-2.5 py-1"><Text class="text-[10px] font-semibold text-foreground">Check now</Text></View>
+            <View class="rounded-full bg-accent px-2.5 py-1"><Text class="text-[10px] font-semibold text-foreground">Pause</Text></View>
+          </View>
+        </Card>
+        <Card class="overflow-hidden border border-border" style={rest}>
+          <View class="flex-row items-center gap-2 px-3 py-1.5">
+            {tile("eye")}
+            <Text class="flex-1 text-[11px] text-foreground">Inbox zero</Text>
+            <Text class="text-[10px] text-muted-foreground">noticed 3 times</Text>
+          </View>
+        </Card>
+      </View>
+    </View>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -733,6 +830,8 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "share-in": ShareIn,
   "git-button": GitButton,
   "work-closes": WorkCloses,
+  "calendar-day": CalendarDay,
+  "triggers-page": TriggersPage,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */

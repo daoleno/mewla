@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.4.21",
+      "date": "2026-11-22",
+      "highlights": [],
+      "fixes": [
+        "New session dims an agent this computer does not have, instead of failing after you start.",
+        "On a wide screen Brain's row stays selected while a terminal is open."
+      ]
+    },
+    {
       "version": "0.4.20",
       "date": "2026-11-22",
       "highlights": [],
