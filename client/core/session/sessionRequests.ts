@@ -21,6 +21,7 @@ import {
 import { assertThreadRuntimeMatches, parseThreadRuntimeSelection } from "../providers/parse";
 import { requireAppliedPersistence } from "../providers/persistence";
 import { listProviders } from "../providers/requests";
+import { isNativeModelClient } from "../providers/types";
 import type {
   ProvidersSnapshot,
   ThreadRuntimeChoice,
@@ -88,7 +89,7 @@ export async function getThreadRuntime(daemon: Daemon, workerId: string): Promis
  * (its runtime carries them), otherwise the computer's Providers.
  */
 export async function threadRuntimeCatalog(daemon: Daemon, selection: ThreadRuntimeSelection): Promise<ProvidersSnapshot> {
-  if (selection.client === "dsh") {
+  if (isNativeModelClient(selection.client)) {
     return {
       revision: 0,
       presets: [],
@@ -97,8 +98,8 @@ export async function threadRuntimeCatalog(daemon: Daemon, selection: ThreadRunt
         {
           id: selection.connection_id,
           name: selection.connection_name,
-          preset_id: "dsh_native",
-          clients: ["dsh"],
+          preset_id: `${selection.client}_native`,
+          clients: [selection.client],
           credential_ready: selection.credential_ready,
           advanced: false,
         },

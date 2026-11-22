@@ -537,6 +537,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		w.ObserveSessions(piFollow.Observe)
 		senders, stops = append(senders, piFollow.send), append(stops, piFollow.interrupt)
 	}
+	work.SetAntigravityStateDir(authManager.StorageDir())
 	agyFollow := newAgyEvents(ctx, eventHub, agentEvents, w.Workers)
 	if err := agyFollow.Listen(work.AntigravityEventsSocket(authManager.StorageDir())); err != nil {
 		logAgyListen(err)
@@ -703,6 +704,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	srv.SetAgentActivity(hubActivity(eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
+	srv.SetAntigravitySessions(agyFollow)
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
 		return fmt.Errorf("open answered requests: %w", err)
