@@ -120,7 +120,9 @@ function page(route: Route, index: () => number): JSX.Element {
     case "workDetail": return <WorkDetail workId={route.workId} nav={nav} links={workLinks} />;
     case "calendar":
     case "item":
+    case "triggers":
     case "trigger":
+    case "triggerCheck":
     case "run":
     case "workFile":
       return calendarRoute(route, nav);
@@ -146,7 +148,7 @@ function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
 }
 
 /** The pages the Mac's left pane opens with its rows (a Session, a Work, Calendar and its items, All Sessions). */
-const PANE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "calendar", "item", "trigger", "run", "workFile", "allSessions"]);
+const PANE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "calendar", "item", "triggers", "trigger", "run", "workFile", "allSessions"]);
 
 function Stack() {
   return (

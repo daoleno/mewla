@@ -1,44 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
-  activeRun, agendaDays, agendaSection, calendarOriginOfWork, firstSentence, groupAgenda, itemSummary, itemsOnDay, mergeRunResults, nextLine,
-  originLabel, quietLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel, type CalendarItem, type CalendarRun,
+  activeRun, calendarOriginOfWork, firstSentence, itemSummary, mergeRunResults, nextLine,
+  originLabel, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel, type CalendarItem, type CalendarRun,
 } from "./model";
 import { testClock } from "./testClock";
 
-const make = (id: string, at: string, kind: CalendarItem["kind"] = "reminder"): CalendarItem => ({
-  id, title: id, kind, status: "scheduled", notify_at: kind === "reminder" ? at : undefined, due_at: kind !== "reminder" ? at : undefined,
-  timezone: "UTC", recurrence: "none", next_at: at, created_at: at, updated_at: at, revision: 1,
-});
-
-describe("the agenda", () => {
-  test("groups by day in the phone's zone", () => {
-    const clock = testClock("2026-07-14T10:00:00Z");
-    expect(agendaSection(make("today", "2026-07-14T18:00:00Z"), clock)).toBe("Today");
-    expect(groupAgenda([make("tomorrow", "2026-07-15T10:00:00Z")], clock)[0].title).toBe("Tomorrow");
-  });
-  test("an item after midnight is tomorrow where the phone is, whatever UTC says", () => {
-    const afterMidnight = make("tomorrow", "2026-03-08T05:30:00Z");
-    expect(agendaSection(afterMidnight, testClock("2026-03-08T04:30:00Z", "America/New_York"))).toBe("Tomorrow");
-    expect(agendaSection(afterMidnight, testClock("2026-03-08T04:30:00Z", "UTC"))).toBe("Today");
-  });
-  test("keeps the week's boundary across the spring DST change", () => {
-    expect(agendaSection(make("monday", "2026-03-09T16:00:00Z"), testClock("2026-03-07T17:00:00Z", "America/New_York"))).toBe("Later");
-  });
-  test("hides cancelled items, keeps overdue and done ones in Today, in time order", () => {
-    const clock = testClock("2026-07-14T10:00:00Z");
-    const sections = groupAgenda([
-      { ...make("b", "2026-07-14T12:00:00Z"), status: "completed" },
-      make("a", "2026-07-13T08:00:00Z"),
-      { ...make("gone", "2026-07-14T11:00:00Z"), status: "cancelled" },
-    ], clock);
-    expect(sections).toEqual([{ title: "Today", items: [expect.objectContaining({ id: "a" }), expect.objectContaining({ id: "b" })] }]);
-  });
-  test("a picked day lists that day's items only", () => {
-    const clock = testClock("2026-07-14T10:00:00Z", "Asia/Shanghai");
-    expect(itemsOnDay([make("late", "2026-07-14T17:00:00Z"), make("early", "2026-07-14T03:00:00Z")], "2026-07-15", clock).map((i) => i.id)).toEqual(["late"]);
-  });
-  test("a due reminder reads as needing you", () => expect(statusLabel.waiting).toBe("Needs you"));
-});
+test("a due reminder reads as needing you", () => expect(statusLabel.waiting).toBe("Needs you"));
 
 const ZONE = "Asia/Shanghai";
 function run(id: string, status: CalendarRun["status"], day: number, extra: Partial<CalendarRun> = {}): CalendarRun {
@@ -123,31 +90,5 @@ describe("where Calendar Work came from", () => {
     expect(originLabel({ itemId: "43754e56", runId: "c08f" }, [yunying], clock)).toBe("运营：从今天的工作里挖稿 · Oct 25");
     expect(originLabel({ itemId: "gone" }, [yunying], clock, { title: "每日论文速读", at: "2026-10-27T01:00:00Z" })).toBe("每日论文速读 · Oct 27");
     expect(originLabel({ itemId: "gone" }, [yunying], clock)).toBeNull();
-  });
-});
-
-describe("the Mac's agenda (w-cal)", () => {
-  test("Today holds the past and overdue, then Tomorrow, then each later day by its date, in this computer's zone", () => {
-    const clock = testClock("2026-11-20T14:02:00Z");
-    const days = agendaDays([
-      make("later", "2026-11-24T09:00:00Z"), make("tomorrow", "2026-11-21T08:00:00Z"), { ...make("gone", "2026-11-20T16:00:00Z"), status: "cancelled" },
-      { ...make("done", "2026-11-20T10:00:00Z"), status: "completed" }, make("overdue", "2026-11-19T09:00:00Z"), make("tonight", "2026-11-20T20:30:00Z"),
-    ], clock);
-    expect(days.map((day) => day.title)).toEqual(["Today", "Tomorrow", "Tue, Nov 24"]);
-    expect(days[0].items.map((item) => item.id)).toEqual(["overdue", "done", "tonight"]);
-    // After midnight in New York it is still the 20th there.
-    expect(agendaDays([make("late", "2026-11-21T03:00:00Z")], testClock("2026-11-20T14:02:00Z", "America/New_York"))[0].title).toBe("Today");
-  });
-  test("one quiet line: what happened, what it waits on, else how it repeats and who acts", () => {
-    const clock = testClock("2026-11-20T14:02:00Z");
-    const run = (status: CalendarRun["status"], extra: Partial<CalendarRun> = {}): CalendarRun => ({ id: "r", scheduled_for: "2026-11-20T10:00:00Z", started_at: "2026-11-20T10:00:00Z", status, ...extra });
-    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z", "scheduled_action"), status: "completed", runs: [run("completed", { result_preview: "2 stale feeds" })] }, clock)).toBe("Done · 2 stale feeds");
-    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z"), status: "completed" }, clock)).toBe("Done");
-    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z", "scheduled_action"), status: "failed", failure_reason: "The repo was gone. Then more." }, clock)).toBe("Failed · The repo was gone.");
-    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z"), status: "waiting" }, clock)).toBe("Needs you");
-    expect(quietLine({ ...make("a", "2026-11-20T20:30:00Z", "scheduled_action"), recurrence: "daily" }, clock)).toBe("Every day · Brain");
-    expect(quietLine({ ...make("a", "2026-11-23T09:00:00Z", "scheduled_action"), recurrence: "weekly" }, clock)).toBe("Every Monday · Brain");
-    expect(quietLine(make("a", "2026-11-21T08:30:00Z"), clock)).toBe("Reminder");
-    expect(quietLine(make("a", "2026-11-21T08:30:00Z", "event"), clock)).toBe("");
   });
 });

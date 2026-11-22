@@ -22,7 +22,7 @@ describe("the connection mark follows you (SPEC §1.3)", () => {
     const app = await open("../FakeDaemonApp.tsx", { host: phoneHost({ brain: {} }), storage: paired, platform: "android", network: expoTokenService });
     await app.waitFor("id:composer");
     await app.host.send("links.open", { url: "mewla://calendar" });
-    await app.waitFor("id:calendar-empty", { timeout: 10_000 });
+    await app.waitFor("id:calendar-headline", { timeout: 10_000 });
     expect(app.shows("id:back-mark")).toBe(false);
     // The header reads Back · the title · Today | Month · + (the mock's order): no leading item for Android to
     // put after the title, the control and + at the header's end.

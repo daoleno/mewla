@@ -727,6 +727,12 @@ func (s *Store) SetRunHold(id, runID string, hold *RunHold) (Item, error) {
 }
 
 func (s *Store) FinishRun(id, runID, result, failure string) (Item, error) {
+	return s.FinishRunWithOutcome(id, runID, result, failure, "")
+}
+
+// FinishRunWithOutcome ends a run as FinishRun does and keeps the outcome its
+// agent stated (NormalizeRunOutcome) on a completed run.
+func (s *Store) FinishRunWithOutcome(id, runID, result, failure, outcome string) (Item, error) {
 	status, result, failure, err := normalizeTerminalPayload(result, failure)
 	if err != nil {
 		return Item{}, err
@@ -756,6 +762,9 @@ func (s *Store) FinishRun(id, runID, result, failure string) (Item, error) {
 	item.Runs[idx].Status, item.Runs[idx].FinishedAt = status, &now
 	item.Runs[idx].Result = result
 	item.Runs[idx].FailureReason = failure
+	if status == StatusCompleted {
+		item.Runs[idx].Outcome = NormalizeRunOutcome(outcome)
+	}
 	item.Status, item.FailureReason, item.UpdatedAt = status, failure, now
 	item.Revision++
 	if item.Runs[idx].Manual && item.Runs[idx].PreviousStatus == StatusScheduled && item.NextAt.After(now) {

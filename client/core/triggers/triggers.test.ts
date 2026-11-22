@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Frame, RequestOptions } from "../transport";
-import { attentionWords, gapLine, NOT_HANDLED_AFTER_MS, triggerAttention, triggerLine, triggersNeedingYou, type Trigger } from "./model";
+import { askDetail, attentionWords, gapLine, NOT_HANDLED_AFTER_MS, triggerAttention, triggerGroups, triggerLine, triggersNeedingYou, type Trigger } from "./model";
 import { TriggersModel, type TriggersTransport } from "./triggers";
 
 class FakeTransport implements TriggersTransport {
@@ -132,5 +132,41 @@ describe("the current computer's Triggers", () => {
     await expect(model.checkNow("a")).rejects.toThrow("the Trigger is paused; resume it first");
     transport.answer = () => new Error("Request timed out");
     await expect(model.pause("a")).rejects.toThrow("The computer did not answer in time.");
+  });
+});
+
+describe("the Triggers page", () => {
+  const day = (at: number) => new Date(at).toISOString().slice(0, 10);
+  const shortDate = (at: number) => new Date(at).toISOString().slice(5, 10);
+  const firing = (seq: number, at: string) => ({ seq, at, outputs: 1, payload: "", event_id: `e${seq}`, handled_at: at });
+
+  test("groups what needs you, what noticed something today (newest first, how often) and what is quiet", () => {
+    const list = [
+      trigger("quiet-old", { firings: [firing(1, "2026-11-16T09:00:00Z")] }),
+      trigger("never"),
+      trigger("failing", { failing: true, failures: 3, last_failure: "the disk did not answer" }),
+      trigger("busy", { firings: [firing(1, "2026-11-17T09:00:00Z"), firing(2, "2026-11-18T08:00:00Z"), firing(3, "2026-11-18T11:30:00Z")] }),
+      trigger("once", { firings: [firing(1, "2026-11-18T11:50:00Z")] }),
+      trigger("runaway", { paused: true, pause_reason: "runaway" }),
+      trigger("paused", { paused: true }),
+      trigger("quiet-new", { firings: [firing(1, "2026-11-17T09:00:00Z")] }),
+    ];
+    const groups = triggerGroups(list, NOW, day, shortDate);
+    expect(groups.needs.map((row) => [row.trigger.id, row.line])).toEqual([["failing", "Its check keeps failing"], ["runaway", "It paused itself"]]);
+    expect(groups.today.map((row) => [row.trigger.id, row.line])).toEqual([["once", "Noticed something today"], ["busy", "Noticed something twice today"]]);
+    expect(groups.quiet.map((row) => [row.trigger.id, row.line])).toEqual([["quiet-new", "Last noticed 11-17"], ["quiet-old", "Last noticed 11-16"], ["never", "Nothing noticed yet"], ["paused", "Paused"]]);
+    expect(groups.watching).toBe(6);
+  });
+
+  test("a firing Brain has not handled is Brain's: it never puts the Trigger with what needs you", () => {
+    const open = trigger("open", { firings: [{ seq: 1, at: ago(4 * HOUR), outputs: 1, payload: "", event_id: "e" }] });
+    expect(triggerAttention(open, NOW)).toBe("not_handled");
+    expect(triggerGroups([open], NOW, day, shortDate).needs).toEqual([]);
+  });
+
+  test("the ask card says how long and why", () => {
+    const failing = trigger("f", { failing: true, failures: 3, failing_since: "2026-11-18T11:46:00Z", last_failure: "the disk did not answer" });
+    expect(askDetail(failing, (at) => new Date(at).toISOString().slice(11, 16))).toBe("3 times in a row since 11:46: the disk did not answer");
+    expect(askDetail(trigger("r", { paused: true, pause_reason: "runaway" }), () => "")).toBe("It woke Brain 6 times in an hour. Its latest change waits until you resume it.");
   });
 });

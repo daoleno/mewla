@@ -20,6 +20,8 @@ export interface CalendarRun {
   /** Lists and broadcasts carry this one line instead. */
   result_preview?: string;
   failure_reason?: string;
+  /** What the run's agent said of how it went, when it said: the row follows it (agenda.ts `runState`). */
+  outcome?: "succeeded" | "failed" | "needs_you";
 }
 
 export interface CalendarItem {
@@ -95,35 +97,6 @@ export function zonesOf(items: readonly CalendarItem[], device: string): string[
 function dayOrdinal(key: string): number {
   const [year, month, day] = key.split("-").map(Number);
   return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
-}
-
-export type AgendaSection = "Today" | "Tomorrow" | "Later This Week" | "Later";
-
-/** Which part of the agenda an item is in, by its day in the phone's zone. Past, overdue and done items stay in Today. */
-export function agendaSection(item: CalendarItem, clock: CalendarClock): AgendaSection {
-  const zone = clock.zones.device;
-  const today = clock.zones.dateKey(clock.now, zone);
-  const days = dayOrdinal(clock.zones.dateKey(itemInstant(item), zone)) - dayOrdinal(today);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  const weekday = new Date(dayOrdinal(today) * 86_400_000).getUTCDay();
-  if (days <= 7 - weekday) return "Later This Week";
-  return "Later";
-}
-
-/** The agenda: cancelled items hidden, the rest by section, each in time order. */
-export function groupAgenda(items: readonly CalendarItem[], clock: CalendarClock): { title: AgendaSection; items: CalendarItem[] }[] {
-  const shown = items.filter((item) => item.status !== "cancelled").sort((a, b) => itemInstant(a) - itemInstant(b));
-  return (["Today", "Tomorrow", "Later This Week", "Later"] as const)
-    .map((title) => ({ title, items: shown.filter((item) => agendaSection(item, clock) === title) }))
-    .filter((section) => section.items.length > 0);
-}
-
-/** The items of one day (a date picked on the month), in time order. */
-export function itemsOnDay(items: readonly CalendarItem[], dateKey: string, clock: CalendarClock): CalendarItem[] {
-  return items
-    .filter((item) => item.status !== "cancelled" && clock.zones.dateKey(itemInstant(item), clock.zones.device) === dateKey)
-    .sort((a, b) => itemInstant(a) - itemInstant(b));
 }
 
 /** The item's wall-clock time, with its zone named only when it is not the phone's. */
@@ -228,47 +201,4 @@ export function originLabel(origin: { itemId: string; runId?: string }, items: r
   const at = run?.scheduled_for ?? fallback.at;
   const date = at ? clock.format.shortDate(Date.parse(at), item?.timezone ?? clock.zones.device) : "";
   return date ? `${title} · ${date}` : title;
-}
-
-/**
- * The agenda by day, for Mewla for Mac's Calendar (w-cal): Today (with what is past, overdue or done), Tomorrow, then
- * each later day by its date, all in this computer's zone; cancelled items hidden, each day in time order.
- */
-export function agendaDays(items: readonly CalendarItem[], clock: CalendarClock): { key: string; title: string; items: CalendarItem[] }[] {
-  const zone = clock.zones.device;
-  const today = dayOrdinal(clock.zones.dateKey(clock.now, zone));
-  const days = new Map<string, { key: string; title: string; items: CalendarItem[] }>();
-  const shown = items.filter((item) => item.status !== "cancelled").sort((a, b) => itemInstant(a) - itemInstant(b));
-  for (const item of shown) {
-    const at = itemInstant(item);
-    const key = clock.zones.dateKey(at, zone);
-    const offset = dayOrdinal(key) - today;
-    const group = offset <= 0 ? "today" : key;
-    if (!days.has(group)) days.set(group, { key: group, title: offset <= 0 ? "Today" : offset === 1 ? "Tomorrow" : clock.format.day(at, zone), items: [] });
-    days.get(group)!.items.push(item);
-  }
-  return [...days.values()].sort((a, b) => (a.key === "today" ? -1 : b.key === "today" ? 1 : a.key.localeCompare(b.key)));
-}
-
-/**
- * A row's one quiet line on the Mac's Calendar (w-cal): what happened ("Done · 2 stale feeds", "Failed · why"), what
- * it waits on, else how it repeats and who acts ("Every day · Brain", "Reminder"); empty for a plain event.
- */
-export function quietLine(item: CalendarItem, clock: CalendarClock): string {
-  const last = runsNewestFirst(item)[0];
-  const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(" · ");
-  switch (item.status) {
-    case "completed":
-      return join("Done", last ? runPreview(last) : undefined);
-    case "failed":
-      return join("Failed", firstSentence(item.failure_reason || last?.failure_reason, 80));
-    case "waiting":
-      return "Needs you";
-    case "running":
-      return "Running";
-  }
-  const repeat = item.recurrence === "daily" ? "Every day" : item.recurrence === "weekdays" ? "Weekdays"
-    : item.recurrence === "weekly" ? `Every ${clock.format.weekday(itemInstant(item), item.timezone)}` : undefined;
-  const actor = item.kind === "scheduled_action" ? "Brain" : item.kind === "event" ? undefined : kindLabel[item.kind];
-  return join(repeat, actor);
 }

@@ -23,10 +23,17 @@ import { calendarLead } from "../../core/calendar/colour";
 import type { CalendarStatus } from "../../core/calendar/model";
 
 /** A run's mark (SPEC §10.4): done is `check-circle` in ok, failed `alert-circle` in warning; the rest keep the dot. */
-function RunMark(props: { status: CalendarStatus }) {
-  return <If when={props.status === "completed"} else={<If when={props.status === "failed"} else={<StatusDot status={props.status} />}><Icon name="alert-circle" size={16} tone="warning" /></If>}><Icon name="check-circle" size={16} tone="ok" /></If>;
+/** How a run went (agenda.ts `runState`: what its agent said wins over its status): a check, amber, the seal or the dot. */
+function RunMark(props: { run: CalendarRun }) {
+  const state = () => runState(props.run);
+  return (
+    <If when={state() === "done"} else={<If when={state() === "failed"} else={<StatusDot status={state() === "needs_you" ? "waiting" : props.run.status} />}><Icon name="alert-circle" size={16} tone="warning" /></If>}>
+      <Icon name="check-circle" size={16} tone="ok" />
+    </If>
+  );
 }
 import type { Route } from "../shell/routes";
+import { runState, runWord } from "../../core/calendar/agenda";
 import { calendar, calendarItems } from "./state";
 import { showAlert } from "../shell/alert";
 
@@ -107,7 +114,7 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
               <Text testID="item-schedule" class="text-base text-muted-foreground">{header(item()!)}</Text>
               <View class="flex-row items-center gap-1.5">
                 <StatusDot status={item()!.status} />
-                <Text class="text-sm text-muted-foreground">{`${statusLabel[item()!.status]} · ${kindLabel[item()!.kind]}`}</Text>
+                <Text class="text-sm text-muted-foreground">{[item()!.status === "scheduled" ? "" : statusLabel[item()!.status], kindLabel[item()!.kind]].filter(Boolean).join(" · ")}</Text>
               </View>
             </View>
             <If when={itemSummary(item()!)}><View class="px-4 py-2"><Text class="text-base">{itemSummary(item()!)}</Text></View></If>
@@ -129,8 +136,8 @@ export function ItemPage(props: { id: string; nav: NavStackState<Route>; openSes
                   onPress={() => (run().status === "running" && run().worker_session && workers().some((worker) => worker.id === run().worker_session)
                     ? props.openSession(run().worker_session!) : props.nav.push({ name: "run", itemId: props.id, runId: run().id }))} class="gap-1 border-b border-border bg-card px-4 py-3 active:bg-accent">
                   <View class="flex-row items-center gap-1.5">
-                    <RunMark status={run().status} />
-                    <Text class="text-sm text-muted-foreground">{`${runWhen(run(), item()!, clock())} · ${statusLabel[run().status]}`}</Text>
+                    <RunMark run={run()} />
+                    <Text class="text-sm text-muted-foreground">{`${runWhen(run(), item()!, clock())} · ${runWord(run())}`}</Text>
                   </View>
                   <If when={runPreview(run())}><Text class="text-base line-clamp-2">{runPreview(run())}</Text></If>
                 </Button>
@@ -164,8 +171,8 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
       <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-background">
         <If when={!run()} else={<View class="gap-3 px-4 pb-10 pt-4">
             <View class="flex-row items-center gap-1.5">
-              <RunMark status={run()!.status} />
-              <Text class="text-sm text-muted-foreground">{`${runWhen(run()!, item()!, clock())} · ${statusLabel[run()!.status]}${run()!.manual ? " · Run by you" : ""}`}</Text>
+              <RunMark run={run()!} />
+              <Text testID="run-word" class="text-sm text-muted-foreground">{`${runWhen(run()!, item()!, clock())} · ${runWord(run()!)}${run()!.manual ? " · Run by you" : ""}`}</Text>
             </View>
             <If when={run()!.status === "failed"} else={<If when={run()!.result} else={<Text class="text-base text-muted-foreground">{run()!.result_preview ? `${run()!.result_preview}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}><View onLayout={({ bounds }) => resultWidth.set(bounds.size.width)}>
                     <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} width={resultWidth} onOpen={() => viewing.set(pictureKey(props.runId, image.src))} />} />

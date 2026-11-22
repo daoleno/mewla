@@ -176,3 +176,69 @@ export function triggersNeedingYou(triggers: readonly Trigger[], now: number): {
 export function sortTriggers(triggers: readonly Trigger[]): Trigger[] {
   return [...triggers].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id));
 }
+
+/** A Trigger on the Triggers page: its group, its one line, and the time it last noticed something today. */
+export interface TriggerListRow {
+  trigger: Trigger;
+  line: string;
+  /** Today's last noticing, for the row's end ("10:31"). */
+  at?: number;
+  needsPerson: boolean;
+}
+
+export interface TriggerGroups {
+  /** It needs the person (its check keeps failing, or it paused itself). */
+  needs: TriggerListRow[];
+  /** It noticed something today, newest first. */
+  today: TriggerListRow[];
+  /** The rest: when each last noticed something, newest first, then those that never have. */
+  quiet: TriggerListRow[];
+  /** How many are watching (not paused). */
+  watching: number;
+}
+
+function timesWords(count: number): string {
+  return count === 1 ? "Noticed something today" : count === 2 ? "Noticed something twice today" : `Noticed something ${count} times today`;
+}
+
+/**
+ * The Triggers page's groups (owner 2026-11-22): what needs the person, what noticed something today, what is quiet.
+ * `day` is the device's date of an instant; `shortDate` says a day ("Nov 19").
+ */
+export function triggerGroups(list: readonly Trigger[], now: number, day: (at: number) => string, shortDate: (at: number) => string): TriggerGroups {
+  const today = day(now);
+  const groups: TriggerGroups = { needs: [], today: [], quiet: [], watching: 0 };
+  for (const trigger of sortTriggers(list)) {
+    if (!trigger.paused) groups.watching++;
+    const attention = triggerAttention(trigger, now);
+    const latest = latestFiring(trigger);
+    const latestAt = latest ? Date.parse(latest.at) : NaN;
+    const todays = (trigger.firings ?? []).filter((firing) => day(Date.parse(firing.at)) === today).length;
+    if (triggerNeedsPerson(attention)) {
+      groups.needs.push({ trigger, line: attention === "runaway" ? "It paused itself" : "Its check keeps failing", needsPerson: true });
+    } else if (trigger.paused) {
+      groups.quiet.push({ trigger, line: "Paused", needsPerson: false });
+    } else if (todays > 0) {
+      groups.today.push({ trigger, line: timesWords(todays), at: latestAt, needsPerson: false });
+    } else {
+      groups.quiet.push({ trigger, line: latest ? `Last noticed ${shortDate(latestAt)}` : "Nothing noticed yet", at: Number.isFinite(latestAt) ? latestAt : undefined, needsPerson: false });
+    }
+  }
+  groups.today.sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+  groups.quiet.sort((a, b) => (b.at ?? -1) - (a.at ?? -1));
+  // The quiet ones' time is for order only: their line says the day.
+  for (const row of groups.quiet) row.at = undefined;
+  return groups;
+}
+
+/**
+ * The ask card's detail under its title ("Its check keeps failing"): how long and why, or what pausing itself holds
+ * back. `time` says an instant on the device's clock.
+ */
+export function askDetail(trigger: Trigger, time: (at: number) => string): string {
+  if (trigger.paused && trigger.pause_reason === "runaway") return `It woke Brain ${WAKES_PER_HOUR} times in an hour. Its latest change waits until you resume it.`;
+  const failures = trigger.failures ?? 0;
+  const since = trigger.failing_since ? ` since ${time(Date.parse(trigger.failing_since))}` : "";
+  const why = failureLine(trigger.last_failure);
+  return `${failures === 1 ? "Once" : `${failures} times in a row`}${since}${why ? `: ${why}` : ""}`;
+}

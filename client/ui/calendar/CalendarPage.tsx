@@ -1,69 +1,80 @@
-import { computed, List, Scroll, signal, Text, View } from "nsh";
+import { Scroll, signal, Text, View } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
-import { NavPage } from "../shell/NavPage";
+import type { NavStackState } from "nsh/base";
+import { agenda, dayKey, dayRows, monthMarks, type AgendaRow } from "../../core/calendar/agenda";
+import { monthTitle } from "../../core/calendar/format";
+import { activeRun } from "../../core/calendar/model";
+import { pageColumnWidth } from "../../core/web/places";
+import { dense, density } from "../kit/density";
+import { Section } from "../kit/kit";
 import { Segmented } from "../kit/Segmented";
 import { createTabPager, TabPages } from "../kit/TabPager";
-import type { NavStackState } from "nsh/base";
-import { monthTitle } from "../../core/calendar/format";
-import { activeRun, agendaDays, groupAgenda, itemInstant, quietLine, itemsOnDay, itemSummary, kindLabel, rowTime, statusLabel, type CalendarItem } from "../../core/calendar/model";
+import { Icon } from "../kit/Icon";
+import { NavPage } from "../shell/NavPage";
+import type { Route } from "../shell/routes";
 import { connection, workers } from "../session";
 import { clock } from "./clock";
 import { CalendarEditor, openEditor } from "./Editor";
-import { StatusDot } from "./parts";
-import { Icon } from "../kit/Icon";
-import { RowTile } from "../kit/RowTile";
-import { calendarLead } from "../../core/calendar/colour";
 import { ReminderBanner } from "./ReminderBanner";
-import type { Route } from "../shell/routes";
+import { AgendaRowView, NowLine, TileRow } from "./rows";
 import { calendar, calendarItems, calendarLoaded } from "./state";
-import { TriggerSection } from "./TriggerPage";
-import { density } from "../kit/density";
-import { Section } from "../kit/kit";
-import { pageColumnWidth } from "../../core/web/places";
-
-type AgendaRow = { kind: "section"; title: string } | { kind: "item"; item: CalendarItem };
+import { TriggersRow } from "./TriggerPage";
 
 const showMonth = signal(false);
-/** A day picked on the month: the list shows that day only. */
+/** A day picked on the month: the list under it shows that day. */
 const pickedDay = signal<string | null>(null);
 const viewedMonth = signal<{ year: number; month: number } | null>(null);
+/** Earlier days, folded into one row at the end until opened. */
+const earlierOpen = signal(false);
+/** Tomorrow shows its first rows and "N more" until opened. */
+const tomorrowOpen = signal(false);
+const TOMORROW_ROWS = 5;
 
-/** The agenda's rows: one day's items (a day picked on the month), else every day's. */
-function rows(day: string | null): AgendaRow[] {
-  const items = calendarItems();
-  const c = clock();
-  if (day) return itemsOnDay(items, day, c).map((item) => ({ kind: "item", item }));
-  // "Today" is the heading's word, so its section has no title of its own.
-  return groupAgenda(items, c).flatMap((section): AgendaRow[] => [
-    ...(section.title === "Today" ? [] : [{ kind: "section" as const, title: section.title }]),
-    ...section.items.map((item) => ({ kind: "item" as const, item })),
-  ]);
+/** Month on a day (a day key): the Mac's proof script shows a picked day this way. */
+export function showCalendarDay(key: string): void {
+  showMonth.set(true);
+  pickedDay.set(key);
+  const [year, month] = key.split("-").map(Number);
+  viewedMonth.set({ year: year!, month: month! });
 }
 
-function ItemRow(props: { item: () => CalendarItem; onPress: () => void }) {
-  const line = () => {
-    const item = props.item();
-    return `${statusLabel[item.status]} · ${itemSummary(item) || kindLabel[item.kind]}`;
+type EarlierDay = { key: string; rows: AgendaRow[] };
+type Line = { key: string; kind: "now" } | { key: string; kind: "row"; row: AgendaRow };
+
+/** A day's card: its rows, the now line among Today's, and "N more" at the end when it is folded. */
+function DayCard(props: { testID: string; title?: string; flush?: boolean; rows: () => AgendaRow[]; now?: boolean; date?: boolean; more?: () => number; onMore?: () => void; onOpen: (row: AgendaRow) => void }) {
+  const lines = (): Line[] => {
+    const lines: Line[] = props.rows().map((row) => ({ key: row.key, kind: "row", row }));
+    if (props.now) {
+      // Before the first row still to come: what ran (or was carried over) is above it.
+      const next = props.rows().findIndex((row) => !row.carried && row.at > clock().now);
+      lines.splice(next < 0 ? lines.length : next, 0, { key: "now", kind: "now" });
+    }
+    return lines;
   };
   return (
-    <Button testID={`calendar-item-${props.item().id}`} onPress={props.onPress} accessibilityLabel={`${props.item().title}, ${itemSummary(props.item()) || kindLabel[props.item().kind]}, ${statusLabel[props.item().status]}`}
-      class="flex-row gap-3 border-b border-border bg-card px-4 py-3 active:bg-accent">
-      {/* Who acts (SPEC §10.4), its glyph on the neutral tile: bell, calendar or flag for you, flash for a job Brain runs, sync for a recurring check. */}
-      <RowTile testID="calendar-item-lead" lead={calendarLead(props.item())} />
-      <Text class="w-20 pt-0.5 text-sm text-muted-foreground">{rowTime(props.item(), clock())}</Text>
-      <View class="flex-1 gap-1">
-        <Text class="text-base line-clamp-2">{props.item().title}</Text>
-        <View class="flex-row items-center gap-1.5">
-          <StatusDot status={props.item().status} />
-          <Text class="flex-1 text-sm text-muted-foreground line-clamp-1">{line()}</Text>
-        </View>
-      </View>
-    </Button>
+    // Flush: right under the headline (or the Triggers row), with no gap of its own.
+    <Section title={props.title} testID={props.testID} flush={props.flush}>
+      <Each of={lines()} key={(line: Line) => line.key}>{(line: () => Line, index: () => number) => {
+        // A line keeps its kind (its key says which); the row it shows follows the list.
+        const row = () => (line() as { row: AgendaRow }).row;
+        return (
+          <If when={line().kind === "now"} else={<AgendaRowView row={row} first={() => index() === 0} date={props.date} onPress={() => props.onOpen(row())} />}>
+            <NowLine first={() => index() === 0} />
+          </If>
+        );
+      }}</Each>
+      <If when={(props.more?.() ?? 0) > 0}>
+        <Button testID={`${props.testID}-more`} onPress={props.onMore} class="border-t border-border py-3 active:bg-accent" style={{ paddingLeft: 66 }}>
+          <Text class="text-sm text-muted-foreground">{`${props.more!()} more`}</Text>
+        </Button>
+      </If>
+    </Section>
   );
 }
 
-/** Six weeks from the Sunday before the 1st; a dot on days with items, today outlined, the picked day filled. */
+/** Six weeks from the Sunday before the 1st: a dot on days with one-off items (amber where one failed), today ringed, the picked day filled. */
 function Month() {
   const view = () => {
     const c = clock();
@@ -74,19 +85,12 @@ function Month() {
     const { year, month } = view();
     const first = Date.UTC(year, month - 1, 1);
     const start = first - new Date(first).getUTCDay() * 86_400_000;
-    const c = clock();
-    const counts = new Map<string, number>();
-    for (const i of calendarItems()) {
-      if (i.status === "cancelled") continue;
-      const key = c.zones.dateKey(Date.parse(i.next_at), c.zones.device);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    const today = c.zones.dateKey(c.now, c.zones.device);
+    const marks = monthMarks(calendarItems(), clock());
+    const today = dayKey(clock());
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(start + i * 86_400_000);
       const key = d.toISOString().slice(0, 10);
-      const count = counts.get(key) ?? 0;
-      return { key, day: d.getUTCDate(), year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, inMonth: d.getUTCMonth() === month - 1, count, dot: count > 0, today: key === today };
+      return { key, day: d.getUTCDate(), year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, inMonth: d.getUTCMonth() === month - 1, mark: marks.get(key), today: key === today, past: key < today };
     });
   };
   // A day of the month before or after moves the month to it.
@@ -99,21 +103,23 @@ function Month() {
     const index = year * 12 + (month - 1) + delta;
     viewedMonth.set({ year: Math.floor(index / 12), month: (index % 12) + 1 });
   };
+  const dayText = (d: { key: string; inMonth: boolean; past: boolean; today: boolean }) =>
+    pickedDay() === d.key ? "text-sm font-bold text-primary-foreground" : d.today ? "text-sm font-bold" : !d.inMonth ? "text-sm text-faint" : d.past ? "text-sm text-muted-foreground" : "text-sm";
+  const circle = (d: { key: string; today: boolean }) =>
+    pickedDay() === d.key ? "size-[34px] items-center justify-center rounded-full bg-primary" : d.today ? "size-[34px] items-center justify-center rounded-full border-[1.5px] border-foreground" : "size-[34px] items-center justify-center";
   return (
-    <View testID="calendar-month" accessibilityLabel="Month date navigator" class="border-b border-border bg-card px-3 pb-3 pt-2">
-      <View class="flex-row items-center justify-between py-1">
-        <Button accessibilityLabel="Previous month" onPress={() => step(-1)} class="px-3 py-1.5"><Text class="text-lg">‹</Text></Button>
+    <View testID="calendar-month" accessibilityLabel="Month date navigator" class={`overflow-hidden bg-card px-2 pb-2.5 pt-1.5 ${dense({ phone: "rounded-(--radius-group)", window: "rounded-[14px]" })}`}>
+      <View class="flex-row items-center justify-between px-1 pb-1.5">
+        <Button accessibilityLabel="Previous month" onPress={() => step(-1)} class="size-9 items-center justify-center active:opacity-70"><Icon name="chevron-left" size={18} tone="ink" /></Button>
         <Text class="text-base font-semibold">{monthTitle(view().year, view().month)}</Text>
-        <Button accessibilityLabel="Next month" onPress={() => step(1)} class="px-3 py-1.5"><Text class="text-lg">›</Text></Button>
+        <Button accessibilityLabel="Next month" onPress={() => step(1)} class="size-9 items-center justify-center active:opacity-70"><Icon name="chevron-right" size={18} tone="ink" /></Button>
       </View>
-      <View class="flex-row">{["S", "M", "T", "W", "T", "F", "S"].map((d) => <Text class="flex-1 text-center text-xs text-muted-foreground">{d}</Text>)}</View>
+      <View class="flex-row">{["S", "M", "T", "W", "T", "F", "S"].map((d) => <Text class="flex-1 pb-1 text-center text-xs text-muted-foreground">{d}</Text>)}</View>
       <View class="flex-row flex-wrap">
         {days().map((d) => (
-          <Button testID={`day-${d.key}`} accessibilityLabel={`${d.day}, ${d.count} items`} onPress={() => pick(d)} class="items-center py-1" style={{ width: "14.28%" }}>
-            <View class={pickedDay() === d.key ? "size-8 items-center justify-center rounded-full bg-primary" : d.today ? "size-8 items-center justify-center rounded-full border border-primary" : "size-8 items-center justify-center"}>
-              <Text class={pickedDay() === d.key ? "text-sm text-primary-foreground" : d.inMonth ? "text-sm" : "text-sm text-muted-foreground"}>{String(d.day)}</Text>
-            </View>
-            <View class={d.dot ? "mt-0.5 size-1 rounded-full bg-muted-foreground" : "mt-0.5 size-1"} />
+          <Button testID={`day-${d.key}`} accessibilityLabel={`${d.day}${d.mark ? ", has items" : ""}`} onPress={() => pick(d)} class="items-center py-[3px]" style={{ width: "14.28%" }}>
+            <View class={circle(d)}><Text class={dayText(d)} style={{ fontVariant: ["tabular-nums"] }}>{String(d.day)}</Text></View>
+            <View class={d.mark === "failed" ? "mt-0.5 size-[5px] rounded-full bg-warning" : d.mark ? "mt-0.5 size-[5px] rounded-full bg-muted-foreground" : "mt-0.5 size-[5px]"} />
           </Button>
         ))}
       </View>
@@ -121,183 +127,107 @@ function Month() {
   );
 }
 
-function Heading(props: { day: () => string | null }) {
-  return (
-    <View class="px-4 pb-1 pt-4">
-      <If when={props.day()} else={<View accessibilityLabel={`Today, ${clock().format.longDay(clock().now, clock().zones.device)}, ${clock().format.time(clock().now, clock().zones.device, true)}`} class="gap-1">
-          <Text class="text-2xl font-semibold">Today</Text>
-          <Text class="text-sm text-muted-foreground">{`${clock().format.longDay(clock().now, clock().zones.device)} · ${clock().format.time(clock().now, clock().zones.device, true)}`}</Text>
-        </View>}><View class="flex-row items-center justify-between">
-          <Text class="text-lg font-semibold">{clock().format.longDay(Date.parse(`${props.day()}T12:00:00Z`), "UTC")}</Text>
-          <Button testID="back-to-today" accessibilityLabel="Return to today" onPress={() => pickedDay.set(null)} class="px-2 py-1"><Text class="text-base text-primary">Today</Text></Button>
-        </View></If>
-    </View>
-  );
-}
-
 function Empty(props: { day: () => string | null }) {
   return (
-    <View testID="calendar-empty" class="items-center gap-2 px-6 py-16">
-      <Text class="text-lg font-semibold">{!calendarLoaded() ? (connection() === "connected" ? "Loading calendar…" : "Calendar offline") : props.day() ? "Nothing planned for this date" : "Nothing planned"}</Text>
+    <View testID="calendar-empty" class={`mt-3 items-center gap-2 bg-card px-6 py-10 ${dense({ phone: "rounded-(--radius-group)", window: "rounded-[14px]" })}`}>
+      <Text class="text-lg font-semibold">{!calendarLoaded() ? (connection() === "connected" ? "Loading calendar…" : "Calendar offline") : "Nothing on this day"}</Text>
       <If when={!calendarLoaded() && connection() !== "connected"}><Text class="text-center text-base text-muted-foreground">It shows when your computer is back.</Text></If>
     </View>
   );
 }
 
-/** One page's agenda: its rows under its header (the month, the day's heading). */
-function Agenda(props: { testID: string; day: () => string | null; header: () => JSX.Element; onOpen: (item: CalendarItem) => void }) {
+/** The page's column: the phone's 16 gutters, the Mac's w-cal column. */
+function Column(props: { testID: string; children: JSX.Element }) {
   return (
-    <List keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1" each={rows(props.day())}
-      keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
-      header={props.header}
-      empty={() => <Empty day={props.day} />}>
-      {(row) => {
-        // Cells are recycled: what a cell shows follows the row it holds now. The clock makes new rows every
-        // 30 s, so the cell is rebuilt only when it turns from a heading into an item or back: a tap at the
-        // tick lands on the row, not on one being replaced.
-        const section = computed(() => row().kind === "section");
-        // The item row may read once more after the cell took a heading, before it goes: it keeps its last item.
-        const item = computed<CalendarItem>((last) => (row().kind === "section" ? last! : (row() as { item: CalendarItem }).item));
-        const title = computed<string>((last) => (row().kind === "section" ? (row() as { title: string }).title : last ?? ""));
-        return (
-          <View>
-            <If when={section()} else={<ItemRow item={item} onPress={() => props.onOpen(item())} />}><View class="bg-background px-4 pb-1.5 pt-4"><Text class="text-sm font-semibold text-muted-foreground">{title()}</Text></View></If>
-          </View>
-        );
-      }}
-    </List>
+    <Scroll keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1 bg-background" contentClass={dense({ phone: "px-4 pt-1", window: "px-6 pt-1" })} contentStyle={{ paddingBottom: 40 }}>
+      <View class="w-full self-center" style={{ maxWidth: pageColumnWidth("page", density() !== "phone") ?? undefined }}>{props.children}</View>
+    </Scroll>
   );
 }
 
-type AgendaDay = ReturnType<typeof agendaDays>[number];
-type MacRow = { key: string; kind: "now" } | { key: string; kind: "item"; item: CalendarItem };
-
-/** The time column's width: "10:00" takes 44 (w-cal), "10:00 PM" more. */
-function timeWidth(sample: string): number {
-  return /[A-Za-z]/.test(sample) ? 62 : 44;
-}
-
-/** The hairline over every row but a card's first, 52 in (w-cal's `.lrow + .lrow`). */
-function TopHairline(props: { first: () => boolean }) {
-  return <If when={!props.first()}><View class="absolute right-0 top-0 h-px bg-border" style={{ left: 52 }} /></If>;
-}
-
-/**
- * A plain row of w-cal: the time in this computer's zone, the title over one quiet line, then a chevron; done rows dim
- * with a check. An overdue item from an earlier day carries its date in the line.
- */
-function MacItemRow(props: { item: () => CalendarItem; first: () => boolean; width: () => number; onPress: () => void }) {
-  const done = () => props.item().status === "completed";
-  const at = () => itemInstant(props.item());
-  const zone = () => clock().zones.device;
-  const earlier = () => clock().zones.dateKey(at(), zone()) < clock().zones.dateKey(clock().now, zone());
-  const line = () => [earlier() ? clock().format.shortDate(at(), zone()) : "", quietLine(props.item(), clock())].filter(Boolean).join(" · ");
-  const time = () => clock().format.time(at(), zone());
+/** "12 today" and the date (w-cal): today's own rows, not what earlier days left open. */
+function Headline() {
+  const count = () => agenda(calendarItems(), clock()).todayCount;
   return (
-    <Button testID={`calendar-item-${props.item().id}`} onPress={props.onPress} accessibilityLabel={[time(), props.item().title, line()].filter(Boolean).join(", ")}
-      class="min-h-[44px] flex-row items-center gap-[11px] px-[14px] py-1.5 active:bg-accent" style={{ opacity: done() ? 0.55 : 1 }}>
-      <TopHairline first={props.first} />
-      <Text class="text-[13px] text-muted-foreground" style={{ width: props.width(), fontVariant: ["tabular-nums"] }}>{time()}</Text>
-      <View class="min-w-0 flex-1">
-        <Text class="text-[14px] leading-[19px] line-clamp-1">{props.item().title}</Text>
-        <If when={line()}>{(text) => <Text testID="calendar-item-line" class="text-[12px] leading-[16px] text-muted-foreground line-clamp-1">{text()}</Text>}</If>
-      </View>
-      <If when={done()} else={<Icon name="chevron-right" size={16} tone="faint" />}><Icon name="check-circle" size={18} tone="ok" /></If>
-    </Button>
-  );
-}
-
-/** The ink now line between what is past and what is next (w-cal). */
-function NowLine(props: { first: () => boolean; width: () => number }) {
-  const now = () => clock().format.time(clock().now, clock().zones.device);
-  return (
-    <View testID="calendar-now" accessibilityLabel={`Now, ${now()}`} class="min-h-[22px] flex-row items-center gap-[11px] px-[14px]">
-      <TopHairline first={props.first} />
-      <Text class="text-[12px] font-semibold" style={{ width: props.width(), fontVariant: ["tabular-nums"] }}>{now()}</Text>
-      <View class="flex-1 bg-foreground" style={{ height: 1.5 }} />
+    <View testID="calendar-headline" class="mb-3 mt-2 flex-row flex-wrap items-baseline gap-2 px-0.5">
+      <Text role="header" class={dense({ phone: "text-[30px] font-bold tracking-display", window: "text-[32px] font-bold tracking-display" })}>{count() ? `${count()} today` : "Nothing today"}</Text>
+      <Text class="text-[15px] text-muted-foreground">{clock().format.day(clock().now, clock().zones.device)}</Text>
     </View>
   );
 }
 
 /**
- * Mewla for Mac's agenda (w-cal), in the page's 640 column: on Today "3 today" and the date, then one card per day,
- * Today's with the now line; on Month, the month over the picked day's card (or every day's). Times are in this
- * computer's zone. The phone keeps its agenda list. Cards and rows are keyed, so the clock's tick only updates them:
- * a tap at the tick lands on its row.
+ * Today (option 2, owner 2026-11-22): the headline, the one Triggers row, today's card (what ran and how it went, the
+ * now line, what is still to come), Tomorrow, Later, and earlier days folded into one row at the end.
  */
-function MacAgenda(props: { testID: string; day: () => string | null; top?: () => JSX.Element; headline?: boolean; onOpen: (item: CalendarItem) => void; onTrigger?: (id: string) => void }) {
-  const days = (): AgendaDay[] => {
+function Today(props: { onOpen: (row: AgendaRow) => void; onTriggers: () => void }) {
+  const a = () => agenda(calendarItems(), clock());
+  const tomorrow = () => (tomorrowOpen() ? a().tomorrow : a().tomorrow.slice(0, TOMORROW_ROWS));
+  const earlierLine = () => [`${a().done} done`, a().failed ? `${a().failed} failed` : ""].filter(Boolean).join(" · ");
+  return (
+    <Column testID="agenda">
+      <If when={calendarLoaded()} else={<Empty day={() => null} />}>
+        <Headline />
+        <TriggersRow onOpen={props.onTriggers} />
+        <DayCard testID="calendar-day-today" flush rows={() => a().today} now onOpen={props.onOpen} />
+        <If when={a().tomorrow.length}>
+          <DayCard testID="calendar-day-tomorrow" title="Tomorrow" rows={tomorrow} onOpen={props.onOpen}
+            more={() => a().tomorrow.length - tomorrow().length} onMore={() => tomorrowOpen.set(true)} />
+        </If>
+        <If when={a().later.length}><DayCard testID="calendar-day-later" title="Later" rows={() => a().later} date onOpen={props.onOpen} /></If>
+        <If when={a().earlier.length}>
+          <Section testID="calendar-earlier">
+            <TileRow testID="calendar-earlier-row" icon="check-circle" first={() => true} title={() => "Earlier"} line={earlierLine}
+              chevron={earlierOpen() ? "up" : "down"} onPress={() => earlierOpen.set(!earlierOpen())}
+              accessibilityLabel={() => `Earlier, ${earlierLine()}`} />
+          </Section>
+          <If when={earlierOpen()}>
+            <Each of={a().earlier} key={(day: EarlierDay) => day.key}>{(day: () => EarlierDay) => (
+              <DayCard testID={`calendar-day-${day().key}`} title={clock().format.day(day().rows[0]!.at, clock().zones.device)} rows={() => day().rows} onOpen={props.onOpen} />
+            )}</Each>
+          </If>
+        </If>
+      </If>
+    </Column>
+  );
+}
+
+/** Month: the month over the picked day's card (today's when none is picked). A past day shows only what is known. */
+function MonthPage(props: { onOpen: (row: AgendaRow) => void }) {
+  const day = () => pickedDay() ?? dayKey(clock());
+  const rows = () => dayRows(calendarItems(), day(), clock());
+  const title = () => {
     const c = clock();
-    const picked = props.day();
-    if (!picked) return agendaDays(calendarItems(), c);
-    const items = itemsOnDay(calendarItems(), picked, c);
-    return items.length ? [{ key: picked, title: c.format.longDay(Date.parse(`${picked}T12:00:00Z`), "UTC"), items }] : [];
-  };
-  // The headline counts today's own items, not the overdue ones Today also holds.
-  const todayCount = () => {
-    const c = clock();
-    const key = c.zones.dateKey(c.now, c.zones.device);
-    return calendarItems().filter((item) => item.status !== "cancelled" && c.zones.dateKey(itemInstant(item), c.zones.device) === key).length;
-  };
-  const width = () => timeWidth(clock().format.time(clock().now, clock().zones.device));
-  const rowsOf = (day: AgendaDay): MacRow[] => {
-    const rows: MacRow[] = day.items.map((item) => ({ key: `i:${item.id}`, kind: "item", item }));
-    if (day.key === "today") {
-      const next = day.items.findIndex((item) => itemInstant(item) > clock().now);
-      rows.splice(next < 0 ? rows.length : next, 0, { key: "now", kind: "now" });
-    }
-    return rows;
+    return day() === dayKey(c) ? "Today" : c.format.day(Date.parse(`${day()}T12:00:00Z`), "UTC");
   };
   return (
-    <Scroll keyboardShouldPersistTaps="handled" testID={props.testID} class="flex-1 bg-background" contentClass="px-6 pt-1" contentStyle={{ paddingBottom: 40 }}>
-      <View class="w-full self-center" style={{ maxWidth: pageColumnWidth("page", true)! }}>
-        {props.top ? props.top() : null}
-        <If when={props.headline && calendarLoaded() && !props.day()}>
-          <View testID="calendar-headline" class="mb-[6px] mt-2 flex-row items-baseline gap-2">
-            <Text role="header" class="text-[32px] font-bold tracking-display">{todayCount() ? `${todayCount()} today` : "Nothing today"}</Text>
-            <Text class="text-[15px] text-muted-foreground">{clock().format.day(clock().now, clock().zones.device)}</Text>
-          </View>
-        </If>
-        <If when={days().length} else={<Empty day={props.day} />}>
-          <Each of={days()} key={(day: AgendaDay) => day.key}>{(day: () => AgendaDay) => (
-            <Section title={day().key === "today" ? undefined : day().title} testID={`calendar-day-${day().key}`}>
-              <Each of={rowsOf(day())} key={(row: MacRow) => row.key}>{(row: () => MacRow, index: () => number) => {
-                // A row keeps its kind (its key says which); the item it shows follows the list.
-                const item = () => (row() as { item: CalendarItem }).item;
-                return (
-                  <If when={row().kind === "now"} else={<MacItemRow item={item} first={() => index() === 0} width={width} onPress={() => props.onOpen(item())} />}>
-                    <NowLine first={() => index() === 0} width={width} />
-                  </If>
-                );
-              }}</Each>
-            </Section>
-          )}</Each>
-        </If>
-        {/* Triggers are about the whole Calendar, under the days on the Mac (w-cal has none to show). */}
-        <If when={props.onTrigger}>{(onTrigger) => <View class="mt-3"><TriggerSection onOpen={onTrigger()} /></View>}</If>
-      </View>
-    </Scroll>
+    <Column testID="agenda-month">
+      <View class="mt-2"><Month /></View>
+      <If when={rows().length} else={<View><View class="mb-2 mt-6 px-4"><Text role="header" class="text-caption font-semibold text-muted-foreground">{title()}</Text></View><Empty day={pickedDay} /></View>}>
+        <DayCard testID={`calendar-day-${day()}`} title={title()} rows={rows} now={day() === dayKey(clock())} onOpen={props.onOpen} />
+      </If>
+    </Column>
   );
 }
 
 export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (sessionId: string) => void }) {
   // Today ⇄ Month switches in place (SPEC §3.5); Today is the whole agenda again, no day picked. The two are
-  // pages side by side that follow the finger (kit/TabPager.tsx): the agenda, and the month over its agenda.
+  // pages side by side that follow the finger (kit/TabPager.tsx).
   const show = (view: "today" | "month") => {
     if (view === "today") pickedDay.set(null);
     showMonth.set(view === "month");
   };
   const pager = createTabPager({ keys: ["today", "month"] as const, value: () => (showMonth() ? "month" : "today"), onChange: show });
-  // A running item opens its Session while the computer lists it; the others, and a run whose Session
-  // has gone, their page (the Expo app checked the same; parity #45).
-  const open = (item: CalendarItem) => {
-    const session = item.status === "running" ? activeRun(item)?.worker_session : undefined;
+  // A running row opens its Session while the computer lists it; a finished run its run page; the rest the item.
+  const open = (row: AgendaRow) => {
+    const run = row.run ?? (row.item.status === "running" ? activeRun(row.item) : undefined);
+    const session = run?.status === "running" ? run.worker_session : undefined;
     if (session && workers().some((worker) => worker.id === session)) props.openSession(session);
-    else props.nav.push({ name: "item", id: item.id });
+    else if (run && run.status !== "running") props.nav.push({ name: "run", itemId: row.item.id, runId: run.id });
+    else props.nav.push({ name: "item", id: row.item.id });
   };
   return (
-    // The mock's header: Back · "Calendar" · the Today | Month control · +. The system header holds the control at
-    // its end beside +, so Back and the title lead on both platforms (no leading item for Android to move).
+    // The mock's header: Back · "Calendar" · the Today | Month control · +.
     <NavPage title="Calendar" testID="calendar-page"
       headerRight={
         <View class="flex-row items-center gap-1">
@@ -312,14 +242,8 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
         {/* About the whole Calendar, so above both pages. */}
         <ReminderBanner />
         <TabPages fill testID="calendar-pages" pager={pager} pages={{
-          today: () => (
-            <If when={density() !== "phone"} else={<Agenda testID="agenda" day={() => null} header={() => <View><TriggerSection onOpen={(id) => props.nav.push({ name: "trigger", id })} /><Heading day={() => null} /></View>} onOpen={open} />}>
-              <MacAgenda testID="agenda" day={() => null} headline onOpen={open} onTrigger={(id) => props.nav.push({ name: "trigger", id })} />
-            </If>),
-          month: () => (
-            <If when={density() !== "phone"} else={<Agenda testID="agenda-month" day={pickedDay} header={() => <View><Month /><Heading day={pickedDay} /></View>} onOpen={open} />}>
-              <MacAgenda testID="agenda-month" day={pickedDay} top={() => <View class="mt-2 overflow-hidden rounded-[14px]"><Month /></View>} onOpen={open} />
-            </If>),
+          today: () => <Today onOpen={open} onTriggers={() => props.nav.push({ name: "triggers" })} />,
+          month: () => <MonthPage onOpen={open} />,
         }} />
         <CalendarEditor />
       </View>

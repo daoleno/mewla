@@ -30,6 +30,12 @@ type ActionInspector interface {
 	InspectScheduledAction(context.Context, Item, Run) (status Status, result, failure string, known bool)
 }
 
+// ActionOutcomeReader is implemented by a runner whose agent may state how a
+// completed run went (Run.Outcome): read when the run completes.
+type ActionOutcomeReader interface {
+	ScheduledActionOutcome(Item, Run) string
+}
+
 // ActionWaker is implemented by a runner that can say when a launched action
 // may have made progress (its Work item changed). The scheduler reconciles
 // running actions on that signal instead of re-reading them on a timer. The
@@ -564,7 +570,12 @@ func (s *Scheduler) reconcile(ctx context.Context, item Item) {
 	}
 	switch status {
 	case StatusCompleted:
-		s.finish(item, *active, result, "")
+		outcome := ""
+		if reader, ok := s.runner.(ActionOutcomeReader); ok {
+			outcome = reader.ScheduledActionOutcome(item, *active)
+		}
+		_, err := s.store.FinishRunWithOutcome(item.ID, active.ID, result, "", outcome)
+		s.note("calendar finish-run "+item.ID, err)
 	case StatusFailed:
 		if strings.TrimSpace(failure) == "" {
 			failure = "Linked Work/agent failed."

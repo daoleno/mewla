@@ -118,13 +118,39 @@ type Run struct {
 	WorkerSession  string     `json:"worker_session,omitempty"`
 	Result         string     `json:"result,omitempty"`
 	// ResultPreview is set only on the wire, where a run's Result is left out.
-	ResultPreview  string `json:"result_preview,omitempty"`
-	FailureReason  string `json:"failure_reason,omitempty"`
+	ResultPreview string `json:"result_preview,omitempty"`
+	FailureReason string `json:"failure_reason,omitempty"`
+	// Outcome is what the run's agent said of how it went, when it said
+	// (RunOutcome*): a completed run whose check could not run is failed in
+	// the agent's words, never by reading its result.
+	Outcome        string `json:"outcome,omitempty"`
 	PreviousStatus Status `json:"previous_status,omitempty"`
 	// Held is set while the run's agent is refused by its model provider (a
 	// rate limit, an overload, a dropped network): the run waits for it to
 	// answer instead of failing (held.go).
 	Held *RunHold `json:"held,omitempty"`
+}
+
+// The outcomes a scheduled action's agent may state in its Work's front
+// matter (`run_outcome:`) when it writes its result.
+const (
+	RunOutcomeSucceeded = "succeeded"
+	RunOutcomeFailed    = "failed"
+	RunOutcomeNeedsYou  = "needs_you"
+)
+
+// NormalizeRunOutcome is the outcome an agent stated, or "" for none or one
+// the Calendar does not know.
+func NormalizeRunOutcome(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case RunOutcomeSucceeded:
+		return RunOutcomeSucceeded
+	case RunOutcomeFailed:
+		return RunOutcomeFailed
+	case RunOutcomeNeedsYou, "needs-you", "needs you":
+		return RunOutcomeNeedsYou
+	}
+	return ""
 }
 
 // MaxSummaryRunes bounds Summary: it is a line, not a description.

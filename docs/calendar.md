@@ -9,10 +9,23 @@ else.
 Open the tray (the state control next to **Brain**). **Today** shows the next
 three items; tap one to open it. Tap **Calendar** for the whole page (on a keyboard, `G` then `C`):
 
-- **Today** lists the day, with past items dimmed above the line for now.
-  **Month** shows the month grid; pick a day to see it.
+- **Today** says how many things happen today ("12 today") and lists the day
+  on your device's clock: everything due today in time order, repeats
+  included, each with how its run went (done with a check, failed in amber
+  with why, running), then a line for now, then what is still to come.
+  **Tomorrow** and **Later** follow. Items from earlier days fold into one
+  **Earlier** row at the end; tap it to see them by day.
+- **Month** shows the month grid. A dot marks days with one-off items, amber
+  when one failed; repeats get none. Pick a day to see it: a coming day lists
+  every repeat that will run, a past day only what is known (one-off items and
+  the runs the Calendar keeps), never a repeat drawn in as if it ran.
 - **+** adds an item.
-- Tap an item to open it. A running item opens its live Session instead.
+- Tap a row to open it: a running one opens its live Session, a finished run
+  its result, the rest the item.
+
+Each row is the time, the title and one quiet line: how it went ("Done · 412
+matched"), else how it repeats and who acts ("Every day · Brain", "Every day ·
+Mewla" for Mewla's own, "Reminder").
 
 ## Item kinds
 
@@ -55,6 +68,11 @@ yesterday's merged pull requests." When it is due, Mewla:
 2. waits for that Work to finish or fail;
 3. posts the result to the Brain thread where you created the action, and
    sends one push notification that opens that thread.
+
+The agent also says how the task went (`run_outcome:` in its Work: succeeded,
+failed, or needs you). A run whose check could not run reads **Failed** even
+though it wrote a result; a run that did not say reads **Done** and the first
+line of its result.
 
 The Work and the Session it starts say where they came from: the Session's row
 has a calendar badge and its header names the item and the date ("运营：挖稿 ·
@@ -194,13 +212,18 @@ mewla trigger resume -id <trigger-id>
 mewla trigger delete -id <trigger-id>
 ```
 
-In the app, **Calendar** lists the current computer's Triggers above Today
-(the section is hidden when there are none). Each row says how often it checks
-and what it did last: "Every 10 min · fired 5 min ago · with Brain", "Failing:
-exit status 1: gh: HTTP 502", "Paused". A seal dot marks one that needs you.
-Tap a row to open the Trigger: its check, what Brain is told when it fires, its
-recent firings (newest first, each handled, with Brain or not handled) and
-**Check now**, **Pause** or **Resume**, and **Delete**.
+In the app, Calendar's Today starts with one **Triggers** row: how many are
+watching, and a seal dot with "1 needs you" only when one does (no row when the
+computer has none). It opens the **Triggers** page in three groups: **Needs
+you** (its check keeps failing, or it paused itself), **Noticed today** (how
+often, and when it last did) and **Quiet** ("Last noticed Nov 19", "Nothing
+noticed yet", "Paused").
+
+Tap a Trigger to open it: how often it checks; when it needs you, why and since
+when, with **Check now** and **Pause** (or **Resume**) on that card; what it
+noticed, newest first, and whether Brain handled it; what Brain does when it
+notices something; **How it checks** (the command, the folder it runs in and
+its timeout); and **Check now**, **Pause** or **Resume**, and **Delete**.
 
 A Trigger that needs you is also under **Needs you** in the tray, with Open:
 its check keeps failing, or it paused itself. A firing Brain has not handled
