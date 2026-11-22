@@ -3,9 +3,18 @@ import { answering, expoTokenService, framesOf, item, paired, pairedTwo, phoneHo
 
 const APP = "../FakeDaemonApp.tsx";
 
-/** The phone's date (Shanghai) `days` from today: a day key of the month. */
-function dayIn(days: number): string {
-  return new Date(Date.now() + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+/** Use one Shanghai clock for the phone, its events and the day selected in Month. */
+async function monthSelectionAt(localTime: string) {
+  const now = Date.parse(localTime);
+  const picked = new Date(now + 8 * 3_600_000 + 2 * 86_400_000).toISOString().slice(0, 10);
+  const rentAt = `${picked}T12:00:00+08:00`;
+  const bankAt = new Date(now + 3_600_000).toISOString();
+  const calendar_items = [
+    item("Call the bank", 0, { next_at: bankAt, notify_at: bankAt, created_at: localTime, updated_at: localTime }),
+    item("Pay rent", 0, { next_at: rentAt, notify_at: rentAt, created_at: localTime, updated_at: localTime }),
+  ];
+  const app = await calendarApp({ calendar_items }, {}, now);
+  return { app, picked };
 }
 const SLOW = { timeout: 10_000 };
 
@@ -17,16 +26,20 @@ function shanghaiTime(ms: number): string {
 }
 
 /** Today's now line is on the phone's clock: its zone is in (a slow runner gets it late, and the agenda redraws then). */
-async function onPhoneClock(app: Awaited<ReturnType<typeof open>>) {
-  await app.waitUntil(() => [Date.now(), Date.now() - 60_000].some((at) => app.shows(`id:calendar-now >> text:${shanghaiTime(at)}`)), SLOW);
+async function onPhoneClock(app: Awaited<ReturnType<typeof open>>, fixedTime?: number) {
+  await app.waitUntil(() => {
+    const now = fixedTime ?? Date.now();
+    return [now, now - 60_000].some((at) => app.shows(`id:calendar-now >> text:${shanghaiTime(at)}`));
+  }, SLOW);
 }
 
 /** The Calendar tab once the phone's zone is in. */
-async function calendarApp(daemon: Record<string, unknown>, extra: Record<string, (data: any) => unknown> = {}) {
-  const app = await open(APP, { host: phoneHost(daemon, extra), storage: paired, platform: "android", network: expoTokenService });
+async function calendarApp(daemon: Record<string, unknown>, extra: Record<string, (data: any) => unknown> = {}, fixedTime?: number) {
+  const clock = fixedTime === undefined ? undefined : { time: fixedTime };
+  const app = await open(APP, { host: phoneHost(daemon, extra), storage: paired, platform: "android", network: expoTokenService, clock });
   await app.host.send("links.open", { url: "mewla://calendar" });
   await app.waitFor("id:calendar-page");
-  await onPhoneClock(app);
+  await onPhoneClock(app, fixedTime);
   return app;
 }
 
@@ -107,12 +120,11 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a day picked on the month is let go when Today is chosen", async () => {
-    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    const { app, picked } = await monthSelectionAt("2026-11-22T22:30:00+08:00");
     await app.waitFor("text:Call the bank");
     await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month");
     // Two days on: in this month's six weeks whatever the date and the zone.
-    const picked = dayIn(2);
     await app.press(`id:day-${picked}`);
     await app.waitFor(`id:calendar-day-${picked}`);
     await app.press("id:calendar-view-today");
@@ -126,13 +138,13 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("Today and Month follow the finger (owner 11-13 20:05): a swipe shows the month, a swipe back the whole agenda again", async () => {
-    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    const { app, picked } = await monthSelectionAt("2026-11-22T23:59:59+08:00");
     await app.waitFor("text:Call the bank");
     await app.drag("id:calendar-pages-today", { x: -260 });
     await app.waitFor("id:calendar-month");
     // Two days on: in this month's six weeks whatever the date and the zone.
-    await app.press(`id:day-${dayIn(2)}`);
-    await app.waitFor(`id:calendar-day-${dayIn(2)}`);
+    await app.press(`id:day-${picked}`);
+    await app.waitFor(`id:calendar-day-${picked}`);
     await app.drag("id:calendar-pages-month", { x: 260 });
     await app.waitUntil(() => !app.shows("id:calendar-month"));
     expect(app.texts()).toContain("Pay rent");
