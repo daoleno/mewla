@@ -11,7 +11,7 @@ import { computerProblemsMayChange } from "../../core/settings/computerModel";
 import { connectionTone, fixRowLead, fixRowTone } from "../../core/computer/colour";
 import { color } from "../kit/colors";
 import { Icon, type IconName } from "../kit/Icon";
-import { Notice, Page, PillButton, Row, Section } from "../kit/kit";
+import { Notice, Page, PillButton, Row, RowButton, Section } from "../kit/kit";
 import { stateTextColor, tile } from "../kit/RowTile";
 import { followFriends, friendsEnabled, unread } from "../more/friends/state";
 import { flowState } from "../more/extensions/plugins";
@@ -245,8 +245,13 @@ export function ComputerPage(props: {
                 lead={fixRowLead(row)}
                 title={row.title}
                 titleTone={macGroups ? undefined : fixRowTone(row)}
-                trailing={<If when={row.button && row.action}><PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={macGroups || row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
-                    busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} /></If>}
+                trailing={<If when={row.button && row.action}>
+                  {/* On the Mac the row's own control (44 rows, as Privacy & access's Allow…); the phone's pill elsewhere. */}
+                  <If when={macGroups} else={<PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
+                    busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />}>
+                    <RowButton testID={`fix-${row.key}-button`} label={row.button!} disabled={Boolean(busy())} onPress={() => fix(row)} />
+                  </If>
+                </If>}
               />
               <If when={notes()[row.key]}><View class="px-4 pb-3"><Text class="text-sub text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[row.key]}</Text></View></If>
             </View>
