@@ -544,12 +544,13 @@ func TestHostAgentKilledBeforeItsFirstCheckIn(t *testing.T) {
 		outcome  string
 		resent   bool
 		reported int
+		untold   int
 		aborted  []string
 		resolved []string
 	}{
 		{name: "not held", provider: older, delivery: PromptNotHeld, outcome: "resent", resent: true, aborted: []string{"turn:first"},
 			plan: AgentRelaunchPlan{PendingTurnID: "turn:first", Words: "sleep was killed (SIGKILL); Mewla started it again in the same conversation and sent it its task again."}},
-		{name: "unknown", provider: unreadable, delivery: PromptUnknown, outcome: "prompt_unknown", reported: 1,
+		{name: "unknown", provider: unreadable, delivery: PromptUnknown, outcome: "prompt_unknown", reported: 1, untold: 1,
 			plan: AgentRelaunchPlan{PendingTurnID: "turn:first", Words: "sleep was killed (SIGKILL); Mewla started it again. Whether its task (turn:first) had reached the conversation is unknown."}},
 		{name: "held", provider: held, delivery: PromptHeld, turnID: "turn:first", outcome: "continued", resolved: []string{"turn:first"},
 			plan: AgentRelaunchPlan{TurnID: "turn:first", Words: "sleep was killed (SIGKILL); Mewla started it again in the same conversation and asked it to continue the task."}},
@@ -559,7 +560,7 @@ func TestHostAgentKilledBeforeItsFirstCheckIn(t *testing.T) {
 			id, pid := startDelegatedAgent(t, h)
 			plan := tc.plan
 			plan.Action, plan.WorkID, plan.Command, plan.Attempt, plan.Agent = AgentEndRelaunch, "work-1", "exec sleep 304", 1, "sleep"
-			ledger := &relaunchLedger{plan: plan, pending: []InputAdmission{{WorkID: "work-1", SessionID: id, ProposedTurnID: "turn:first",
+			ledger := &relaunchLedger{plan: plan, untold: tc.untold, pending: []InputAdmission{{WorkID: "work-1", SessionID: id, ProposedTurnID: "turn:first",
 				Receipt: "turn:first", PayloadSHA256: "digest-first", AcceptedAt: sent, State: InputAdmissionPending, SignalProtocol: true,
 				PaneGeneration: h.w.currentPaneGeneration(id)}}}
 			h.w.SetTurnLedger(ledger)
@@ -595,6 +596,23 @@ func TestHostAgentKilledBeforeItsFirstCheckIn(t *testing.T) {
 			}
 			if len(reported) != tc.reported {
 				t.Fatalf("reported %+v", reported)
+			}
+			if tc.reported > 0 {
+				// Nothing runs for the task: the line does not read as healthy,
+				// and a report Brain did not have yet is asked again.
+				supervisor := h.w.agentRelaunch()
+				if state, relaunch, ok := supervisor.line(id, true, classifier.StateDone, time.Now()); !ok || relaunch.State != "stopped" || state != classifier.StateBlocked {
+					t.Fatalf("line = %v %+v %v", state, relaunch, ok)
+				}
+				supervisor.now = func() time.Time { return time.Now().Add(time.Minute) }
+				h.w.poll()
+				if _, _, again, _ := ledger.snapshot(); len(again) != tc.reported+tc.untold {
+					t.Fatalf("asked %d times, want %d", len(again), tc.reported+tc.untold)
+				}
+				h.w.poll()
+				if _, _, again, _ := ledger.snapshot(); len(again) != tc.reported+tc.untold {
+					t.Fatalf("asked again once Brain had it: %d", len(again))
+				}
 			}
 			mu.Lock()
 			defer mu.Unlock()

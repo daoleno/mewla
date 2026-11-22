@@ -29,6 +29,7 @@ func TestPrepareRelaunchStartsANewAppServerForTheSameThread(t *testing.T) {
 	}
 	for _, want := range []string{
 		"set +m; codex app-server --listen unix://" + launch.Control,
+		"-c 'model=\"gpt-6\"'",
 		"-c 'mcp_servers.mewla_chrome.command=\"m\"'",
 		`-c 'approval_policy="never"' -c 'sandbox_mode="danger-full-access"'`,
 		"echo $! > " + launch.Control + ".pid",
@@ -64,6 +65,22 @@ func TestPrepareRelaunchReattachesToTheAppServerStillRunning(t *testing.T) {
 	if !launch.Reattached || launch.Control != socket ||
 		launch.Command != "exec codex resume "+relaunchThread+" --remote unix://"+socket+" -m gpt-6" {
 		t.Fatalf("launch = %+v", launch)
+	}
+}
+
+// A Model Profile route's resume (routes.ResumeLaunch) names its provider on
+// the TUI; the new app-server, which calls the model, carries it.
+func TestPrepareRelaunchCarriesAModelRouteToTheAppServer(t *testing.T) {
+	a := Adapter{ControlDir: t.TempDir()}
+	launch, err := a.PrepareRelaunch("codex resume "+relaunchThread+` --model gpt-6 -c 'model_provider="openai"' -c 'openai_base_url="http://127.0.0.1:9/r/abc/v1"'`, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, _, _ := strings.Cut(launch.Command, "; exec ")
+	for _, want := range []string{`-c 'model="gpt-6"'`, `-c 'model_provider="openai"'`, `-c 'openai_base_url="http://127.0.0.1:9/r/abc/v1"'`} {
+		if !strings.Contains(server, want) {
+			t.Errorf("app-server lacks %s:\n%s", want, server)
+		}
 	}
 }
 
