@@ -199,3 +199,22 @@ func TestInventoryAdvertisesDeleteOnly(t *testing.T) {
 		t.Fatalf("mutation operations = %v", inventory.MutationOperations)
 	}
 }
+
+func TestAntigravitySkillsAreWhereAgyReadsThem(t *testing.T) {
+	f := newFixture(t)
+	global := f.writeSkill(filepath.Join(f.Home, ".gemini", "config", "skills"), "agy_global", "global")
+	project := f.writeSkill(filepath.Join(f.Project, ".agents", "skills"), "agy_project", "project")
+	inventory, err := DiscoverInventory(f.options(f.Project))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copy := findCopy(t, inventory, "agy_global", global); !slices.Equal(copy.Agents, []Agent{AgentAntigravity}) {
+		t.Fatalf("~/.gemini/config/skills serves agy alone: %v", copy.Agents)
+	}
+	if copy := findCopy(t, inventory, "agy_project", project); !slices.Contains(copy.Agents, AgentAntigravity) || !slices.Contains(copy.Agents, AgentCodex) {
+		t.Fatalf("a project's .agents/skills serves agy and Codex: %v", copy.Agents)
+	}
+	if resolveExecutorAgent("", "agy --model gemini-4-neon-low", "") != AgentAntigravity || executorKindAgent("antigravity") != AgentAntigravity {
+		t.Fatal("an agy executor is the Antigravity Skills agent")
+	}
+}

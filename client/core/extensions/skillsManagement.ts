@@ -4,7 +4,8 @@ export type SkillAgent =
   | "cursor"
   | "grok"
   | "opencode"
-  | "pi";
+  | "pi"
+  | "antigravity";
 export type ManagedSkillAgent = SkillAgent;
 export type SkillScope =
   | "project"
@@ -161,6 +162,7 @@ const AGENTS = new Set<SkillAgent>([
   "grok",
   "opencode",
   "pi",
+  "antigravity",
 ]);
 const SCOPES = new Set<SkillScope>([
   "project",
@@ -652,6 +654,7 @@ export function skillAgentLabel(agent: SkillAgent): string {
     case "grok": return "Grok";
     case "opencode": return "OpenCode";
     case "pi": return "Pi";
+    case "antigravity": return "Antigravity";
   }
 }
 

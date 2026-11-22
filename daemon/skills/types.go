@@ -13,6 +13,8 @@ const (
 	AgentGrok       Agent = "grok"
 	AgentOpenCode   Agent = "opencode"
 	AgentPi         Agent = "pi"
+	// AgentAntigravity is Google's Antigravity CLI (agy).
+	AgentAntigravity Agent = "antigravity"
 )
 
 type Scope string
