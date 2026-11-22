@@ -162,6 +162,14 @@ describe("The computer page", () => {
     await app.waitFor("id:pair-stub");
   });
 
+  test("on the Mac Needs fixing is one of the mock's groups: plain words, the row's own button, and it still fixes", async () => {
+    const app = await open(HARNESS, { ...setup({ state: "waiting" }, { network: { "GET http://desk.test:9877/auth-check": { status: 401 }, "GET http://desk.test:9877/health": { status: 401 } } }), platform: "macos", width: 1280, height: 800 });
+    await app.waitFor("id:fix-pair");
+    expect(app.texts()).toContain("Device not paired");
+    await app.press("id:fix-pair-button");
+    await app.waitFor("id:pair-stub");
+  });
+
   test("Claude not signed in says so, and Switch opens Brain's host sheet", async () => {
     const app = await open(HARNESS, setup({}, { network: { "GET http://desk.test:9877/auth-check": { status: 503 } } }));
     await app.waitFor("id:computer-page");

@@ -121,8 +121,8 @@ function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: 
         <RowText row={row} />
         <RowEnd row={row} />
       </>}>
-        <Text testID="tray-today-time" class="text-[11.5px] leading-[15px] text-muted-foreground" style={{ width: /[AP]M/i.test(row().end) ? 50 : 40, fontVariant: ["tabular-nums"] }}>{row().end}</Text>
-        <Text class="min-w-0 flex-1 text-[13px] leading-[17px] line-clamp-1">{row().title}</Text>
+        <Text testID="tray-today-time" class="text-[11.5px] leading-[15px] text-muted-foreground line-clamp-1" style={{ width: /[AP]M/i.test(row().end) ? 58 : 40, fontVariant: ["tabular-nums"] }}>{row().end}</Text>
+        <Text class="min-w-0 flex-1 text-[13px] font-semibold leading-[17px] line-clamp-1">{row().title}</Text>
       </If>
       <If when={!(mac || props.selected || props.last)}><RowHair /></If>
     </Button>
