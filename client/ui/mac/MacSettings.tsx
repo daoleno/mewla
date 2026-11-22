@@ -20,7 +20,7 @@ import { runDesktopCommand } from "../shell/desktop/Overlays";
 import { pageNav } from "../shell/nav";
 import { atLogin, readStartAtLogin, setStartAtLogin } from "./login";
 import { ShortcutRecorder } from "./QuickChatShortcut";
-import { daemonPairing, isThisMac, MAC_TITLE_BAR, showMainWindow, type DaemonPairing } from "./local";
+import { daemonPairing, isThisMac, MAC_TITLE_BAR, setMacLAN, showMainWindow, type DaemonPairing } from "./local";
 import { MaterialTint } from "./materials";
 
 /**
@@ -124,6 +124,21 @@ function MacVersionRow() {
 
 function Connections() {
   const pairing = signal<DaemonPairing | null>(null);
+  const changing = signal(false);
+  const error = signal("");
+  const turnOffLAN = async () => {
+    if (changing()) return;
+    changing.set(true);
+    error.set("");
+    try {
+      await setMacLAN(false);
+      pairing.set(await daemonPairing());
+    } catch (cause) {
+      error.set(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      changing.set(false);
+    }
+  };
   effect(() => {
     if (connection() !== "connected" || !isThisMac(current())) return;
     untracked(() => {
@@ -139,6 +154,10 @@ function Connections() {
       <Section title="Phones reach this Mac">
         <Row testID="mac-settings-remote" title="Anywhere" value={host(pairing()?.phone_address) || "Off"} />
         <Row testID="mac-settings-wifi" title="This Wi‑Fi" value={host(pairing()?.wifi_address) || "Not on Wi‑Fi"} />
+        <If when={pairing()?.mac_lan}>
+          <Row title="Trusted LAN access" trailing={<RowButton testID="mac-lan-off" label={changing() ? "Turning off…" : "Turn off LAN"} onPress={() => void turnOffLAN()} />} />
+        </If>
+        <If when={error()}>{(message) => <Text class="text-sub">{message()}</Text>}</If>
       </Section>
       </></If>
     </View>

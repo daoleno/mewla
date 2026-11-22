@@ -1,6 +1,14 @@
 {
   "releases": [
     {
+      "version": "0.4.23",
+      "date": "2026-11-22",
+      "highlights": [],
+      "fixes": [
+        "On Windows, listing available agents no longer runs Cursor commands when Cursor is unused."
+      ]
+    },
+    {
       "version": "0.4.22",
       "date": "2026-11-22",
       "highlights": [],

@@ -7,7 +7,7 @@ A release counts only when all of these hold:
   1. the tag is an annotated tag whose commit is on main (an ancestor of origin/main);
   2. that commit passed CI on main, or is the version change on top of one that did
      (scripts/release-green.py; a run cancelled by the next push is not a pass);
-  3. the GitHub release is public and carries every asset, none empty;
+  3. the GitHub release is public and carries every asset, none empty (a stable one with Mewla for Mac's five files);
   4. a stable tag is marked Latest and is the highest stable version published (or a higher
      release has since taken the mark); a beta is a prerelease.
 Prints each check; exits 1 if any fails. GH_TOKEN reads the release and the runs.
@@ -29,8 +29,16 @@ STABLE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 TAG = re.compile(r"^v\d+\.\d+\.\d+(-beta\.\d+)?$")
 
 
-def assets(version: str) -> list[str]:
-    return sorted([
+# The first release with Mewla for Mac: the stable releases before it carry no Mac files.
+MAC_SINCE = (0, 4, 22)
+
+
+def assets(version: str, stable: bool = True) -> list[str]:
+    """What a public release carries. A stable release from MAC_SINCE on also carries Mewla for Mac's five files
+    (macos-release.yml): the update zip and its signed manifest the installed apps read from releases/latest, the .dmg
+    people install from, and that .dmg again under a name without a version, which the site's download links to. A
+    beta carries none: the apps look at the Latest release."""
+    files = [
         "mewla-linux-amd64.tar.gz",
         "mewla-linux-arm64.tar.gz",
         "mewla-darwin-arm64.tar.gz",
@@ -39,7 +47,16 @@ def assets(version: str) -> list[str]:
         "SHA256SUMS",
         "release-manifest.json",
         "release-manifest.json.sig",
-    ])
+    ]
+    if stable and tuple(int(x) for x in version.split("-")[0].split(".")) >= MAC_SINCE:
+        files += [
+            f"Mewla-{version}-macos-aarch64.zip",
+            f"Mewla-{version}-macos-arm64.dmg",
+            "Mewla-macos-arm64.dmg",
+            "latest.json",
+            "latest.json.sig",
+        ]
+    return sorted(files)
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -86,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     report(release is not None and not release["draft"], f"{tag} is published")
     if release is not None:
         have = sorted(a["name"] for a in release["assets"] if a["size"] > 0)
-        want = assets(tag.removeprefix("v"))
+        want = assets(tag.removeprefix("v"), stable=bool(STABLE.match(tag)))
         report(have == want, f"every asset, none empty ({len(have)}/{len(want)})")
         if STABLE.match(tag):
             published = [r["tag_name"] for r in json.loads(gh("api", f"repos/{repo}/releases?per_page=100"))

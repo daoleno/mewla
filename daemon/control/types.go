@@ -162,6 +162,8 @@ const (
 )
 
 type PairingInfo struct {
+	// MacLAN is set only by the daemon managed by the Mac app's LaunchAgent.
+	MacLAN          *bool     `json:"mac_lan,omitempty"`
 	Token           string    `json:"token"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	DaemonID        string    `json:"daemon_id"`
