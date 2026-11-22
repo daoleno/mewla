@@ -8,105 +8,54 @@ import (
 	"github.com/daoleno/mewla/daemon/doctor"
 )
 
-func TestHostAuthProbeAnswersAsDoctorDoesAndCaches(t *testing.T) {
-	calls := 0
+func TestHostProbesArePassiveUntilExactAgentUse(t *testing.T) {
 	now := time.Unix(1000, 0)
-	probe := newHostAuthProbe(func() doctor.ExecutorsCheck {
-		calls++
-		return doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{
-			{ID: "claude", BinaryFound: true, Auth: doctor.AuthAuthenticated, VerifiedAuthenticated: true},
-			{ID: "codex", BinaryFound: true, Auth: doctor.AuthUnauthenticated},
-			{ID: "grok", BinaryFound: true, Auth: doctor.AuthUnknown},
-		}}
+	calls := map[string]int{}
+	probe, auth, unsupported, account := newHostProbes(func(id string) doctor.ExecutorsCheck {
+		calls[id]++
+		switch id {
+		case "codex":
+			return doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{{ID: id, BinaryFound: true, Runnable: true, Auth: doctor.AuthAuthenticated, VerifiedAuthenticated: true, Account: "person@example.com"}}}
+		case "cursor-alias":
+			return doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{{ID: id, BinaryFound: true, Auth: doctor.AuthUnauthenticated}}}
+		default:
+			return doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{{ID: id, BinaryFound: true, Summary: "unsupported"}}}
+		}
 	}, func() time.Time { return now })
-
-	for id, want := range map[string]brain.HostAuthState{
-		"claude": brain.HostAuthAuthenticated,
-		"codex":  brain.HostAuthUnauthenticated,
-		"grok":   brain.HostAuthUnknown,
-		"pi":     brain.HostAuthUnknown,
-	} {
-		if got := probe(id); got != want {
-			t.Errorf("%s = %q, want %q", id, got, want)
+	for _, id := range []string{"codex", "cursor-alias", "opencode"} {
+		if auth(id) != brain.HostAuthUnknown || unsupported(id) != "" || account(id) != "" {
+			t.Fatalf("%s had evidence before a probe", id)
 		}
 	}
-	if calls != 1 {
-		t.Fatalf("doctor ran %d times within the TTL, want 1", calls)
+	now = now.Add(2 * hostAuthSettledTTL)
+	if len(calls) != 0 {
+		t.Fatalf("passive reads started probes: %v", calls)
+	}
+	probe("codex")
+	if auth("codex") != brain.HostAuthAuthenticated || account("codex") != "person@example.com" {
+		t.Fatal("active Codex evidence missing")
 	}
 	now = now.Add(hostAuthProbeTTL + time.Second)
-	probe("claude")
-	if calls != 2 {
-		t.Fatalf("doctor ran %d times after the TTL, want 2", calls)
-	}
-}
-
-func TestHostProbesReportAnInstalledButUnsupportedAgent(t *testing.T) {
-	calls := 0
-	auth, unsupported := newHostProbes(func() doctor.ExecutorsCheck {
-		calls++
-		return doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{
-			{ID: "opencode", BinaryFound: true, Auth: doctor.AuthUnknown, Runnable: false, Summary: "OpenCode 1.1.25 found; Mewla supports OpenCode 2 only."},
-			{ID: "codex", BinaryFound: true, Auth: doctor.AuthUnauthenticated, Runnable: false, Summary: "codex found but not authenticated"},
-			{ID: "grok", BinaryFound: true, Auth: doctor.AuthUnknown, Runnable: true},
-			{ID: "pi", BinaryFound: false},
-		}}
-	}, func() time.Time { return time.Unix(1000, 0) })
-	if got := unsupported("opencode"); got != "OpenCode 1.1.25 found; Mewla supports OpenCode 2 only." {
-		t.Fatalf("opencode = %q", got)
-	}
-	for _, id := range []string{"codex", "grok", "pi"} {
-		if got := unsupported(id); got != "" {
-			t.Fatalf("%s is not unsupported, got %q", id, got)
-		}
-	}
-	if auth("codex") != brain.HostAuthUnauthenticated {
-		t.Fatal("signed-out codex lost")
-	}
-	if calls != 1 {
-		t.Fatalf("doctor ran %d times, want 1 (shared cache)", calls)
-	}
-}
-
-func TestHostAuthProbeKeepsASettledAnswerLongerThanAnOpenOne(t *testing.T) {
-	now := time.Unix(1000, 0)
-	calls := 0
-	items := []doctor.ExecutorCheck{
-		{ID: "claude", BinaryFound: true, Runnable: true, Auth: doctor.AuthAuthenticated, VerifiedAuthenticated: true},
-		{ID: "pi", BinaryFound: true, Runnable: true, Auth: doctor.AuthUnknown},
-	}
-	probe := newHostAuthProbe(func() doctor.ExecutorsCheck {
-		calls++
-		return doctor.ExecutorsCheck{Items: items}
-	}, func() time.Time { return now })
-
-	probe("claude")
-	now = now.Add(hostAuthProbeTTL + time.Second)
-	probe("claude")
-	if calls != 1 {
-		t.Fatalf("settled agents were asked again after %v: %d runs", hostAuthProbeTTL, calls)
+	probe("codex")
+	if calls["codex"] != 1 || calls["cursor-alias"] != 0 {
+		t.Fatalf("settled probe crossed agents: %v", calls)
 	}
 	now = now.Add(hostAuthSettledTTL)
-	probe("claude")
-	if calls != 2 {
-		t.Fatalf("settled agents were not asked again after %v: %d runs", hostAuthSettledTTL, calls)
+	probe("codex")
+	if calls["codex"] != 2 {
+		t.Fatalf("settled expiry: %v", calls)
 	}
-
-	// Someone signed out is someone about to sign in: ask soon.
-	items = []doctor.ExecutorCheck{
-		{ID: "claude", BinaryFound: true, Runnable: true, Auth: doctor.AuthAuthenticated, VerifiedAuthenticated: true},
-		{ID: "codex", BinaryFound: true, Auth: doctor.AuthUnauthenticated},
+	probe("cursor-alias")
+	if auth("cursor-alias") != brain.HostAuthUnauthenticated {
+		t.Fatal("signed-out distinction lost")
 	}
-	now = now.Add(hostAuthSettledTTL + time.Second)
-	probe("claude")
-	calls = 0
 	now = now.Add(hostAuthProbeTTL + time.Second)
-	probe("claude")
-	if calls != 1 {
-		t.Fatalf("an agent waiting for sign-in was not asked again after %v: %d runs", hostAuthProbeTTL, calls)
+	probe("cursor-alias")
+	if calls["cursor-alias"] != 2 || calls["codex"] != 2 {
+		t.Fatalf("short expiry crossed agents: %v", calls)
 	}
-	for _, missing := range []doctor.ExecutorCheck{{ID: "pi"}, {ID: "opencode", BinaryFound: true, Runnable: false}} {
-		if hostProbesSettled([]doctor.ExecutorCheck{{ID: "claude", BinaryFound: true, Runnable: true}, missing}) {
-			t.Fatalf("%+v counted as settled", missing)
-		}
+	probe("opencode")
+	if unsupported("opencode") != "unsupported" {
+		t.Fatal("unsupported version reason lost")
 	}
 }

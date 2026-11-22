@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -1356,13 +1355,12 @@ func TestBootStateLockPIDRequiresRealLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A real process in the same cgroup opens the lock file without flocking.
-	opener := exec.Command("/bin/sh", "-c", "exec 9>>\"$0\"; sleep 30", lockPath)
-	opener.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	opener := exec.Command("/bin/sh", "-c", "exec 9>>\"$0\"; exec sleep 30", lockPath)
 	if err := opener.Start(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = syscall.Kill(-opener.Process.Pid, syscall.SIGKILL)
+		_ = opener.Process.Kill()
 		_, _ = opener.Process.Wait()
 	})
 	deadline := time.Now().Add(3 * time.Second)

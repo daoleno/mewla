@@ -48,6 +48,7 @@ func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
 			return fmt.Errorf("%w: %s is not installed", ErrHostNotRunnable, fields[0])
 		}
 	}
+	hostActiveProbe(executor.ID)
 	if reason := hostUnsupported(executor.ID); reason != "" {
 		return fmt.Errorf("%w: %s", ErrHostNotRunnable, reason)
 	}
@@ -239,6 +240,7 @@ func (s *Service) noteHostRestartedFresh(hostID, executorID string) {
 
 // noteHostLaunchAuth records the sign-in probe's answer as a Host launches.
 func (s *Service) noteHostLaunchAuth(executorID string) {
+	hostActiveProbe(executorID)
 	state := hostAuth(executorID)
 	s.hostProblemMu.Lock()
 	s.hostLaunchAuth = state
@@ -259,6 +261,7 @@ func (s *Service) hostSignedInSinceLaunch(executorID string, continuityErr error
 	s.hostProblemMu.Lock()
 	launchAuth, since := s.hostLaunchAuth, s.hostNotReadySince
 	s.hostProblemMu.Unlock()
+	hostActiveProbe(executorID)
 	if hostAuth(executorID) == HostAuthUnauthenticated {
 		return false
 	}

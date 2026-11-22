@@ -59,6 +59,7 @@ export function brainExecutorMeta(
   choices: readonly BrainExecutorRef[],
 ): string {
   const state = states?.[executor.id];
+  if (state?.auth_state === "unknown") return "Sign-in not checked";
   if (state && !state.signed_in) return "Not signed in";
   const label = brainExecutorLabel(executor);
   const shared = choices.some((other) => other.id !== executor.id && brainExecutorLabel(other) === label);

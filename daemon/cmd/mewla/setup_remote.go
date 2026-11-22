@@ -135,7 +135,7 @@ func runSetupRemote(args []string, stderr io.Writer) error {
 			return count, nil
 		},
 		agentReady: func() bool {
-			options := doctor.Options{LookPath: hostdeps.LookPath}
+			options := doctor.Options{LookPath: hostdeps.LookPath, Passive: true}
 			return readyAgent(doctor.CheckExecutors(options)) != ""
 		},
 		sleep: time.Sleep,

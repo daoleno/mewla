@@ -36,14 +36,19 @@ type Options struct {
 	StateDir      string
 	Addr          string
 	ExecutorsPath string
-	Home          string
-	PathEnv       string
-	Now           func() time.Time
-	LookPath      func(file string) (string, error)
-	RunCommand    func(ctx context.Context, name string, args ...string) ([]byte, error)
-	HTTPGet       func(ctx context.Context, url string) (status int, body []byte, err error)
-	Listen        func(network, address string) (io.Closer, error)
-	ProbeTimeout  time.Duration
+	// ExecutorID limits an executor check to one configured agent. An empty ID
+	// keeps the full explicit doctor diagnosis.
+	ExecutorID string
+	// Passive reports installation without starting an agent command.
+	Passive      bool
+	Home         string
+	PathEnv      string
+	Now          func() time.Time
+	LookPath     func(file string) (string, error)
+	RunCommand   func(ctx context.Context, name string, args ...string) ([]byte, error)
+	HTTPGet      func(ctx context.Context, url string) (status int, body []byte, err error)
+	Listen       func(network, address string) (io.Closer, error)
+	ProbeTimeout time.Duration
 	// GOOS is the platform diagnosed; empty means this one.
 	GOOS string
 }
@@ -487,6 +492,9 @@ func (e env) checkExecutors() ExecutorsCheck {
 	}
 
 	for _, name := range cfg.Roles() {
+		if e.opts.ExecutorID != "" && name != e.opts.ExecutorID {
+			continue
+		}
 		executor := cfg.ByName[name]
 		check.Items = append(check.Items, e.probeExecutor(name, executor))
 	}
@@ -591,6 +599,13 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 	}
 	item.BinaryFound = true
 	item.BinaryPath = path
+	if e.opts.Passive {
+		item.Runnable = true
+		item.Usable = true
+		item.Status = StatusWarn
+		item.Summary = fmt.Sprintf("%s installed; sign-in and version not checked", item.ID)
+		return item
+	}
 	item.Version = e.probeVersion(path, worker.Provider)
 	if worker.Provider == work.WorkerProviderOpenCode {
 		version := opencodeapi.ParseVersion([]byte(item.Version))

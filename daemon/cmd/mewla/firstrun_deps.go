@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -43,7 +42,7 @@ type depsPrompt struct {
 }
 
 func newDepsPrompt(in *bufio.Reader, w io.Writer, interactive bool) *depsPrompt {
-	options := doctor.Options{LookPath: hostdeps.LookPath}
+	options := doctor.Options{LookPath: hostdeps.LookPath, Passive: true}
 	return &depsPrompt{
 		in:          in,
 		w:           w,
@@ -508,9 +507,7 @@ func quickDepsCheck(stderr io.Writer) {
 	d := newDepsPrompt(bufio.NewReader(os.Stdin), stderr, interactive)
 	installed := doctor.CheckExecutors(doctor.Options{
 		LookPath: hostdeps.LookPath,
-		RunCommand: func(context.Context, string, ...string) ([]byte, error) {
-			return nil, errors.New("not probed at start")
-		},
+		Passive:  true,
 	})
 	if readyAgent(installed) == "" {
 		d.ensureAgent()
@@ -592,6 +589,9 @@ func runDepsCommand(args []string, stderr io.Writer) error {
 	}
 	prepareToolPath()
 	d := newDepsPrompt(bufio.NewReader(os.Stdin), stderr, stdioIsTerminal())
+	d.agents = func() doctor.ExecutorsCheck {
+		return doctor.CheckExecutors(doctor.Options{LookPath: hostdeps.LookPath})
+	}
 	if *agent != "" {
 		if !d.installAgent(*agent, func(id string) error { return setRunningBrainHost(*stateDir, id) }) {
 			return errDepsMissing
