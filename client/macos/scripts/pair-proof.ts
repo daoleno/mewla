@@ -19,7 +19,7 @@ const mode = process.argv[3];
 if (mode === "--across-takeover" || mode === "--rollback") {
   const home = process.env.HOME!;
   const domain = `gui/${process.getuid!()}`;
-  const listing = (label: string) => spawnSync("/bin/launchctl", ["print", `${domain}/${label}`], { encoding: "utf8" }).stdout;
+  const listing = (label: string) => spawnSync("/bin/launchctl", ["print", `${domain}/${label}`], { encoding: "utf8", timeout: 2500 }).stdout ?? "";
   const auth = () => confirmPairedDevice({ serverUrl: paired.url, daemonId: paired.daemonId, daemonPublicKey: paired.daemonPublicKey }).catch(() => null);
   const wait = async (condition: () => boolean | Promise<boolean>, seconds: number, message: string) => {
     const deadline = Date.now() + seconds * 1000;
@@ -43,8 +43,8 @@ if (mode === "--across-takeover" || mode === "--rollback") {
     const s = installed();
     const pid = s.match(/^\tpid = (\d+)$/m)?.[1];
     if (!pid || !s.includes("\n\tstate = running\n") || !s.includes("program = " + helper)) return false;
-    const listener = spawnSync("/usr/sbin/lsof", ["-nP", "-a", "-p", pid, "-iTCP:9876", "-sTCP:LISTEN", "-t"], { encoding: "utf8" });
-    if (!listener.stdout.split(/\s+/).includes(pid)) return false;
+    const listener = spawnSync("/usr/sbin/lsof", ["-nP", "-a", "-p", pid, "-iTCP:9876", "-sTCP:LISTEN", "-t"], { encoding: "utf8", timeout: 2500 });
+    if (!listener.stdout?.split(/\s+/).includes(pid)) return false;
     const h = await health();
     return h?.status === "ok" && h.version === version && h.daemon_id === paired.daemonId && h.daemon_public_key === paired.daemonPublicKey;
   };
@@ -66,9 +66,10 @@ if (mode === "--across-takeover" || mode === "--rollback") {
   const probe = setInterval(async () => {
     const s = installed();
     if (s && !attached) {
-      const result = spawnSync("/usr/bin/sudo", ["-n", "/bin/launchctl", "debug", domain + "/com.daoleno.mewla.installed-daemon", "--stderr", errFile]);
-      attached = result.status === 0;
-      console.log("Trial stderr redirect status", result.status);
+      const task = Bun.spawn(["/usr/bin/sudo", "-n", "/bin/launchctl", "debug", domain + "/com.daoleno.mewla.installed-daemon", "--stderr", errFile], {stdin:"ignore",stdout:"ignore",stderr:"ignore"});
+      attached = true;
+      const timer = setTimeout(() => task.kill(), 8000);
+      void task.exited.then(code => { clearTimeout(timer); console.log("Trial stderr redirect status", code); });
     }
     if (existsSync(errFile)) {
       const lines = (await Bun.file(errFile).text()).trim().split("\n");
