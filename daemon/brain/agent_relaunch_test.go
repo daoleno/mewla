@@ -2,6 +2,7 @@ package brain
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -592,6 +593,65 @@ func TestAgentRelaunchUnsentPromptIsNotInFlight(t *testing.T) {
 	f.sendPrompt(t, "turn:unsent", false)
 	plan, err := f.service.PlanAgentRelaunch(killedEnd(time.Now()))
 	if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.PendingTurnID != "" || plan.TurnID != "" {
+		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+}
+
+// A provider outage is waited out: the end is held, no try is used, and once
+// the provider answers the agent is started again as the first try.
+func TestAgentRelaunchWaitsOutAProviderOutage(t *testing.T) {
+	f := newRelaunchFixture(t)
+	outage := &outageWatcher{fakeWatcher: f.fw, unavailable: true}
+	f.service.watcher = outage
+	end := killedEnd(time.Now())
+	plan, err := f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndWait || plan.Line != "Waiting for Claude Code's provider" ||
+		plan.Words != "Claude Code was killed (SIGKILL); it is started again once its provider answers (rate limit)." {
+		t.Fatalf("during the outage: plan = %+v, %v", plan, err)
+	}
+	if records, _, _ := f.store.agentRelaunches(f.item.ID, "worker"); len(records) != 0 {
+		t.Fatalf("a wait used a try: %+v", records)
+	}
+	outage.unavailable = false
+	plan, err = f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.Attempt != 1 || plan.After != 0 {
+		t.Fatalf("after the outage: plan = %+v, %v", plan, err)
+	}
+}
+
+// The lifetime bound: a task whose agent dies again and again, each time past
+// the thirty-minute window, is stopped at its fifth relaunch, counted along
+// its continuations.
+func TestAgentRelaunchBoundForOneTask(t *testing.T) {
+	f := newRelaunchFixture(t)
+	f.startTurn(t)
+	base := time.Now().UTC().Add(-10 * time.Hour)
+	// The live Turn is the newest continuation of the chain.
+	from := "turn:origin"
+	for attempt := 1; attempt <= agentRelaunchTurnLimit; attempt++ {
+		next := fmt.Sprintf("turn:continued-%d", attempt)
+		if attempt == agentRelaunchTurnLimit {
+			next = "turn:first"
+		}
+		at := base.Add(time.Duration(attempt) * time.Hour)
+		if err := f.service.RecordAgentRelaunch(watcher.AgentRelaunch{WorkID: f.item.ID, SessionID: "worker", Attempt: 1, Cause: "was killed (SIGKILL)",
+			EndedAt: at, FromTurnID: from, TurnID: next, Outcome: "continued", Words: "w", At: at}); err != nil {
+			t.Fatal(err)
+		}
+		from = next
+	}
+	records, _, _ := f.store.agentRelaunches(f.item.ID, "worker")
+	if got := relaunchesOfTask(records, from); got != agentRelaunchTurnLimit {
+		t.Fatalf("relaunches of the task = %d", got)
+	}
+	if got := relaunchesOfTask(records, "turn:unrelated"); got != 0 {
+		t.Fatalf("an unrelated turn counts %d", got)
+	}
+	end := killedEnd(time.Now())
+	end.TurnID = "turn:first"
+	plan, err := f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndReport || plan.Line != "Stopped after 5 restarts" ||
+		!strings.Contains(plan.Words, "it was started again 5 times during this task and ended each time") {
 		t.Fatalf("plan = %+v, %v", plan, err)
 	}
 }
