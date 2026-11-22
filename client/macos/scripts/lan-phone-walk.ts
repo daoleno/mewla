@@ -87,7 +87,17 @@ try {
   });
   installMemoryPlatform({ deviceName: () => "Simulated LAN phone", fetch: (input, init) => fetch(input, init) });
   const target = readPairingLink(scanned);
-  if (!target) throw new Error("Phone client rejected the displayed QR payload");
+  if (!target) {
+    const url = URL.canParse(scanned) ? new URL(scanned) : null;
+    const payload = url?.searchParams.get("p") ?? "";
+    const bytes = Buffer.from(payload, "base64url");
+    const addressLength = bytes.length >= 3 ? bytes.readUInt16BE(1) : -1;
+    await until("Copy link unavailable", () => inspect("click", "Copy link").status === 0);
+    await wait(500);
+    const copied = execFileSync("pbpaste", { encoding: "utf8" }).trim();
+    execFileSync("pbcopy", { input: "" });
+    throw new Error(`QR rejected: url=${!!url}, bytes=${bytes.length}, declaredAddressBytes=${addressLength}, version=${bytes[0]}, matchesClipboard=${copied === scanned}, clipboardParses=${!!readPairingLink(copied)}`);
+  }
   const host = new URL(target.url).hostname;
   if (!ips.includes(host)) throw new Error("Displayed QR hostname " + host + " differs from LAN interfaces " + ips.join(", "));
   execFileSync(vision, [screen, "redact", join(out, "06-pair-redacted.png")]);
