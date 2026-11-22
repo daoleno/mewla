@@ -12,8 +12,8 @@ const payload = readPairingLink(link);
 if (!payload) throw new Error("not a pairing link");
 const paired = await pairWith(payload);
 const confirmed = await confirmPairedDevice({ serverUrl: paired.url, daemonId: paired.daemonId, daemonPublicKey: paired.daemonPublicKey });
-if (!confirmed) throw new Error(`paired with ${paired.url}, but the daemon does not know the device`);
-console.log(JSON.stringify({ paired: true, url: paired.url, daemonId: paired.daemonId, confirmed: true }));
+if (!confirmed) throw new Error("daemon did not recognize the paired device");
+console.log("Original device paired and authenticated.");
 
 const mode = process.argv[3];
 if (mode === "--across-takeover" || mode === "--rollback") {
@@ -28,42 +28,66 @@ if (mode === "--across-takeover" || mode === "--rollback") {
       await Bun.sleep(500);
     }
   };
-  const { existsSync, readlinkSync } = await import("node:fs");
+  const { existsSync, readlinkSync, writeFileSync } = await import("node:fs");
   const oldJob = home + "/Library/LaunchAgents/com.daoleno.mewla.daemon.plist";
   const priorBundle = home + "/Applications/Mewla.app";
   execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
   const installed = () => listing("com.daoleno.mewla.installed-daemon");
   const errFile = process.env.RUNNER_TEMP + "/trial-helper.stderr";
-  let attached = false;
-  const snapshot = async () => {
+  writeFileSync(errFile, "", { mode: 0o600 });
+  const helper = "/Applications/Mewla.app/Contents/Helpers/mewla";
+  const version = JSON.parse(execFileSync(helper, ["version", "--json"], { encoding: "utf8" })).version;
+  const health = async () => fetch("http://127.0.0.1:9876/health", { signal: AbortSignal.timeout(1000) })
+    .then(r => r.json()).catch(() => null);
+  const serves = async () => {
     const s = installed();
-    const jobState = s.match(/^\tstate = (.+)$/m)?.[1] ?? "absent";
-    const lastExit = s.match(/^\tlast exit code = (.*)$/m)?.[1] ?? "none";
-    const jobProgram = s.match(/^\tprogram(?: identifier)? = (.*)$/m)?.[1] ?? "none";
+    const pid = s.match(/^\tpid = (\d+)$/m)?.[1];
+    if (!pid || !s.includes("\n\tstate = running\n") || !s.includes("program = " + helper)) return false;
+    const listener = spawnSync("/usr/sbin/lsof", ["-nP", "-a", "-p", pid, "-iTCP:9876", "-sTCP:LISTEN", "-t"], { encoding: "utf8" });
+    if (!listener.stdout.split(/\s+/).includes(pid)) return false;
+    const h = await health();
+    return h?.status === "ok" && h.version === version && h.daemon_id === paired.daemonId && h.daemon_public_key === paired.daemonPublicKey;
+  };
+  // The signed app is unchanged. Redirect only this job's next launch on the disposable CI Mac.
+  // Print fixed error categories, never raw stderr or program arguments.
+  let attached = false;
+  let prior = "";
+  let lastCapture = "";
+  const startupTerms = [
+    "Brain root", "already owned", "another Mewla daemon owns", "recover from an interrupted update",
+    "open database", "database is locked", "database disk image is malformed", "unable to open database",
+    "permission denied", "operation not permitted", "address already in use", "no such file or directory",
+    "read-only file system", "no such column", "duplicate column", "migration", "missing", "bind", "listen",
+    "initialize", "start model profiles owner", "load executors", "resolve home", "unknown command",
+    "flag provided but not defined", "unexpected arguments", "control socket", "launchctl", "acquire",
+    "server error", "auth", "brain store", "calendar store", "watcher", "state directory", "sqlite",
+    "malformed", "outdated", "daemon", "worktree", "tmux", "http", "keychain", "failed",
+  ];
+  const probe = setInterval(async () => {
+    const s = installed();
     if (s && !attached) {
-      const result = spawnSync("/bin/launchctl", ["debug", domain + "/com.daoleno.mewla.installed-daemon", "--stderr", errFile]);
+      const result = spawnSync("/usr/bin/sudo", ["-n", "/bin/launchctl", "debug", domain + "/com.daoleno.mewla.installed-daemon", "--stderr", errFile]);
       attached = result.status === 0;
+      console.log("Trial stderr redirect status", result.status);
     }
     if (existsSync(errFile)) {
-      const stderr = await Bun.file(errFile).text();
-      const errors = stderr.split("\n").filter(l => /^(?:\d{4}\/\d{2}\/\d{2} [\d:]+ )?(?:unknown command|flag provided but not defined|resolve auth storage directory|open |listen |bind:|another daemon|recover from an interrupted update|acquire |cannot |lock |create |Mewla is|mewla is)/i.test(l));
-      for (const line of errors.slice(-1)) {
-        if (!/token|key|signature|nonce|:\/\//i.test(line)) console.log("Helper startup error", line.slice(0,220));
-      }
+      const lines = (await Bun.file(errFile).text()).trim().split("\n");
+      const tail = lines.at(-1)?.toLowerCase() ?? "";
+      const capture = JSON.stringify({ lines: lines.length, lastLineCategories: startupTerms.filter(t => tail.includes(t.toLowerCase())) });
+      if (capture !== lastCapture) { console.log("Helper startup diagnostics", capture); lastCapture = capture; }
     }
-    const h = await fetch("http://127.0.0.1:9876/health", {signal: AbortSignal.timeout(1000)}).then(r => r.json()).catch(() => null);
-    return JSON.stringify({jobState, jobProgram, lastExit, version:h?.version, identity:h?.daemon_id === paired.daemonId});
-  };
-  let prior = "";
-  const probe = setInterval(async () => {
-    const next = await snapshot();
+    const h = await health();
+    const argv = s.match(/^\s*arguments = \{\n([\s\S]*?)\n\s*\}/m)?.[1]?.trim().split(/\n\s*/);
+    const next = JSON.stringify({
+      state: s.match(/^\tstate = (.+)$/m)?.[1] ?? "absent",
+      lastExit: s.match(/^\tlast exit code = (.*)$/m)?.[1],
+      argv: argv?.map(a => a === helper ? "helper" : a === "serve" ? "serve" : "other"),
+      version: h?.version, identity: h?.daemon_id === paired.daemonId,
+    });
     if (next !== prior) { console.log("Trial observation", next); prior = next; }
   }, 1000);
   probe.unref();
-  await wait(() => {
-    const s = installed();
-    return s.includes("\n\tstate = running\n") && s.includes("program = /Applications/Mewla.app/Contents/Helpers/mewla");
-  }, 180, "signed installed helper did not run at its absolute path");
+  await wait(serves, 95, "signed helper never owned the healthy listener with its version and original identity");
   if (!existsSync(oldJob) || !existsSync(priorBundle)) throw new Error("previous installation removed before the original phone authenticated");
   if (mode === "--rollback") {
     // Keep this original phone offline throughout the trial. Its key stays in memory.
@@ -72,7 +96,7 @@ if (mode === "--across-takeover" || mode === "--rollback") {
     if (!existsSync(oldJob) || !existsSync(priorBundle) || !(await auth())) throw new Error("original phone could not use the restored installation");
     console.log("Trial withheld phone authentication; previous login job and original phone recovered.");
   } else {
-    await wait(async () => !!(await auth()), 60, "original phone failed to authenticate to the installed helper");
+    await wait(async () => await serves() && !!(await auth()) && await serves(), 60, "original phone failed to authenticate to the installed helper");
     await wait(() => !existsSync(oldJob) && !existsSync(priorBundle)
       && existsSync(home + "/.mewla/mac-app-takeover.complete")
       && readlinkSync(home + "/.local/bin/mewla") === "/Applications/Mewla.app/Contents/Helpers/mewla", 30, "takeover did not commit after the original phone authenticated");
