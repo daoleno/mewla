@@ -335,15 +335,18 @@ with no action from the person or Brain, when all of these hold:
   "Waiting for Claude Code's provider" in the waiting look (state `waiting`,
   the Session `blocked`: no running dot, nothing asked of the person). It is
   planned again every 30 s and started as soon as the provider answers. The
-  wait also ends by itself: at about 1, 3 and 7 minutes it asks
-  for the family's one probe request, and holding it, it is started again as
-  that request. At 10 minutes it is started again anyway. Either start counts
-  toward the bounds below like any other, and Brain's event says the provider
-  was still refusing requests and the start is the test. So an outage that
-  lasts ends as "Stopped after 3 restarts" with its cause, never as a Worker
-  held for ever. A Worker already at a bound is reported at once, not held. The
-  wait is in memory: a daemon restart forgets it with the outage itself and
-  plans the end afresh;
+  wait also ends by itself. An end whose start sends a request (a Turn to
+  continue, a prompt to send again) asks for the family's one probe request at
+  about 1, 3 and 7 minutes, and holding it, it is started again as that
+  request. An idle end never asks: its start sends nothing, so the probe stays
+  with the family's held Turns. At 10 minutes any held end is started again
+  anyway. No end waits longer. Every start counts toward the bounds below, and
+  Brain's event says the provider was still refusing requests when it was
+  started. An agent that keeps dying stops at a bound with its cause; one that
+  comes up is an ordinary Worker again, and a continuation the provider refuses
+  is held as any Turn is in an outage. A Worker already at a bound is reported
+  at once, not held. The wait is in memory: a daemon restart forgets it with
+  the outage itself and plans the end afresh;
 - it has been started again fewer than 3 times in the last 30 minutes (after 0,
   10 s and 30 s). The task also has a lifetime bound: at most 5 relaunches for
   one Turn and the continuations and re-sent prompts that carry it on, however

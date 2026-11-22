@@ -798,58 +798,78 @@ func TestHostAgentHeldForAnOutageComesBackWhenAnotherWorkerIsAnswered(t *testing
 	}
 }
 
-// An outage that never ends: the held end asks for the family's probe on its
-// backoff and is started again at the latest at agentProviderWaitLimit; that
-// start is counted like any other, so the usual bound ends a lasting outage.
+// An outage that never ends: no held end waits past agentProviderWaitLimit,
+// and every start counts. An agent that keeps dying while the provider still
+// refuses requests is started at each bound and stopped at the relaunch bound
+// with its cause (Brain's "then the usual counting").
 func TestHostAgentHeldForAnOutageThatNeverEndsIsStartedAtTheBound(t *testing.T) {
 	h := newHostHarness(t)
 	id, pid := startDelegatedAgent(t, h)
-	ledger := &relaunchLedger{}
+	ledger := &relaunchLedger{bound: 3, boundWords: "sleep was killed (SIGKILL); not started again: it was started again 3 times in the last 30 minutes and ended each time."}
 	ledger.planFn = outagePlans(h.w)
 	h.w.SetTurnLedger(ledger)
 	at := time.Now().UTC()
 	startOutage(h.w, at)
-	// The family's probe was taken by another held Turn just now, so this
-	// end's asks are refused until its own bound.
-	if granted, _ := h.w.ProviderProbe("claude", at.Add(providerProbeIntervals[0])); !granted {
-		t.Fatal("setup: the first probe was not granted")
-	}
 	supervisor := h.w.agentRelaunch()
 	clock := &lockedClock{at: at}
 	supervisor.now = clock.now
-	killAgent(t, h.w, id, pid)
-	h.w.poll()
-	for step := agentEndWaitEvery; step < agentProviderWaitLimit; step += agentEndWaitEvery {
+	for death := 1; death <= 3; death++ {
+		killAgent(t, h.w, id, pid)
+		h.w.poll()
+		for step := agentEndWaitEvery; step < agentProviderWaitLimit; step += agentEndWaitEvery {
+			clock.add(agentEndWaitEvery)
+			h.w.poll()
+			if _, records, _, _ := ledger.snapshot(); len(records) != death-1 {
+				t.Fatalf("death %d: started at %s, before the bound: %+v", death, step, records)
+			}
+		}
 		clock.add(agentEndWaitEvery)
 		h.w.poll()
-		if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
-			t.Fatalf("started at %s, before the bound: %+v", step, records)
+		previous := pid
+		pid = waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != previous }).PID
+		_, records, reported, plans := ledger.snapshot()
+		if len(records) != death || len(reported) != 0 || !plans[len(plans)-1].ProviderTest {
+			t.Fatalf("death %d at the bound: records %d reported %+v last plan %+v", death, len(records), reported, plans[len(plans)-1])
+		}
+		if _, down := h.w.ProviderOutage("claude"); !down {
+			t.Fatal("setup: the outage ended")
+		}
+		// Idle: it sent nothing, so the family's probe was never taken.
+		if death == 1 {
+			if granted, _ := h.w.ProviderProbe("claude", at.Add(providerProbeIntervals[0])); !granted {
+				t.Fatal("an idle held end took the family's probe")
+			}
 		}
 	}
-	clock.add(agentEndWaitEvery)
+	// The fourth end is past the relaunch bound: stopped, with its cause.
+	killAgent(t, h.w, id, pid)
 	h.w.poll()
-	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
-	_, records, reported, plans := ledger.snapshot()
-	if len(records) != 1 || len(reported) != 0 || !plans[len(plans)-1].ProviderTest {
-		t.Fatalf("at the bound: records %+v reported %+v last plan %+v", records, reported, plans[len(plans)-1])
-	}
-	if _, down := h.w.ProviderOutage("claude"); !down {
-		t.Fatal("setup: the outage ended")
+	waitUntil(t, 10*time.Second, "the report", func() bool { _, _, reported, _ := ledger.snapshot(); return len(reported) == 1 })
+	if state, relaunch, ok := supervisor.line(id, false, "", clock.now()); !ok || state != classifier.StateFailed || relaunch.State != "stopped" {
+		t.Fatalf("after the bound: state %q line %+v", state, relaunch)
 	}
 }
 
-// Holding the family's probe starts the held end before the bound.
+// Holding the family's probe starts a held end that will send a request (a
+// Turn to continue) before the bound.
 func TestHostAgentHeldForAnOutageIsStartedWithTheFamilysProbe(t *testing.T) {
 	h := newHostHarness(t)
 	id, pid := startDelegatedAgent(t, h)
-	ledger := &relaunchLedger{}
-	ledger.planFn = outagePlans(h.w)
+	ledger := &relaunchLedger{turn: TurnSnapshot{TurnID: "turn:first", Status: TurnRunning, SignalProtocol: true}, hasTurn: true}
+	ledger.planFn = func(end AgentEnd) AgentRelaunchPlan {
+		plan := outagePlans(h.w)(end)
+		plan.TurnID = end.TurnID
+		return plan
+	}
 	h.w.SetTurnLedger(ledger)
 	at := time.Now().UTC()
 	startOutage(h.w, at)
 	supervisor := h.w.agentRelaunch()
 	clock := &lockedClock{at: at}
 	supervisor.now = clock.now
+	supervisor.submit = func(sessionID, command, payload, workID, turnID string, at time.Time) (InputResult, error) {
+		return InputResult{Outcome: InputAccepted, TurnID: turnID}, nil
+	}
 	killAgent(t, h.w, id, pid)
 	h.w.poll()
 	// The family's first probe is due five minutes into the outage; the
@@ -867,8 +887,8 @@ func TestHostAgentHeldForAnOutageIsStartedWithTheFamilysProbe(t *testing.T) {
 		t.Fatalf("started with the probe at %s", started)
 	}
 	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
-	if _, _, _, plans := ledger.snapshot(); !plans[len(plans)-1].ProviderTest {
-		t.Fatalf("last plan %+v", plans[len(plans)-1])
+	if granted, _ := h.w.ProviderProbe("claude", clock.now()); granted {
+		t.Fatal("the probe the start took is still free")
 	}
 }
 
