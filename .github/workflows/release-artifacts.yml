@@ -585,6 +585,9 @@ jobs:
     needs: validate
     if: needs.validate.outputs.mode == 'candidate' || !contains(needs.validate.outputs.tag, '-beta.')
     uses: ./.github/workflows/macos-release.yml
+    # Its jobs read the signing secrets by name (the environment's and the repository's); a called workflow sees none
+    # it is not given.
+    secrets: inherit
     with:
       tag: ${{ needs.validate.outputs.tag }}
       version: ${{ needs.validate.outputs.version }}
