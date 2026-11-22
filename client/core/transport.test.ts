@@ -71,8 +71,12 @@ describe("Transport", () => {
     const { transport, socket } = await connected();
     const pad = "x".repeat(1 << 20);
     const replies = Array.from({ length: 40 }, (_, i) => transport.request<{ n: number }>("get_stats", { n: i, pad }, { reply: "stats" }));
+    // A request left waiting when this test fails is rejected by the close below: nobody may see that as unhandled.
+    for (const reply of replies) reply.catch(() => {});
     expect(socket.sent.length).toBe(7);
-    await wait(30);
+    // The rest drain as the socket empties, however long a busy runner takes (a fixed 30 ms failed on CI at 58 ms).
+    const deadline = Date.now() + 5_000;
+    while (socket.sent.length < 40 && Date.now() < deadline) await wait(1);
     expect(socket.sent.length).toBe(40);
     const sent = socket.sent.map((text) => JSON.parse(text));
     expect(sent.map((frame) => frame.n)).toEqual(Array.from({ length: 40 }, (_, i) => i));
@@ -102,10 +106,11 @@ describe("Transport", () => {
     expect(transport.state).toBe("waiting");
     expect(transport.problem).toBe("network lost");
     await socketsReach(2);
+    const closedAt = Date.now();
     sockets[1].close(1006, "still down");
-    await wait(12);
-    expect(sockets).toHaveLength(2); // second wait is twice as long
     await socketsReach(3);
+    // The second wait is twice the first (10 ms): measured, not raced against a fixed sleep a late timer can overrun.
+    expect(Date.now() - closedAt).toBeGreaterThanOrEqual(15);
     sockets[2].open();
     expect(transport.state).toBe("connected");
     transport.close();
