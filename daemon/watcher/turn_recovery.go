@@ -480,7 +480,13 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		return
 	}
 	supervisor := w.turnRecovery()
+	relaunch := w.agentRelaunch()
 	for _, item := range results {
+		if relaunch.holds(item.id, item.turn.TurnID) {
+			// Its agent is being, or was just, started again: the old Turn's
+			// process is gone on purpose and its continuation is on its way.
+			continue
+		}
 		// A prompt the provider took its turn over without admitting (a keystroke
 		// sent into a prompt never becomes a user prompt, or a follow-up whose
 		// progress signal never carried its identity) holds the Work's active-Attempt fence:

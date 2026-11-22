@@ -84,6 +84,8 @@ type Service struct {
 	// agentInstallCommand builds the command that installs an agent for Brain
 	// (SetAgentInstallCommand); nil offers no install.
 	agentInstallCommand atomic.Pointer[func(id string) string]
+	// workerLaunchEnv is a Worker's launch environment, for a relaunch.
+	workerLaunchEnv atomic.Pointer[func() map[string]string]
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once

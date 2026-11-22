@@ -290,6 +290,68 @@ For an owned wait, the reference is `session:<session-id>:turn:<turn-token>`.
 Bare Session names and another producer's Turn do not authorize changing the
 active Attempt. Without an Attempt, wait retains its usual typed external Wake.
 
+### Agent Process Ends And Relaunch
+
+A delegated Worker's agent program can end while its Work is open: killed
+(`SIGKILL`, the out-of-memory killer), exited with a code, or replaced by an
+update of the agent's program. The session host keeps the ended program with
+its exit code or signal, and the watcher decides once per ended program
+(`daemon/watcher/agent_relaunch.go`, planned by Brain in
+`daemon/brain/agent_relaunch.go`).
+
+Mewla starts the agent again in the same Session and the same conversation,
+with no action from the person or Brain, when all of these hold:
+
+- the Session is a delegated Worker of an open Work (not Brain's own host, not a
+  Session the person ended, not a Worker Brain closed);
+- it did not end itself between Turns (exit 0 with no Turn in flight is a
+  finished or exited agent); an exit 0 right after its program was replaced
+  counts as "updated" and is started again;
+- Mewla recorded how the Worker was launched (`launch_command` on the Work's
+  Worker record, from `worker spawn`), the agent is installed, and its sign-in
+  is not known to be gone;
+- there is a conversation to resume: the Work's transcript link (Claude Code,
+  Codex, agy), else the id Mewla put on the launch (OpenCode, Pi, DSH). Cursor
+  Agent and Grok record none, so they are reported, not restarted;
+- it has been started again fewer than 3 times in the last 30 minutes (after 0,
+  10 s and 30 s).
+
+The relaunch is one launch path for every agent (`work.RelaunchCommand`: the
+spawn launch with the agent's resume flag, Codex as `codex resume <id> …`, a
+Model Profile route restored by `routes.ResumeLaunch`). It reuses the Session's
+id, resource unit and TMPDIR, stops what the old program left running in that
+unit, and keeps the Session's input receipts, so a Work event already delivered
+is not delivered again.
+
+The in-flight Turn: when the agent ended mid-Turn, Mewla waits for the new
+program to be ready (90 s at most) and sends one continuation as a follow-up of
+that Turn ("Your agent process … Continue the task from where you stopped;
+check what already finished before you repeat a step."). The commands the old
+program was running were stopped, so nothing runs twice unknowingly. If the
+agent is not ready in time, the Turn is released as `turn_lost` for Brain.
+
+Brain gets one Work Event in plain words. A relaunch is a non-actionable
+`session.relaunched` event ("Claude Code was killed (SIGKILL); Mewla started it
+again in the same conversation and asked it to continue the task."). An agent
+not started again opens the usual `turn_lost` review once, worded with the
+cause and the reason ("Claude Code exited with code 1; not started again: it
+was started again 3 times in the last 30 minutes and ended each time.").
+
+The Session carries `relaunch` (`state`: `restarting`, `restarted` or
+`not_restarted`, and a short `line`). The app shows the line on the Session's
+row and the Work card ("Restarted after SIGKILL", "Gave up after 3 restarts")
+and the state word in the Session header, until the agent shows something newer
+(restarted: work, a request, or 10 minutes).
+
+Restarts:
+- Daemon restart: Sessions live in the session host. An agent that ended while
+  the daemon was down is decided on the first poll with the same rules; the
+  bound counts recorded relaunches, so a given-up agent is tried again only once
+  its 30 minutes have passed.
+- Session-host restart and computer reboot end every Session. Unchanged: a
+  mid-Turn Work is released as `turn_lost` once the Session is proven absent;
+  nothing is started again.
+
 ### Model-Led Continuation
 
 Normal operation is one command per decision:

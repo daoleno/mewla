@@ -474,6 +474,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		answer, usage, err := progressAsker.Ask(ctx, system, prompt, schema)
 		return answer, usage.CostUSD, err
 	})
+	// A Worker whose agent ended is started again with the environment it
+	// was spawned with (agent relaunch).
+	brainService.SetWorkerLaunchEnv(func() map[string]string { return progressEnvForStateDir(authManager.StorageDir()) })
 	w.SetTurnLedger(brainService)
 	// A Worker whose agent announces its conversation is re-proved when it
 	// announces another, not every 30 seconds; one the Hub has no binding for

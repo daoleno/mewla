@@ -203,6 +203,10 @@ type TurnFact struct {
 	ProcessDead     bool // positive identity disappearance
 	SessionReplaced bool
 	PaneAbsent      bool // transient absence; never terminal
+	// Ended is, for a ProcessDead fact, how the agent ended and what Mewla
+	// did about it, in plain words ("claude was killed (SIGKILL); not
+	// restarted: …"). It becomes the loss's summary for Brain and the Work.
+	Ended string
 
 	// LeaseSeconds is the caller-declared progress lease for Control facts:
 	// the reducer extends the turn's own per-turn liveness deadline by this

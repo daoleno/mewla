@@ -130,3 +130,26 @@ func (m *jobDelegatedResourceManager) tempDir(unit string) (string, error) {
 	}
 	return filepath.Join(m.tempRoot, digest), nil
 }
+
+// Reuse returns an existing unit's spec. Its TMPDIR is made again if it is
+// gone.
+func (m *jobDelegatedResourceManager) Reuse(unit string) (*delegatedResourceSpec, error) {
+	unit = strings.TrimSpace(unit)
+	dir, err := m.tempDir(unit)
+	if err != nil {
+		return nil, err
+	}
+	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("create delegated temporary directory: %w", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, delegatedTempMarkerName), []byte(unit+"\n"), 0o600); err != nil {
+			return nil, fmt.Errorf("write delegated temporary ownership marker: %w", err)
+		}
+	}
+	return &delegatedResourceSpec{Owner: m.owner, Unit: unit, TempDir: dir}, nil
+}
+
+// StopLeftovers has nothing to do on Windows: removing the old Session ends
+// its Job Object, and every process in it, before the new one starts.
+func (m *jobDelegatedResourceManager) StopLeftovers(string) error { return nil }
