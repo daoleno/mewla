@@ -218,3 +218,33 @@ func TestAntigravitySkillsAreWhereAgyReadsThem(t *testing.T) {
 		t.Fatal("an agy executor is the Antigravity Skills agent")
 	}
 }
+
+// Every shared project .agents/skills root, from the working directory up to
+// the git root, serves exactly Codex, Pi and agy; the shared user root above
+// it stays Codex and Pi.
+func TestSharedProjectRootsServeCodexPiAndAgy(t *testing.T) {
+	f := newFixture(t)
+	if err := os.MkdirAll(filepath.Join(f.Project, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cwd := filepath.Join(f.Project, "app", "src")
+	if err := os.MkdirAll(cwd, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	top := f.writeSkill(filepath.Join(f.Project, ".agents", "skills"), "project_top", "top")
+	nested := f.writeSkill(filepath.Join(f.Project, "app", ".agents", "skills"), "project_nested", "nested")
+	user := f.writeSkill(filepath.Join(f.Home, ".agents", "skills"), "user_shared", "user")
+	inventory, err := DiscoverInventory(f.options(cwd))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Agent{AgentCodex, AgentPi, AgentAntigravity}
+	for name, path := range map[string]string{"project_top": top, "project_nested": nested} {
+		if copy := findCopy(t, inventory, name, path); !slices.Equal(copy.Agents, want) {
+			t.Fatalf("%s Agents = %v, want %v", name, copy.Agents, want)
+		}
+	}
+	if copy := findCopy(t, inventory, "user_shared", user); !slices.Equal(copy.Agents, []Agent{AgentCodex, AgentPi}) {
+		t.Fatalf("~/.agents/skills Agents = %v", copy.Agents)
+	}
+}
