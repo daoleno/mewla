@@ -150,14 +150,14 @@ func TestAgentRelaunchMidTurnContinuesTheLiveTurn(t *testing.T) {
 		plan.Words != "Claude Code was killed (SIGKILL); Mewla started it again in the same conversation and asked it to continue the task." {
 		t.Fatalf("plan = %+v", plan)
 	}
-	prompt := watcher.AgentContinuationPrompt(end.Cause(), "- npm run dev (running 12m)")
+	prompt := watcher.AgentContinuationPrompt(end.Cause(), "- npm run dev (running 12m)", false)
 	for _, want := range []string{"was killed (SIGKILL)", "same conversation", "Mewla stopped nothing",
 		"may have finished, may still be running, or may have run only in part", "- npm run dev (running 12m)", "before you repeat any step"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("continuation lacks %q: %q", want, prompt)
 		}
 	}
-	if prompt := watcher.AgentContinuationPrompt(end.Cause(), ""); !strings.Contains(prompt, "Nothing it started is still running.") {
+	if prompt := watcher.AgentContinuationPrompt(end.Cause(), "", false); !strings.Contains(prompt, "Nothing it started is still running.") {
 		t.Fatalf("continuation with no survivor = %q", prompt)
 	}
 }
@@ -691,7 +691,7 @@ func TestAgentRelaunchBoundForOneTask(t *testing.T) {
 func TestAgentRelaunchContinuationsDoneIsTheWorksResult(t *testing.T) {
 	f := newRelaunchFixture(t)
 	f.startTurn(t)
-	payload := watcher.DelegatedLifecyclePayload(watcher.AgentContinuationPrompt("was killed (SIGKILL)", ""), "turn:cont")
+	payload := watcher.DelegatedLifecyclePayload(watcher.AgentContinuationPrompt("was killed (SIGKILL)", "", false), "turn:cont")
 	if _, created, err := f.store.PrepareInputAdmission(watcher.InputAdmission{
 		WorkID: f.item.ID, SessionID: "worker", ProposedTurnID: "turn:cont", Receipt: "turn:cont",
 		PayloadSHA256: pendingSubmissionDigest(payload), ProcessIdentity: "proc", PaneGeneration: "pane",

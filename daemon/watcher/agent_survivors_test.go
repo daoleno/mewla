@@ -51,7 +51,7 @@ func TestSurvivorListSaysHowLongEachRan(t *testing.T) {
 	if len(lines) != survivorListMax+1 || lines[0] != "- sleep 600 (running 12m)" || lines[survivorListMax] != "- and 2 more" {
 		t.Fatalf("list = %q", list)
 	}
-	if words := survivorWords(survivors[:2], now); words != " Still running from before: sleep 600 (running 12m); sleep 600 (running 12m)." {
+	if words := survivorWords(survivors[:2], false, now); words != " Still running from before: sleep 600 (running 12m); sleep 600 (running 12m)." {
 		t.Fatalf("words = %q", words)
 	}
 }
@@ -115,5 +115,33 @@ func TestSurvivorsLeaveOutTheControlServerAndItsChildren(t *testing.T) {
 	got := withoutControlServer(survivors, socket)
 	if len(got) != 2 || got[0].PID != 20 || got[1].PID != 21 {
 		t.Fatalf("survivors = %+v", got)
+	}
+}
+
+// endingManager is a resource manager whose units end with their Session, as
+// Windows' Job Objects do.
+type endingManager struct{ noopDelegatedResourceManager }
+
+func (endingManager) EndsSurvivors() bool { return true }
+
+// On Windows a relaunch closes the old Session's Job Object, which ends what
+// the Worker had left running: nothing is listed, and Brain's event and the
+// continuation say it was stopped, never "Mewla stopped nothing".
+func TestARelaunchThatEndsWhatTheAgentLeftSaysSo(t *testing.T) {
+	survivors, stopped := unitSurvivors(endingManager{}, "unit-1", "")
+	if len(survivors) != 0 || !stopped {
+		t.Fatalf("survivors %+v stopped %v", survivors, stopped)
+	}
+	if words := survivorWords(survivors, stopped, time.Now()); words != " What it had left running was stopped: on Windows it ends with the old Session." {
+		t.Fatalf("Brain's words = %q", words)
+	}
+	prompt := AgentContinuationPrompt("was killed (SIGKILL)", "", stopped)
+	if !strings.Contains(prompt, "everything it had left running was stopped with it") || strings.Contains(prompt, "Mewla stopped nothing") ||
+		strings.Contains(prompt, "may still be running") {
+		t.Fatalf("continuation = %q", prompt)
+	}
+	// A manager that keeps its units (Linux, macOS) stops nothing.
+	if _, stopped := unitSurvivors(noopDelegatedResourceManager{}, "unit-1", ""); stopped {
+		t.Fatal("a unit that outlives its Session reported as stopped")
 	}
 }
