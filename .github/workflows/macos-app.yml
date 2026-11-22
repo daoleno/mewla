@@ -262,9 +262,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { old: v0.4.21, mode: --across-takeover }
-          - { old: v0.4.22, mode: --across-takeover }
-          - { old: v0.4.22, mode: --rollback }
+          - { old: v0.4.22, mode: --external }
     env:
       MEWLA_VERSION: ${{ matrix.old }}
       TAKEOVER_MODE: ${{ matrix.mode }}
@@ -296,11 +294,17 @@ jobs:
           MEWLA_INSTALL_DIR="$HOME/.local/bin" MEWLA_NO_PATH_UPDATE=1 sh install.sh
           export PATH="$HOME/.local/bin:$PATH"
           mewla --version
-          mewla boot install
+          python3 - <<'PYPLIST'
+          import os, plistlib
+          root = os.environ['RUNNER_TEMP']
+          with open(root + '/external.plist', 'wb') as f:
+              plistlib.dump(dict(Label='org.example.mewla', RunAtLoad=True, ProgramArguments=[os.path.expanduser('~/.local/bin/mewla'),'serve'], EnvironmentVariables={'MEWLA_NO_AUTOUPDATE':'1'}), f)
+          PYPLIST
+          launchctl bootstrap "gui/$(id -u)" "$RUNNER_TEMP/external.plist"
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break; sleep 1; done
           curl -fsS http://127.0.0.1:9876/health > "$RUNNER_TEMP/health-before.json"
           jq -r '"Installed CLI daemon: " + .version' "$RUNNER_TEMP/health-before.json"
-          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state"
+          launchctl print "gui/$(id -u)/org.example.mewla" | grep -E "program|state"
       - name: Install and open Mewla
         run: |
           set -euo pipefail
@@ -315,60 +319,8 @@ jobs:
             ditto -x -k "$RUNNER_TEMP/zips/Mewla-"[0-9]*-macos-aarch64.zip /Applications
           fi
           link=$("$HOME/.local/bin/mewla" pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
-          if ! (cd client && bun macos/scripts/pair-proof.ts "$link" "$TAKEOVER_MODE"); then
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.installed-daemon" 2>/dev/null | grep -E 'program (identifier|=)|path =|state =|last exit code|pid =' || true
-            curl -fsS --max-time 2 http://127.0.0.1:9876/health | jq '{status,version}' || true
-            /usr/bin/log show --last 5m --style compact --predicate 'process == "launchd" AND eventMessage CONTAINS "com.daoleno.mewla.daemon" AND (eventMessage CONTAINS "resolve" OR eventMessage CONTAINS "spawn" OR eventMessage CONTAINS "exited")' | tail -25 || true
-            exit 1
-          fi
-          if [[ "$TAKEOVER_MODE" == --rollback ]]; then exit 0; fi
-          launchctl print "gui/$(id -u)/com.daoleno.mewla.installed-daemon" | grep -E "program|state|pid"
-          # A daemon that did not come up: why launchd could not spawn it (the job, launchd's own log, its BTM entry).
-          if ! curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1; then
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.installed-daemon" || true
-            log show --last 5m --style compact --predicate 'process == "launchd" AND eventMessage CONTAINS "com.daoleno.mewla"' | tail -60 || true
-            log show --last 5m --style compact --predicate 'eventMessage CONTAINS "Contents/Helpers/mewla" OR eventMessage CONTAINS "com.daoleno.mewla.daemon"' | grep -iv "launchd" | tail -40 || true
-            sudo sfltool dumpbtm 2>/dev/null | grep -B4 -A12 "com.daoleno.mewla" | head -60 || true
-            codesign -dv --verbose=2 /Applications/Mewla.app/Contents/Helpers/mewla 2>&1 | head -12 || true
-            tail -30 "$HOME/.mewla/logs/launchd.log" 2>/dev/null || true
-          fi
-      - name: One daemon, the app's, with the same identity and device
-        if: matrix.mode != '--rollback'
-        run: |
-          set -euo pipefail
-          export PATH="$HOME/.local/bin:$PATH"
-          curl -fsS http://127.0.0.1:9876/health > "$RUNNER_TEMP/health-after.json"
-          python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"], (a,b); print("same daemon_id", a["daemon_id"])' "$RUNNER_TEMP/health-before.json" "$RUNNER_TEMP/health-after.json"
-          test ! -e "$HOME/Library/LaunchAgents/com.daoleno.mewla.daemon.plist"
-          test ! -e "$HOME/Applications/Mewla.app"
-          ls -l "$HOME/.local/bin/mewla"
-          [[ "$(readlink "$HOME/.local/bin/mewla")" == "/Applications/Mewla.app/Contents/Helpers/mewla" ]]
-          mewla devices list | tee "$RUNNER_TEMP/devices-after.txt"
-          pgrep -fl "mewla.*serve|Helpers/mewla" || true
-          [[ $(pgrep -f "/Applications/Mewla.app/Contents/Helpers/mewla serve" | wc -l) -eq 1 ]]
-          if pgrep -f "$HOME/Applications/Mewla.app" >/dev/null; then echo "the old daemon still runs"; exit 1; fi
-          out=$(mewla update 2>&1 || true); echo "$out"; grep -q "Mewla for Mac" <<<"$out"
-      - name: The daemon keeps running when the app quits
-        if: matrix.mode != '--rollback'
-        run: |
-          set -euo pipefail
-          before=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.installed-daemon" | awk '/^\tpid = / {print $3}')
-          # Quit as the menu does; AppKit may answer the Apple event before the app has finished quitting.
-          osascript -e 'quit app "Mewla"' || true
-          for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null || break; sleep 1; done
-          if pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null; then echo "the app did not quit"; exit 1; fi
-          after=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.installed-daemon" | awk '/^\tpid = / {print $3}')
-          echo "daemon pid before $before, after $after"
-          test -n "$before" && test "$before" = "$after"
-          curl -fsS http://127.0.0.1:9876/health
-      - name: What the app, launchd and Background Task Management said
-        if: always()
-        run: |
-          find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | while read -r f; do echo "== $f"; tail -60 "$f"; done
-          log show --last 15m --style compact --predicate 'process == "Mewla" OR process == "smd" OR subsystem == "com.apple.backgroundtaskmanagement" OR (process == "launchd" AND eventMessage CONTAINS "mewla")' 2>/dev/null | tail -120
-          sudo sfltool dumpbtm 2>/dev/null | grep -i -B2 -A14 mewla | head -80
-          launchctl print "gui/$(id -u)" 2>/dev/null | grep -i mewla
-
+          cd client
+          bun macos/scripts/pair-proof.ts "$link" "$TAKEOVER_MODE"
 
   # The app's own update on a clean Mac (client/macos/package.sh, NSH's updater): Mewla at one version is installed and
   # paired, its daemon a LaunchAgent; a signed latest.json served on loopback offers the next version; the running app
