@@ -200,10 +200,15 @@ type AgentRelaunchLedger interface {
 
 // AgentContinuationPrompt is what a relaunched agent that was in a Turn is
 // sent, with a fresh turn contract. survivors is survivorList's lines: what
-// the dead agent left running, untouched.
-func AgentContinuationPrompt(cause, survivors string) string {
-	prompt := "Your agent process " + strings.TrimSpace(cause) + " in the middle of this task, and Mewla started it again in the same conversation. " +
-		"Mewla stopped nothing: the command you were running when it ended may have finished, may still be running, or may have run only in part."
+// the dead agent left running, untouched. stopped says the relaunch ended
+// everything it left running instead (Windows).
+func AgentContinuationPrompt(cause, survivors string, stopped bool) string {
+	prompt := "Your agent process " + strings.TrimSpace(cause) + " in the middle of this task, and Mewla started it again in the same conversation. "
+	if stopped {
+		return prompt + "On this computer everything it had left running was stopped with it: the command you were running when it ended may have finished or may have run only in part, and nothing of it is running now. " +
+			"Look at the state of the work (files, outputs) before you repeat any step, then continue the task from where you stopped."
+	}
+	prompt += "Mewla stopped nothing: the command you were running when it ended may have finished, may still be running, or may have run only in part."
 	if strings.TrimSpace(survivors) != "" {
 		prompt += "\n\nStill running from before it ended:\n" + survivors + "\n\n"
 	} else {
@@ -213,8 +218,12 @@ func AgentContinuationPrompt(cause, survivors string) string {
 }
 
 // survivorWords is the survivors in one line for Brain's event: "Still
-// running from before: python3 -m http.server 18473 (running 12m)."
-func survivorWords(survivors []agentSurvivor, now time.Time) string {
+// running from before: python3 -m http.server 18473 (running 12m).", or that
+// the relaunch stopped them (stopped, Windows).
+func survivorWords(survivors []agentSurvivor, stopped bool, now time.Time) string {
+	if stopped {
+		return " What it had left running was stopped: on Windows it ends with the old Session."
+	}
 	if len(survivors) == 0 {
 		return ""
 	}
@@ -225,25 +234,33 @@ func survivorWords(survivors []agentSurvivor, now time.Time) string {
 // agentSurvivors lists what the Session's dead agent left running in its
 // resource unit; nothing on a Session without one. The agent's own control
 // server (named by its control socket) is the agent's, not something it
-// started: a relaunch attaches to it again.
-func (w *Watcher) agentSurvivors(sessionID, control string) []agentSurvivor {
+// started: a relaunch attaches to it again. stopped says the relaunch ends
+// them all instead (Windows), so there is nothing to list.
+func (w *Watcher) agentSurvivors(sessionID, control string) (survivors []agentSurvivor, stopped bool) {
 	delegated, unit := w.sessions().delegatedResource(sessionID)
 	if !delegated || unit == "" {
-		return nil
+		return nil, false
 	}
-	reuser, ok := w.resourceManager().(delegatedResourceReuser)
+	return unitSurvivors(w.resourceManager(), unit, control)
+}
+
+func unitSurvivors(manager delegatedResourceManager, unit, control string) ([]agentSurvivor, bool) {
+	if ender, ok := manager.(survivorEnder); ok && ender.EndsSurvivors() {
+		return nil, true
+	}
+	reuser, ok := manager.(delegatedResourceReuser)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	survivors, err := reuser.Survivors(unit)
 	if err != nil {
-		log.Printf("agent relaunch: list what %s left running: %v", sessionID, err)
+		log.Printf("agent relaunch: list what unit %s left running: %v", unit, err)
 	}
 	control = strings.TrimSpace(control)
 	if control == "" {
-		return survivors
+		return survivors, false
 	}
-	return withoutControlServer(survivors, control)
+	return withoutControlServer(survivors, control), false
 }
 
 // withoutControlServer drops the agent's control server (the process whose
@@ -893,8 +910,8 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		return
 	}
 	plan = fresh
-	survivors := w.agentSurvivors(end.SessionID, end.Control)
-	plan.Words = strings.TrimSuffix(plan.Words, ".") + "." + survivorWords(survivors, supervisor.now())
+	survivors, stopped := w.agentSurvivors(end.SessionID, end.Control)
+	plan.Words = strings.TrimSuffix(plan.Words, ".") + "." + survivorWords(survivors, stopped, supervisor.now())
 	err = w.replaceEndedSession(end, plan)
 	if errors.Is(err, agentevents.ErrControlBusy) {
 		// The agent's control server is finishing its turn: waited for, no
@@ -952,7 +969,7 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		turnID := "turn:" + uuid.NewString()
 		at := supervisor.now().UTC()
 		result, submitErr := supervisor.submit(
-			end.SessionID, plan.Command, DelegatedLifecyclePayload(AgentContinuationPrompt(end.Cause(), survivorList(survivors, at)), turnID),
+			end.SessionID, plan.Command, DelegatedLifecyclePayload(AgentContinuationPrompt(end.Cause(), survivorList(survivors, at), stopped), turnID),
 			plan.WorkID, turnID, at,
 		)
 		outcome := result.Outcome

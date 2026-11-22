@@ -184,6 +184,13 @@ type delegatedResourceReuser interface {
 	Survivors(unit string) ([]agentSurvivor, error)
 }
 
+// survivorEnder is a resource manager whose units end with their Session: a
+// relaunch, which replaces the Session, stops what the dead agent left running
+// (Windows: the Session's Job Object closes with its ConPTY).
+type survivorEnder interface {
+	EndsSurvivors() bool
+}
+
 // agentSurvivor is one process a dead agent left running.
 type agentSurvivor struct {
 	PID     int

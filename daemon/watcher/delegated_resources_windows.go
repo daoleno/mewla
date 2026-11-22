@@ -153,3 +153,9 @@ func (m *jobDelegatedResourceManager) Reuse(unit string) (*delegatedResourceSpec
 // Survivors lists nothing on Windows: a Session's processes live in its Job
 // Object, which ends with the old Session when the new one takes its place.
 func (m *jobDelegatedResourceManager) Survivors(string) ([]agentSurvivor, error) { return nil, nil }
+
+// EndsSurvivors: the old Session's Job Object, closed when the new Session
+// takes its place, ends every process the dead agent left running.
+func (m *jobDelegatedResourceManager) EndsSurvivors() bool { return true }
+
+var _ survivorEnder = (*jobDelegatedResourceManager)(nil)
