@@ -3,9 +3,9 @@ import { answering, expoTokenService, framesOf, item, paired, pairedTwo, phoneHo
 
 const APP = "../FakeDaemonApp.tsx";
 
-/** The phone's date (Shanghai) `days` from today: a day key of the month. */
-function dayIn(days: number): string {
-  return new Date(Date.now() + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+/** The date of the fixture's actual reminder on the test phone. */
+function shanghaiDay(at: string): string {
+  return new Date(Date.parse(at) + 8 * 3_600_000).toISOString().slice(0, 10);
 }
 const SLOW = { timeout: 10_000 };
 
@@ -107,12 +107,13 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a day picked on the month is let go when Today is chosen", async () => {
-    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    const rent = item("Pay rent", 48);
+    const picked = shanghaiDay(rent.next_at);
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), rent] });
     await app.waitFor("text:Call the bank");
     await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month");
     // Two days on: in this month's six weeks whatever the date and the zone.
-    const picked = dayIn(2);
     await app.press(`id:day-${picked}`);
     await app.waitFor(`id:calendar-day-${picked}`);
     await app.press("id:calendar-view-today");
@@ -126,13 +127,15 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("Today and Month follow the finger (owner 11-13 20:05): a swipe shows the month, a swipe back the whole agenda again", async () => {
-    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    const rent = item("Pay rent", 48);
+    const picked = shanghaiDay(rent.next_at);
+    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), rent] });
     await app.waitFor("text:Call the bank");
     await app.drag("id:calendar-pages-today", { x: -260 });
     await app.waitFor("id:calendar-month");
     // Two days on: in this month's six weeks whatever the date and the zone.
-    await app.press(`id:day-${dayIn(2)}`);
-    await app.waitFor(`id:calendar-day-${dayIn(2)}`);
+    await app.press(`id:day-${picked}`);
+    await app.waitFor(`id:calendar-day-${picked}`);
     await app.drag("id:calendar-pages-month", { x: 260 });
     await app.waitUntil(() => !app.shows("id:calendar-month"));
     expect(app.texts()).toContain("Pay rent");
