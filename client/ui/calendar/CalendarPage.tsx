@@ -264,9 +264,11 @@ function MacAgenda(props: { testID: string; day: () => string | null; top?: () =
               <Each of={rowsOf(day())} key={(row: MacRow) => row.key}>{(row: () => MacRow, index: () => number) => {
                 // A row keeps its kind (its key says which); the item it shows follows the list.
                 const item = () => (row() as { item: CalendarItem }).item;
-                return row().kind === "now"
-                  ? <NowLine first={() => index() === 0} width={width} />
-                  : <MacItemRow item={item} first={() => index() === 0} width={width} onPress={() => props.onOpen(item())} />;
+                return (
+                  <If when={row().kind === "now"} else={<MacItemRow item={item} first={() => index() === 0} width={width} onPress={() => props.onOpen(item())} />}>
+                    <NowLine first={() => index() === 0} width={width} />
+                  </If>
+                );
               }}</Each>
             </Section>
           )}</Each>
@@ -310,12 +312,14 @@ export function CalendarPage(props: { nav: NavStackState<Route>; openSession: (s
         {/* About the whole Calendar, so above both pages. */}
         <ReminderBanner />
         <TabPages fill testID="calendar-pages" pager={pager} pages={{
-          today: () => (density() !== "phone"
-            ? <MacAgenda testID="agenda" day={() => null} headline onOpen={open} onTrigger={(id) => props.nav.push({ name: "trigger", id })} />
-            : <Agenda testID="agenda" day={() => null} header={() => <View><TriggerSection onOpen={(id) => props.nav.push({ name: "trigger", id })} /><Heading day={() => null} /></View>} onOpen={open} />),
-          month: () => (density() !== "phone"
-            ? <MacAgenda testID="agenda-month" day={pickedDay} top={() => <View class="mt-2 overflow-hidden rounded-[14px]"><Month /></View>} onOpen={open} />
-            : <Agenda testID="agenda-month" day={pickedDay} header={() => <View><Month /><Heading day={pickedDay} /></View>} onOpen={open} />),
+          today: () => (
+            <If when={density() !== "phone"} else={<Agenda testID="agenda" day={() => null} header={() => <View><TriggerSection onOpen={(id) => props.nav.push({ name: "trigger", id })} /><Heading day={() => null} /></View>} onOpen={open} />}>
+              <MacAgenda testID="agenda" day={() => null} headline onOpen={open} onTrigger={(id) => props.nav.push({ name: "trigger", id })} />
+            </If>),
+          month: () => (
+            <If when={density() !== "phone"} else={<Agenda testID="agenda-month" day={pickedDay} header={() => <View><Month /><Heading day={pickedDay} /></View>} onOpen={open} />}>
+              <MacAgenda testID="agenda-month" day={pickedDay} top={() => <View class="mt-2 overflow-hidden rounded-[14px]"><Month /></View>} onOpen={open} />
+            </If>),
         }} />
         <CalendarEditor />
       </View>
