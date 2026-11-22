@@ -159,7 +159,10 @@ export function formatTaskTokens(tokens: number): string {
   return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
-/** First readable paragraph of Markdown as plain text, capped for a preview. */
+/**
+ * First readable paragraph of Markdown as plain text, capped for a preview: no heading, list or quote marks, no bold,
+ * italic, strike or code marks, links and pictures as their words, rules and table lines skipped.
+ */
 export function markdownPreview(markdown: string, maxChars: number): string {
   const paragraph =
     markdown
@@ -168,6 +171,7 @@ export function markdownPreview(markdown: string, maxChars: number): string {
       .map((block) =>
         block
           .split("\n")
+          .filter((line) => !/^\s*[-*_=|:\s]{3,}$/.test(line))
           .map((line) => line.replace(/^\s{0,3}(#{1,6}\s+|[-*+]\s+|>\s?|\d+\.\s+)/, ""))
           .join(" "),
       )
@@ -175,7 +179,9 @@ export function markdownPreview(markdown: string, maxChars: number): string {
         block
           .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
           .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-          .replace(/(\*\*|__|`)/g, "")
+          .replace(/(\*\*|__|~~|`)/g, "")
+          // Italic: a mark against a word on each side ("*so*", "_so_"), never one inside a word (snake_case) or alone.
+          .replace(/(^|[^\w*])[*_](?=\S)([^*_\n]*?\S)[*_](?![\w*])/g, "$1$2")
           .replace(/\s+/g, " ")
           .trim(),
       )

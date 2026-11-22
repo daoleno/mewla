@@ -1,4 +1,4 @@
-import { firstSentence, itemInstant, runPreview, type CalendarClock, type CalendarItem, type CalendarRun } from "./model";
+import { firstSentence, itemInstant, plainLine, runPreview, type CalendarClock, type CalendarItem, type CalendarRun } from "./model";
 
 /**
  * The agenda as every client shows it (w-cal, owner 2026-11-22): what a day holds, each repeat at its time on that day
@@ -244,7 +244,7 @@ function repeatWords(item: CalendarItem, clock: CalendarClock): string | undefin
 }
 
 function runLine(run: CalendarRun): string {
-  if (run.status === "failed") return firstSentence(run.failure_reason, 80) || runPreview(run);
+  if (run.status === "failed") return firstSentence(plainLine(run.failure_reason), 80) || runPreview(run);
   return runPreview(run);
 }
 
@@ -258,7 +258,7 @@ export function rowLine(row: AgendaRow, clock: CalendarClock, options: { date?: 
   const { item, run } = row;
   switch (row.state) {
     case "done": return join(date, "Done", run ? runLine(run) : undefined);
-    case "failed": return join(date, "Failed", run ? runLine(run) : firstSentence(item.failure_reason, 80));
+    case "failed": return join(date, "Failed", run ? runLine(run) : firstSentence(plainLine(item.failure_reason), 80));
     case "needs_you": return join(date, "Needs you", run ? runLine(run) : undefined);
     case "running": {
       const started = run ? Date.parse(run.started_at) : NaN;

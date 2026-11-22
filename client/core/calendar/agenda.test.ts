@@ -86,6 +86,12 @@ describe("how a run went", () => {
     const item = make("x", local("2026-11-22", "09:45"), { runs: [run("r", local("2026-11-22", "09:45"), "completed", { result_preview: "Exit code 1: sign-in expired" })] });
     expect(rowLine(dayRows([item], dayKey(clock), clock)[0]!, clock)).toBe("Done · Exit code 1: sign-in expired");
   });
+  test("a row's line is plain words when the run's result or failure starts with Markdown", () => {
+    const item = make("x", local("2026-11-22", "09:45"), { runs: [run("r", local("2026-11-22", "09:45"), "completed", { outcome: "failed", result_preview: "**Disk space check failed.** The c" })] });
+    expect(rowLine(dayRows([item], dayKey(clock), clock)[0]!, clock)).toBe("Failed · Disk space check failed. The c");
+    const failed = make("y", local("2026-11-22", "09:45"), { status: "failed", runs: [run("r", local("2026-11-22", "09:45"), "failed", { failure_reason: "_Timed out_ after `30 s`." })] });
+    expect(rowLine(dayRows([failed], dayKey(clock), clock)[0]!, clock)).toBe("Failed · Timed out after 30 s.");
+  });
   test("a failed run says why", () => {
     const item = make("x", local("2026-11-22", "09:45"), { status: "failed", runs: [run("r", local("2026-11-22", "09:45"), "failed", { failure_reason: "The key was refused. More." })] });
     expect(rowLine(dayRows([item], dayKey(clock), clock)[0]!, clock)).toBe("Failed · The key was refused.");
