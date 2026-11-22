@@ -1,4 +1,4 @@
-import { Text, View } from "nsh";
+import { fontScale, Text, View } from "nsh";
 import type { JSX } from "nsh";
 import { Button } from "nsh/base";
 import { rowDim, rowLine, type AgendaRow } from "../../core/calendar/agenda";
@@ -18,9 +18,17 @@ export function rowSize() {
   });
 }
 
-/** The time column's width: "10:00" fits the size's own, "10:00 PM" more. */
+/**
+ * The time column's least width, so a card's times line up: "10:00" fits the size's own, "10:00 PM" more, both grown
+ * with the device's text size. It is a least width, never a fixed one: a time takes the width its text needs and never
+ * wraps; the title beside it gives way (gate 0.4.21: "3:35 / PM" stood on two lines at 1.3).
+ */
+export function timeColumnWidth(sample: string, base: number, scale: number): number {
+  return Math.ceil((/[A-Za-z]/.test(sample) ? base + 20 : base) * Math.max(1, scale));
+}
+
 function timeWidth(sample: string): number {
-  return /[A-Za-z]/.test(sample) ? rowSize().timeWidth + 20 : rowSize().timeWidth;
+  return timeColumnWidth(sample, rowSize().timeWidth, fontScale());
 }
 
 /** The hairline over every row but a card's first, from the text's start (w-cal's `.lrow + .lrow`). */
@@ -67,7 +75,7 @@ export function AgendaRowView(props: { row: () => AgendaRow; first: () => boolea
       accessibilityLabel={[time(), props.row().item.title, line()].filter(Boolean).join(", ")}
       class={`${size.min} flex-row items-center ${size.gap} ${size.pad} active:bg-accent`}>
       <TopHairline first={props.first} left={width() + 25} />
-      <Text class={`${size.time} text-muted-foreground`} style={{ width: width(), fontVariant: ["tabular-nums"], opacity: rowDim(props.row()) ? 0.55 : 1 }}>{time()}</Text>
+      <Text testID="calendar-row-time" class={`${size.time} text-muted-foreground`} style={{ minWidth: width(), fontVariant: ["tabular-nums"], opacity: rowDim(props.row()) ? 0.55 : 1 }}>{time()}</Text>
       <View class="min-w-0 flex-1" style={{ opacity: rowDim(props.row()) ? 0.55 : 1 }}>
         <Text class={`${size.title} line-clamp-1`}>{props.row().item.title}</Text>
         <If when={line()}>{(text) => <Text testID="calendar-item-line" class={`${size.line} ${lineTone()} line-clamp-1`}>{text()}</Text>}</If>
@@ -84,7 +92,7 @@ export function NowLine(props: { first: () => boolean }) {
   return (
     <View testID="calendar-now" accessibilityLabel={`Now, ${now()}`} class="min-h-[24px] flex-row items-center gap-[11px] px-[14px]">
       <TopHairline first={props.first} left={width() + 25} />
-      <Text class={dense({ phone: "text-[13px] font-bold", window: "text-[12px] font-semibold" })} style={{ width: width(), fontVariant: ["tabular-nums"] }}>{now()}</Text>
+      <Text class={dense({ phone: "text-[13px] font-bold", window: "text-[12px] font-semibold" })} style={{ minWidth: width(), fontVariant: ["tabular-nums"] }}>{now()}</Text>
       <View class="flex-1 flex-row items-center">
         <View class="rounded-full bg-foreground" style={{ width: 7, height: 7, marginRight: -3 }} />
         <View class="flex-1 bg-foreground" style={{ height: 1.5 }} />
