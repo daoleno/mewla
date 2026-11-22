@@ -618,7 +618,7 @@ func TestAgentRelaunchWaitsOutAProviderOutage(t *testing.T) {
 	test.ProviderTest = true
 	plan, err = f.service.PlanAgentRelaunch(test)
 	if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.Attempt != 1 ||
-		!strings.HasSuffix(plan.Words, " Its provider was still refusing requests (rate limit); this start is the test of it.") {
+		!strings.HasSuffix(plan.Words, " Its provider was still refusing requests (rate limit) when it was started.") {
 		t.Fatalf("the test start: plan = %+v, %v", plan, err)
 	}
 	outage.unavailable = false

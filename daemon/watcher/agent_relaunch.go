@@ -417,14 +417,15 @@ func (w *Watcher) waitForControl(ledger AgentRelaunchLedger, end AgentEnd, plan 
 
 // An end held for its provider's outage ends by itself. The outage ends when
 // any Activity of the family completes (provider_availability.go; every
-// Session of the family is read while it lasts). Until then the end asks for
-// the family's one probe request at agentProviderAsks (the last repeating), and
-// holding it is started again: that start is the request. Past
-// agentProviderWaitLimit it is started again anyway. Either start counts toward
-// the relaunch bounds, so an outage that lasts ends as "Stopped after N
-// restarts" with its cause, never as a Worker held for ever. The wait is in
-// memory: a daemon restart forgets it and the outage alike, and plans the end
-// afresh.
+// Session of the family is read while it lasts). Until then an end whose start
+// sends a request asks for the family's one probe request at agentProviderAsks,
+// and holding it is started again: that start is the request. Past
+// agentProviderWaitLimit any held end is started again anyway. No end waits
+// longer; every start counts toward the relaunch bounds, so an agent that keeps
+// dying stops at a bound with its cause, and one that comes up is an ordinary
+// Worker again (a continuation the provider refuses is held as main holds any
+// Turn in an outage). The wait is in memory: a daemon restart forgets it and
+// the outage alike, and plans the end afresh.
 // Asks at about 1, 3 and 7 minutes; the bound comes before a fourth.
 var agentProviderAsks = []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute}
 
@@ -443,8 +444,11 @@ type providerWait struct {
 
 // providerTest says whether the held end of sessionID is started again now
 // although its provider still refuses requests: past the wait's bound, or
-// holding the family's probe.
-func (w *Watcher) providerTest(sessionID string, endedAt time.Time) bool {
+// holding the family's probe. Only an end whose start sends a request (a Turn
+// to continue, a prompt to send again) asks for the probe: an idle start sends
+// nothing, so taking the family's one request would only delay its held Turns.
+func (w *Watcher) providerTest(end AgentEnd) bool {
+	sessionID, endedAt := end.SessionID, end.Exit.EndedAt
 	supervisor := w.agentRelaunch()
 	now := supervisor.now()
 	supervisor.mu.Lock()
@@ -460,7 +464,8 @@ func (w *Watcher) providerTest(sessionID string, endedAt time.Time) bool {
 		log.Printf("agent relaunch: %s waited %s for its provider (%s); started again as the test", sessionID, agentProviderWaitLimit, wait.provider)
 		return true
 	}
-	if now.Before(wait.nextAsk) {
+	sends := end.TurnID != "" || (end.PendingTurnID != "" && end.PromptDelivery == PromptNotHeld)
+	if !sends || now.Before(wait.nextAsk) {
 		return false
 	}
 	if granted, _ := w.ProviderProbe(wait.provider, now); granted {
@@ -729,7 +734,7 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if end.TurnID == "" {
 		w.readPromptInFlight(&end, pending, provider)
 	}
-	end.ProviderTest = w.providerTest(item.id, exit.EndedAt)
+	end.ProviderTest = w.providerTest(end)
 	plan, err := ledger.PlanAgentRelaunch(end)
 	if err != nil {
 		log.Printf("agent relaunch: plan for %s: %v", item.id, err)
