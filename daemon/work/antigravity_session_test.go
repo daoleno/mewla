@@ -120,6 +120,11 @@ func fakeAgyACP() {
 				switch {
 				case strings.Contains(text, "crash"):
 					os.Exit(3)
+				case strings.Contains(text, "fruit"):
+					update(map[string]any{"sessionUpdate": "tool_call", "toolCallId": "call_q", "name": "ask_question", "title": "Run ask_question", "kind": "other", "status": "pending",
+						"args": map[string]any{"questions": []map[string]any{{"question": "Which fruit?", "options": []string{"Apple", "Pear"}}}}})
+					update(map[string]any{"sessionUpdate": "tool_call_update", "toolCallId": "call_q", "name": "ask_question", "status": "pending",
+						"args": map[string]any{"questions": []map[string]any{{"question": "Which fruit?", "options": []string{"Apple", "Pear"}}}}})
 				case strings.Contains(text, "background"):
 					// agy 1.5.14 with a command left running: the turn ends,
 					// then the command finishes and agy answers by itself.
@@ -597,5 +602,57 @@ func TestAntigravitySessionLogShowsAQuestionAnsweredInTheAppOnce(t *testing.T) {
 	}
 	if conversation.Activity == nil || conversation.Activity.ID != "c:2" || conversation.Activity.Status != ProviderActivityCompleted {
 		t.Fatalf("the answer's turn is the newest: %+v", conversation.Activity)
+	}
+}
+
+// The Session line says what agy asks, and an answer picked in the app shows
+// once, on its card.
+func TestAgyQuestionLine(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", filepath.Join(dir, "agy-calls"))
+	socket := filepath.Join(dir, "events.sock")
+	daemon := newFakeDaemon(t, socket)
+	in, typed := io.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		_ = RunAntigravitySession(ctx, AntigravitySessionOptions{
+			ID: "agy-0b6a3c1e-0000-4000-8000-00000000cccc", Cwd: dir, StateDir: stateDir, Binary: os.Args[0], Socket: socket,
+			In: in, Out: io.Discard,
+		})
+	}()
+	t.Cleanup(func() { cancel(); typed.Close(); <-finished })
+	daemon.awaitHello()
+	daemon.send(map[string]string{"t": "send", "id": "r1", "text": "ask me which fruit"})
+	if activity := daemon.await("activity"); activity.Summary != "Which fruit?" || activity.Tool != "ask_question" {
+		t.Fatalf("the Session line = %+v", activity)
+	}
+	ask := daemon.await("ask")
+	if ask.Ask == nil || ask.Ask.Kind != "question" || len(ask.Ask.Options) != 2 {
+		t.Fatalf("ask = %+v", ask.Ask)
+	}
+	daemon.await("turn_end")
+	daemon.send(map[string]string{"t": "decide", "id": ask.Ask.ID, "option": "2", "by": "mewla"})
+	daemon.await("turn_end")
+	records, err := ReadAntigravitySessionLog(AntigravitySessionLogPath(stateDir, fakeAgyConversation))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var answer *AntigravityLogRecord
+	for index := range records {
+		if records[index].T == "user" && records[index].Text == "Pear" {
+			answer = &records[index]
+		}
+	}
+	if answer == nil || answer.Answers != ask.Ask.ID {
+		t.Fatalf("the answer's message names its question: %+v", answer)
+	}
+	for _, event := range projectAntigravitySessionLog("", records).Events {
+		if event.Kind == "user_message" && event.Body == "Pear" {
+			t.Fatalf("the answer shows on its card, not as a message: %+v", event)
+		}
 	}
 }

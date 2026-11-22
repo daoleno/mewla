@@ -1322,7 +1322,12 @@ func (s *antigravitySession) onNotify(method string, params json.RawMessage) {
 		name := s.toolNames[update.ToolCallID]
 		s.mu.Unlock()
 		if update.Kind == "tool_call" {
-			s.link.send(map[string]any{"t": "activity", "turn": turn, "tool": name, "summary": firstNonEmpty(update.Title, name)})
+			summary := firstNonEmpty(update.Title, name)
+			if name == "ask_question" {
+				// The Session line says what agy asks, as it does for Claude.
+				summary = firstNonEmpty(antigravityQuestionText(update), summary)
+			}
+			s.link.send(map[string]any{"t": "activity", "turn": turn, "tool": name, "summary": summary})
 		} else {
 			s.link.send(map[string]any{"t": "progress", "turn": turn})
 		}
@@ -1339,6 +1344,19 @@ func (s *antigravitySession) onNotify(method string, params json.RawMessage) {
 
 // question records agy's ask_question as a decision with its options; the
 // answer is the next message.
+// antigravityQuestionText is the first question of agy's ask_question call.
+func antigravityQuestionText(update antigravityACPUpdate) string {
+	var args struct {
+		Questions []struct {
+			Question string `json:"question"`
+		} `json:"questions"`
+	}
+	if json.Unmarshal([]byte(firstNonEmptyRaw(update.Args, update.RawInput)), &args) != nil || len(args.Questions) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(args.Questions[0].Question)
+}
+
 func (s *antigravitySession) question(update antigravityACPUpdate) {
 	var args struct {
 		Questions []struct {
