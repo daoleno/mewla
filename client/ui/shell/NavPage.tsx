@@ -13,6 +13,8 @@ import { rail, stackWidth, wide } from "./layout";
 import { bottomBarInset } from "./below";
 import { joinRail, type RailAction } from "./railPages";
 import { density, headerSize } from "../kit/density";
+import { macLightsRow } from "../mac/local";
+import { lightsLead } from "../../core/mac/frame";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
 export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
@@ -200,9 +202,13 @@ function PageHeader(props: {
   mark: () => ReturnType<typeof backMark>;
 }) {
   const size = headerSize();
+  // Mewla for Mac in one column (under 1024, the first-run window): the traffic lights sit in this row, so it starts
+  // after them at 84, as Home's column header does (w-small). Two panes keep them in the left pane.
+  const lights = () => lightsLead(wide(), macLightsRow()) > 0;
   return (
     <View testID="page-header" class={`justify-center border-b border-border bg-background ${size.bar}`}>
       <View class="w-full flex-row items-center gap-2 self-center" style={{ maxWidth: wide() ? props.width() ?? undefined : undefined }}>
+        <If when={lights()}><View testID="page-header-lights" style={{ width: 58 }} /></If>
         <If when={props.canGoBack()}><Button testID="page-back" accessibilityLabel={props.mark()?.label ?? "Back"} onPress={props.back} class={`${size.back} items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
             <Icon name="chevron-left" size={size.backIcon} tone="ink" />
             <If when={props.mark()}><MarkDot tone={props.mark()!.tone} /></If>
