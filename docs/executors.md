@@ -231,7 +231,9 @@ A tool's page lists its **Plugins** (Claude Code and Codex) and its **Skills**:
 Codex built-ins and the tool's global and project Skills. Skills that come
 with a plugin are listed inside that plugin. Skills in `~/.agents/skills` serve
 several tools, so they are listed once, under **Shared**, rather than under
-each tool.
+each tool. Antigravity's own Skills are the ones in `~/.gemini/config/skills`
+(where agy keeps them) and a project's `.agents/skills`; Mewla changes that
+folder only when you delete a Skill there.
 
 Open a Skill to see its description, files, the agents it is available to and
 every copy. **Delete Skill** removes exactly the copy you opened, after you
