@@ -13,7 +13,7 @@ on:
         type: boolean
         default: true
       takeover_run:
-        description: "Only verify takeover with the signed build A from this release proof run"
+        description: "Verify takeover from proof run ID, or tag:vX.Y.Z for the public DMG over the previous stable CLI"
         type: string
   push:
     branches: ["mac-app/**"]
@@ -260,13 +260,28 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v4
+        if: ${{ !startsWith(inputs.takeover_run, 'tag:') }}
         with:
           name: ${{ inputs.takeover_run && format('mewla-macos-proof-a-{0}', inputs.takeover_run) || format('mewla-macos-{0}', github.sha) }}
           path: ${{ runner.temp }}/zips
           github-token: ${{ github.token }}
           run-id: ${{ inputs.takeover_run || github.run_id }}
+      - name: Public disk image and previous stable CLI version
+        if: startsWith(inputs.takeover_run, 'tag:')
+        env:
+          SOURCE: ${{ inputs.takeover_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${SOURCE#tag:}"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          previous=$(git describe --first-parent --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "$tag^")
+          echo "MEWLA_VERSION=$previous" >> "$GITHUB_ENV"
+          gh release download "$tag" --pattern Mewla-macos-arm64.dmg --dir "$RUNNER_TEMP"
       - name: Today's install (install.sh, mewla boot install) with a paired device
         run: |
           set -euo pipefail
@@ -280,7 +295,13 @@ jobs:
       - name: Install and open Mewla
         run: |
           set -euo pipefail
-          ditto -x -k "$RUNNER_TEMP/zips/Mewla-"[0-9]*-macos-aarch64.zip /Applications
+          if [[ -f "$RUNNER_TEMP/Mewla-macos-arm64.dmg" ]]; then
+            hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/image" "$RUNNER_TEMP/Mewla-macos-arm64.dmg"
+            ditto "$RUNNER_TEMP/image/Mewla.app" /Applications/Mewla.app
+            hdiutil detach "$RUNNER_TEMP/image"
+          else
+            ditto -x -k "$RUNNER_TEMP/zips/Mewla-"[0-9]*-macos-aarch64.zip /Applications
+          fi
           link=$("$HOME/.local/bin/mewla" pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
           (cd client && bun macos/scripts/pair-proof.ts "$link" --across-takeover)
           launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
