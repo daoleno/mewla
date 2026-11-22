@@ -163,19 +163,9 @@ try {
     console.log("Settings showed the phone routes on its Connections page.");
     captureSettings("before");
     await observeOff("before click");
-    await until("Turn off LAN missing on the Connections page", () => {
-      const result = inspect("click", "Turn off LAN");
-      if (result.status === 0) console.log(result.stdout.trim());
-      return result.status === 0;
-    });
-    await wait(3000);
-    captureSettings("after-original-click");
-    await observeOff("3s after original click");
-    if (startupChoice() === "lan") {
-      const result = inspect("button-click", "Turn off LAN");
-      if (result.status !== 0) throw new Error("off control unavailable for normal mouse press");
-      console.log(result.stdout.trim());
-    }
+    if (startupChoice() !== "lan") throw new Error("expected saved LAN consent before opt-out");
+    const pressed = execFileSync("osascript", [join(import.meta.dir, "press-lan-off.applescript")], { timeout: 20_000, encoding: "utf8" });
+    console.log(pressed.trim());
     const start = performance.now();
     await until("off action did not persist and recover both listeners", async () => {
       const ok = await observeOff(`${Math.round(performance.now() - start)}ms`);
@@ -184,12 +174,12 @@ try {
     }, 100);
     captureSettings("after-off");
   } catch (error) {
-    if (inspect("no-code").status === 0) copyFileSync(screen, join(out, "settings-at-failure.png"));
+    captureSettings("at-failure");
     throw error;
   }
   await proveOff("Turn off LAN closed the plain HTTP route.");
   execFileSync("launchctl", ["kickstart", "-k", daemonJob], { timeout: 60_000 });
-  await until("local daemon did not restart", async () => (await fetch("http://127.0.0.1:9876/health").catch(() => null))?.ok === true);
+  await until("LAN setting or listener failed to recover after restart", () => observeOff("after restart"));
   await proveOff("LAN remained off after restart.");
   if (!execFileSync(cli, ["devices", "list"], { encoding: "utf8" }).includes("Simulated LAN phone")) throw new Error("turning off LAN lost phone pairing");
 } finally {
