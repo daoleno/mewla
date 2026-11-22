@@ -1068,6 +1068,8 @@ func (b *claudeConversationBuilder) addNativeMessage(lineNumber int, recordID st
 			if event.Origin == "" {
 				event.Origin = ConversationOriginDelegated
 			}
+		} else if brief, typed := ClaudeTypedBrief(exact); typed {
+			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
 		}
 	}
 	if b.addEvent(event) {
@@ -1395,6 +1397,20 @@ var claudePasteEnvelope = regexp.MustCompile(`(?s)\A\n\n<pasted_content id="([0-
 // delegated Worker's brief (watcher.DelegatedInputPrefix); Claude wraps only the
 // pasted part.
 const claudeDelegatedInputPrefix = "Execute: "
+
+// ClaudeTypedBrief is the brief of a delegated message Claude Code (2.1.330)
+// records without its paste envelope: Mewla's typed intent, then the bare
+// brief. It only names the digest a pending prompt is compared with; it never
+// marks a message as Mewla's (a person may type "Execute: …" too), and a
+// person's text cannot match a delegated prompt, which carries its own turn id.
+func ClaudeTypedBrief(raw string) (string, bool) {
+	rest, found := strings.CutPrefix(raw, claudeDelegatedInputPrefix)
+	// A paste envelope, whole or broken, is the envelope's to read.
+	if !found || strings.TrimSpace(rest) == "" || strings.Contains(rest, "<pasted_content") || strings.Contains(rest, "</pasted_content") {
+		return "", false
+	}
+	return rest, true
+}
 
 // UnwrapClaudeDelegatedInput recovers the exact brief Mewla submitted from a
 // native delegated user message: the typed intent prefix followed by one whole
