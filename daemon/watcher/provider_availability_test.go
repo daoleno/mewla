@@ -45,6 +45,24 @@ func TestProviderOutageStartsOnTheSecondRefusalAndEndsOnTheFirstAnswer(t *testin
 	}
 }
 
+func TestAgyPushedOutcomesCountFastRefusalsWithoutPolling(t *testing.T) {
+	w := New(0)
+	command := "mewla agy-session --agy-session agy-0b6a3c1e-0000-4000-8000-00000000abcd"
+	at := time.Now().UTC()
+	w.ObserveProviderOutcome(command, refused(at.Add(-time.Second)))
+	if _, down := w.ProviderOutage("antigravity"); down {
+		t.Fatal("one agy refusal started an outage")
+	}
+	w.ObserveProviderOutcome(command, refused(at))
+	if outage, down := w.ProviderOutage("antigravity"); !down || outage.Kind != "rate limit" {
+		t.Fatalf("two agy refusals = %+v, %v", outage, down)
+	}
+	w.ObserveProviderOutcome(command, answered(at.Add(time.Second)))
+	if _, down := w.ProviderOutage("antigravity"); down {
+		t.Fatal("agy answer did not release the outage")
+	}
+}
+
 func TestOneDroppedRequestBetweenAnswersIsNotAnOutage(t *testing.T) {
 	base := time.Date(2026, 11, 21, 0, 0, 0, 0, time.UTC)
 	a := &providerAvailability{}
