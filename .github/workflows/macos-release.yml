@@ -670,6 +670,21 @@ jobs:
           sudo scutil --set ComputerName "MacBook Pro"
           python3 -I "$F/solid.py" "$RUNNER_TEMP/desk.png" 64 64 222 224 228
           osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk.png\"" || true
+      - name: Browser and public asset identity for the live install
+        if: steps.source.outputs.run == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/landing-browser"
+          mkdir -p "$dir"
+          version=$(cat scripts/terminal-corpus/playwright-version.txt)
+          npm install --prefix "$dir" --no-save "playwright-core@$version"
+          "$dir/node_modules/.bin/playwright-core" install chromium
+          echo "PLAYWRIGHT_CORE=$dir/node_modules/playwright-core/index.mjs" >> "$GITHUB_ENV"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/public-release.json"
+          jq -er '"PUBLIC_RELEASE_TAG=" + .tag_name' "$RUNNER_TEMP/public-release.json" >> "$GITHUB_ENV"
+          jq -er '.assets[] | select(.name=="Mewla-macos-arm64.dmg") | "PUBLIC_DMG_DIGEST=" + (.digest | select(startswith("sha256:")))' "$RUNNER_TEMP/public-release.json" >> "$GITHUB_ENV"
       - name: The walk
         # Its own limit, so the captures are uploaded whatever it did.
         timeout-minutes: 30
