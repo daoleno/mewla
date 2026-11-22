@@ -52,7 +52,7 @@ async function proveOff(label: string) {
 }
 function startupChoice() {
   try {
-    const { choice } = JSON.parse(readFileSync(join(homedir(), ".mewla", "state", "startup-choice.json"), "utf8"));
+    const { choice } = JSON.parse(readFileSync(join(homedir(), ".mewla", "startup-choice.json"), "utf8"));
     return ["later", "lan", "remote", "own"].includes(choice) ? choice : "unknown";
   } catch { return "unavailable"; }
 }
