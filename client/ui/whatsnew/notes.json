@@ -20,7 +20,9 @@
           ]
         }
       ],
-      "fixes": []
+      "fixes": [
+        "On Windows, checking which agents are available no longer opens Cursor windows in the background."
+      ]
     },
     {
       "version": "0.4.22",

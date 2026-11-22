@@ -4,7 +4,9 @@
       "version": "0.4.23",
       "date": "2026-11-22",
       "highlights": [],
-      "fixes": []
+      "fixes": [
+        "On Windows, checking which agents are available no longer opens Cursor windows in the background."
+      ]
     },
     {
       "version": "0.4.22",
