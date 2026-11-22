@@ -257,9 +257,7 @@ func (w *Watcher) deliverPromptInFlight(ledger AgentRelaunchLedger, end AgentEnd
 	record.Words = words
 	report := plan
 	report.Words = words
-	if _, err := ledger.ReportAgentEnd(end, report); err != nil {
-		log.Printf("agent relaunch: report %s: %v", end.SessionID, err)
-	}
+	w.reportAfterRelaunch(ledger, end, report, "Restarted; its task was not resumed")
 }
 
 // agentStartedWords: "Claude Code was killed (SIGKILL); Mewla started it

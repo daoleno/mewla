@@ -263,6 +263,39 @@ type agentEndDecision struct {
 	recheck time.Time
 }
 
+// agentAfterReport is a report made after a relaunch (its task was not
+// resumed) that Brain does not have yet: asked again every agentEndTellEvery
+// while the relaunched Session lives, until Brain has it.
+type agentAfterReport struct {
+	end  AgentEnd
+	plan AgentRelaunchPlan
+	next time.Time
+}
+
+// reportAfterRelaunch tells Brain that a relaunched agent's task is not
+// running, and shows it on the Session's line until the agent works again.
+func (w *Watcher) reportAfterRelaunch(ledger AgentRelaunchLedger, end AgentEnd, plan AgentRelaunchPlan, line string) {
+	supervisor := w.agentRelaunch()
+	supervisor.setLine(end.SessionID, agentRelaunchLine{kind: agentLineHalted, text: line})
+	w.retellAfterRelaunch(ledger, agentAfterReport{end: end, plan: plan})
+}
+
+func (w *Watcher) retellAfterRelaunch(ledger AgentRelaunchLedger, report agentAfterReport) {
+	supervisor := w.agentRelaunch()
+	told, err := ledger.ReportAgentEnd(report.end, report.plan)
+	if err != nil {
+		log.Printf("agent relaunch: report %s: %v", report.end.SessionID, err)
+	}
+	supervisor.mu.Lock()
+	defer supervisor.mu.Unlock()
+	if told {
+		delete(supervisor.after, report.end.SessionID)
+		return
+	}
+	report.next = supervisor.now().Add(agentEndTellEvery)
+	supervisor.after[report.end.SessionID] = report
+}
+
 // agentEndTellEvery is how often a not-started-again report that waits behind
 // an earlier review is asked again.
 const agentEndTellEvery = 10 * time.Second
@@ -285,7 +318,9 @@ type agentRelaunchSupervisor struct {
 	lines map[string]agentRelaunchLine
 	// swap serializes a Session's replacement with KillSession.
 	swap map[string]*sync.Mutex
-	oom  oomSamples
+	// after holds reports made after a relaunch that Brain does not have yet.
+	after map[string]agentAfterReport
+	oom   oomSamples
 	// submit delivers a continuation once the relaunched agent is ready.
 	submit func(sessionID, command, payload, workID, turnID string, at time.Time) (InputResult, error)
 	run    func(func())
@@ -337,6 +372,10 @@ const (
 	agentLineRestarting agentLineKind = iota + 1
 	agentLineRestarted
 	agentLineStopped
+	// agentLineHalted: started again, but nothing runs for its open task
+	// (Brain was told to decide). Unlike stopped it stays on a live Session,
+	// until the agent works again.
+	agentLineHalted
 )
 
 // agentRelaunchShown is how long "Restarted after …" stays on a relaunched
@@ -372,6 +411,12 @@ func (s *agentRelaunchSupervisor) line(sessionID string, alive bool, state class
 			return state, classifier.Relaunch{}, false
 		}
 		return classifier.StateFailed, classifier.Relaunch{State: "stopped", Line: line.text}, true
+	case agentLineHalted:
+		if state == classifier.StateRunning {
+			delete(s.lines, sessionID)
+			return state, classifier.Relaunch{}, false
+		}
+		return classifier.StateBlocked, classifier.Relaunch{State: "stopped", Line: line.text}, true
 	case agentLineRestarted:
 		if !alive || now.After(line.until) {
 			delete(s.lines, sessionID)
@@ -395,6 +440,7 @@ func newAgentRelaunchSupervisor() *agentRelaunchSupervisor {
 		held:    map[string]agentRelaunchHeld{},
 		lines:   map[string]agentRelaunchLine{},
 		swap:    map[string]*sync.Mutex{},
+		after:   map[string]agentAfterReport{},
 		run:     func(fn func()) { go fn() },
 		now:     time.Now,
 		sleep:   time.Sleep,
@@ -471,7 +517,13 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if item.alive {
 		supervisor.mu.Lock()
 		delete(supervisor.decided, item.id)
+		report, untold := supervisor.after[item.id]
 		supervisor.mu.Unlock()
+		if untold && !supervisor.now().Before(report.next) {
+			if ledger, ok := w.turnLedger.(AgentRelaunchLedger); ok {
+				w.retellAfterRelaunch(ledger, report)
+			}
+		}
 		return supervisor.holds(item.id, turn.TurnID), ""
 	}
 	if supervisor.busy(item.id) {
@@ -770,9 +822,7 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		// update prompt) is Brain's to see now.
 		if presence, err := w.ProbeSession(end.SessionID); err == nil && presence == SessionPresencePresent && !w.SessionExited(end.SessionID) {
 			plan.Words = strings.TrimSpace(plan.Words + " It was started again but did not become ready for input.")
-			if _, err := ledger.ReportAgentEnd(end, plan); err != nil {
-				log.Printf("agent relaunch: report %s: %v", end.SessionID, err)
-			}
+			w.reportAfterRelaunch(ledger, end, plan, "Restarted; it is not ready")
 		}
 		finish("")
 		return
