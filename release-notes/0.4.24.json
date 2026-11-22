@@ -5,6 +5,6 @@
   "fixes": [
     "After Windows auto-updates, background Git and agent checks no longer interrupt typing.",
     "Existing terminals and Workers keep running across consecutive Windows updates.",
-    "On Mac, the app keeps your CLI installation until the new daemon is healthy and a previously paired device reconnects. If the handoff fails, your CLI daemon starts again."
+    "On Mac, switching from the CLI keeps paired phones connected or restores the previous daemon."
   ]
 }
