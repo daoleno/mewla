@@ -116,8 +116,9 @@ appearance false
 dmg="$HOME/Downloads/Mewla-macos-arm64.dmg"
 mkdir -p "$HOME/Downloads"
 if [[ "$src" == http* ]]; then
-  say "download: $src"
-  curl -fsSL -o "$dmg" -w 'download HTTP %{http_code}, %{size_download} bytes\n' "$src" | tee -a "$log"
+  node "$here/landing-download.mjs" "$src" "$dmg" "$out" >> "$log" 2>&1 || exit 1
+  actual=$(shasum -a 256 "$dmg" | cut -d' ' -f1)
+  [[ "sha256:$actual" == "$PUBLIC_DMG_DIGEST" ]] || { say "FAILED: download digest differs from the public asset"; exit 1; }
 else
   cp "$src" "$dmg"
 fi
@@ -145,6 +146,10 @@ check "Mewla is in Applications" test -x /Applications/Mewla.app/Contents/MacOS/
 xattr -p com.apple.quarantine /Applications/Mewla.app >/dev/null 2>&1 || xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" /Applications/Mewla.app
 say "quarantine on the installed app: $(xattr -p com.apple.quarantine /Applications/Mewla.app 2>/dev/null | cut -d';' -f1)"
 say "version: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' /Applications/Mewla.app/Contents/Info.plist)"
+if [[ "$src" == http* ]]; then
+  check "installed version matches the stable tag" test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' /Applications/Mewla.app/Contents/Info.plist)" = "${PUBLIC_RELEASE_TAG#v}"
+  check "installed updater uses the public release repository" python3 -I -c 'import json,sys; c=json.load(open(sys.argv[1])); assert c.get("github")=="daoleno/mewla" and not c.get("url") and c.get("publicKey") and c["version"]==sys.argv[2]' /Applications/Mewla.app/Contents/Resources/nsh/assets/nsh-updater.json "${PUBLIC_RELEASE_TAG#v}"
+fi
 check "Gatekeeper accepts the installed app (spctl)" spctl -a -t exec -vv /Applications/Mewla.app
 codesign -dv --verbose=2 /Applications/Mewla.app 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" | tee -a "$log"
 osa -e 'tell application "Finder" to eject disk "Mewla"' >/dev/null 2>&1 || bounded 30 hdiutil detach /Volumes/Mewla >/dev/null 2>&1 || bounded 30 hdiutil detach -force /Volumes/Mewla >/dev/null 2>&1 || true
