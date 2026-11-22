@@ -48,6 +48,8 @@ const LIVE_STATE: Partial<Record<Worker["status"], WorkWorkerState>> = { running
  * Work (owner 2026-11-13, shot 11).
  */
 function liveState(session: Worker): WorkWorkerState | undefined {
+  // Started again with nothing running for its task: it waits on Brain, but it does not work.
+  if (session.status === "blocked" && session.relaunch?.state === "stopped") return "blocked";
   if (session.status === "blocked" && session.delegated && !session.prompt && !session.approvals?.length) return "running";
   return LIVE_STATE[session.status];
 }

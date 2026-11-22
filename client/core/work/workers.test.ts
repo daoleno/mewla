@@ -49,6 +49,11 @@ describe("the Workers of a Work", () => {
     // The line says it failed: no "Failed ·" before it.
     const gaveUp = session("worker:@c", { status: "failed", relaunch: { state: "stopped", line: "Stopped after 3 restarts" } });
     expect(workWorkerLines([rows[2]!], new Map([["worker:@c", gaveUp]]), NOW)[0]).toMatchObject({ state: "failed", stateLabel: undefined, summary: "Stopped after 3 restarts" });
+    // Started again but its task was not resumed: nothing runs, so no live time.
+    const halted = session("worker:@c", { status: "blocked", delegated: true, running_since: "2026-11-12T08:30:00Z", relaunch: { state: "stopped", line: "Task not resumed after a restart" } });
+    const line = workWorkerLines([rows[2]!], new Map([["worker:@c", halted]]), NOW)[0]!;
+    expect(line).toMatchObject({ state: "blocked", stateLabel: undefined, summary: "Task not resumed after a restart" });
+    expect(line.time).not.toBe("live");
   });
 
   test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {
