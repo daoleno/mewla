@@ -209,6 +209,28 @@ var bootControlPeerPID = func(stateDir string) (int, error) {
 	return control.PeerPID(socket)
 }
 
+// printMacAppOwner lets the signed app compare the actual state owner with
+// launchd before changing registration or refreshing the installed daemon.
+func printMacAppOwner(out io.Writer) error {
+	stateDir := resolveCLIStateDir("")
+	held, err := bootStateLockHeld(stateDir)
+	if err != nil {
+		return err
+	}
+	pid := 0
+	if held {
+		pid, err = bootControlPeerPID(stateDir)
+		if err != nil {
+			return err
+		}
+		if pid <= 0 {
+			return errors.New("cannot identify daemon holding the state directory")
+		}
+	}
+	_, err = fmt.Fprintln(out, pid)
+	return err
+}
+
 // bootDaemonStatus asks the daemon on the control socket for its executable
 // (control request daemon_status). Daemons older than that request answer
 // with an error, so it is asked only to check what a freshly started daemon

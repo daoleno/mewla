@@ -51,6 +51,20 @@ fn configure(home: &Path, cli: &Path, said: &mut Vec<String>) -> Result<(), Stri
     let pending = state.join("mac-app-takeover.pending");
     let installed = state.join("mac-app-takeover.complete");
     let relative_job = format!("{}/{LABEL}", domain());
+    let owner = Command::new(cli).arg("mac-app-owner").output().map_err(|e| e.to_string())?;
+    let pid: u32 = std::str::from_utf8(&owner.stdout).ok()
+        .filter(|_| owner.status.success())
+        .and_then(|text| text.trim().parse().ok())
+        .ok_or("could not identify the current daemon; kept its installation")?;
+    if pid != 0 {
+        let matches = |label: &str| {
+            launchd_listing(&format!("{}/{label}", domain()))
+                .is_some_and(|s| s.lines().any(|line| line.trim() == format!("pid = {pid}")))
+        };
+        if !matches(LABEL) && !matches(INSTALLED_LABEL) {
+            return Err("externally managed daemon retained".into());
+        }
+    }
     if legacy.exists() {
         if !fs::read_to_string(&legacy).map_err(|e| e.to_string())?.contains(MANAGED_MARK) {
             return Err("externally managed daemon retained".into());
