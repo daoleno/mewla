@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.4.24",
+      "date": "2026-11-22",
+      "highlights": [],
+      "fixes": [
+        "After Windows auto-updates, background Git and agent checks no longer interrupt typing.",
+        "Existing terminals and Workers keep running across consecutive Windows updates."
+      ]
+    },
+    {
       "version": "0.4.23",
       "date": "2026-11-22",
       "highlights": [],

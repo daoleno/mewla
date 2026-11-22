@@ -113,7 +113,7 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("the headline counts today, Month shows today's card under the month, and Today goes back to the whole agenda", async () => {
-    const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
+    const { app } = await monthSelectionAt("2026-11-22T12:00:00+08:00");
     await app.waitFor("text:Call the bank");
     await app.waitFor("id:calendar-headline");
     await app.press("id:calendar-view-month");
@@ -338,13 +338,14 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a running item opens its Session while the computer lists it, and its page once the Session has gone (parity #45)", async () => {
-    const run = { id: "r1", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w1" };
-    const gone = { id: "r2", status: "running", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), worker_session: "w-gone" };
-    const sessions = [{ id: "w1", name: "digest run", status: "running", cwd: "/home/me", command: "claude", provider: "claude", updated_at: Date.now() }];
+    const now = "2026-11-22T12:00:00+08:00";
+    const run = { id: "r1", status: "running", scheduled_for: now, started_at: now, worker_session: "w1" };
+    const gone = { id: "r2", status: "running", scheduled_for: now, started_at: now, worker_session: "w-gone" };
+    const sessions = [{ id: "w1", name: "digest run", status: "running", cwd: "/home/me", command: "claude", provider: "claude", updated_at: Date.parse(now) }];
     const app = await calendarApp({
-      calendar_items: [item("Digest", 0.5, { kind: "scheduled_action", status: "running", runs: [run] }), item("Brief", 1, { kind: "scheduled_action", status: "running", runs: [gone] })],
+      calendar_items: [item("Digest", 0, { next_at: now, notify_at: now, kind: "scheduled_action", status: "running", runs: [run] }), item("Brief", 0, { next_at: now, notify_at: now, kind: "scheduled_action", status: "running", runs: [gone] })],
       worker_sessions: sessions, conversations: { w1: [] },
-    });
+    }, {}, Date.parse(now));
     await app.waitFor("id:calendar-item-Brief", SLOW);
     await app.press("id:calendar-item-Brief");
     await app.waitFor("id:calendar-item-page", SLOW);
