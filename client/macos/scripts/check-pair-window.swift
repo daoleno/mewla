@@ -28,18 +28,38 @@ case "scan":
     guard title, let qr, let value = qr.payloadStringValue,
           lines.contains(where: { $0.range(of: #"(1[0-5]|[0-9]):[0-5][0-9] left"#, options: .regularExpression) != nil }) else { exit(1) }
     try value.write(toFile: CommandLine.arguments[3], atomically: true, encoding: .utf8)
-case "click":
+case "click", "button-click":
     let target = CommandLine.arguments[3].lowercased()
     guard let found = request.results?.first(where: {
         guard let text = $0.topCandidates(1).first?.string.lowercased() else { return false }
         return text == target || text.hasSuffix(" " + target)
     }) else { exit(1) }
     let screen = CGDisplayBounds(CGMainDisplayID())
-    let box = found.boundingBox
-    let point = CGPoint(x: screen.minX + screen.width * box.midX, y: screen.minY + screen.height * (1 - box.midY))
+    let original = found.boundingBox
+    guard let text = found.topCandidates(1).first,
+          let range = text.string.range(of: target, options: [.caseInsensitive, .backwards]),
+          let label = try text.boundingBox(for: range)?.boundingBox else { exit(1) }
+    func center(_ box: CGRect) -> CGPoint {
+        CGPoint(x: screen.minX + screen.width * box.midX, y: screen.minY + screen.height * (1 - box.midY))
+    }
+    let normalClick = CommandLine.arguments[2] == "button-click"
+    let point = center(normalClick ? label : original)
+    if target == "turn off lan" {
+        print("off click: cursor=\(String(describing: CGEvent(source: nil)?.location)) lineCenter=\(center(original)) labelCenter=\(center(label)) moved=\(normalClick)")
+    }
+    if normalClick {
+        CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.1)
+    }
     for type: CGEventType in [.leftMouseDown, .leftMouseUp] {
         CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+        if normalClick && type == .leftMouseDown { Thread.sleep(forTimeInterval: 0.06) }
     }
+case "settings-state":
+    guard (barcode.results ?? []).isEmpty, !title, lines.contains("phones reach this mac") else { exit(1) }
+    let states = ["turn off lan", "turning off", "trusted lan access", "saved the network setting",
+                  "change trusted lan access", "not on wi", "applying its network setting"]
+    print(states.filter { state in lines.contains { $0.contains(state) } }.joined(separator: ","))
 case "redact":
     guard title, let qr, let source = CGImageSourceCreateWithURL(image as CFURL, nil),
           let pixels = CGImageSourceCreateImageAtIndex(source, 0, nil),

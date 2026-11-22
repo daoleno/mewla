@@ -1,7 +1,7 @@
 // Runs on the clean CI Mac, with the signed app's pairing dialog already open.
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { buildAuthorizationHeader } from "../../core/auth";
 import { confirmPairedDevice } from "../../core/pairing";
@@ -50,6 +50,39 @@ async function proveOff(label: string) {
   if (!response.ok || await httpLAN()) throw new Error(label);
   console.log(label);
 }
+function startupChoice() {
+  try {
+    const { choice } = JSON.parse(readFileSync(join(homedir(), ".mewla", "state", "startup-choice.json"), "utf8"));
+    return ["later", "lan", "remote", "own"].includes(choice) ? choice : "unknown";
+  } catch { return "unavailable"; }
+}
+async function probe(host: string) {
+  const start = performance.now();
+  let result: string;
+  try {
+    const response = await fetch(`http://${host}:9876/health`, { signal: AbortSignal.timeout(1500) });
+    if (response.ok) {
+      result = (await response.json()).daemon_id ? "healthy" : "unexpected-body";
+    } else {
+      const tlsOnly = response.status === 400 && (await response.text()).includes("HTTP request to an HTTPS server");
+      result = tlsOnly ? "TLS-only" : `HTTP-${response.status}`;
+    }
+  } catch (error) {
+    result = error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unavailable";
+  }
+  return { result, ms: Math.round(performance.now() - start) };
+}
+async function observeOff(label: string) {
+  const [local, ...lan] = await Promise.all(["127.0.0.1", ...ips].map(probe));
+  const choice = startupChoice();
+  console.log(`Off check ${label}: ` + JSON.stringify({ local, lan, choice }));
+  return choice === "later" && local.result === "healthy" && lan.every((r) => ["unavailable", "TLS-only"].includes(r.result));
+}
+function captureSettings(label: string) {
+  const result = inspect("settings-state");
+  console.log(`Connections ${label}: ${result.status === 0 ? result.stdout.trim() : "page not visible"}`);
+  if (result.status === 0) copyFileSync(screen, join(out, `connections-${label}.png`));
+}
 async function phoneSocket(url: string, daemonId: string) {
   const auth = await buildAuthorizationHeader({ daemonId, purpose: "mewla-connect" });
   const socket = new WebSocket(url, [authSubprotocol(auth)]);
@@ -69,6 +102,7 @@ async function roundTrip(socket: WebSocket, id: string) {
 
 try {
   await proveOff("Fresh install answers locally with LAN off.");
+  await observeOff("fresh install");
   await until("no trusted LAN consent from cat menu", () => inspect("consent").status === 0);
   copyFileSync(screen, join(out, "06-pair-consent.png"));
   await until("Cancel unavailable", () => inspect("click", "Cancel").status === 0);
@@ -127,12 +161,32 @@ try {
       return false;
     });
     console.log("Settings showed the phone routes on its Connections page.");
-    await until("Turn off LAN missing on the Connections page", () => inspect("click", "Turn off LAN").status === 0);
+    captureSettings("before");
+    await observeOff("before click");
+    await until("Turn off LAN missing on the Connections page", () => {
+      const result = inspect("click", "Turn off LAN");
+      if (result.status === 0) console.log(result.stdout.trim());
+      return result.status === 0;
+    });
+    await wait(3000);
+    captureSettings("after-original-click");
+    await observeOff("3s after original click");
+    if (startupChoice() === "lan") {
+      const result = inspect("button-click", "Turn off LAN");
+      if (result.status !== 0) throw new Error("off control unavailable for normal mouse press");
+      console.log(result.stdout.trim());
+    }
+    const start = performance.now();
+    await until("off action did not persist and recover both listeners", async () => {
+      const ok = await observeOff(`${Math.round(performance.now() - start)}ms`);
+      if (!ok) await wait(1500);
+      return ok;
+    }, 100);
+    captureSettings("after-off");
   } catch (error) {
     if (inspect("no-code").status === 0) copyFileSync(screen, join(out, "settings-at-failure.png"));
     throw error;
   }
-  await until("LAN stayed open", async () => !await httpLAN() && (await fetch("http://127.0.0.1:9876/health").catch(() => null))?.ok === true, 90);
   await proveOff("Turn off LAN closed the plain HTTP route.");
   execFileSync("launchctl", ["kickstart", "-k", daemonJob], { timeout: 60_000 });
   await until("local daemon did not restart", async () => (await fetch("http://127.0.0.1:9876/health").catch(() => null))?.ok === true);
