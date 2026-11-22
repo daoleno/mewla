@@ -1,12 +1,21 @@
 {
   "releases": [
     {
+      "version": "0.4.25",
+      "date": "2026-11-23",
+      "highlights": [],
+      "fixes": [
+        "Antigravity Workers wait through rate limits and resume the same conversation when service recovers."
+      ]
+    },
+    {
       "version": "0.4.24",
       "date": "2026-11-22",
       "highlights": [],
       "fixes": [
         "After Windows auto-updates, background Git and agent checks no longer interrupt typing.",
-        "Existing terminals and Workers keep running across consecutive Windows updates."
+        "Existing terminals and Workers keep running across consecutive Windows updates.",
+        "On Mac, switching from the CLI keeps paired phones connected or restores the previous daemon."
       ]
     },
     {
