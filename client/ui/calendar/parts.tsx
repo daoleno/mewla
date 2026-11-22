@@ -7,9 +7,9 @@ export function SectionTitle(props: { title: string }) {
   return <View class="px-4 pb-1.5 pt-5"><Text class="text-sm font-semibold text-muted-foreground">{props.title}</Text></View>;
 }
 
-/** A plain row of a grouped list: a title, an optional detail at the end. */
-export function Row(props: { title: string; detail?: string; onPress?: () => void; testID?: string; tone?: "destructive" | "primary"; disabled?: boolean }) {
-  const tone = () => (props.disabled ? "text-muted-foreground" : props.tone === "destructive" ? "text-destructive" : props.tone === "primary" ? "font-semibold" : "");
+/** A plain row of a grouped list: a title, an optional detail at the end. `delete` is the red of removing something for good (the seal's ink); `destructive` stays the theme's ink. */
+export function Row(props: { title: string; detail?: string; onPress?: () => void; testID?: string; tone?: "destructive" | "delete" | "primary"; disabled?: boolean }) {
+  const tone = () => (props.disabled ? "text-muted-foreground" : props.tone === "destructive" ? "text-destructive" : props.tone === "delete" ? "text-seal-ink" : props.tone === "primary" ? "font-semibold" : "");
   return (
     <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled || !props.onPress}
       class="flex-row items-center justify-between gap-3 border-b border-border bg-card px-4 py-3.5 active:bg-accent">

@@ -21,4 +21,15 @@ describe("the Mac fixture", () => {
     await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") > 5, { timeout: 5_000 });
     expect(app.shows("id:tray-running-more")).toBe(false);
   }, 30_000);
+
+  test("the Calendar scene's pane: Today is one time-first list, its running item too, ending with the ring", async () => {
+    const base = phoneHost({});
+    const app = await open("./MacFixtureApp.tsx", { platform: "macos", width: 1280, height: 800, storage, host: { ...base, params: { ...(base.params ?? {}), devScript: { calendarScene: "busy" } } } });
+    await app.waitFor("id:tray-today", { timeout: 15_000 });
+    await app.waitFor("id:tray-today >> label:Running", { timeout: 10_000 });
+    expect(app.count("id:tray-today >> id:row-title")).toBe(0);
+    expect(app.count("id:tray-today >> id:tray-today-time")).toBe(app.count("id:tray-today >> id:tray-row"));
+    expect(app.texts()).toContain("Photo archive sorting (09:50)");
+    expect(app.texts()).toContain("9:50 AM");
+  }, 30_000);
 });

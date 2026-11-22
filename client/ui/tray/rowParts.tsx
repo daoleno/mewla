@@ -29,7 +29,7 @@ export function RowTile(props: { tile: () => TrayTile; mark?: () => ProgressMark
   return (
     <View class="items-center justify-center" style={{ width: t.slot, height: t.slot }}>
       <If when={props.mark?.()}>{(mark) => <View class="absolute" style={{ left: (t.slot - t.halo) / 2, top: (t.slot - t.halo) / 2 }}><ProgressHalo mark={() => mark()!} size={t.halo} /></View>}</If>
-      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<Icon name="calendar" size={t.icon} tone="soft" />}><Icon name="shield-check" size={t.icon} tone="soft" /></If>}><Icon name="brain" size={ringed() ? t.brainRinged : t.brain} tone="ink" /></If>}>
+      <If when={props.tile().kind === "agent"} else={<If when={props.tile().kind === "brain"} else={<If when={props.tile().kind === "device"} else={<If when={props.tile().kind === "trigger"} else={<Icon name="calendar" size={t.icon} tone="soft" />}><Icon name="eye" size={t.icon} tone="soft" /></If>}><Icon name="shield-check" size={t.icon} tone="soft" /></If>}><Icon name="brain" size={ringed() ? t.brainRinged : t.brain} tone="ink" /></If>}>
         {/* Kept by agent, flavor and ring: the row's tile is a new object each time the tray is made again (every second). */}
         <Each of={agentLogo() ? [agentLogo()!] : []} key={(logo) => `${logo.agent}|${logo.flavor}|${logo.ringed}`}>{(logo) => {
           // Read once: the key is agent, flavor and ring, so they cannot change here, and a read inside JSX would make

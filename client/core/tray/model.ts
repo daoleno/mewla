@@ -64,6 +64,8 @@ export type TrayTile =
   /** Brain's mark: a Work with several Workers or none. */
   | { kind: "brain" }
   | { kind: "calendar" }
+  /** A Trigger's eye, as on the Calendar's Triggers row and page. */
+  | { kind: "trigger" }
   | { kind: "device" };
 
 /** What a row opens. */
@@ -93,6 +95,8 @@ export interface TrayRow {
   quiet?: boolean;
   /** Today: already past (dimmed above the now line). */
   past?: boolean;
+  /** Today: its wall-clock time, also while it runs (the Mac's time-first rows). */
+  time?: string;
   /** A Work's judged progress (§11 Progress, `workProgressMark`): Running's and Waiting's Work rows only; absent: none. */
   mark?: ProgressMark;
   /**
@@ -501,6 +505,7 @@ export function trayModel(input: TrayInput): TrayModel {
       title: item.title,
       line: item.running ? live?.line || `Started ${item.time}` : item.time,
       end: item.running ? live?.end ?? "" : item.time,
+      time: item.time,
       live: item.running || undefined,
       tile: { kind: "calendar" as const },
       target: item.running && item.sessionId ? { open: "session" as const, workerId: item.sessionId } : { open: "item" as const, itemId: item.id, sessionId: item.sessionId },
