@@ -471,6 +471,21 @@ func launchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry
 	}
 }
 
+// relaunchAdapterFor is how an ended agent starts again: through its
+// adapter's relaunch (Codex: attached to the app-server still running, or a
+// new one on the same thread), else like a fresh launch.
+func relaunchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry) func(executorID, command, control string) (agentevents.Launch, error) {
+	fresh := launchAdapterFor(execs, adapters)
+	return func(executorID, command, control string) (agentevents.Launch, error) {
+		if adapter, ok := adapters.For(providerOf(execs, executorID, command)); ok {
+			if relauncher, ok := adapter.(agentevents.Relauncher); ok {
+				return relauncher.PrepareRelaunch(command, control)
+			}
+		}
+		return fresh(executorID, command)
+	}
+}
+
 // appApprovals is what the app sees of an agent's pending decisions, and how
 // its answer gets back.
 type appApprovals struct{ service *agentEventService }

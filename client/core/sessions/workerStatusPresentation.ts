@@ -1,5 +1,5 @@
 /** From the Expo app's services/workerStatusPresentation.ts. */
-import type { WorkerStatus } from './workers';
+import type { Worker, WorkerStatus } from './workers';
 
 /** True only for durable active-turn Running from the daemon contract. */
 export function isWorkerActivelyRunning(status: WorkerStatus): boolean {
@@ -22,6 +22,13 @@ export function workerStatusLabel(status: WorkerStatus): string {
     default:
       return 'Idle';
   }
+}
+
+const RELAUNCH_WORD = { restarting: 'Restarting', waiting: 'Waiting', restarted: 'Restarted', stopped: 'Stopped' } as const;
+
+/** The Session header's state word: its agent's restart while that is the news, else its status. */
+export function sessionStateWord(worker: Pick<Worker, 'status' | 'relaunch'>): string {
+  return worker.relaunch ? RELAUNCH_WORD[worker.relaunch.state] : workerStatusLabel(worker.status);
 }
 
 export function buildWorkerSessionAccessibilityLabel({

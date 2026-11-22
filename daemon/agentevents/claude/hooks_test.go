@@ -119,6 +119,21 @@ func TestUserPromptSubmitOfADelegatedBriefCarriesTheBriefsOwnDigest(t *testing.T
 	}
 }
 
+// Claude Code 2.1.330 submits a delegated brief as the typed intent and the
+// bare brief, with no paste envelope (seen live 11-22): the unwrapped digest is
+// the brief's, the one Mewla's pending prompt has.
+func TestUserPromptSubmitOfABriefWithoutAnEnvelopeCarriesTheBriefsDigest(t *testing.T) {
+	brief := "Run this.\n\nMewla delegated turn contract:\n  --turn-id turn:9b8ae09a"
+	payload, err := json.Marshal(map[string]string{"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt_id": "p1", "prompt": "Execute: " + brief})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := mustMap(t, string(payload))
+	if want := fmt.Sprintf("%x", sha256.Sum256([]byte(brief))); events[0].InputUnwrappedSHA256 != want {
+		t.Fatalf("unwrapped digest = %q, want %q", events[0].InputUnwrappedSHA256, want)
+	}
+}
+
 // A sub-agent's hooks name it, so what it asks is settled by it alone.
 func TestSubAgentHooksCarryTheSubAgent(t *testing.T) {
 	events := mustMap(t, `{"hook_event_name":"PostToolUse","session_id":"s1","prompt_id":"p1","agent_id":"abc","agent_type":"general-purpose","tool_name":"Bash"}`)

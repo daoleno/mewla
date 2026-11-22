@@ -480,7 +480,13 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		return
 	}
 	supervisor := w.turnRecovery()
+	relaunch := w.agentRelaunch()
 	for _, item := range results {
+		if relaunch.holds(item.id, item.turn.TurnID) {
+			// Its agent is being, or was just, started again: the old Turn's
+			// process is gone on purpose and its continuation is on its way.
+			continue
+		}
 		// A prompt the provider took its turn over without admitting (a keystroke
 		// sent into a prompt never becomes a user prompt, or a follow-up whose
 		// progress signal never carried its identity) holds the Work's active-Attempt fence:
@@ -716,6 +722,14 @@ func stalledDelegatedTurn(item probedPollWorker) (delegatedStall, bool) {
 	return stall, true
 }
 
+// StaleSignalAdmissionReason is the reason a prompt the provider took its
+// turn over without admitting is released with as delivery-unknown.
+const StaleSignalAdmissionReason = "provider settled and stayed idle without this prompt's progress signal"
+
+// AgentEndedAdmissionReason is the reason a prompt in flight on an agent that
+// ended is released with once Brain is told (agent_relaunch.go).
+const AgentEndedAdmissionReason = "the agent ended before it checked in on this prompt"
+
 // signalAdmissionStaleAfter is how long a provider must stay idle after
 // settling, past a delegated prompt's preparation, before that prompt's
 // missing progress signal proves nothing more will arrive.
@@ -758,8 +772,7 @@ func (w *Watcher) releaseStaleAdmissions(sessionID string, stale []string) {
 		return
 	}
 	for _, pending := range stale {
-		if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, pending,
-			"provider settled and stayed idle without this prompt's progress signal"); err != nil {
+		if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, pending, StaleSignalAdmissionReason); err != nil {
 			log.Printf("delegated turn recovery: release stale admission %s: %v", pending, err)
 		}
 	}

@@ -1,0 +1,470 @@
+package brain
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
+)
+
+// Agent relaunch, Brain's half (see watcher/agent_relaunch.go): which open
+// Work an ended agent belongs to, how it resumes its conversation, the bound,
+// and the durable record.
+
+// workEventKindRelaunched is the Work Event of one relaunch.
+const workEventKindRelaunched = "session.relaunched"
+
+// The bound: at most agentRelaunchLimit relaunches of one Work's Worker in
+// agentRelaunchWindow; the next end is reported to Brain with its cause.
+// Waits before each relaunch grow so an agent that ends at once is not
+// started in a tight loop.
+//
+// The lifetime bound: at most agentRelaunchTurnLimit relaunches for one task
+// (a Turn and the continuations and re-sent prompts that carry it on), however
+// far apart. Three in thirty minutes catches an agent that dies at once; five
+// for a task catches one that dies the same way every forty minutes, which the
+// window alone would restart for ever. Five is the window's three plus two
+// spaced-out tries: past that the end is a pattern, not a fluke.
+const (
+	agentRelaunchLimit     = 3
+	agentRelaunchWindow    = 30 * time.Minute
+	agentRelaunchTurnLimit = 5
+)
+
+var agentRelaunchBackoff = []time.Duration{0, 10 * time.Second, 30 * time.Second}
+
+type agentRelaunchDetails struct {
+	SessionID    string    `json:"session_id"`
+	Conversation string    `json:"conversation,omitempty"`
+	Attempt      int       `json:"attempt"`
+	Cause        string    `json:"cause"`
+	ExitCode     *int      `json:"exit_code,omitempty"`
+	ExitSignal   string    `json:"exit_signal,omitempty"`
+	EndedAt      time.Time `json:"ended_at"`
+	FromTurnID   string    `json:"from_turn_id,omitempty"`
+	TurnID       string    `json:"turn_id,omitempty"`
+	Outcome      string    `json:"outcome"`
+	// Error is why a start failed (Outcome "start_failed").
+	Error string `json:"error,omitempty"`
+}
+
+var _ watcher.AgentRelaunchLedger = (*Service)(nil)
+
+// SetWorkerLaunchEnv gives Brain the environment a Worker is launched with
+// (its progress command and state directory), for a relaunch.
+func (s *Service) SetWorkerLaunchEnv(env func() map[string]string) {
+	s.workerLaunchEnv.Store(&env)
+}
+
+// agentEndWork is the open Work an ended agent's Session belongs to: the one
+// whose live Attempt runs on it (turnID is that Attempt's Turn), the one with
+// a delegated prompt in flight on it that the agent never checked in on
+// (pending is that prompt's turn), or else the open Work the Session last
+// joined.
+func (s *Store) agentEndWork(sessionID string) (item Work, turnID, pending string, found bool, err error) {
+	if st, ok := s.fsmWorkByAttemptSession(sessionID); ok && st.Attempt != nil && st.Attempt.Delegated && !st.Status.Terminal() {
+		item, err = s.Work(string(st.ID))
+		return item, string(st.Attempt.TurnToken), "", err == nil, err
+	}
+	if st, ok := s.fsm.Find(func(candidate *lifecycle.State) bool {
+		return !candidate.Status.Terminal() && promptInFlight(candidate, sessionID) != nil
+	}); ok {
+		item, err = s.Work(string(st.ID))
+		return item, "", string(promptInFlight(st, sessionID).TurnToken), err == nil, err
+	}
+	records, err := s.workWorkerRecords()
+	if err != nil {
+		return Work{}, "", "", false, err
+	}
+	candidates := []WorkWorkerRecord{}
+	for _, record := range records {
+		if record.SessionID == sessionID {
+			candidates = append(candidates, record)
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].JoinedAt.After(candidates[j].JoinedAt) })
+	for _, record := range candidates {
+		current, readErr := s.Work(record.WorkID)
+		if errors.Is(readErr, ErrWorkNotFound) {
+			continue
+		}
+		if readErr != nil {
+			return Work{}, "", "", false, readErr
+		}
+		if current.Status == WorkDone || current.Status == WorkCancelled {
+			// The newest Work this Session joined is closed: it is no open
+			// Work's Worker any more.
+			return Work{}, "", "", false, nil
+		}
+		return current, "", "", true, nil
+	}
+	return Work{}, "", "", false, nil
+}
+
+// promptInFlight is the delegated prompt a Work sent to sessionID that its
+// agent never checked in on: the Work's newest prompt to that Session, sent
+// (its transport started) and neither accepted nor ended. A prompt released
+// as stale (the agent went idle over it) or already reported with its
+// agent's end is no longer in flight.
+func promptInFlight(st *lifecycle.State, sessionID string) *lifecycle.AdmissionState {
+	var newest *lifecycle.AdmissionState
+	for _, admission := range st.Admissions {
+		if admission.SessionID != sessionID || admission.ClaimToken != "" {
+			continue
+		}
+		if newest == nil || admission.PreparedSeq > newest.PreparedSeq {
+			newest = admission
+		}
+	}
+	if newest == nil || !newest.SignalProtocol || newest.TransportStartedAt == nil {
+		return nil
+	}
+	switch {
+	case newest.Status == lifecycle.AdmissionPrepared:
+		return newest
+	case newest.Status == lifecycle.AdmissionAmbiguous &&
+		newest.Reason != watcher.StaleSignalAdmissionReason && newest.Reason != watcher.AgentEndedAdmissionReason:
+		return newest
+	}
+	return nil
+}
+
+// agentRelaunches are the relaunch records of a Work's Worker, oldest first.
+func (s *Store) agentRelaunches(workID, sessionID string) ([]agentRelaunchDetails, []time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return nil, nil, err
+	}
+	var records []agentRelaunchDetails
+	var at []time.Time
+	for _, event := range database.BrainWorkEvents {
+		if event.WorkID != workID || event.Kind != workEventKindRelaunched {
+			continue
+		}
+		var details agentRelaunchDetails
+		if json.Unmarshal([]byte(event.DetailsJSON), &details) != nil || details.SessionID != sessionID {
+			continue
+		}
+		records = append(records, details)
+		at = append(at, event.CreatedAt)
+	}
+	return records, at, nil
+}
+
+// workConversation is the newest conversation recorded for a Work's Worker.
+func (s *Store) workConversation(workID, sessionID string) (WorkTranscriptLink, bool) {
+	links, err := s.WorkTranscripts(workID)
+	if err != nil {
+		return WorkTranscriptLink{}, false
+	}
+	var newest WorkTranscriptLink
+	found := false
+	for _, link := range links {
+		if link.SessionID != sessionID {
+			continue
+		}
+		if !found || !link.RecordedAt.Before(newest.RecordedAt) {
+			newest, found = link, true
+		}
+	}
+	return newest, found
+}
+
+// PlanAgentRelaunch decides what happens to an ended agent.
+func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunchPlan, error) {
+	if s == nil || s.store == nil {
+		return watcher.AgentRelaunchPlan{}, nil
+	}
+	sessionID := strings.TrimSpace(end.SessionID)
+	if host, err := s.store.HostSession(); err == nil && strings.TrimSpace(host.ID) == sessionID {
+		return watcher.AgentRelaunchPlan{}, nil // Brain's own Host has its own restart
+	}
+	item, turnID, pending, found, err := s.store.agentEndWork(sessionID)
+	if err != nil || !found {
+		return watcher.AgentRelaunchPlan{}, err
+	}
+	if turnID == "" {
+		// A Turn in flight that the Work no longer holds (it was released in
+		// the moment) is not continued.
+		end.TurnID = ""
+	}
+	if pending != end.PendingTurnID {
+		// The ledger's prompt in flight is the one there is: one the watcher
+		// did not read the conversation for is not known to be held.
+		end.PromptDelivery = watcher.PromptUnknown
+	}
+	inFlight := turnID != "" || pending != ""
+	records, err := s.store.workWorkerRecords()
+	if err != nil {
+		return watcher.AgentRelaunchPlan{}, err
+	}
+	record := records[workWorkerKey(item.ID, sessionID)]
+	launch := strings.TrimSpace(record.LaunchCommand)
+	provider := firstNonEmpty(work.InferWorkerProvider(firstNonEmpty(launch, end.Command)), strings.TrimSpace(record.Provider))
+	name := work.AgentProductName(provider, firstNonEmpty(launch, end.Command))
+	plan := watcher.AgentRelaunchPlan{
+		WorkID: item.ID, TurnID: turnID, PendingTurnID: pending,
+		Name: firstNonEmpty(record.Name, end.Name), Cwd: firstNonEmpty(record.Cwd, end.Cwd), Agent: name,
+	}
+	cause, short := end.Cause(), end.ShortCause()
+	if end.Clean() {
+		if !inFlight {
+			// It ended itself between Turns: finished, or the person exited it
+			// (Claude Code exits 0 on Ctrl-C and /exit). Never started again,
+			// whatever happened to its program since.
+			return watcher.AgentRelaunchPlan{}, nil
+		}
+		return reportAgentEnd(plan, name, cause, "it ended itself before it reported", "Not restarted: it ended itself"), nil
+	}
+	// A death right after the program was replaced on disk is put down to the
+	// update; a replacement after the death is not.
+	startedAt := end.Exit.EndedAt.Add(-end.Exit.Ran)
+	if end.Exit.Ran > 0 && work.ProgramUpdatedBetween(firstNonEmpty(launch, end.Command), startedAt, end.Exit.EndedAt) {
+		cause += " after it was updated"
+		short = "an update"
+	}
+	if launch == "" {
+		if !inFlight {
+			// A Worker spawned before launches were recorded, idle when it
+			// ended: nothing was lost, and the person saw it end. Log only.
+			log.Printf("agent relaunch: %s %s; not started again: no launch record, and no Turn was in flight", sessionID, cause)
+			return watcher.AgentRelaunchPlan{}, nil
+		}
+		return reportAgentEnd(plan, name, cause, "Mewla has no record of how this Worker was launched", "Not restarted: no launch record"), nil
+	}
+	if missing := work.MissingAgentFor(launch); missing != nil {
+		return reportAgentEnd(plan, name, cause, strings.TrimSuffix(missing.Message(), "."), "Not restarted: not installed"), nil
+	}
+	if authID := firstNonEmpty(record.ExecutorID, provider); authID != "" && ExecutorAuth(authID) == HostAuthUnauthenticated {
+		return reportAgentEnd(plan, name, cause, name+" is not signed in on this computer", "Not restarted: signed out"), nil
+	}
+	link, _ := s.store.workConversation(item.ID, sessionID)
+	token, known, resumable := s.hostProviderResumeToken(HostSession{
+		ProviderSessionID: link.ProviderSessionID, TranscriptPath: link.TranscriptPath, ProviderDataRoot: link.ProviderDataRoot,
+	}, work.WorkerExecutor{ID: record.ExecutorID, Provider: provider, Command: launch})
+	if !known || !resumable {
+		// Mewla's own id on the launch (Claude, OpenCode, Pi, DSH) names the
+		// conversation when no link was recorded yet.
+		if own, present, ownErr := work.ProviderResumeToken(provider, launch); ownErr == nil && present {
+			token, resumable = own, true
+		} else {
+			return reportAgentEnd(plan, name, cause, "Mewla has no conversation of it to resume", "Not restarted: nothing to resume"), nil
+		}
+	}
+	command, err := work.RelaunchCommand(provider, launch, token)
+	if err != nil {
+		return reportAgentEnd(plan, name, cause, "its conversation can't be resumed ("+err.Error()+")", "Not restarted: can't resume"), nil
+	}
+	env := map[string]string{}
+	if base := s.workerLaunchEnv.Load(); base != nil && *base != nil {
+		env = mergeStringMaps(env, (*base)())
+	}
+	history, at, err := s.store.agentRelaunches(item.ID, sessionID)
+	if err != nil {
+		return watcher.AgentRelaunchPlan{}, err
+	}
+	now := s.nowUTC()
+	recent := 0
+	var last *agentRelaunchDetails
+	for index, when := range at {
+		if now.Sub(when) < agentRelaunchWindow {
+			recent++
+			last = &history[index]
+		}
+	}
+	if task := firstNonEmpty(turnID, pending); task != "" {
+		if count := relaunchesOfTask(history, task); count >= agentRelaunchTurnLimit {
+			return reportAgentEnd(plan, name, cause, fmt.Sprintf("it was started again %d times during this task and ended each time", count),
+				fmt.Sprintf("Stopped after %d restarts", count)), nil
+		}
+	}
+	if recent >= agentRelaunchLimit {
+		minutes := int(agentRelaunchWindow / time.Minute)
+		if last != nil && last.Outcome == "start_failed" {
+			// The tries did not die: they never started. Say why.
+			return reportAgentEnd(plan, name, cause, fmt.Sprintf("it could not be started again (%s), %d times in the last %d minutes", last.Error, recent, minutes),
+				"Stopped: it could not start"), nil
+		}
+		return reportAgentEnd(plan, name, cause, fmt.Sprintf("it was started again %d times in the last %d minutes and ended each time", recent, minutes),
+			fmt.Sprintf("Stopped after %d restarts", recent)), nil
+	}
+	family := watcher.ProviderFamily(firstNonEmpty(launch, end.Command))
+	outage, down := watcher.ProviderOutage{}, false
+	if availability := s.availability(); availability != nil {
+		outage, down = availability.ProviderOutage(family)
+	}
+	if down && !end.ProviderTest {
+		// Every agent of the family fails now: a restart would fail too. The
+		// end waits, held back and with no try used, until the provider
+		// answers, the family's probe is this end's, or the wait's bound
+		// (watcher agentProviderWaitLimit) makes the restart the test.
+		plan.Action, plan.Provider = watcher.AgentEndWait, family
+		plan.Words = name + " " + cause + "; it is started again once its provider answers (" + firstNonEmpty(outage.Kind, "unavailable") + ")."
+		plan.Line = "Waiting for " + name + "'s provider"
+		return plan, nil
+	}
+	// The model route is restored only for a start that happens (it may open
+	// the route's listener), not on every recheck of a wait.
+	if routes := s.sessionRoutes(); routes != nil {
+		routeCommand, routeEnv, routed, routeErr := routes.ResumeLaunch(sessionID, command)
+		if routeErr != nil {
+			return reportAgentEnd(plan, name, cause, "its model route can't be restored ("+routeErr.Error()+")", "Not restarted: no model route"), nil
+		}
+		if routed {
+			command = firstNonEmpty(routeCommand, command)
+			env = mergeStringMaps(env, routeEnv)
+		}
+	}
+	plan.Action = watcher.AgentEndRelaunch
+	plan.Command, plan.Env, plan.PrepareWorkspace = command, env, work.PrepareDelegatedWorkspace
+	plan.Conversation, plan.Attempt = token, recent+1
+	if recent < len(agentRelaunchBackoff) {
+		plan.After = agentRelaunchBackoff[recent]
+	}
+	plan.Words = name + " " + cause + "; Mewla started it again in the same conversation"
+	switch {
+	case turnID != "":
+		plan.Words += " and asked it to continue the task."
+	case pending != "" && end.PromptDelivery == watcher.PromptNotHeld:
+		plan.Words += " and sent it its task again: the task (" + pending + ") had not reached the conversation before it ended, so nothing of it ran."
+	case pending != "":
+		plan.Words += ". Whether its task (" + pending + ") had reached the conversation before it ended is unknown, so it was not sent again and nothing is running for it: decide whether to send it again."
+	default:
+		plan.Words += "."
+	}
+	if down {
+		plan.Words += " Its provider was still refusing requests (" + firstNonEmpty(outage.Kind, "unavailable") + ") when it was started."
+	}
+	plan.Line = "Restarted after " + short
+	return plan, nil
+}
+
+// relaunchesOfTask counts the relaunches made for the task turnID carries on:
+// those from turnID itself and from every Turn it continues (a continuation or
+// a re-sent prompt is recorded as TurnID, from FromTurnID).
+func relaunchesOfTask(history []agentRelaunchDetails, turnID string) int {
+	chain := map[string]bool{turnID: true}
+	for grown := true; grown; {
+		grown = false
+		for _, record := range history {
+			if record.TurnID != "" && chain[record.TurnID] && record.FromTurnID != "" && !chain[record.FromTurnID] {
+				chain[record.FromTurnID], grown = true, true
+			}
+		}
+	}
+	count := 0
+	for _, record := range history {
+		if record.FromTurnID != "" && chain[record.FromTurnID] {
+			count++
+		}
+	}
+	return count
+}
+
+// reportAgentEnd is the plan for an agent not started again: words for Brain,
+// and the Session's short line.
+func reportAgentEnd(plan watcher.AgentRelaunchPlan, name, cause, reason, line string) watcher.AgentRelaunchPlan {
+	plan.Action = watcher.AgentEndReport
+	plan.Words = name + " " + cause + "; not started again: " + reason + "."
+	plan.Line = line
+	return plan
+}
+
+// RecordAgentRelaunch appends the relaunch as a Work Event. It is history and
+// the bound's count: it does not wake Brain, whose Work goes on.
+func (s *Service) RecordAgentRelaunch(record watcher.AgentRelaunch) error {
+	if s == nil || s.store == nil {
+		return fmt.Errorf("brain service is not configured")
+	}
+	if strings.TrimSpace(record.WorkID) == "" || strings.TrimSpace(record.SessionID) == "" || record.At.IsZero() {
+		return fmt.Errorf("agent relaunch requires work, session and time")
+	}
+	details, err := json.Marshal(agentRelaunchDetails{
+		SessionID: record.SessionID, Conversation: record.Conversation, Attempt: record.Attempt, Cause: record.Cause,
+		ExitCode: record.ExitCode, ExitSignal: record.ExitSignal, EndedAt: record.EndedAt.UTC(),
+		FromTurnID: record.FromTurnID, TurnID: record.TurnID, Outcome: record.Outcome, Error: record.Error,
+	})
+	if err != nil {
+		return err
+	}
+	summary := strings.TrimSpace(record.Words)
+	switch record.Outcome {
+	case "continuation_unknown":
+		summary += " Whether it received the request to continue is unknown."
+	case "not_ready":
+		summary += " It did not become ready for the request to continue."
+	case "start_failed":
+		summary = strings.TrimSpace(record.Cause+"; Mewla could not start it again: "+record.Error) + "."
+		if name := strings.TrimSpace(record.Name); name != "" {
+			summary = name + " " + summary
+		}
+	}
+	_, err = s.store.appendWorkAuditEvent(WorkEvent{
+		WorkID: record.WorkID, Kind: workEventKindRelaunched,
+		DedupeKey:  fmt.Sprintf("session:%s:relaunched:%d:%d", record.SessionID, record.EndedAt.UTC().UnixNano(), record.Attempt),
+		PayloadRef: "session:" + record.SessionID, SourceName: record.SessionID,
+		Summary: summary, DetailsJSON: string(details), CreatedAt: record.At.UTC(),
+	})
+	return err
+}
+
+// ReportAgentEnd tells Brain once that an ended agent is not started again.
+// A Worker still holding a Turn (relaunched but never ready) loses it as
+// turn_lost; an idle Worker's Work gets one turn_lost review of its own end.
+func (s *Service) ReportAgentEnd(end watcher.AgentEnd, plan watcher.AgentRelaunchPlan) (bool, error) {
+	if s == nil || s.store == nil || strings.TrimSpace(plan.WorkID) == "" {
+		return true, nil
+	}
+	store := s.store
+	sessionID := strings.TrimSpace(end.SessionID)
+	ref := fmt.Sprintf("agent-end:%s:%d", sessionID, end.Exit.EndedAt.UTC().UnixNano())
+	st, live := store.fsmWorkByAttemptSession(sessionID)
+	if live && st.Attempt != nil && string(st.ID) == plan.WorkID {
+		ref = string(st.Attempt.TurnToken)
+	} else if pending := strings.TrimSpace(plan.PendingTurnID); pending != "" {
+		// The prompt the agent never checked in on is the Turn Brain hears is
+		// lost; released, it no longer fences the Work's next prompt.
+		ref = pending
+		if err := store.MarkInputAdmissionAmbiguous(sessionID, pending, watcher.AgentEndedAdmissionReason); err != nil {
+			log.Printf("agent relaunch: release the prompt %s on %s: %v", pending, sessionID, err)
+		}
+	}
+	if _, err := store.appendWorkAuditEvent(WorkEvent{
+		WorkID: plan.WorkID, Kind: "session.uncertain",
+		DedupeKey:  "session:" + sessionID + ":turn:" + ref + ":agent_ended",
+		PayloadRef: ref, SourceName: sessionID,
+		Summary: plan.Words, CreatedAt: s.nowUTC(),
+	}); err != nil {
+		return false, err
+	}
+	if live && st.Attempt != nil && string(st.ID) == plan.WorkID {
+		identity := lifecycle.AttemptIdentity{SessionID: st.Attempt.SessionID, TurnToken: st.Attempt.TurnToken, Fence: st.Attempt.Generation}
+		if _, err := store.fsm.ReportTurnLost(st.ID, identity, "agent_ended"); err != nil {
+			return false, fsmObservationResult(err)
+		}
+		return true, store.SyncWorkProjection(plan.WorkID)
+	}
+	// Brain may still have an earlier review of this Work (its result, say):
+	// the loss is opened once that one has left it, so Brain reads both.
+	opened, err := store.fsm.OpenReview(lifecycle.WorkID(plan.WorkID), "turn_lost", ref)
+	if err != nil {
+		if errors.Is(err, lifecycle.ErrTerminal) || errors.Is(err, lifecycle.ErrUnknownWork) {
+			return true, nil
+		}
+		return false, err
+	}
+	told := opened != nil && opened.Review != nil && opened.Review.Reason == "turn_lost" && opened.Review.Ref == ref
+	if !told && opened != nil && opened.Status.Terminal() {
+		told = true
+	}
+	return told, store.SyncWorkProjection(plan.WorkID)
+}

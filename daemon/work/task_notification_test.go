@@ -492,6 +492,25 @@ func TestClaudeDelegatedInputUnwrapsToTheSubmittedBrief(t *testing.T) {
 	}
 }
 
+// Claude Code 2.1.330 records a delegated brief as the typed intent and the
+// bare brief, with no paste envelope (seen live 11-22): its unwrapped digest
+// is still the brief's, so the pending prompt is recognized, but the message
+// is not marked as Mewla's.
+func TestClaudeTypedBriefWithoutAnEnvelopeKeepsTheBriefsDigest(t *testing.T) {
+	brief := "Run this.\n\nMewla delegated turn contract:\n  --turn-id turn:9b8ae09a"
+	conversation := parseClaudeFixture(t, claudeTaskNotificationRecord("u8", "2026-11-22T03:50:44Z", "human", "Execute: "+brief))
+	event := conversation.Events[0]
+	if want := fmt.Sprintf("%x", sha256.Sum256([]byte(brief))); event.AdmissionUnwrappedSHA256 != want {
+		t.Fatalf("unwrapped digest = %q, want the brief's %q", event.AdmissionUnwrappedSHA256, want)
+	}
+	if event.Origin == ConversationOriginDelegated {
+		t.Fatal("a message without the envelope was marked as Mewla's")
+	}
+	if _, ok := ClaudeTypedBrief("Execute: "); ok {
+		t.Fatal("an empty brief was read")
+	}
+}
+
 // A delegated Worker's brief is Mewla's, not the person's: its user_message
 // says so in Origin, and a person's own message (even one that starts with
 // "Execute: ") keeps the empty origin.

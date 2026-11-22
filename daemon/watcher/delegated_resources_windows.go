@@ -130,3 +130,32 @@ func (m *jobDelegatedResourceManager) tempDir(unit string) (string, error) {
 	}
 	return filepath.Join(m.tempRoot, digest), nil
 }
+
+// Reuse returns an existing unit's spec. Its TMPDIR is made again if it is
+// gone.
+func (m *jobDelegatedResourceManager) Reuse(unit string) (*delegatedResourceSpec, error) {
+	unit = strings.TrimSpace(unit)
+	dir, err := m.tempDir(unit)
+	if err != nil {
+		return nil, err
+	}
+	if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("create delegated temporary directory: %w", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, delegatedTempMarkerName), []byte(unit+"\n"), 0o600); err != nil {
+			return nil, fmt.Errorf("write delegated temporary ownership marker: %w", err)
+		}
+	}
+	return &delegatedResourceSpec{Owner: m.owner, Unit: unit, TempDir: dir}, nil
+}
+
+// Survivors lists nothing on Windows: a Session's processes live in its Job
+// Object, which ends with the old Session when the new one takes its place.
+func (m *jobDelegatedResourceManager) Survivors(string) ([]agentSurvivor, error) { return nil, nil }
+
+// EndsSurvivors: the old Session's Job Object, closed when the new Session
+// takes its place, ends every process the dead agent left running.
+func (m *jobDelegatedResourceManager) EndsSurvivors() bool { return true }
+
+var _ survivorEnder = (*jobDelegatedResourceManager)(nil)

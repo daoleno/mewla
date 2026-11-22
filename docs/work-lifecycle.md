@@ -137,9 +137,11 @@ not start one. While the outage lasts:
   own message stays, and so does any refusal that is not transient.
 
 The first Activity of that family that settles without an error ends the outage
-at once. Mewla sends nothing extra to find out, so it notices on the next probe
-or the next request a person makes, up to one probe interval after the provider
-is back. Then the line clears, the lane delivers what it held, and every held Turn is
+at once. While the outage lasts every Session of the family is read for this,
+including one whose Turn already settled (a Worker that reports done before its
+request finishes). Mewla sends nothing extra to find out, so it notices on the
+next probe, the next request a person makes or the next request any Worker of
+the family finishes, up to one probe interval after the provider is back. Then the line clears, the lane delivers what it held, and every held Turn is
 continued in its own Session on the next poll. Persistent errors (sign-in,
 billing, a bad request) are not an outage, and an unclassified error keeps the
 rows above.
@@ -289,6 +291,215 @@ longer blocks. A prompt queued behind a running provider turn keeps its fence.
 For an owned wait, the reference is `session:<session-id>:turn:<turn-token>`.
 Bare Session names and another producer's Turn do not authorize changing the
 active Attempt. Without an Attempt, wait retains its usual typed external Wake.
+
+### Agent Process Ends And Relaunch
+
+A delegated Worker's agent program can end while its Work is open: killed
+(`SIGKILL`, the out-of-memory killer), exited with a code, or replaced by an
+update of the agent's program. The session host keeps the ended program with
+its exit code or signal, and the watcher decides once per ended program
+(`daemon/watcher/agent_relaunch.go`, planned by Brain in
+`daemon/brain/agent_relaunch.go`). The decision is kept on the Session
+(session-host data `agent-end`), so a daemon restart reads it instead of
+judging the same end again.
+
+**What counts as a Turn in flight.** The Turn ledger decides, never the
+Worker's first progress report. A Turn is in flight when the Work's live
+Attempt runs on the Session, or when the Work sent the Session a delegated
+prompt (its transport started) that the agent never checked in on. That second
+case is the window from the paste to the agent's first `worker progress`. A
+prompt that was only prepared and never sent is not in flight. Neither is one
+already released as stale, or one already reported with its agent's end.
+
+Mewla starts the agent again in the same Session and the same conversation,
+with no action from the person or Brain, when all of these hold:
+
+- the Session is a delegated Worker of an open Work (not Brain's own host, not a
+  Session the person ended, not a Worker Brain closed). The plan is asked again
+  after any wait, so a Work closed meanwhile is not started for;
+- it died: a signal or a non-zero exit. An agent that exits 0 between Turns is
+  never started again, whatever happened to its program since (Claude Code
+  exits 0 on Ctrl-C and `/exit`). An exit 0 with a Turn in flight is reported:
+  "it ended itself before it reported";
+- Mewla recorded how the Worker was launched (`launch_command` on the Work's
+  Worker record, from `worker spawn`), the agent is installed, and its sign-in
+  is not known to be gone. A Worker from before launches were recorded, idle
+  when it ended, is only logged. With a Turn in flight it is reported once,
+  named from its record ("Claude Code … no record of how this Worker was
+  launched");
+- there is a conversation to resume: the Work's transcript link (Claude Code,
+  Codex, agy), else the id Mewla put on the launch (OpenCode, Pi, DSH). Cursor
+  Agent and Grok record none, so they are reported, not restarted;
+- its provider is not refusing every request. During a provider outage
+  (`providerAvailability`) the end is held back, uses no try and shows
+  "Waiting for Claude Code's provider" in the waiting look (state `waiting`,
+  the Session `blocked`: no running dot, nothing asked of the person). It is
+  planned again every 30 s and started as soon as the provider answers. The
+  wait also ends by itself. An end whose start sends a request (a Turn to
+  continue, a prompt to send again) asks for the family's one probe request at
+  about 1, 3 and 7 minutes, and holding it, it is started again as that
+  request. An idle end never asks: its start sends nothing, so the probe stays
+  with the family's held Turns. At 10 minutes any held end is started again
+  anyway. No end waits longer. Every start counts toward the bounds below, and
+  Brain's event says the provider was still refusing requests when it was
+  started. An agent that keeps dying stops at a bound with its cause; one that
+  comes up is an ordinary Worker again, and a continuation the provider refuses
+  is held as any Turn is in an outage. A Worker already at a bound is reported
+  at once, not held. The wait is in memory: a daemon restart forgets it with
+  the outage itself and plans the end afresh;
+- it has been started again fewer than 3 times in the last 30 minutes (after 0,
+  10 s and 30 s). The task also has a lifetime bound: at most 5 relaunches for
+  one Turn and the continuations and re-sent prompts that carry it on, however
+  far apart. Three in 30 minutes catches an agent that dies at once. Five per
+  task catches one that dies the same way every 40 minutes, which the window
+  alone would restart forever.
+
+A start that fails counts as a try: the folder is gone, workspace preparation
+fails, or the launch adapter refuses. It is recorded (`start_failed`, with the
+error), so the backoff applies. At the bound Brain hears the real cause once
+("it could not be started again (…), 3 times in the last 30 minutes"), and the
+dead Turn reaches the Turn ledger. A Worker the person or Brain closed during
+the wait is not a try.
+
+The update cause ("… after it was updated", "Restarted after an update")
+applies only to a death, and only when the program was replaced on disk
+between the agent's start and its death.
+
+**The relaunch never stops anything it did not start.** The old program's
+children in the Worker's resource unit are left running, idle or mid-Turn: a
+server the Worker was told to keep up, a build half-way. They are listed
+instead. The list shows each process's command line (secrets, tokens and JSON
+settings redacted) and how long it has run. It goes into the continuation
+prompt and Brain's event ("Still running from before: …"). Mewla's own helpers
+and the agent's own control server (Codex's app-server) are left out of the
+list.
+
+**On Windows a relaunch stops what the Worker left running.** There the old
+Session's processes live in its ConPTY's Job Object, and the relaunch closes it
+when the new Session takes its place. So everything the dead agent had left
+running ends with it, and there is nothing to list. Brain's event says so in
+one sentence ("What it had left running was stopped: on Windows it ends with
+the old Session."). A continuation says it too, instead of "Mewla stopped
+nothing": the command in flight may have finished or run only in part, and
+nothing of it is running now. This is accepted as it is
+(`jobDelegatedResourceManager.EndsSurvivors`).
+
+**agy today.** agy has two restart layers. Inside its Session, `agy-session`
+starts `agy acp` again itself when it stops, up to 3 times in 2 minutes
+(`work/antigravity_session.go`); Brain does not see those restarts. Only when
+`agy-session` itself ends does this relaunch start `agy-session` again, by the
+rules above. agy also has no provider-outage wait yet. Its errors are not
+classified as transient. Its availability is recorded under the family
+`agy-session` (the Session's observed command), while the relaunch plan looks
+up the family of the recorded launch command (`agy …`), which names none. So an
+agy Worker that dies during an outage is started again at once, like any end. Both belong to the agy Worker
+and are not changed here.
+
+**One launch path for every agent, started before the old one goes.** The launch is
+`work.RelaunchCommand`: the spawn launch with the agent's resume flag, and a
+Model Profile route restored by `routes.ResumeLaunch`. The session host's
+`respawn` starts the new program under the same Session id, resource unit and
+TMPDIR. It keeps the Session's data (input receipts, so a Work event already
+delivered is not delivered again). Only once the new program runs does it
+remove the old ended one. If the new program cannot start, the ended Session
+stays as it was. A session host from before `respawn` cannot do this. Then the
+agent is reported once ("needs an update"), with no try counted, until that
+host is replaced (`minHostVersion`).
+
+**The Turn in flight after the relaunch.** Mewla waits for the new program to
+be ready (90 s at most). Brain's one event says which case applied:
+
+- **Continued.** The Attempt was live, or the dead agent's conversation holds
+  the prompt (the conversation's newest user message has the prompt's digest).
+  The held prompt is accepted as the Turn, and one continuation goes as a
+  follow-up of it. It says the agent process died and that Mewla stopped
+  nothing. It says the command in flight may have finished, may still be
+  running (then it is in the list) or may have run only in part. It tells the
+  agent to look at the state before repeating any step. Event: "… Mewla started
+  it again in the same conversation and asked it to continue the task."
+- **Sent again.** The conversation provably lacks the prompt: it was read, and
+  its newest user message is older than the prompt. Nothing of it ran. The
+  prompt was kept on the Session when it was sent (session-host data
+  `delegated-prompt`, up to 60 KB). It is aborted in the ledger and delivered
+  again under a new turn id. Event: "… sent it its task again: the task (…)
+  had not reached the conversation before it ended, so nothing of it ran."
+- **Needs a decision.** Delivery cannot be shown either way: the conversation
+  is unreadable, the prompt is over 60 KB or was sent before prompts were kept,
+  or it was a review follow-up. The agent is started again, the prompt is not
+  sent again, and Brain gets the Turn as `turn_lost`: "Whether its task (…) had
+  reached the conversation … is unknown, so it was not sent again and nothing
+  is running for it: decide whether to send it again." The prompt is then
+  released, so it no longer fences the Work's next send.
+
+If the agent is not ready in time, the Turn is released as `turn_lost` for
+Brain. No state reads as healthy while nothing runs for an open Turn: after a
+"needs a decision" or "not ready", the Session shows `stopped` with "Task not
+resumed after a restart" (or "Not ready after a restart") while its agent lives. The
+line stays until the agent works again. While Brain still holds an earlier
+review of the Work, the report is asked again every 10 s until Brain has it.
+
+**Codex.** A Codex Worker is a TUI attached to its own app-server. The
+app-server runs the thread and its turns, and Mewla sends, approves and
+interrupts through it. A Codex relaunch is never a bare `codex resume`
+(`agentevents/codex/relaunch.go`):
+
+- While the old app-server still answers on the Worker's control socket,
+  nothing is started. Seen live with Codex 0.170.0: a SIGKILL of the TUI leaves
+  its app-server running. The app-server then drains: it finishes the turn it
+  runs, refuses any new client ("Server is draining", so a TUI cannot attach
+  to it again) and exits. Until it exits it is also the thread's one writer,
+  so another app-server cannot resume the thread ("already has an active
+  writer"). The relaunch waits, uses no try, and shows "Restarting after its
+  turn ends". The turn goes on and reports itself through the app-server
+  (structured events, approvals and the Worker's own progress report). The
+  wait is planned again every 30 s. After 30 minutes Brain is told
+  ("its app-server is still running …"), and the app-server is not stopped.
+- Once it is gone (or when it died with the TUI), a new app-server is started
+  the way a fresh Codex Worker's is: trust, MCP servers, the model, a Model
+  Profile route's `model_provider` and `openai_base_url`, and the permission
+  flags as `-c approval_policy=… -c sandbox_mode=…` (a remote resume refuses
+  them on the TUI: "Permission overrides are not supported when resuming a
+  remote task"). The TUI resumes the same thread through it (`codex resume
+  <thread> --remote <socket>`). The Worker's control socket becomes the new
+  one, and structured send, approvals, interrupt and events follow it there.
+  A Turn still in flight then (one the app-server died in, or one that ended
+  without the Worker's report) gets its continuation through that new
+  app-server, like any other agent.
+
+The app-server and everything it runs (its MCP servers, the command of the
+turn it is finishing) are the agent's own, so they are left out of the
+survivor list.
+
+**Staggering.** After a mass death (an out-of-memory sweep, say), relaunches
+of different Sessions start at least 5 s apart. A Session's own retries are
+spaced by their backoff instead.
+
+**Words.** Brain gets one Work Event in plain words. A relaunch is a
+non-actionable `session.relaunched` event. An agent not started again opens the
+usual `turn_lost` review once, worded with the cause and the reason ("Claude
+Code exited with code 1; not started again: it was started again 3 times in the
+last 30 minutes and ended each time."). When Brain still has an earlier review
+of the Work (the result the Worker reported before it died), the loss opens as
+soon as that review has left Brain.
+
+The Session carries `relaunch` (`state`: `restarting`, `waiting`, `restarted`
+or `stopped`, and a short `line` in a person's words). The app shows the line on
+the Session's row and the Work card ("Restarted after a crash", "… after
+running out of memory", "… after an update", "Stopped after 3 restarts",
+"Waiting for Claude Code's provider"). It shows the state word (Restarting,
+Waiting, Restarted, Stopped) in the Session header; a waiting Worker's card row
+ends in "Waiting" with no dot. The exact signal or exit code is in
+Brain's event and the daemon log, never in the app. A line stays until the
+agent shows something newer (restarted: work, a request, or 10 minutes).
+
+Restarts:
+- Daemon restart: Sessions live in the session host. An agent that ended while
+  the daemon was down is decided on the first poll with the same rules. An end
+  that was already decided keeps its stored decision, and a report Brain
+  already has is not sent again. The bound counts recorded relaunches.
+- Session-host restart and computer reboot end every Session. Unchanged: a
+  mid-Turn Work is released as `turn_lost` once the Session is proven absent;
+  nothing is started again.
 
 ### Model-Led Continuation
 

@@ -793,8 +793,10 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 			if err != nil {
 				return brainWorkControlError(err)
 			}
-			a.recordSpawnWorkWorker(ownedWork.ID, workerID, name, cwd, a.spawnExecutorID(req))
+			a.recordSpawnWorkWorker(ownedWork.ID, workerID, name, cwd, a.spawnExecutorID(req), command)
 		}
+	} else if ownedWork.ID != "" {
+		a.recordSpawnWorkWorker(ownedWork.ID, workerID, name, cwd, a.spawnExecutorID(req), command)
 	}
 
 	// A successful paste is not proof that the provider survived startup.
@@ -857,8 +859,10 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 }
 
 // recordSpawnWorkWorker keeps the name and executor a Work's new Worker was
-// spawned with, so the Work names it after its pane is gone.
-func (a *controlApp) recordSpawnWorkWorker(workID, sessionID, name, cwd, executorID string) {
+// spawned with, so the Work names it after its pane is gone, and its launch
+// command (before any Model Profile route), so an agent that ends is started
+// again the same way in its conversation.
+func (a *controlApp) recordSpawnWorkWorker(workID, sessionID, name, cwd, executorID, launch string) {
 	if a == nil || a.brainStore == nil {
 		return
 	}
@@ -870,6 +874,7 @@ func (a *controlApp) recordSpawnWorkWorker(workID, sessionID, name, cwd, executo
 	}
 	if _, err := a.brainStore.RecordWorkWorker(brain.WorkWorkerRecord{
 		WorkID: workID, SessionID: sessionID, Name: name, ExecutorID: executorID, Provider: provider, Cwd: cwd,
+		LaunchCommand: launch,
 	}); err != nil {
 		log.Printf("brain Work %s Worker %s record failed: %v", workID, sessionID, err)
 	}

@@ -89,8 +89,13 @@ func (c *codexEvents) Observe(event watcher.SessionEvent) {
 func (c *codexEvents) start(workerID, socket, cwd string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if existing := c.sessions[workerID]; existing != nil && existing.socket == socket {
+	existing := c.sessions[workerID]
+	if existing != nil && existing.socket == socket {
 		return
+	}
+	if existing != nil {
+		// A relaunched Worker's new app-server: the old one's session ends.
+		existing.cancel()
 	}
 	ctx, cancel := context.WithCancel(c.ctx)
 	s := &codexSession{owner: c, workerID: workerID, socket: socket, cwd: cwd, cancel: cancel, mapper: codex.NewMapper(workerID)}
