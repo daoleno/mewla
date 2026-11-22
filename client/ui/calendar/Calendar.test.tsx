@@ -3,18 +3,23 @@ import { answering, expoTokenService, framesOf, item, paired, pairedTwo, phoneHo
 
 const APP = "../FakeDaemonApp.tsx";
 
+/** The date of the fixture's actual reminder on the test phone. */
+function shanghaiDay(at: string): string {
+  return new Date(Date.parse(at) + 8 * 3_600_000).toISOString().slice(0, 10);
+}
+
 /** Use one Shanghai clock for the phone, its events and the day selected in Month. */
 async function monthSelectionAt(localTime: string) {
   const now = Date.parse(localTime);
-  const picked = new Date(now + 8 * 3_600_000 + 2 * 86_400_000).toISOString().slice(0, 10);
-  const rentAt = `${picked}T12:00:00+08:00`;
+  const rentAt = new Date(now + 48 * 3_600_000).toISOString();
   const bankAt = new Date(now + 3_600_000).toISOString();
+  const rent = item("Pay rent", 0, { next_at: rentAt, notify_at: rentAt, created_at: localTime, updated_at: localTime });
   const calendar_items = [
     item("Call the bank", 0, { next_at: bankAt, notify_at: bankAt, created_at: localTime, updated_at: localTime }),
-    item("Pay rent", 0, { next_at: rentAt, notify_at: rentAt, created_at: localTime, updated_at: localTime }),
+    rent,
   ];
   const app = await calendarApp({ calendar_items }, {}, now);
-  return { app, picked };
+  return { app, picked: shanghaiDay(rent.next_at) };
 }
 const SLOW = { timeout: 10_000 };
 

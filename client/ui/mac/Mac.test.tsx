@@ -75,6 +75,27 @@ describe("Mewla for Mac", () => {
     await app.waitFor("id:sessions-empty", { timeout: 10_000 });
   }, 30_000);
 
+  test("a fresh Mac enables trusted LAN only after consent", async () => {
+    let enabled = false;
+    const host = macHost({ pairPhone: true });
+    const handlers = {
+      ...host.handlers,
+      "app.pairing": () => enabled
+        ? { ...pairing, mac_lan: true }
+        : { daemon_id: pairing.daemon_id, daemon_public_key: pairing.daemon_public_key, expires_at: pairing.expires_at, local_link: pairing.local_link, mac_lan: false },
+      "app.setLAN": ({ enabled: choice }: { enabled: boolean }) => { enabled = choice; },
+    };
+    const app = await open(APP, { platform: "macos", width: 720, height: 560, storage: paired, host: { ...host, handlers } });
+    await app.waitFor("id:pair-lan-cancel");
+    await app.press("id:pair-lan-cancel");
+    expect(enabled).toBe(false);
+    await app.keyboard.press("mod+5");
+    await app.press("id:pair-phone-row");
+    await app.press("id:pair-lan-allow");
+    await app.waitFor("id:pair-phone-qr");
+    expect(enabled).toBe(true);
+  }, 30_000);
+
   test("This Mac (⌘5): no hero cat on wide, Phones and browsers first, and Pair a phone opens the dialog", async () => {
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
     await app.waitFor("id:composer", { timeout: 15_000 });

@@ -25,6 +25,7 @@ export const macLightsRow = (): number => (isMacApp() ? titleBar().height : 0);
 
 /** `mewla pair -json` of the app's own daemon, as the host's `app.pairing` gives it. */
 export type DaemonPairing = {
+  mac_lan?: boolean;
   expires_at: string;
   daemon_id: string;
   daemon_public_key: string;
@@ -40,6 +41,10 @@ export type DaemonPairing = {
 /** A fresh one-time pairing of this computer's daemon (15 minutes): the phone QR and the app's own link. */
 export async function daemonPairing(): Promise<DaemonPairing> {
   return (await host.call("app.pairing", {}, { timeout: 120_000 })) as DaemonPairing;
+}
+
+export async function setMacLAN(enabled: boolean): Promise<void> {
+  await host.call("app.setLAN", { enabled }, { timeout: 100_000 });
 }
 
 /** Why the app could not join its own daemon; empty while it starts or once it has. */
