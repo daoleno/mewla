@@ -29,11 +29,15 @@ STABLE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
 TAG = re.compile(r"^v\d+\.\d+\.\d+(-beta\.\d+)?$")
 
 
+# The first release with Mewla for Mac: the stable releases before it carry no Mac files.
+MAC_SINCE = (0, 4, 22)
+
+
 def assets(version: str, stable: bool = True) -> list[str]:
-    """What a public release carries. A stable release also carries Mewla for Mac's five files (macos-release.yml):
-    the update zip and its signed manifest the installed apps read from releases/latest, the .dmg people install from,
-    and that .dmg again under a name without a version, which the site's download links to. A beta carries none: the
-    apps look at the Latest release."""
+    """What a public release carries. A stable release from MAC_SINCE on also carries Mewla for Mac's five files
+    (macos-release.yml): the update zip and its signed manifest the installed apps read from releases/latest, the .dmg
+    people install from, and that .dmg again under a name without a version, which the site's download links to. A
+    beta carries none: the apps look at the Latest release."""
     files = [
         "mewla-linux-amd64.tar.gz",
         "mewla-linux-arm64.tar.gz",
@@ -44,7 +48,7 @@ def assets(version: str, stable: bool = True) -> list[str]:
         "release-manifest.json",
         "release-manifest.json.sig",
     ]
-    if stable:
+    if stable and tuple(int(x) for x in version.split("-")[0].split(".")) >= MAC_SINCE:
         files += [
             f"Mewla-{version}-macos-aarch64.zip",
             f"Mewla-{version}-macos-arm64.dmg",
