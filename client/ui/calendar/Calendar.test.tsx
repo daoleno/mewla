@@ -298,12 +298,13 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a run whose agent said it failed reads Failed on its row, on its item's page and on its own page, though its status is completed (Brain 2026-11-22)", async () => {
-    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const now = Date.parse("2026-11-22T12:00:00+08:00");
+    const at = new Date(now - 3_600_000).toISOString();
     const check = item("Credits check", -1, {
-      kind: "scheduled_action", due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
+      kind: "scheduled_action", next_at: at, created_at: at, updated_at: at, due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
       runs: [{ id: "r-out", scheduled_for: at, started_at: at, finished_at: at, status: "completed", outcome: "failed", result_preview: "Exit code 1: the sign-in expired" }],
     });
-    const app = await calendarApp({ calendar_items: [check] });
+    const app = await calendarApp({ calendar_items: [check] }, {}, now);
     await app.waitFor("id:calendar-item-Credits check", SLOW);
     expect(app.shows("id:calendar-item-Credits check >> text:Failed · Exit code 1: the sign-in expired")).toBe(true);
     await app.press("id:calendar-item-Credits check");
@@ -318,13 +319,14 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a result that starts with Markdown reads as plain words on its row, in its item's Runs and on its run page (gate 0.4.21)", async () => {
-    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const now = Date.parse("2026-11-22T12:00:00+08:00");
+    const at = new Date(now - 3_600_000).toISOString();
     const md = "**Disk space check failed.** The check could not run because the disk did not answer.";
     const check = item("Disk space check", -1, {
-      kind: "scheduled_action", due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
+      kind: "scheduled_action", next_at: at, created_at: at, updated_at: at, due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
       runs: [{ id: "r-md", scheduled_for: at, started_at: at, finished_at: at, status: "completed", outcome: "failed", result_preview: md.slice(0, 60) }],
     });
-    const app = await calendarApp({ calendar_items: [check] });
+    const app = await calendarApp({ calendar_items: [check] }, {}, now);
     await app.waitFor("id:calendar-item-Disk space check", SLOW);
     expect(app.texts().some((text) => text.startsWith("Failed · Disk space check failed. The check could not run"))).toBe(true);
     expect(app.texts().some((text) => text.includes("**"))).toBe(false);
