@@ -4,6 +4,7 @@
   "highlights": [],
   "fixes": [
     "After Windows auto-updates, background Git and agent checks no longer interrupt typing.",
-    "Existing terminals and Workers keep running across consecutive Windows updates."
+    "Existing terminals and Workers keep running across consecutive Windows updates.",
+    "On Mac, switching from the CLI keeps paired phones connected or restores the previous daemon."
   ]
 }

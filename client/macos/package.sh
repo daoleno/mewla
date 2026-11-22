@@ -136,6 +136,25 @@ if [[ $dev == 0 ]]; then
 </plist>
 PLIST
   plutil -lint "$app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist" >/dev/null
+  # The CLI wrapper and the GUI historically shared a bundle identifier. For adoption in
+  # /Applications, launchd must execute the installed signed helper without resolving that identifier.
+  installed_plist="$app/Contents/Library/LaunchAgents/com.daoleno.mewla.installed-daemon.plist"
+  cp "$app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist" "$installed_plist"
+  plutil -replace Label -string com.daoleno.mewla.installed-daemon "$installed_plist"
+  plutil -remove BundleProgram "$installed_plist"
+  plutil -insert Program -string /Applications/Mewla.app/Contents/Helpers/mewla "$installed_plist"
+  # Build the complete argv in one operation. Replacing element zero on this Mac
+  # left the original "mewla" word before "serve".
+  plutil -replace ProgramArguments -json '["/Applications/Mewla.app/Contents/Helpers/mewla","serve"]' "$installed_plist"
+  python3 - "$installed_plist" <<'CHECK_ARGV'
+import plistlib
+import sys
+
+with open(sys.argv[1], "rb") as plist:
+    job = plistlib.load(plist)
+assert job["ProgramArguments"] == [job["Program"], "serve"], "incorrect installed helper argv"
+CHECK_ARGV
+  plutil -lint "$installed_plist" >/dev/null
 fi
 
 iconset="$work/AppIcon.iconset"
