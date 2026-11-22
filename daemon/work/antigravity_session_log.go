@@ -92,7 +92,7 @@ func AntigravitySessionTurns(records []AntigravityLogRecord) []AntigravitySessio
 		switch record.T {
 		case "session":
 			model = firstNonEmpty(record.Model, model)
-		case "user":
+		case "user", "agent_turn":
 			turns = append(turns, AntigravitySessionTurn{ID: record.Turn, StartedAt: at, Model: model})
 		case "turn_end":
 			for index := len(turns) - 1; index >= 0; index-- {
@@ -125,7 +125,7 @@ func projectAntigravitySessionLog(path string, records []AntigravityLogRecord) C
 		updates      []antigravityACPUpdate
 		times        []string
 		conversation string
-		users        int
+		turns        int
 		lastTurn     string
 		lastStart    string
 		lastEnd      *AntigravityLogRecord
@@ -140,8 +140,13 @@ func projectAntigravitySessionLog(path string, records []AntigravityLogRecord) C
 		switch record.T {
 		case "session":
 			conversation = firstNonEmpty(record.Conversation, conversation)
+		case "agent_turn":
+			// A turn agy started by itself (no message of the person's).
+			turns++
+			boundary(record.At)
+			lastTurn, lastStart, lastEnd, lastExit = record.Turn, record.At, nil, nil
 		case "user":
-			users++
+			turns++
 			boundary(record.At)
 			content, _ := json.Marshal(map[string]string{"type": "text", "text": record.Text})
 			updates = append(updates, antigravityACPUpdate{Kind: "user_message_chunk", Content: content})
@@ -175,7 +180,7 @@ func projectAntigravitySessionLog(path string, records []AntigravityLogRecord) C
 		projected.Events[index].Source = antigravitySessionSource
 	}
 	projected.SessionID = conversation
-	if users > 0 && lastTurn != "" {
+	if turns > 0 && lastTurn != "" {
 		activity := &ProviderActivity{ID: lastTurn, Status: ProviderActivityRunning, StartedAt: lastStart}
 		switch {
 		case lastEnd != nil:
