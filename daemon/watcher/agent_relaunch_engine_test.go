@@ -5,6 +5,9 @@ package watcher
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -612,5 +615,161 @@ func TestHostAgentKilledBeforeItsFirstCheckIn(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// The plan is asked again after the wait: a Work closed while its Worker's
+// agent waited to start is not started for (M1).
+func TestHostAgentRelaunchAsksAgainAfterTheWait(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 305", Attempt: 2, After: time.Second}}
+	h.w.SetTurnLedger(ledger)
+	killAgent(t, h.w, id, pid)
+	supervisor := h.w.agentRelaunch()
+	waiting, release := make(chan struct{}), make(chan struct{})
+	supervisor.sleep = func(time.Duration) { close(waiting); <-release }
+	h.w.poll()
+	<-waiting
+	ledger.mu.Lock()
+	ledger.plan = AgentRelaunchPlan{} // the Work was closed meanwhile
+	ledger.mu.Unlock()
+	close(release)
+	waitUntil(t, 10*time.Second, "relaunch to give up", func() bool { return !supervisor.busy(id) })
+	if info, present, err := h.w.host().info(id); err != nil || !present || info.Alive {
+		t.Fatalf("the ended Session was started for a closed Work: %+v present=%v err=%v", info, present, err)
+	}
+	if _, records, _, plans := ledger.snapshot(); len(records) != 0 || len(plans) != 2 {
+		t.Fatalf("records %+v plans %d", records, len(plans))
+	}
+}
+
+// A close that lands while the ended agent is being replaced waits for the
+// replacement and then closes the new program: the close wins (M8).
+func TestHostAgentCloseDuringTheSwapWaitsAndWins(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	killAgent(t, h.w, id, pid)
+	swap := h.w.agentRelaunch().swapLock(id)
+	swap.Lock()
+	closed := make(chan error, 1)
+	go func() { closed <- h.w.KillSession(id) }()
+	select {
+	case err := <-closed:
+		swap.Unlock()
+		t.Fatalf("the close did not wait for the swap: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	// The swap starts the new program, then lets go.
+	if err := h.w.sessions().replace(id, backendCreateSpec{name: "Relaunchee", cwd: t.TempDir(), command: "exec sleep 306",
+		env: []string{"PATH=/usr/bin:/bin"}, labels: sessionLabels{delegated: true, executorID: "claude"}}); err != nil {
+		swap.Unlock()
+		t.Fatal(err)
+	}
+	swap.Unlock()
+	if err := <-closed; err != nil {
+		t.Fatal(err)
+	}
+	if _, present, err := h.w.host().info(id); err != nil || present {
+		t.Fatalf("the replacement outlived the close: present=%v err=%v", present, err)
+	}
+}
+
+// A provider outage holds the end back: nothing is started, no try is used,
+// and the line says what it waits for; once the provider answers it is
+// started again.
+func TestHostAgentEndWaitsOutAProviderOutage(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{plan: AgentRelaunchPlan{Action: AgentEndWait, WorkID: "work-1", Line: "Waiting for sleep's provider"}}
+	h.w.SetTurnLedger(ledger)
+	killAgent(t, h.w, id, pid)
+	supervisor := h.w.agentRelaunch()
+	at := time.Now()
+	supervisor.now = func() time.Time { return at }
+	h.w.poll()
+	h.w.poll()
+	facts, records, reported, plans := ledger.snapshot()
+	if len(plans) != 1 || len(records) != 0 || len(reported) != 0 || len(deadFacts(facts)) != 0 {
+		t.Fatalf("during the outage: plans %d records %+v reported %+v facts %+v", len(plans), records, reported, deadFacts(facts))
+	}
+	if _, relaunch, ok := supervisor.line(id, false, "", at); !ok || relaunch.State != "restarting" || relaunch.Line != "Waiting for sleep's provider" {
+		t.Fatalf("line = %+v %v", relaunch, ok)
+	}
+	ledger.mu.Lock()
+	ledger.plan = AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 307", Attempt: 1}
+	ledger.mu.Unlock()
+	at = at.Add(agentEndWaitEvery + time.Second)
+	h.w.poll()
+	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+}
+
+// A relaunch stops nothing it did not start: a server the dead agent left
+// running in its resource unit is still running after the relaunch, and
+// Brain's record and the continuation both name it (point 2).
+func TestHostAgentRelaunchLeavesWhatTheAgentStartedRunning(t *testing.T) {
+	h := newHostHarness(t)
+	owner := "abc123"
+	unit := delegatedResourceUnit(owner, "0123456789abcdef0123456789abcdef")
+	root := t.TempDir()
+	leaseDir := filepath.Join(root, "leases")
+	if err := os.MkdirAll(leaseDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	h.w.resources = &portableDelegatedResourceManager{owner: owner, leaseDir: leaseDir, tempRoot: root,
+		byTarget: map[string]string{}, reserved: map[string]time.Time{}, now: time.Now}
+	marker := filepath.Join(t.TempDir(), "server.pid")
+	cwd := t.TempDir()
+	id := createHostSession(t, h.w, backendCreateSpec{
+		name: "Relaunchee", cwd: cwd,
+		command: "setsid sleep 391 </dev/null >/dev/null 2>&1 & echo $! > " + marker + "; exec sleep 300",
+		env:     []string{"PATH=/usr/bin:/bin", "HOME=" + cwd, delegatedResourceUnitEnv + "=" + unit},
+		labels:  sessionLabels{delegated: true, executorID: "claude", resourceUnit: unit, resourceOwner: owner},
+	})
+	h.w.mu.Lock()
+	h.w.delegated[id] = true
+	h.w.mu.Unlock()
+	info := waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID > 0 })
+	var server int
+	waitUntil(t, 5*time.Second, "server pid", func() bool {
+		raw, err := os.ReadFile(marker)
+		if err != nil {
+			return false
+		}
+		server, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+		return err == nil && server > 0
+	})
+	t.Cleanup(func() { _ = syscall.Kill(server, syscall.SIGKILL) })
+	ledger := &relaunchLedger{
+		turn: TurnSnapshot{SessionID: id, TurnID: "turn:live", Status: TurnRunning}, hasTurn: true,
+		plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", TurnID: "turn:live", Cwd: cwd, Command: "exec sleep 308", Attempt: 1, Agent: "sleep",
+			Words: "sleep was killed (SIGKILL); Mewla started it again in the same conversation and asked it to continue the task."},
+	}
+	h.w.SetTurnLedger(ledger)
+	var mu sync.Mutex
+	var sent []string
+	h.w.agentRelaunch().submit = func(sessionID, command, payload, workID, turnID string, at time.Time) (InputResult, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		sent = append(sent, payload)
+		return InputResult{Outcome: InputAccepted, TurnID: turnID}, nil
+	}
+	killAgent(t, h.w, id, info.PID)
+	h.w.poll()
+	waitUntil(t, 10*time.Second, "relaunch record", func() bool {
+		_, records, _, _ := ledger.snapshot()
+		return len(records) == 1
+	})
+	if err := syscall.Kill(server, 0); err != nil {
+		t.Fatalf("the relaunch stopped the server the agent left running: %v", err)
+	}
+	_, records, _, _ := ledger.snapshot()
+	if !strings.Contains(records[0].Words, "Still running from before: setsid sleep 391") && !strings.Contains(records[0].Words, "Still running from before: sleep 391") {
+		t.Fatalf("record words = %q", records[0].Words)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(sent) != 1 || !strings.Contains(sent[0], "Mewla stopped nothing") || !strings.Contains(sent[0], "sleep 391 (running ") {
+		t.Fatalf("continuation = %q", sent)
 	}
 }

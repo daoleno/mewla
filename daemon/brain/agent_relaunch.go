@@ -25,9 +25,17 @@ const workEventKindRelaunched = "session.relaunched"
 // agentRelaunchWindow; the next end is reported to Brain with its cause.
 // Waits before each relaunch grow so an agent that ends at once is not
 // started in a tight loop.
+//
+// The lifetime bound: at most agentRelaunchTurnLimit relaunches for one task
+// (a Turn and the continuations and re-sent prompts that carry it on), however
+// far apart. Three in thirty minutes catches an agent that dies at once; five
+// for a task catches one that dies the same way every forty minutes, which the
+// window alone would restart for ever. Five is the window's three plus two
+// spaced-out tries: past that the end is a pattern, not a fluke.
 const (
-	agentRelaunchLimit  = 3
-	agentRelaunchWindow = 30 * time.Minute
+	agentRelaunchLimit     = 3
+	agentRelaunchWindow    = 30 * time.Minute
+	agentRelaunchTurnLimit = 5
 )
 
 var agentRelaunchBackoff = []time.Duration{0, 10 * time.Second, 30 * time.Second}
@@ -239,6 +247,16 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	if authID := firstNonEmpty(record.ExecutorID, provider); authID != "" && ExecutorAuth(authID) == HostAuthUnauthenticated {
 		return reportAgentEnd(plan, name, cause, name+" is not signed in on this computer", "Not restarted: signed out"), nil
 	}
+	if availability := s.availability(); availability != nil {
+		if outage, down := availability.ProviderOutage(watcher.ProviderFamily(firstNonEmpty(launch, end.Command))); down {
+			// Every agent of the family fails now: a restart would fail too and
+			// use up a try. The end waits, held back, until the provider answers.
+			plan.Action = watcher.AgentEndWait
+			plan.Words = name + " " + cause + "; it is started again once its provider answers (" + firstNonEmpty(outage.Kind, "unavailable") + ")."
+			plan.Line = "Waiting for " + name + "'s provider"
+			return plan, nil
+		}
+	}
 	link, _ := s.store.workConversation(item.ID, sessionID)
 	token, known, resumable := s.hostProviderResumeToken(HostSession{
 		ProviderSessionID: link.ProviderSessionID, TranscriptPath: link.TranscriptPath, ProviderDataRoot: link.ProviderDataRoot,
@@ -283,6 +301,12 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 			last = &history[index]
 		}
 	}
+	if task := firstNonEmpty(turnID, pending); task != "" {
+		if count := relaunchesOfTask(history, task); count >= agentRelaunchTurnLimit {
+			return reportAgentEnd(plan, name, cause, fmt.Sprintf("it was started again %d times during this task and ended each time", count),
+				fmt.Sprintf("Stopped after %d restarts", count)), nil
+		}
+	}
 	if recent >= agentRelaunchLimit {
 		minutes := int(agentRelaunchWindow / time.Minute)
 		if last != nil && last.Outcome == "start_failed" {
@@ -312,6 +336,28 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	}
 	plan.Line = "Restarted after " + short
 	return plan, nil
+}
+
+// relaunchesOfTask counts the relaunches made for the task turnID carries on:
+// those from turnID itself and from every Turn it continues (a continuation or
+// a re-sent prompt is recorded as TurnID, from FromTurnID).
+func relaunchesOfTask(history []agentRelaunchDetails, turnID string) int {
+	chain := map[string]bool{turnID: true}
+	for grown := true; grown; {
+		grown = false
+		for _, record := range history {
+			if record.TurnID != "" && chain[record.TurnID] && record.FromTurnID != "" && !chain[record.FromTurnID] {
+				chain[record.FromTurnID], grown = true, true
+			}
+		}
+	}
+	count := 0
+	for _, record := range history {
+		if record.FromTurnID != "" && chain[record.FromTurnID] {
+			count++
+		}
+	}
+	return count
 }
 
 // reportAgentEnd is the plan for an agent not started again: words for Brain,
