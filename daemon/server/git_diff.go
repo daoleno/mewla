@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 const (
@@ -723,7 +725,7 @@ var errNotGitRepository = errors.New("not a git repository")
 // gitFailure, and a translated message would turn "not a repository" into a
 // hard error.
 func gitCommand(args ...string) *exec.Cmd {
-	cmd := exec.Command("git", args...)
+	cmd := platform.WithoutConsoleWindow(exec.Command("git", args...))
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	return cmd
 }

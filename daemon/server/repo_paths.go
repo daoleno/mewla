@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // gitRepoPathsMax bounds the reply: a tree view needs every path, but a
@@ -41,7 +43,7 @@ func (s *Server) buildGitRepoPaths(targetID, cwd string) (gitRepoPathsPayload, e
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitRepoPathsTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "-C", repoRoot, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	cmd := platform.WithoutConsoleWindow(exec.CommandContext(ctx, "git", "-C", repoRoot, "ls-files", "-z", "--cached", "--others", "--exclude-standard"))
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	cmd.WaitDelay = time.Second
 	var stderr bytes.Buffer

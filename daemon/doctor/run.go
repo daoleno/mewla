@@ -22,6 +22,7 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/opencodeapi"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/work"
@@ -1082,7 +1083,7 @@ func lookPathEnv(file, pathEnv string) (string, error) {
 }
 
 func (e env) defaultRunCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := platform.WithoutConsoleWindow(exec.CommandContext(ctx, name, args...))
 	if pathEnv := strings.TrimSpace(e.opts.PathEnv); pathEnv != "" {
 		cmd.Env = append(os.Environ(), "PATH="+pathEnv)
 	}
