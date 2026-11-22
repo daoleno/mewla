@@ -76,11 +76,28 @@ jobs:
           F=client/macos/scripts/fidelity
           OUT="$RUNNER_TEMP/captures"; mkdir -p "$OUT"
           APP="$RUNNER_TEMP/run-app/Mewla Dev.app"; FIX="$RUNNER_TEMP/run-fixture/Mewla Dev.app"
+          # A mac-audit/calendar-* branch captures only Calendar, on its real-shaped scenes (ui/fixture/calendarScene.ts).
+          only_calendar=$([[ "$GITHUB_REF_NAME" == mac-audit/calendar* ]] && echo 1 || true)
           for theme in light dark; do
             dark=$([ "$theme" = dark ] && echo true || echo false)
             osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $dark"
             osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk-$theme.png\""
             sleep 2
+            if [[ -n "$only_calendar" ]]; then
+              export FIDELITY_WINDOW=1280x800
+              "$F/capture.sh" "$FIX" "$OUT" $theme cal-busy '{"open":"calendar","calendarScene":"busy"}' fresh
+              "$F/capture.sh" "$FIX" "$OUT" $theme cal-night '{"open":"calendar","calendarScene":"night"}' fresh
+              "$F/capture.sh" "$FIX" "$OUT" $theme cal-quiet '{"open":"calendar","calendarScene":"quiet"}' fresh
+              # The pages the Calendar redesign added (a build without them has no Triggers page to open).
+              if grep -q 'calendarDay' client/ui/mac/mac.ts; then
+                "$F/capture.sh" "$FIX" "$OUT" $theme cal-month-future '{"open":"calendar","calendarScene":"busy","calendarDay":2}' fresh
+                "$F/capture.sh" "$FIX" "$OUT" $theme cal-month-past '{"open":"calendar","calendarScene":"busy","calendarDay":-6}' fresh
+                "$F/capture.sh" "$FIX" "$OUT" $theme cal-triggers '{"open":"triggers","calendarScene":"busy"}' fresh
+                "$F/capture.sh" "$FIX" "$OUT" $theme cal-trigger '{"open":"triggers","trigger":"trg-home-server-disk-health","calendarScene":"busy"}' fresh
+              fi
+              unset FIDELITY_WINDOW
+              continue
+            fi
             # Mewla Dev on this runner's daemon: a first run, then each surface on the same install.
             # A first run opens at its first size (one column); opened again, at the size it was left.
             "$F/capture.sh" "$APP" "$OUT" $theme firstrun '{}' fresh

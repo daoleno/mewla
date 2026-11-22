@@ -3,6 +3,7 @@
  * and the Rate-limit Session's thread) as a scripted computer's state, so the fidelity sheet's pairs show the same
  * content on both sides. For `fixture/FixtureApp.tsx` and its test only; the app never imports it.
  */
+import { calendarScene, calendarSceneData } from "./calendarScene";
 import dashboard from "../../core/resources/fixtures/dashboard-v2.json";
 import type { FakeDaemonState } from "../testing/fakeDaemon";
 import { SKETCH, TALL, WIDE } from "./pictures";
@@ -220,13 +221,17 @@ const calendar_items = EVENTS.map(([day, time, kind, title], i) => {
 });
 
 export function scenario(): FakeDaemonState & { assets: Record<string, string> } {
+  // A Calendar scene (calendarScene.ts) brings its own Calendar and Triggers, on its pinned clock.
+  const scene = calendarScene();
+  const calendarState = scene ? calendarSceneData(scene) : { calendar_items, triggers: undefined };
   const conversations: FakeDaemonState["conversations"] = { "brain-host": brainThread };
   for (const s of SESS) conversations[s.id] = sessionThread(s);
   return {
     brain,
     worker_sessions: SESS.map(workerSession),
     conversations,
-    calendar_items,
+    calendar_items: calendarState.calendar_items,
+    ...(calendarState.triggers ? { triggers: calendarState.triggers } : {}),
     // The Work's file (its Work detail's "Work file" row), as the computer lists it.
     work_items: [{
       id: IDS.docsWork, path: "/home/me/.mewla/work/atlas-docs/docs-refresh.md", project: "atlas-docs", title: "Docs refresh",

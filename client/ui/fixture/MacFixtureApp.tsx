@@ -5,6 +5,8 @@
 // The scripted computer (workbench) is this Mac: `app.pairing` answers with its key, so the app joins it as its own
 // daemon (mac/local.ts `joinLocalDaemon`) instead of pairing the Dev daemon the host started.
 import "./seed";
+// Before the app: a Calendar scene pins the clock Calendar reads when it loads.
+import "./calendar/macScene";
 import { host } from "nsh";
 import "../App";
 import { installPlatform, platform } from "../../core/platform";
