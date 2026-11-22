@@ -9,7 +9,7 @@ const both = async (name) => {
   }
   await app.setColorScheme("light");
 };
-await app.waitFor("text:Gave up after 3 restarts", { timeout: 20000 });
+await app.waitFor("text:Stopped after 3 restarts", { timeout: 20000 });
 await app.wait(500);
 await both("1-cards");
 for (const [n, id] of [[2, "r-died"], [3, "r-back"], [4, "r-gave"]]) {

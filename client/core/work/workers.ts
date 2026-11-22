@@ -96,7 +96,7 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       agentLabel: typeLabel(agent, flavor),
       state,
       summary,
-      // "Gave up after 3 restarts" says it failed.
+      // "Stopped after 3 restarts" says it failed.
       stateLabel: relaunch ? undefined : STATE_LABEL[state],
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
       since: Number.isFinite(turn) ? turn : Number.isFinite(joined) ? joined : undefined,

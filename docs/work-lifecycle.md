@@ -340,10 +340,13 @@ Brain still has an earlier review of the Work (the result the Worker reported
 before it died), the loss opens as soon as that review has left Brain.
 
 The Session carries `relaunch` (`state`: `restarting`, `restarted` or
-`not_restarted`, and a short `line`). The app shows the line on the Session's
-row and the Work card ("Restarted after SIGKILL", "Gave up after 3 restarts")
-and the state word in the Session header, until the agent shows something newer
-(restarted: work, a request, or 10 minutes).
+`stopped`, and a short `line` in a person's words). The app shows the line on
+the Session's row and the Work card ("Restarted after a crash", "… after
+running out of memory", "… after an update", "Stopped after 3 restarts") and
+the state word (Restarting, Restarted, Stopped) in the Session header. The
+exact signal or exit code is in Brain's event and the daemon log, never in the
+app. A line stays until the agent shows something newer (restarted: work, a
+request, or 10 minutes).
 
 Restarts:
 - Daemon restart: Sessions live in the session host. An agent that ended while
