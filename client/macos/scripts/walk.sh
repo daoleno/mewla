@@ -25,7 +25,8 @@ bounded() {
   local secs="$1"; shift
   "$@" &
   local pid=$!
-  ( sleep "$secs"; kill -9 "$pid" 2>/dev/null ) &
+  # Its output is not the command's: inside $(…) the guard would hold the pipe open until its sleep ends.
+  ( sleep "$secs"; kill -9 "$pid" 2>/dev/null ) > /dev/null 2>&1 < /dev/null &
   local guard=$!
   wait "$pid"; local rc=$?
   kill "$guard" 2>/dev/null; wait "$guard" 2>/dev/null
