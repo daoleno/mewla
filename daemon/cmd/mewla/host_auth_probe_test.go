@@ -58,4 +58,9 @@ func TestHostProbesArePassiveUntilExactAgentUse(t *testing.T) {
 	if unsupported("opencode") != "unsupported" {
 		t.Fatal("unsupported version reason lost")
 	}
+	now = now.Add(hostAuthProbeTTL + time.Second)
+	probe("opencode")
+	if calls["opencode"] != 2 {
+		t.Fatalf("unknown active agent was not rechecked for recovery: %v", calls)
+	}
 }

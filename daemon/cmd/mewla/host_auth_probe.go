@@ -51,7 +51,7 @@ func newHostProbes(check func(string) doctor.ExecutorsCheck, now func() time.Tim
 				result.unsupported = item.Summary
 			}
 			result.account = item.Account
-			if item.BinaryFound && item.Runnable && item.Auth != doctor.AuthUnauthenticated {
+			if item.VerifiedAuthenticated {
 				result.ttl = hostAuthSettledTTL
 			}
 			break
