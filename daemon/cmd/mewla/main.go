@@ -553,6 +553,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	work.SetAntigravityStateDir(authManager.StorageDir())
 	agyFollow := newAgyEvents(ctx, eventHub, agentEvents, w.Workers)
+	agyFollow.providerOutcome = func(observation watcher.ProviderActivityObservation) {
+		w.ObserveProviderOutcome("agy", observation)
+	}
 	if err := agyFollow.Listen(work.AntigravityEventsSocket(authManager.StorageDir())); err != nil {
 		logAgyListen(err)
 	} else {

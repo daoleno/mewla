@@ -628,6 +628,85 @@ func TestAgentRelaunchWaitsOutAProviderOutage(t *testing.T) {
 	}
 }
 
+type agyRelaunchAvailability struct {
+	*fakeWatcher
+	down  bool
+	asked string
+}
+
+func (a *agyRelaunchAvailability) ProviderOutage(provider string) (watcher.ProviderOutage, bool) {
+	a.asked = provider
+	return watcher.ProviderOutage{Provider: provider, Kind: "rate limit"}, a.down
+}
+
+func (a *agyRelaunchAvailability) ProviderOutages() []watcher.ProviderOutage { return nil }
+func (a *agyRelaunchAvailability) ProviderProbe(string, time.Time) (bool, time.Time) {
+	return !a.down, time.Time{}
+}
+
+func TestAntigravityRelaunchUsesOutageHoldAndCountsActualStarts(t *testing.T) {
+	f := newRelaunchFixture(t)
+	const sessionID = "agy-worker"
+	const conversation = "33333333-3333-4333-8333-333333333333"
+	f.fw.sessions[sessionID] = &classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateRunning}
+	if _, err := f.store.RecordWorkWorker(WorkWorkerRecord{
+		WorkID: f.item.ID, SessionID: sessionID, Name: "Agy Worker", ExecutorID: "agy", Provider: "antigravity", Cwd: "/repo",
+		LaunchCommand: "agy --model gemini-4-neon-low",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.RecordWorkTranscript(WorkTranscriptLink{
+		WorkID: f.item.ID, SessionID: sessionID, Executor: "agy", ProviderSessionID: conversation, RecordedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(t.TempDir(), "agy")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(bin, old, old); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(work.SetAgentLookPath(func(name string) (string, error) {
+		if name == "agy" {
+			return bin, nil
+		}
+		return "", errors.New("not found")
+	}))
+	availability := &agyRelaunchAvailability{fakeWatcher: f.fw, down: true}
+	f.service.watcher = availability
+	code := 1
+	end := watcher.AgentEnd{SessionID: sessionID, Command: "mewla agy-session --agy-session agy-0b6a3c1e-0000-4000-8000-00000000abcd",
+		Exit: watcher.SessionExit{Code: &code, Ran: time.Minute, EndedAt: time.Now().UTC()}}
+	plan, err := f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndWait || plan.Provider != "antigravity" || availability.asked != "antigravity" {
+		t.Fatalf("agy outage hold = %+v, asked %q, err %v", plan, availability.asked, err)
+	}
+	if records, _, _ := f.store.agentRelaunches(f.item.ID, sessionID); len(records) != 0 {
+		t.Fatalf("outage wait used a restart: %+v", records)
+	}
+	availability.down = false
+	for attempt := 1; attempt <= agentRelaunchLimit; attempt++ {
+		plan, err = f.service.PlanAgentRelaunch(end)
+		if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.Attempt != attempt || plan.Conversation != conversation ||
+			plan.Command != "agy --model gemini-4-neon-low --conversation "+conversation || plan.Agent != "Antigravity" {
+			t.Fatalf("agy attempt %d = %+v, %v", attempt, plan, err)
+		}
+		at := time.Now().UTC()
+		if err := f.service.RecordAgentRelaunch(watcher.AgentRelaunch{
+			WorkID: f.item.ID, SessionID: sessionID, Conversation: conversation, Attempt: attempt,
+			Cause: "exited with code 1", EndedAt: end.Exit.EndedAt, Outcome: "idle", Name: "Antigravity", At: at,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err = f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndReport || plan.Line != "Stopped after 3 restarts" {
+		t.Fatalf("agy after three actual attempts = %+v, %v", plan, err)
+	}
+}
+
 // A Worker past its bound during an outage is stopped at once with its cause,
 // not held first: the outage only delays a restart that would happen.
 func TestAgentRelaunchPastItsBoundIsNotHeldForAnOutage(t *testing.T) {
