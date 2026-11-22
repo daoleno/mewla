@@ -197,12 +197,19 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then
 fi
 sleep 4
 shot 06-pair-from-cat
+# The pairing dialog, read through Accessibility: its title in the window.
+pair_texts() { osa -e 'tell application "System Events" to tell process "Mewla" to get value of every static text of entire contents of window 1' 2>&1 | tr ',' '\n'; }
+pair_texts > "$out/06-pair-from-cat-texts.txt"
+check "Pair a phone… from the cat's menu opens the pairing dialog" grep -q "Pair a phone" "$out/06-pair-from-cat-texts.txt"
 osa -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
 sleep 1
 # The same from the app's own menu bar: File › Pair a Phone…
 osa -e 'tell application "System Events" to tell process "Mewla" to click menu item "Pair a Phone…" of menu "File" of menu bar item "File" of menu bar 1' >> "$log" 2>&1 \
   && say "File › Pair a Phone… chosen" || say "File › Pair a Phone… could not be chosen"
 sleep 4
+pair_texts > "$out/06-pair-from-file-texts.txt"
+check "File › Pair a Phone… opens the pairing dialog" grep -q "Pair a phone" "$out/06-pair-from-file-texts.txt"
+check "the pairing dialog offers its link" grep -q -E "Copy link|Scan with" "$out/06-pair-from-file-texts.txt"
 pairing=$(bounded 60 swift -e 'import CoreGraphics
 let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
 print(l.filter { ($0[kCGWindowOwnerName as String] as? String) == "Mewla" && ($0[kCGWindowLayer as String] as? Int) == 0 }.count)' 2>/dev/null || echo 0)
