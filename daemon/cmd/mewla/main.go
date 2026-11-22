@@ -173,6 +173,8 @@ func run(args []string, stderr io.Writer) error {
 			return runDaemonUpdating(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
+		case "mac-app-owner":
+			return printMacAppOwner(os.Stdout)
 		case "mac-lan":
 			return runMacLAN(args[1:], stderr)
 		case "web":
