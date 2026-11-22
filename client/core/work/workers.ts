@@ -79,7 +79,9 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
     // What it reported (a live Session's summary only once it reported progress: before, it is the daemon
     // reading the screen); the terminal's footer ("⏵⏵ bypass permissions on…") is never a summary.
     const reported = following && Boolean(session.phase?.trim() || session.event_kind?.trim());
-    const summary = (reported ? readableSummary(session.summary) : "") || readableSummary(row.summary);
+    // Its agent ended and was started again, or not: that, while it is the news.
+    const relaunch = following ? session.relaunch : undefined;
+    const summary = relaunch?.line || (reported ? readableSummary(session.summary) : "") || readableSummary(row.summary);
     const joined = Date.parse(row.joined_at);
     // A working Session's time counts from its current turn (SPEC §11 Elapsed time), as its tray row and Working line do.
     const turn = following && working && session.running_since ? session.running_since : NaN;
@@ -94,7 +96,8 @@ export function workWorkerLines(rows: readonly WorkWorkerSession[] | undefined, 
       agentLabel: typeLabel(agent, flavor),
       state,
       summary,
-      stateLabel: STATE_LABEL[state],
+      // "Gave up after 3 restarts" says it failed.
+      stateLabel: relaunch ? undefined : STATE_LABEL[state],
       time: working ? "live" : listTime(Number.isFinite(at) ? at : undefined, now),
       since: Number.isFinite(turn) ? turn : Number.isFinite(joined) ? joined : undefined,
       openable: Boolean(session),

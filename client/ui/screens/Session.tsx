@@ -23,7 +23,7 @@ import { getInterfaceRenderModes, getWorkerAliases, setInterfaceRenderMode, setW
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { presentWorker } from "../../core/sessions/workerPresentation";
-import { workerStatusLabel } from "../../core/sessions/workerStatusPresentation";
+import { sessionStateWord } from "../../core/sessions/workerStatusPresentation";
 import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
 import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
@@ -713,7 +713,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
             <Text role="header" class={`${head.name} text-foreground line-clamp-1${head.oneLine ? " shrink-0" : ""}`}>{title()}</Text>
             <If when={props.brain} else={<If when={worker()}><View testID="session-status" class={head.oneLine ? "min-w-0 shrink flex-row" : "min-w-0 flex-row"}>
                 <If when={projectWord()}><Text testID="session-project" class={`min-w-0 shrink ${head.sub} text-muted-foreground line-clamp-1`}>{projectWord()}</Text></If>
-                <Text testID="session-state" class={`shrink-0 ${head.sub} text-muted-foreground line-clamp-1`}>{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : workerStatusLabel(worker()!.status)}`}</Text>
+                <Text testID="session-state" class={`shrink-0 ${head.sub} text-muted-foreground line-clamp-1`}>{`${projectWord() ? " · " : ""}${connection() !== "connected" ? "Offline" : sessionStateWord(worker()!)}`}</Text>
               </View></If>}><Text testID="session-status" class={`${head.oneLine ? "min-w-0 shrink " : ""}${head.sub} text-muted-foreground line-clamp-1`}>{`${worker() ? presentWorker(worker()!).typeLabel : "Brain"} · workspace`}</Text></If>
           </View>
           {actions(true)}
