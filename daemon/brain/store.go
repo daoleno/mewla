@@ -78,6 +78,14 @@ type Store struct {
 	seedGates map[string]func() bool
 }
 
+// Close releases the Brain database. Call it after all Store users have stopped.
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
 func DefaultRoot() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

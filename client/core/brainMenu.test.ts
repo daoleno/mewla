@@ -63,6 +63,7 @@ describe("Switch executor", () => {
     expect(brainExecutorLabel({ id: "work", name: "Work Codex", provider: "codex" })).toBe("Work Codex");
     expect(brainExecutorMeta(claude, states, [claude, codex])).toBe("");
     expect(brainExecutorMeta(codex, states, [claude, codex])).toBe("Not signed in");
+    expect(brainExecutorMeta(codex, { ...states, codex: { installed: true, signed_in: false, auth_state: "unknown" } }, [claude, codex])).toBe("Sign-in not checked");
     const codex2 = { id: "codex2", name: "codex2", provider: "codex" };
     const both = { ...states, codex: { installed: true, signed_in: true, account: "me@x" }, codex2: { installed: true, signed_in: true, account: "you@y" } };
     expect(brainExecutorMeta(codex, both, [codex, codex2])).toBe("me@x");

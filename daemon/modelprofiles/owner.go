@@ -347,7 +347,6 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 			_ = o.modelsDev.refresh(o.backgroundCtx)
 		}()
 	}
-	o.refreshCodexModelsInBackground()
 	if o.discoveryPath != "" {
 		if err := o.discovery.load(o.discoveryPath); err != nil {
 			o.discoveryLoadWarning = fmt.Errorf("%w: %v", ErrDiscoveryCacheInvalid, err)
