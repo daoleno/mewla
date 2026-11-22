@@ -4,7 +4,7 @@ import { Button } from "nsh/base";
 import { BackHandler, isAvailable as mobile } from "nsh/mobile";
 import { forgetConnectionIssue } from "../more/settings/computers";
 import { current, currentTransport, resumeConnection, workersHydrated } from "../session";
-import { BusyLabel, delayed, Rows } from "../kit/wait";
+import { BusyLabel, delayed, Rows, Spinner } from "../kit/wait";
 import { haptic } from "../shell/haptics";
 import { decideApproval, answerPrompt } from "../../core/conversation/turn";
 import { isPromptGoneError, PROMPT_GONE_NOTICE } from "../../core/timeline/claudeChoiceModel";
@@ -112,8 +112,8 @@ function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: 
     <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end, row().mark ? progressMarkLabel(row().mark!) : ""].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`${mac ? MAC_ROW : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       <If when={props.selected}><SelectedWell /></If>
-      {/* Mewla for Mac's Today (w-home, mac.js `todayRow`): the time where the tile goes, then the title; no end. */}
-      <If when={mac && row().tile.kind === "calendar" && !row().live} else={<>
+      {/* Mewla for Mac's Today (w-home, mac.js `todayRow`): the time where the tile goes, then the title; a running one ends with the ring. */}
+      <If when={mac && row().tile.kind === "calendar"} else={<>
         <If when={row().tileTarget} else={<RowTile tile={() => row().tile} mark={() => row().mark} />}>
           {(target) => <Button testID="tray-row-session" accessibilityLabel="Open its Session" onPress={() => props.onTile(target())} class="-m-2 rounded-full p-2 active:opacity-60">
             <RowTile tile={() => row().tile} mark={() => row().mark} />
@@ -122,8 +122,9 @@ function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: 
         <RowText row={row} />
         <RowEnd row={row} />
       </>}>
-        <Text testID="tray-today-time" class="text-[11.5px] leading-[15px] text-muted-foreground line-clamp-1" style={{ width: /[AP]M/i.test(row().end) ? 58 : 40, fontVariant: ["tabular-nums"] }}>{row().end}</Text>
+        <Text testID="tray-today-time" class="text-[11.5px] leading-[15px] text-muted-foreground line-clamp-1" style={{ width: /[AP]M/i.test(row().time ?? row().end) ? 58 : 40, fontVariant: ["tabular-nums"] }}>{row().time ?? row().end}</Text>
         <Text class="min-w-0 flex-1 text-[13px] font-semibold leading-[17px] line-clamp-1">{row().title}</Text>
+        <If when={row().live}><Spinner size={14} label="Running" /></If>
       </If>
       <If when={!(mac || props.selected || props.last)}><RowHair /></If>
     </Button>
@@ -144,7 +145,7 @@ function RequestRow(props: { request: () => TrayRequest; busy: boolean; selected
   return (
     <Button testID="tray-request" accessibilityLabel={named() ? `${r().source}, ${r().ask}` : `${r().title}, ${r().source}`} selected={props.selected} onPress={props.onOpen} class={`${mac ? MAC_ROW : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
       <If when={props.selected}><SelectedWell /></If>
-      <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "alert" || r().kind === "trigger" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
+      <RowTile tile={(): TrayTile => (r().agent ? { kind: "agent", agent: r().agent!, flavor: r().flavor ?? "shell" } : r().kind === "trigger" ? { kind: "trigger" } : r().kind === "alert" ? { kind: "calendar" } : r().kind === "device" ? { kind: "device" } : { kind: "brain" })} />
       <View class="min-w-0 flex-1">
         <Text testID="tray-request-title" class={`${mac ? "text-[13px] leading-[17px]" : "text-body"} font-semibold line-clamp-1`}>{named() ? r().source : r().title}</Text>
         <Text testID="tray-request-line" class={`${mac ? "text-[11.5px] leading-[15px]" : "text-sub"} text-muted-foreground line-clamp-1`}>{named() ? r().ask : r().source}</Text>

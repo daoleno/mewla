@@ -244,7 +244,7 @@ export function TriggerPage(props: { id: string; nav: NavStackState<Route> }) {
             <If when={trigger()!.paused} else={<Row testID="trigger-pause" title="Pause" disabled={actions.busy()} onPress={actions.pause} />}>
               <Row testID="trigger-resume" title="Resume" disabled={actions.busy()} onPress={actions.resume} />
             </If>
-            <Row testID="trigger-delete" title="Delete" tone="destructive" disabled={actions.busy()} onPress={() => void actions.remove(trigger()!)} />
+            <Row testID="trigger-delete" title="Delete" tone="delete" disabled={actions.busy()} onPress={() => void actions.remove(trigger()!)} />
           </Section>
           <If when={actions.failure()}><View class="px-1 pt-3"><Text testID="trigger-failure" class="text-base text-destructive">{`That did not go through. ${actions.failure()}`}</Text></View></If>
         </If>
