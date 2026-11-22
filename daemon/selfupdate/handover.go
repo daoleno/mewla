@@ -220,7 +220,7 @@ func promote(installed, staged string) error {
 		return err
 	}
 	prev := target + PrevSuffix
-	if err := os.Remove(prev); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := platform.RetireExecutable(prev, target); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	if err := linkFile(target, prev); err != nil {

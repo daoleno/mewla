@@ -98,6 +98,11 @@ func TestWindowsUpdateConsole(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
+				// A retained Session host can still map the previous hard-linked
+				// executable. Start from a mapped image with that extra link.
+				if err := os.Link(installed, installed+selfupdate.PrevSuffix); err != nil {
+					t.Fatal(err)
+				}
 				listener, err := net.Listen("tcp4", "127.0.0.1:0")
 				if err != nil {
 					t.Fatal(err)
