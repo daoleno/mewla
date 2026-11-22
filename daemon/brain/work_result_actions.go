@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -107,7 +108,7 @@ func (p *resultGitProbes) probe(cwd string) resultGitProbe {
 func runResultGit(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), resultGitProbeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd := platform.WithoutConsoleWindow(exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...))
 	// A read must never take the index lock from the person's own git.
 	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0")
 	out, err := cmd.Output()

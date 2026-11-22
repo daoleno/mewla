@@ -33,6 +33,9 @@ func StartDetachedBare(path string, args []string, dir string) error {
 // StartBackground is StartDetached: only Windows tells the two apart.
 func StartBackground(cmd *exec.Cmd) error { return StartDetached(cmd) }
 
+// WithoutConsoleWindow is a no-op on Unix; console children inherit the terminal.
+func WithoutConsoleWindow(cmd *exec.Cmd) *exec.Cmd { return cmd }
+
 // ExecReplace replaces this process with path: the same PID runs the new
 // image.
 func ExecReplace(path string, argv, env []string) error {

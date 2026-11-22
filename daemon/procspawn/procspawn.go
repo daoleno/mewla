@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 var (
@@ -66,13 +68,13 @@ func site(label string) {
 // Command is exec.Command that counts one spawn under label.
 func Command(label, name string, args ...string) *exec.Cmd {
 	count(label)
-	return exec.Command(name, args...)
+	return platform.WithoutConsoleWindow(exec.Command(name, args...))
 }
 
 // CommandContext is exec.CommandContext that counts one spawn under label.
 func CommandContext(ctx context.Context, label, name string, args ...string) *exec.Cmd {
 	count(label)
-	return exec.CommandContext(ctx, name, args...)
+	return platform.WithoutConsoleWindow(exec.CommandContext(ctx, name, args...))
 }
 
 // Snapshot returns the spawn count of every label seen so far.
