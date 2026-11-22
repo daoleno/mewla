@@ -123,7 +123,12 @@ else
   cp "$src" "$dmg"
 fi
 check "the download is a disk image" test -s "$dmg"
-xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" "$dmg"
+if xattr -p com.apple.quarantine "$dmg" >/dev/null 2>&1; then
+  say "preserved the download's quarantine"
+else
+  xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");MewlaDownloadWalk;$(uuidgen)" "$dmg" || exit 1
+  say "runner applied quarantine before opening the download"
+fi
 xattr -w com.apple.metadata:kMDItemWhereFroms "$src" "$dmg" 2>/dev/null || true
 say "sha256: $(shasum -a 256 "$dmg" | cut -d' ' -f1)"
 check "Gatekeeper accepts the image (spctl)" spctl -a -t open --context context:primary-signature -vv "$dmg"
