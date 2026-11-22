@@ -41,6 +41,8 @@ type relaunchLedger struct {
 	pending  []InputAdmission
 	aborted  []string
 	resolved []string
+	// planFn, when set, is the plan (it must not take mu).
+	planFn func(AgentEnd) AgentRelaunchPlan
 }
 
 func (l *relaunchLedger) PrepareInputAdmission(submission InputAdmission) (InputAdmission, bool, error) {
@@ -120,6 +122,9 @@ func (l *relaunchLedger) PlanAgentRelaunch(end AgentEnd) (AgentRelaunchPlan, err
 	l.plans = append(l.plans, end)
 	if l.bound > 0 && len(l.records) >= l.bound {
 		return AgentRelaunchPlan{Action: AgentEndReport, WorkID: l.plan.WorkID, TurnID: l.plan.TurnID, Words: l.boundWords, Line: "Stopped: it could not start"}, nil
+	}
+	if l.planFn != nil {
+		return l.planFn(end), nil
 	}
 	return l.plan, nil
 }
@@ -712,7 +717,7 @@ func TestHostAgentEndWaitsOutAProviderOutage(t *testing.T) {
 	if len(plans) != 1 || len(records) != 0 || len(reported) != 0 || len(deadFacts(facts)) != 0 {
 		t.Fatalf("during the outage: plans %d records %+v reported %+v facts %+v", len(plans), records, reported, deadFacts(facts))
 	}
-	if _, relaunch, ok := supervisor.line(id, false, "", at); !ok || relaunch.State != "restarting" || relaunch.Line != "Waiting for sleep's provider" {
+	if state, relaunch, ok := supervisor.line(id, false, "", at); !ok || state != classifier.StateBlocked || relaunch.State != "waiting" || relaunch.Line != "Waiting for sleep's provider" {
 		t.Fatalf("line = %+v %v", relaunch, ok)
 	}
 	ledger.mu.Lock()
@@ -721,6 +726,132 @@ func TestHostAgentEndWaitsOutAProviderOutage(t *testing.T) {
 	at = at.Add(agentEndWaitEvery + time.Second)
 	h.w.poll()
 	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+}
+
+// outagePlans is Brain's outage rule over the watcher's own availability:
+// wait while Claude's provider refuses requests, unless the end is the test.
+func outagePlans(w *Watcher) func(AgentEnd) AgentRelaunchPlan {
+	return func(end AgentEnd) AgentRelaunchPlan {
+		if _, down := w.ProviderOutage("claude"); down && !end.ProviderTest {
+			return AgentRelaunchPlan{Action: AgentEndWait, WorkID: "work-1", Provider: "claude", Line: "Waiting for Claude Code's provider"}
+		}
+		return AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 307", Attempt: 1}
+	}
+}
+
+func startOutage(w *Watcher, at time.Time) {
+	w.noteProviderObservation("claude", refused(at.Add(-time.Minute)))
+	w.noteProviderObservation("claude", refused(at))
+}
+
+// The reviewer's sequence (delta of a8ba41b9b): the outage starts, a Worker
+// dies and is held, the outage ends, and a different Claude Worker finishes a
+// request after its own Turn settled. The held Worker is back on the next
+// recheck; while held it looks like waiting, never like work.
+func TestHostAgentHeldForAnOutageComesBackWhenAnotherWorkerIsAnswered(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{}
+	ledger.planFn = outagePlans(h.w)
+	h.w.SetTurnLedger(ledger)
+	at := time.Now().UTC()
+	startOutage(h.w, at)
+	supervisor := h.w.agentRelaunch()
+	supervisor.now = func() time.Time { return at }
+	killAgent(t, h.w, id, pid)
+	h.w.poll()
+	if state, relaunch, ok := supervisor.line(id, false, "", at); !ok || state != classifier.StateBlocked || relaunch.State != "waiting" {
+		t.Fatalf("held: state %q line %+v", state, relaunch)
+	}
+	// Another Claude Worker's Turn settled (done) before its request finished.
+	ledger.mu.Lock()
+	ledger.turn, ledger.hasTurn = TurnSnapshot{SessionID: "p5", TurnID: "turn:p5", Status: TurnDone, SignalProtocol: true}, true
+	ledger.mu.Unlock()
+	answer := at.Add(90 * time.Second)
+	h.w.collectPollEvidence([]preparedPollWorker{{id: "p5", workerSnap: classifier.Worker{ID: "p5", Command: "claude --session-id p5", Delegated: true}, alive: true, now: answer}},
+		nil, nil, byWorkerProbe{"p5": answered(answer)})
+	if _, down := h.w.ProviderOutage("claude"); down {
+		t.Fatal("the other Worker's answer did not end the outage")
+	}
+	at = answer.Add(agentEndWaitEvery)
+	h.w.poll()
+	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+	_, records, reported, plans := ledger.snapshot()
+	if len(records) != 1 || len(reported) != 0 || plans[len(plans)-1].ProviderTest {
+		t.Fatalf("after the outage: records %+v reported %+v last plan %+v", records, reported, plans[len(plans)-1])
+	}
+}
+
+// An outage that never ends: the held end asks for the family's probe on its
+// backoff and is started again at the latest at agentProviderWaitLimit; that
+// start is counted like any other, so the usual bound ends a lasting outage.
+func TestHostAgentHeldForAnOutageThatNeverEndsIsStartedAtTheBound(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{}
+	ledger.planFn = outagePlans(h.w)
+	h.w.SetTurnLedger(ledger)
+	at := time.Now().UTC()
+	startOutage(h.w, at)
+	// The family's probe was taken by another held Turn just now, so this
+	// end's asks are refused until its own bound.
+	if granted, _ := h.w.ProviderProbe("claude", at.Add(providerProbeIntervals[0])); !granted {
+		t.Fatal("setup: the first probe was not granted")
+	}
+	supervisor := h.w.agentRelaunch()
+	supervisor.now = func() time.Time { return at }
+	killAgent(t, h.w, id, pid)
+	h.w.poll()
+	for step := agentEndWaitEvery; step < agentProviderWaitLimit; step += agentEndWaitEvery {
+		at = at.Add(agentEndWaitEvery)
+		h.w.poll()
+		if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
+			t.Fatalf("started at %s, before the bound: %+v", step, records)
+		}
+	}
+	at = at.Add(agentEndWaitEvery)
+	h.w.poll()
+	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+	_, records, reported, plans := ledger.snapshot()
+	if len(records) != 1 || len(reported) != 0 || !plans[len(plans)-1].ProviderTest {
+		t.Fatalf("at the bound: records %+v reported %+v last plan %+v", records, reported, plans[len(plans)-1])
+	}
+	if _, down := h.w.ProviderOutage("claude"); !down {
+		t.Fatal("setup: the outage ended")
+	}
+}
+
+// Holding the family's probe starts the held end before the bound.
+func TestHostAgentHeldForAnOutageIsStartedWithTheFamilysProbe(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{}
+	ledger.planFn = outagePlans(h.w)
+	h.w.SetTurnLedger(ledger)
+	at := time.Now().UTC()
+	startOutage(h.w, at)
+	supervisor := h.w.agentRelaunch()
+	supervisor.now = func() time.Time { return at }
+	killAgent(t, h.w, id, pid)
+	h.w.poll()
+	// The family's first probe is due five minutes into the outage; the
+	// end's asks at 1, 3 and 7 minutes find it at 7.
+	started := time.Duration(0)
+	for step := agentEndWaitEvery; step <= agentProviderWaitLimit; step += agentEndWaitEvery {
+		at = at.Add(agentEndWaitEvery)
+		h.w.poll()
+		if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
+			started = step
+			break
+		}
+	}
+	if started == 0 || started >= agentProviderWaitLimit || started < providerProbeIntervals[0] {
+		t.Fatalf("started with the probe at %s", started)
+	}
+	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+	if _, _, _, plans := ledger.snapshot(); !plans[len(plans)-1].ProviderTest {
+		t.Fatalf("last plan %+v", plans[len(plans)-1])
+	}
 }
 
 // A relaunch stops nothing it did not start: a server the dead agent left

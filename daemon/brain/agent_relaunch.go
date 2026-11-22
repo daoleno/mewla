@@ -247,16 +247,6 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	if authID := firstNonEmpty(record.ExecutorID, provider); authID != "" && ExecutorAuth(authID) == HostAuthUnauthenticated {
 		return reportAgentEnd(plan, name, cause, name+" is not signed in on this computer", "Not restarted: signed out"), nil
 	}
-	if availability := s.availability(); availability != nil {
-		if outage, down := availability.ProviderOutage(watcher.ProviderFamily(firstNonEmpty(launch, end.Command))); down {
-			// Every agent of the family fails now: a restart would fail too and
-			// use up a try. The end waits, held back, until the provider answers.
-			plan.Action = watcher.AgentEndWait
-			plan.Words = name + " " + cause + "; it is started again once its provider answers (" + firstNonEmpty(outage.Kind, "unavailable") + ")."
-			plan.Line = "Waiting for " + name + "'s provider"
-			return plan, nil
-		}
-	}
 	link, _ := s.store.workConversation(item.ID, sessionID)
 	token, known, resumable := s.hostProviderResumeToken(HostSession{
 		ProviderSessionID: link.ProviderSessionID, TranscriptPath: link.TranscriptPath, ProviderDataRoot: link.ProviderDataRoot,
@@ -317,6 +307,21 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		return reportAgentEnd(plan, name, cause, fmt.Sprintf("it was started again %d times in the last %d minutes and ended each time", recent, minutes),
 			fmt.Sprintf("Stopped after %d restarts", recent)), nil
 	}
+	family := watcher.ProviderFamily(firstNonEmpty(launch, end.Command))
+	outage, down := watcher.ProviderOutage{}, false
+	if availability := s.availability(); availability != nil {
+		outage, down = availability.ProviderOutage(family)
+	}
+	if down && !end.ProviderTest {
+		// Every agent of the family fails now: a restart would fail too. The
+		// end waits, held back and with no try used, until the provider
+		// answers, the family's probe is this end's, or the wait's bound
+		// (watcher agentProviderWaitLimit) makes the restart the test.
+		plan.Action, plan.Provider = watcher.AgentEndWait, family
+		plan.Words = name + " " + cause + "; it is started again once its provider answers (" + firstNonEmpty(outage.Kind, "unavailable") + ")."
+		plan.Line = "Waiting for " + name + "'s provider"
+		return plan, nil
+	}
 	plan.Action = watcher.AgentEndRelaunch
 	plan.Command, plan.Env, plan.PrepareWorkspace = command, env, work.PrepareDelegatedWorkspace
 	plan.Conversation, plan.Attempt = token, recent+1
@@ -333,6 +338,9 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		plan.Words += ". Whether its task (" + pending + ") had reached the conversation before it ended is unknown, so it was not sent again and nothing is running for it: decide whether to send it again."
 	default:
 		plan.Words += "."
+	}
+	if down {
+		plan.Words += " Its provider was still refusing requests (" + firstNonEmpty(outage.Kind, "unavailable") + "); this start is the test of it."
 	}
 	plan.Line = "Restarted after " + short
 	return plan, nil

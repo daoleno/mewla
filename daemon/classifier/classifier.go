@@ -21,7 +21,8 @@ const (
 
 // Worker holds the current state and metadata for a single execution session.
 // Relaunch is a Session's agent ended while its Work was open: State is
-// "restarting", "restarted" or "stopped", and Line says it in a person's
+// "restarting", "waiting" (held for its provider; nothing runs), "restarted"
+// or "stopped", and Line says it in a person's
 // words ("Restarted after a crash", "Stopped after 3 restarts"): never a
 // signal name or exit code, which stay in Brain's event and the log.
 type Relaunch struct {
