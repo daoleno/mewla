@@ -3,7 +3,7 @@ import { computed, signal, Storage, untracked } from "nsh";
 import { answeredKeys, parseAnsweredRequest, sealedOfAnswered, type AnsweredRequest } from "../../core/timeline/answered";
 import { brainAgentInstalls, brainSurface } from "../../core/brain";
 import { openAlerts } from "../../core/calendar/alerts";
-import { itemInstant, itemsOnDay, rowTime } from "../../core/calendar/model";
+import { dayKey, dayRows } from "../../core/calendar/agenda";
 import { isMacApp } from "../mac/local";
 import { getRecentWorkerOpens } from "../../core/sessions/deviceState";
 import { normalizePrompt } from "../../core/sessions/workers";
@@ -105,11 +105,21 @@ export const brainTurn = computed(() => brainThread().conversation?.activity?.st
 function today(): TrayTodayInput[] {
   const now = clock();
   const listed = new Set(workers().map((worker) => worker.id));
-  const key = now.zones.dateKey(now.now, now.zones.device);
-  return itemsOnDay(calendarItems(), key, now).map((item) => {
-    const run = item.runs?.at(-1);
+  // The same rows as Calendar's Today (core/calendar/agenda.ts): repeats at their time today, with the run they made.
+  // One entry per item (a repeat run by hand earlier still has its time later): the running one, else the next to come,
+  // else its last.
+  const rows = dayRows(calendarItems(), dayKey(now), now);
+  const pick = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const held = pick.get(row.item.id);
+    const rank = (r: typeof row) => (r.state === "running" ? 0 : r.at > now.now ? 1 : 2);
+    if (!held || rank(row) < rank(held) || (rank(row) === rank(held) && rank(row) === 2)) pick.set(row.item.id, row);
+    else if (rank(row) === rank(held) && rank(row) === 1 && row.at < held.at) pick.set(row.item.id, row);
+  }
+  return rows.filter((row) => pick.get(row.item.id) === row).map((row) => {
+    const run = row.run;
     const sessionId = run?.status === "running" && run.worker_session && listed.has(run.worker_session) ? run.worker_session : undefined;
-    return { id: item.id, title: item.title, time: rowTime(item, now), at: itemInstant(item), running: item.status === "running", sessionId };
+    return { id: row.item.id, title: row.item.title, time: now.format.time(row.at, now.zones.device), at: row.at, running: row.state === "running", sessionId };
   });
 }
 

@@ -300,7 +300,7 @@ describe("Mewla for Mac", () => {
     expect(app.count("id:page-back")).toBe(0);
   }, 30_000);
 
-  test("Calendar is w-cal: \"N today\" and the date, one card per day, the now line, one quiet line a row, local times", async () => {
+  test("Calendar is w-cal, the same as every client's: \"N today\" and the date, the day's card with the now line, one quiet line a row, local times", async () => {
     const done = item("Crawler check", -0.01, { kind: "scheduled_action", status: "completed", runs: [{ id: "r1", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), status: "completed", result_preview: "2 stale feeds" }] });
     const later = item("Write the digest", 48, { kind: "scheduled_action", recurrence: "daily" });
     // Overdue from an earlier day: in Today's card with its date, not counted as today's.
@@ -311,18 +311,20 @@ describe("Mewla for Mac", () => {
     const texts = app.texts();
     expect(texts).toContain("1 today");
     expect(texts).toContain("Done · 2 stale feeds");
-    expect(texts).toContain("Every day · Brain");
+    // A repeat whose next time is after tomorrow is under Later, with its date.
+    expect(app.shows("id:calendar-day-later >> id:calendar-item-Write the digest")).toBe(true);
+    expect(texts.some((text) => /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+ · Every day · Brain$/.test(text))).toBe(true);
     expect(app.shows("id:calendar-day-today >> id:calendar-now")).toBe(true);
     expect(app.shows("id:calendar-day-today >> id:calendar-item-Crawler check")).toBe(true);
     // The phone's lines are gone: no zone names, no status words, no kind tiles.
     expect(texts.some((text) => text.includes("GMT") || text.includes("UTC") || text.startsWith("Scheduled"))).toBe(false);
     expect(app.count("id:calendar-item-lead")).toBe(0);
     expect(app.shows("id:calendar-day-today >> id:calendar-item-Renew the domain")).toBe(true);
-    expect(texts.some((text) => /^[A-Z][a-z]{2} \d+ · Reminder$/.test(text))).toBe(true);
-    // Month keeps the Mac's cards under the month.
+    expect(texts.some((text) => /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+ · Reminder$/.test(text))).toBe(true);
+    // Month: today's card under the month.
     await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month", { timeout: 10_000 });
-    await app.waitFor("id:agenda-month >> id:calendar-item-Write the digest", { timeout: 10_000 });
+    await app.waitFor("id:agenda-month >> id:calendar-item-Crawler check", { timeout: 10_000 });
     expect(app.count("id:calendar-item-lead")).toBe(0);
   }, 30_000);
 

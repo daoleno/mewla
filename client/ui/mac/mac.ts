@@ -6,6 +6,9 @@ import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready } from "../session";
 import { nav, openBrainTerminal, openPage, openSession } from "../shell/nav";
+import { dayKey } from "../../core/calendar/agenda";
+import { showCalendarDay } from "../calendar/CalendarPage";
+import { clock } from "../calendar/clock";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
 import { catUpdateHint } from "../update/hint";
@@ -30,7 +33,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "screen" | "computer"; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -217,7 +220,12 @@ export function startMac(): void {
           if (script.shortcutOffer) openShortcutOffer();
           if (script.perch && !script.quickSend) togglePerch();
           // A page and the window's size for the captures beside w-cal, w-screen, w-mac, w-small and w-full.
-          if (script.open) openPage(({ calendar: { name: "calendar" }, screen: { name: "screen" }, computer: { name: "computer" } } as const)[script.open]);
+          if (script.open) openPage(({ calendar: { name: "calendar" }, triggers: { name: "calendar" }, screen: { name: "screen" }, computer: { name: "computer" } } as const)[script.open]);
+          // Calendar's own pages for the captures beside its mocks: the Triggers page (over Calendar, as its row opens
+          // it), one Trigger, Month on a day `calendarDay` days from today.
+          if (script.open === "triggers") nav.push({ name: "triggers" });
+          if (script.trigger) nav.push({ name: "trigger", id: script.trigger });
+          if (typeof script.calendarDay === "number") showCalendarDay(dayKey(untracked(clock), script.calendarDay));
           // A Session's page (the fidelity captures' busy desk, macos-fidelity.yml).
           if (script.session) openSession(script.session);
           if (script.size) Window.get("main")?.setBounds({ size: { width: script.size[0], height: script.size[1] } });

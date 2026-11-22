@@ -244,11 +244,12 @@ export function RankedRow(props: { title: string; subtitle?: string; share: numb
  * A section label (caption, soft), one surface group of rows with inset hair dividers, an optional footnote.
  * `label` puts a SectionLabel (icon, name, count) in place of the plain one; `sheet` draws the group on a sheet's surface.
  */
-export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; label?: JSX.Element; sheet?: boolean; children?: JSX.Element }) {
+export function Section(props: { title?: string; detail?: JSX.Element; footer?: string; testID?: string; label?: JSX.Element; sheet?: boolean; flush?: boolean; children?: JSX.Element }) {
   // Mewla for Mac: groups 12 apart, radius 14 (RESULT-DESIGN-PAIRS #8).
   const size = dense({ phone: { gap: "mt-6", radius: "rounded-(--radius-group)" }, window: { gap: "mt-3", radius: "rounded-[14px]" } });
   return (
-    <View class={props.label ? "" : size.gap} testID={props.testID}>
+    // Flush: right under what is above it, with no gap of its own (Calendar's Today card under its headline).
+    <View class={props.label || props.flush ? "" : size.gap} testID={props.testID}>
       {props.label ?? null}
       <If when={!props.label && (props.title || props.detail)}><View class="mb-2 min-h-[18px] flex-row items-center justify-between px-4">
           <Caption role="header" inRow text={props.title ?? ""} />

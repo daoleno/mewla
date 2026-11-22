@@ -55,9 +55,9 @@ export function openCalendarItem(id: string, runId?: string): void {
   nav.setRoutes([...untracked(nav.routes), { name: "calendar" }, { name: "item", id }, ...(runId ? [{ name: "run" as const, itemId: id, runId }] : [])]);
 }
 
-/** A Trigger's page, over the Calendar it lives in. */
+/** A Trigger's page, over the Triggers page of the Calendar it lives in. */
 export function openTrigger(id: string): void {
-  nav.setRoutes([...untracked(nav.routes), { name: "calendar" }, { name: "trigger", id }]);
+  nav.setRoutes([...untracked(nav.routes), { name: "calendar" }, { name: "triggers" }, { name: "trigger", id }]);
 }
 
 /** How the computer page's children push their next page and leave. */

@@ -1019,3 +1019,46 @@ func newLinkedScheduledRunFixture(t *testing.T, body string, mutate func(*work.F
 func scheduledDeliverableBody(deliverable string) string {
 	return "# Scheduled result\n\n" + scheduledDeliverableStart + "\n" + deliverable + "\n" + scheduledDeliverableEnd + "\n"
 }
+
+// A run's agent states how it went in its Work's front matter (`run_outcome:`):
+// the completed run keeps it, so a check that could not run reads Failed
+// without reading its result. The Work's digest `outcome` never stands in.
+func TestSchedulerKeepsTheOutcomeItsAgentStated(t *testing.T) {
+	cases := []struct {
+		name  string
+		extra map[string]interface{}
+		want  string
+	}{
+		{"failed", map[string]interface{}{"run_outcome": "failed"}, RunOutcomeFailed},
+		{"needs you", map[string]interface{}{"run_outcome": " Needs_You "}, RunOutcomeNeedsYou},
+		{"succeeded", map[string]interface{}{"run_outcome": "succeeded"}, RunOutcomeSucceeded},
+		{"unknown word", map[string]interface{}{"run_outcome": "mostly fine"}, ""},
+		{"none, a digest outcome only", map[string]interface{}{"outcome": "failed"}, ""},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			done := time.Now().UTC()
+			calendarStore, scheduler, item, _ := newLinkedScheduledRunFixture(t, scheduledDeliverableBody("The script exited 1: sign-in expired."), func(frontmatter *work.Frontmatter) {
+				frontmatter.Done = &done
+				for key, value := range test.extra {
+					frontmatter.Extra[key] = value
+				}
+			}, scheduledActionWatcher{worker: &classifier.Worker{State: classifier.StateDone}})
+			scheduler.Tick(context.Background())
+			finished, err := calendarStore.Get(item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(finished.Runs) != 1 || finished.Runs[0].Status != StatusCompleted || finished.Runs[0].Outcome != test.want {
+				t.Fatalf("run = %#v, want completed with outcome %q", finished.Runs, test.want)
+			}
+		})
+	}
+}
+
+func TestScheduledWorkAsksItsAgentForTheOutcome(t *testing.T) {
+	body := scheduledWorkBody(Item{ID: "i", Timezone: "UTC", ActionInstruction: "Check"}, Run{Title: "Check", ScheduledFor: time.Now()})
+	if !strings.Contains(body, "`run_outcome:`") || !strings.Contains(body, "`needs_you`") {
+		t.Fatalf("the Work does not ask for the run's outcome:\n%s", body)
+	}
+}

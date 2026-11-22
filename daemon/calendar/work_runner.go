@@ -142,6 +142,20 @@ func (r *WorkRunner) InspectScheduledAction(_ context.Context, item Item, run Ru
 	}
 }
 
+// ScheduledActionOutcome is the outcome the run's agent wrote in its Work's
+// front matter (`run_outcome:`), or "" when it wrote none.
+func (r *WorkRunner) ScheduledActionOutcome(item Item, run Run) string {
+	if r == nil || r.Store == nil {
+		return ""
+	}
+	linked, err := r.readCurrentScheduledWork(item, run)
+	if err != nil {
+		return ""
+	}
+	value, _ := linked.Frontmatter.Extra["run_outcome"].(string)
+	return NormalizeRunOutcome(value)
+}
+
 func (r *WorkRunner) readCurrentScheduledWork(item Item, run Run) (*work.Item, error) {
 	itemID := strings.TrimSpace(item.ID)
 	runID := strings.TrimSpace(run.ID)
@@ -277,6 +291,11 @@ Write the complete result for the user between the markers below. Replace the
 placeholder entirely. Preserve useful paragraphs, lists, links, and citations;
 do not put execution notes or Calendar metadata in this section. Keep the
 deliverable at or below 256 KiB.
+
+When you write the result, also set `+"`run_outcome:`"+` in this file's front matter to
+how the task went: `+"`succeeded`"+`; `+"`failed`"+` (it did not do what it is for, such
+as a check that could not run); or `+"`needs_you`"+` (the user has to act before it
+can). The Calendar shows the run that way.
 
 %s
 %s

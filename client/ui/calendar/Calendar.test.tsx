@@ -2,14 +2,31 @@ import { describe, expect, open, test } from "nsh/test";
 import { answering, expoTokenService, framesOf, item, paired, pairedTwo, phoneHost, zoneTable } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
+
+/** The phone's date (Shanghai) `days` from today: a day key of the month. */
+function dayIn(days: number): string {
+  return new Date(Date.now() + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
+}
 const SLOW = { timeout: 10_000 };
 
-/** The Calendar tab once the phone's zone is in (a slow runner gets it late, and the agenda redraws then). */
+/** "6:20 PM": an instant on the test phone's clock (Shanghai, GMT+8 all year). */
+function shanghaiTime(ms: number): string {
+  const at = new Date(ms + 8 * 3_600_000);
+  const hour = at.getUTCHours();
+  return `${hour % 12 || 12}:${String(at.getUTCMinutes()).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+/** Today's now line is on the phone's clock: its zone is in (a slow runner gets it late, and the agenda redraws then). */
+async function onPhoneClock(app: Awaited<ReturnType<typeof open>>) {
+  await app.waitUntil(() => [Date.now(), Date.now() - 60_000].some((at) => app.shows(`id:calendar-now >> text:${shanghaiTime(at)}`)), SLOW);
+}
+
+/** The Calendar tab once the phone's zone is in. */
 async function calendarApp(daemon: Record<string, unknown>, extra: Record<string, (data: any) => unknown> = {}) {
   const app = await open(APP, { host: phoneHost(daemon, extra), storage: paired, platform: "android", network: expoTokenService });
   await app.host.send("links.open", { url: "mewla://calendar" });
   await app.waitFor("id:calendar-page");
-  await app.waitUntil(() => app.texts().some((text) => text.includes("GMT+8")), SLOW);
+  await onPhoneClock(app);
   return app;
 }
 
@@ -19,9 +36,11 @@ describe("the Calendar tab", () => {
     await app.waitFor("id:calendar-item-Call the bank", SLOW);
     await app.waitFor("text:Dentist", SLOW);
     expect(app.texts()).not.toContain("Old plan");
-    expect(app.texts().join(" ")).toMatch(/Scheduled · Reminder/);
-    // Each row leads with who acts (SPEC §10.4).
-    expect(app.count("id:calendar-item-lead")).toBe(2);
+    // Time first on the phone's clock, then one quiet line: who acts, no status word, no zone, no tile (w-cal).
+    expect(app.shows(`id:calendar-item-Call the bank >> text:${shanghaiTime(Date.now() + 3_600_000)}`) || app.shows(`id:calendar-item-Call the bank >> text:${shanghaiTime(Date.now() + 3_540_000)}`)).toBe(true);
+    expect(app.shows("id:calendar-item-Call the bank >> text:Reminder")).toBe(true);
+    expect(app.texts().join(" ")).not.toMatch(/Scheduled|GMT/);
+    expect(app.count("id:calendar-item-lead")).toBe(0);
     await app.press("id:calendar-item-Call the bank");
     await app.waitFor("id:calendar-item-page", SLOW);
     expect(app.shows("id:item-lead")).toBe(true);
@@ -75,13 +94,13 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("None");
   }, 20_000);
 
-  test("the heading says Today, Month picks a day and Today goes back to the whole agenda", async () => {
+  test("the headline counts today, Month shows today's card under the month, and Today goes back to the whole agenda", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Pay rent", 50)] });
     await app.waitFor("text:Call the bank");
-    expect(app.texts()).toContain("Today");
+    await app.waitFor("id:calendar-headline");
     await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month");
-    await app.press("id:back-to-today").catch(() => undefined);
+    await app.waitFor("id:agenda-month >> id:calendar-now");
     await app.press("id:calendar-view-today");
     await app.waitUntil(() => !app.shows("id:calendar-month"));
     expect(app.texts()).toContain("Pay rent");
@@ -93,10 +112,16 @@ describe("the Calendar tab", () => {
     await app.press("id:calendar-view-month");
     await app.waitFor("id:calendar-month");
     // Two days on: in this month's six weeks whatever the date and the zone.
-    await app.press(`id:day-${new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)}`);
-    await app.waitFor("id:back-to-today");
+    const picked = dayIn(2);
+    await app.press(`id:day-${picked}`);
+    await app.waitFor(`id:calendar-day-${picked}`);
     await app.press("id:calendar-view-today");
-    await app.waitUntil(() => !app.shows("id:calendar-month") && !app.shows("id:back-to-today"));
+    await app.waitUntil(() => !app.shows("id:calendar-month"));
+    await app.press("id:calendar-view-month");
+    await app.waitFor("id:calendar-month");
+    await app.waitUntil(() => !app.shows(`id:calendar-day-${picked}`));
+    await app.press("id:calendar-view-today");
+    await app.waitUntil(() => !app.shows("id:calendar-month"));
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
@@ -106,10 +131,10 @@ describe("the Calendar tab", () => {
     await app.drag("id:calendar-pages-today", { x: -260 });
     await app.waitFor("id:calendar-month");
     // Two days on: in this month's six weeks whatever the date and the zone.
-    await app.press(`id:day-${new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)}`);
-    await app.waitFor("id:back-to-today");
+    await app.press(`id:day-${dayIn(2)}`);
+    await app.waitFor(`id:calendar-day-${dayIn(2)}`);
     await app.drag("id:calendar-pages-month", { x: 260 });
-    await app.waitUntil(() => !app.shows("id:calendar-month") && !app.shows("id:back-to-today"));
+    await app.waitUntil(() => !app.shows("id:calendar-month"));
     expect(app.texts()).toContain("Pay rent");
   }, 20_000);
 
@@ -146,12 +171,12 @@ describe("the Calendar tab", () => {
     await answering(app, () => app.press("id:cancel-item"));
     await app.waitUntil(() => framesOf(app.host.posts(), "cancel_calendar_item").length === 1);
     expect(framesOf(app.host.posts(), "cancel_calendar_item")[0]).toMatchObject({ id: "Call the bank", revision: 1 });
-    await app.waitFor("id:calendar-empty");
+    await app.waitFor("text:Nothing today");
   }, 20_000);
 
   test("a chosen chip keeps its label's weight, so choosing Weekly never widens it into two lines", async () => {
     const app = await calendarApp({ calendar_items: [] });
-    await app.waitFor("id:calendar-empty");
+    await app.waitFor("text:Nothing today");
     await app.press("id:add-item");
     await app.waitFor("id:editor-repeat-weekly");
     await app.press("id:editor-repeat-weekly");
@@ -167,7 +192,7 @@ describe("the Calendar tab", () => {
       "calendar.pickDate": () => ({ year: 2031, month: 7, day: 14 }),
       "calendar.pickTime": () => ({ hour: 18, minute: 20 }),
     });
-    await app.waitFor("id:calendar-empty");
+    await app.waitFor("text:Nothing today");
     await app.press("id:add-item");
     await app.waitFor("id:calendar-editor");
     await app.type("id:editor-title", "Pick up the parcel");
@@ -207,7 +232,7 @@ describe("the Calendar tab", () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1), item("Dentist", 26)] }, slowZones), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("links.open", { url: "mewla://calendar" });
     await app.waitFor("text:Dentist", SLOW);
-    await app.waitUntil(() => app.texts().some((text) => text.includes("GMT+8")), SLOW);
+    await onPhoneClock(app);
     await app.wait(300);
     await app.press("id:calendar-item-Dentist");
     await app.waitFor("id:item-title", SLOW);
@@ -253,6 +278,26 @@ describe("the Calendar tab", () => {
     expect(saved).toEqual([{ source: daemon.replies.codex_asset.data_url, name: "chart.png", mimeType: "image/png" }]);
     // The viewer read the original (no max_edge), in Brain's host folder.
     expect(framesOf(app.host.posts(), "codex_asset").some((frame) => frame.path === "out/chart.png" && frame.max_edge === undefined && frame.cwd === "/home/me/brain")).toBe(true);
+  }, 20_000);
+
+  test("a run whose agent said it failed reads Failed on its row, on its item's page and on its own page, though its status is completed (Brain 2026-11-22)", async () => {
+    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const check = item("Credits check", -1, {
+      kind: "scheduled_action", due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
+      runs: [{ id: "r-out", scheduled_for: at, started_at: at, finished_at: at, status: "completed", outcome: "failed", result_preview: "Exit code 1: the sign-in expired" }],
+    });
+    const app = await calendarApp({ calendar_items: [check] });
+    await app.waitFor("id:calendar-item-Credits check", SLOW);
+    expect(app.shows("id:calendar-item-Credits check >> text:Failed · Exit code 1: the sign-in expired")).toBe(true);
+    await app.press("id:calendar-item-Credits check");
+    await app.waitFor("id:calendar-run-page", SLOW);
+    expect(app.texts().some((text) => / · Failed$/.test(text))).toBe(true);
+    expect(app.texts().some((text) => / · Done$/.test(text))).toBe(false);
+    await app.host.send("links.open", { url: "mewla://calendar?id=Credits check" });
+    await app.waitFor("id:calendar-item-page", SLOW);
+    await app.waitFor("id:run-r-out", SLOW);
+    expect(app.texts().some((text) => / · Failed$/.test(text))).toBe(true);
+    expect(app.texts().some((text) => / · Done$/.test(text))).toBe(false);
   }, 20_000);
 
   test("a running item opens its Session while the computer lists it, and its page once the Session has gone (parity #45)", async () => {
