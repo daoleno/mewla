@@ -150,6 +150,6 @@ func (m *jobDelegatedResourceManager) Reuse(unit string) (*delegatedResourceSpec
 	return &delegatedResourceSpec{Owner: m.owner, Unit: unit, TempDir: dir}, nil
 }
 
-// StopLeftovers has nothing to do on Windows: removing the old Session ends
-// its Job Object, and every process in it, before the new one starts.
-func (m *jobDelegatedResourceManager) StopLeftovers(string) error { return nil }
+// Survivors lists nothing on Windows: a Session's processes live in its Job
+// Object, which ends with the old Session when the new one takes its place.
+func (m *jobDelegatedResourceManager) Survivors(string) ([]agentSurvivor, error) { return nil, nil }

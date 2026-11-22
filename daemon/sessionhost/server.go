@@ -57,6 +57,7 @@ type Server struct {
 	conns       map[*net.UnixConn]struct{}
 	stop        context.CancelFunc
 	closing     bool // set once Run ends the Sessions; no new ones start
+	respawning  map[string]bool
 }
 
 // NewServer makes a host; Run serves it.
@@ -385,6 +386,12 @@ func (s *Server) dispatch(req request) (any, error) {
 			return nil, err
 		}
 		return s.create(p)
+	case MethodRespawn:
+		var p CreateParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.respawn(p)
 	case MethodList:
 		return s.list(), nil
 	case MethodInfo:
@@ -498,6 +505,66 @@ func (s *Server) create(p CreateParams) (Info, error) {
 	}
 	s.sessions[p.ID] = sess
 	s.mu.Unlock()
+	info := sess.info()
+	s.publish(Event{Type: EventCreated, Session: p.ID, At: info.CreatedAt})
+	return info, nil
+}
+
+// respawn starts p's program in place of the ended Session p.ID. The old
+// Session stays until the new program runs; then the new one takes its id and
+// its data (the input receipts, what Mewla decided about the end), with the
+// labels p gives. A Session that is gone, whose program still runs, or that is
+// being respawned already is left as it is.
+func (s *Server) respawn(p CreateParams) (Info, error) {
+	if !s.engine {
+		return Info{}, errorf(ErrCodeUnavailable, "%v", ghosttyvt.ErrUnavailable)
+	}
+	old, err := s.session(p.ID)
+	if err != nil {
+		return Info{}, err
+	}
+	if old.isAlive() {
+		return Info{}, errorf(ErrCodeBusy, "session %q: its program still runs", p.ID)
+	}
+	s.mu.Lock()
+	if s.closing {
+		s.mu.Unlock()
+		return Info{}, errorf(ErrCodeUnavailable, "the session host is stopping")
+	}
+	if s.respawning == nil {
+		s.respawning = map[string]bool{}
+	}
+	if s.respawning[p.ID] {
+		s.mu.Unlock()
+		return Info{}, errorf(ErrCodeBusy, "session %q is being respawned", p.ID)
+	}
+	s.respawning[p.ID] = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		delete(s.respawning, p.ID)
+		s.mu.Unlock()
+	}()
+	sess, err := startSession(s, p)
+	if err != nil {
+		return Info{}, err
+	}
+	old.mu.Lock()
+	for key, value := range old.data {
+		sess.data[key] = value
+	}
+	old.mu.Unlock()
+	s.mu.Lock()
+	if s.closing || s.sessions[p.ID] != old {
+		// Removed (or the host stopping) while the new program started: the
+		// removal wins.
+		s.mu.Unlock()
+		sess.close()
+		return Info{}, errorf(ErrCodeNotFound, "session %q was removed while it was respawned", p.ID)
+	}
+	s.sessions[p.ID] = sess
+	s.mu.Unlock()
+	old.close()
 	info := sess.info()
 	s.publish(Event{Type: EventCreated, Session: p.ID, At: info.CreatedAt})
 	return info, nil

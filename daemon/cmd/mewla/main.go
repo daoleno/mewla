@@ -704,6 +704,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	w.SetExecutorResolver(execs.IDForCommand)
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
+	w.SetRelaunchAdapter(relaunchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	srv.SetAgentActivity(hubActivity(eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})

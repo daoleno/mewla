@@ -205,18 +205,18 @@ func (b *fakeSessionBackend) replace(id string, spec backendCreateSpec) error {
 	return nil
 }
 
-func (b *fakeSessionBackend) agentEndData(id string) (string, error) {
+func (b *fakeSessionBackend) relaunchData(id, key string) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.agentEnd[id], nil
+	return b.agentEnd[id+"\x00"+key], nil
 }
 
-func (b *fakeSessionBackend) setAgentEndData(id, value string) error {
+func (b *fakeSessionBackend) setRelaunchData(id, key, value string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.agentEnd == nil {
 		b.agentEnd = map[string]string{}
 	}
-	b.agentEnd[id] = value
+	b.agentEnd[id+"\x00"+key] = value
 	return nil
 }
