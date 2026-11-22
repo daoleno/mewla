@@ -100,3 +100,20 @@ func TestPortableSurvivorsListsAndLeavesTheUnitsProcesses(t *testing.T) {
 		t.Fatalf("listing stopped the process: %v", err)
 	}
 }
+
+// The agent's control server and what runs under it are the agent's own, not
+// something it left running; the rest is listed.
+func TestSurvivorsLeaveOutTheControlServerAndItsChildren(t *testing.T) {
+	socket := "/state/codex-ctl/codex-ctl-1.sock"
+	survivors := []agentSurvivor{
+		{PID: 10, ppid: 1, args: []string{"codex", "app-server", "--listen", "unix://" + socket}},
+		{PID: 11, ppid: 10, args: []string{"python", "mcp-server"}},
+		{PID: 12, ppid: 11, args: []string{"node", "tool"}},
+		{PID: 20, ppid: 1, args: []string{"python3", "-m", "http.server"}},
+		{PID: 21, ppid: 99, args: []string{"sleep", "60"}},
+	}
+	got := withoutControlServer(survivors, socket)
+	if len(got) != 2 || got[0].PID != 20 || got[1].PID != 21 {
+		t.Fatalf("survivors = %+v", got)
+	}
+}

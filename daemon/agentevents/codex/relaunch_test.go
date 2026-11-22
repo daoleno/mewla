@@ -1,11 +1,14 @@
 package codex
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/agentevents"
 )
 
 const relaunchThread = "01a20138-c75d-7d82-8c87-1217573b1588"
@@ -20,7 +23,7 @@ func TestPrepareRelaunchStartsANewAppServerForTheSameThread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if launch.Reattached || launch.Control == "" || launch.Control == old || !strings.HasSuffix(launch.Control, ".sock") {
+	if launch.Control == "" || launch.Control == old || !strings.HasSuffix(launch.Control, ".sock") {
 		t.Fatalf("launch = %+v", launch)
 	}
 	server, tui, ok := strings.Cut(launch.Command, "; exec ")
@@ -44,8 +47,9 @@ func TestPrepareRelaunchStartsANewAppServerForTheSameThread(t *testing.T) {
 	}
 }
 
-// The app-server outlived the TUI: only the TUI comes back, attached to it.
-func TestPrepareRelaunchReattachesToTheAppServerStillRunning(t *testing.T) {
+// The app-server outlived the TUI: it is draining its turn and holds the
+// thread, so nothing is started until it is gone.
+func TestPrepareRelaunchWaitsWhileTheAppServerStillRuns(t *testing.T) {
 	dir, err := os.MkdirTemp(os.TempDir(), "cx-")
 	if err != nil {
 		t.Fatal(err)
@@ -56,15 +60,15 @@ func TestPrepareRelaunchReattachesToTheAppServerStillRunning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
 	a := Adapter{ControlDir: t.TempDir(), Mewla: "/bin/mewla"}
-	launch, err := a.PrepareRelaunch("codex resume "+relaunchThread+" -a never -s danger-full-access --add-dir /data -m gpt-6", socket)
-	if err != nil {
-		t.Fatal(err)
+	command := "codex resume " + relaunchThread + " -a never -m gpt-6"
+	if _, err := a.PrepareRelaunch(command, socket); !errors.Is(err, agentevents.ErrControlBusy) {
+		t.Fatalf("while the app-server runs: %v", err)
 	}
-	if !launch.Reattached || launch.Control != socket ||
-		launch.Command != "exec codex resume "+relaunchThread+" --remote unix://"+socket+" -m gpt-6" {
-		t.Fatalf("launch = %+v", launch)
+	_ = ln.Close()
+	launch, err := a.PrepareRelaunch(command, socket)
+	if err != nil || launch.Control == socket || !strings.Contains(launch.Command, "app-server --listen") {
+		t.Fatalf("once it is gone: %+v, %v", launch, err)
 	}
 }
 

@@ -4367,9 +4367,6 @@ type preparedSessionCreate struct {
 	cwd     string
 	opts    CreateSessionOptions
 	release func()
-	// reattached: a relaunch attaches to the agent's control server that
-	// still runs.
-	reattached bool
 }
 
 // prepareSessionCreate does everything a create does before the backend
@@ -4471,7 +4468,6 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 			opts.Command = tools(opts.Command, opts.ProgressEnv)
 		}
 	}
-	reattached := false
 	if !opts.Hidden {
 		w.mu.RLock()
 		adapt, relaunch := w.launchAdapter, w.relaunchAdapter
@@ -4489,7 +4485,7 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 		if err != nil {
 			return none, err
 		}
-		opts.Command, opts.AgentControl, reattached = launch.Command, launch.Control, launch.Reattached
+		opts.Command, opts.AgentControl = launch.Command, launch.Control
 	}
 	shellCommand, err := buildWindowCommand(opts)
 	if err != nil {
@@ -4505,7 +4501,7 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 			labels:  createdSessionLabels(opts),
 			agent:   agent,
 		},
-		cwd: cwd, opts: opts, release: release, reattached: reattached,
+		cwd: cwd, opts: opts, release: release,
 	}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 )
 
@@ -828,5 +829,52 @@ func TestHostAgentRelaunchesAfterAMassDeathAreStaggered(t *testing.T) {
 	}
 	if staggered != 1 {
 		t.Fatalf("waits = %v, want one of about %v", waits, agentRelaunchStagger)
+	}
+}
+
+// A Codex whose app-server outlived its TUI is draining that turn and holds
+// the thread: the relaunch waits for it, uses no try, says so on the line,
+// and starts once it is gone.
+func TestHostAgentRelaunchWaitsForItsControlServer(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 310", Attempt: 1}}
+	h.w.SetTurnLedger(ledger)
+	var mu sync.Mutex
+	busy, asked := true, 0
+	h.w.SetRelaunchAdapter(func(executorID, command, control string) (agentevents.Launch, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked++
+		if busy {
+			return agentevents.Launch{}, agentevents.ErrControlBusy
+		}
+		return agentevents.Launch{Command: command}, nil
+	})
+	supervisor := h.w.agentRelaunch()
+	at := time.Now()
+	supervisor.now = func() time.Time { return at }
+	killAgent(t, h.w, id, pid)
+	h.w.poll()
+	waitUntil(t, 10*time.Second, "the wait", func() bool { return !supervisor.busy(id) })
+	h.w.poll()
+	if _, records, reported, _ := ledger.snapshot(); len(records) != 0 || len(reported) != 0 {
+		t.Fatalf("while it drains: records %+v reported %+v", records, reported)
+	}
+	if _, relaunch, ok := supervisor.line(id, false, "", at); !ok || relaunch.State != "restarting" || relaunch.Line != "Restarting after its turn ends" {
+		t.Fatalf("line = %+v %v", relaunch, ok)
+	}
+	mu.Lock()
+	busy = false
+	mu.Unlock()
+	at = at.Add(agentEndWaitEvery + time.Second)
+	h.w.poll()
+	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+	waitUntil(t, 10*time.Second, "relaunch record", func() bool {
+		_, records, _, _ := ledger.snapshot()
+		return len(records) == 1
+	})
+	if _, records, _, _ := ledger.snapshot(); records[0].Outcome != "idle" {
+		t.Fatalf("record = %+v", records[0])
 	}
 }
