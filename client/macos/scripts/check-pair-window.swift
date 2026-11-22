@@ -37,6 +37,9 @@ case "click":
     let screen = CGDisplayBounds(CGMainDisplayID())
     let box = found.boundingBox
     let point = CGPoint(x: screen.minX + screen.width * box.midX, y: screen.minY + screen.height * (1 - box.midY))
+    if target == "turn off lan" {
+        print("off click: original OCR point=\(point), exact match=\(found.topCandidates(1).first?.string.lowercased() == target)")
+    }
     for type: CGEventType in [.leftMouseDown, .leftMouseUp] {
         CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     }

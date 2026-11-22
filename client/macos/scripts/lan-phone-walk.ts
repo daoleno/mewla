@@ -34,6 +34,10 @@ function inspect(mode: string, arg?: string) {
 function osa(script: string) {
   execFileSync("osascript", ["-e", script], { timeout: 20_000, stdio: "ignore" });
 }
+function button(window: string, id: string, operation = "press") {
+  return execFileSync("osascript", [join(import.meta.dir, "lan-button.applescript"), window, id, operation],
+    { timeout: 20_000, encoding: "utf8" }).trim();
+}
 const esc = () => osa('tell application "System Events" to key code 53');
 const fromFile = () => osa('tell application "System Events" to tell process "Mewla" to click menu item "Pair a Phone…" of menu "File" of menu bar item "File" of menu bar 1');
 async function httpLAN() {
@@ -105,12 +109,12 @@ try {
   await observeOff("fresh install");
   await until("no trusted LAN consent from cat menu", () => inspect("consent").status === 0);
   copyFileSync(screen, join(out, "06-pair-consent.png"));
-  await until("Cancel unavailable", () => inspect("click", "Cancel").status === 0);
+  console.log(button("Mewla", "pair-lan-cancel"));
   await until("Cancel left the sheet open", () => inspect("closed").status === 0);
   await proveOff("Cancel kept LAN off.");
   fromFile();
   await until("File did not open trusted LAN consent", () => inspect("consent").status === 0);
-  await until("Allow trusted LAN unavailable", () => inspect("click", "Allow trusted LAN").status === 0);
+  console.log(button("Mewla", "pair-lan-allow"));
   await until("LAN listener did not open", httpLAN, 120);
   const decodedFile = join(privateDir, "decoded");
   await until("no short-lived scannable code after consent", () => {
@@ -164,8 +168,14 @@ try {
     captureSettings("before");
     await observeOff("before click");
     if (startupChoice() !== "lan") throw new Error("expected saved LAN consent before opt-out");
-    const pressed = execFileSync("osascript", [join(import.meta.dir, "press-lan-off.applescript")], { timeout: 20_000, encoding: "utf8" });
-    console.log(pressed.trim());
+    console.log("Off button frame: " + button("Settings", "mac-lan-off", "frame"));
+    const oldClick = inspect("click", "Turn off LAN");
+    if (oldClick.status !== 0) throw new Error("old OCR driver did not find the off button");
+    console.log(oldClick.stdout.trim());
+    await wait(3000);
+    captureSettings("after-original-click");
+    await observeOff("after original click");
+    if (startupChoice() === "lan") console.log(button("Settings", "mac-lan-off"));
     const start = performance.now();
     await until("off action did not persist and recover both listeners", async () => {
       const ok = await observeOff(`${Math.round(performance.now() - start)}ms`);
