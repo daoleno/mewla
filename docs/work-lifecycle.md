@@ -129,7 +129,11 @@ not start one. While the outage lasts:
   handled, and the same review is delivered again (lifecycle
   `ReplayInterruptedReview`). This is the one case where delivered input is
   delivered again. The person's own messages are never held.
-- `brain_snapshot.provider_outages` lists it, and Brain's Chat shows one line:
+- `brain_snapshot.provider_outages` lists every affected family for diagnostics.
+  On a Mewla app connection it contains only the observed Brain Host's outage.
+  Switching to a healthy Host clears the Chat footer as soon as the new Host
+  is observed, even while Workers on the previous family are still waiting.
+  When the Host's own family is down, Brain's Chat shows one line:
   "Claude hasn't answered since 07:03 (rate limit). Work is held, not lost." The
   log names the provider's own error. The provider's refusal text that ends a
   Host turn handed a Work event ("API Error: Request rejected (429) …") stays

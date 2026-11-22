@@ -228,7 +228,7 @@ func TestBrainSnapshotHostWorkerCapabilitiesSharedWirePath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := hostCapabilitiesFromWire(t, wire.(map[string]any))
+	caps := hostCapabilitiesFromWire(t, wire)
 	if !caps.ModelProfileManaged || !caps.ModelProfileActiveSwitch {
 		t.Fatalf("shared brainSnapshotWire path capabilities = %#v", caps)
 	}
@@ -267,7 +267,7 @@ func TestHiddenHostDiscoveryRefreshesBrainSnapshotCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	initialCaps := hostCapabilitiesFromWire(t, initial.(map[string]any))
+	initialCaps := hostCapabilitiesFromWire(t, initial)
 	if initialCaps.ModelProfileManaged || initialCaps.ModelProfileActiveSwitch || initialCaps.StructuredEvents {
 		t.Fatalf("missing watcher agent must stay false: %#v", initialCaps)
 	}
@@ -441,11 +441,7 @@ func mustBrainSnapshotHostWire(t *testing.T, srv *Server, hostID, command string
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, ok := wire.(map[string]any)
-	if !ok {
-		t.Fatalf("wire type %T", wire)
-	}
-	return payload
+	return wire
 }
 
 func hostCapabilitiesFromWire(t *testing.T, payload map[string]any) workerSessionWireCapabilities {
