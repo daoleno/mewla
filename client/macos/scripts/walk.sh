@@ -187,20 +187,21 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then
   bounded 90 swift "$here/fidelity/click.swift" right $((x + w / 2)) $((y + h / 2)) || true
   sleep 2
   shot 05-cat-menu
-  # The row, clicked where it is (an Accessibility press on a status item's row reports success and does nothing).
-  row=$(osa -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to get {position, size} of menu item \"Pair a phone…\" of menu 1 of menu bar item 1 of menu bar 2" 2>&1 || true)
-  say "Pair a phone… row: $row"
-  read -r rx ry rw rh < <(tr -d ',' <<<"$row")
-  if [[ "$rx" =~ ^[0-9]+$ && "$ry" =~ ^[0-9]+$ ]]; then
-    bounded 90 swift "$here/fidelity/click.swift" left $((rx + rw / 3)) $((ry + rh / 2)) || true
-    paired_by="a click on the cat's menu row"
-  else
-    key() { osa -e "tell application \"System Events\" to key code $1" >/dev/null 2>&1 || true; }
-    # The menu is open: its fourth row (Open Mewla, Quick chat, a separator, Pair a phone…) by the keyboard.
-    key 125; key 125; key 125; key 36
-    paired_by="the cat's menu, by the keyboard"
-  fi
+  # The open menu by the keyboard, as a person can: Open Mewla, Quick chat, (a separator), Pair a phone…, Return.
+  # (An Accessibility press on a status item's row, or a synthetic click on it, reports success and does nothing.)
+  key() { osa -e "tell application \"System Events\" to key code $1" >/dev/null 2>&1 || true; sleep 0.3; }
+  key 125; key 125; key 125
+  shot 05-cat-menu-row
+  key 36
+  paired_by="the cat's menu"
 fi
+sleep 4
+shot 06-pair-from-cat
+osa -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
+sleep 1
+# The same from the app's own menu bar: File › Pair a Phone…
+osa -e 'tell application "System Events" to tell process "Mewla" to click menu item "Pair a Phone…" of menu "File" of menu bar item "File" of menu bar 1' >> "$log" 2>&1 \
+  && say "File › Pair a Phone… chosen" || say "File › Pair a Phone… could not be chosen"
 sleep 4
 pairing=$(bounded 60 swift -e 'import CoreGraphics
 let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]
