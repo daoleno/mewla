@@ -120,8 +120,18 @@ try {
   await roundTrip(resumed, "after-restart");
   console.log("Restart retained LAN and the original paired phone authenticated again.");
   osa('tell application "System Events" to keystroke "," using command down');
-  await until("Connections settings missing", () => inspect("click", "Connections").status === 0);
-  await until("LAN off control missing", () => inspect("click", "Turn off LAN").status === 0);
+  try {
+    await until("Connections settings did not open", () => {
+      if (inspect("connections").status === 0) return true;
+      inspect("click", "Connections");
+      return false;
+    });
+    console.log("Settings showed the phone routes on its Connections page.");
+    await until("Turn off LAN missing on the Connections page", () => inspect("click", "Turn off LAN").status === 0);
+  } catch (error) {
+    if (inspect("no-code").status === 0) copyFileSync(screen, join(out, "settings-at-failure.png"));
+    throw error;
+  }
   await until("LAN stayed open", async () => !await httpLAN() && (await fetch("http://127.0.0.1:9876/health").catch(() => null))?.ok === true, 90);
   await proveOff("Turn off LAN closed the plain HTTP route.");
   execFileSync("launchctl", ["kickstart", "-k", daemonJob], { timeout: 60_000 });
