@@ -173,6 +173,8 @@ func run(args []string, stderr io.Writer) error {
 			return runDaemonUpdating(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
+		case "mac-lan":
+			return runMacLAN(args[1:])
 		case "web":
 			return runWebCommand(args[1:], stderr)
 		case "doctor":
@@ -568,6 +570,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		brainService:    brainService,
 		calendarStore:   calendarStore,
 		stateDir:        authManager.StorageDir(),
+	}
+	if runtime.GOOS == "darwin" && len(args) == 0 && os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel && inMacApp() {
+		controlHandler.macLAN = &macLANControl{stateDir: authManager.StorageDir(), enabled: cfg.lan, restart: func() { restartDaemon(errDaemonRestart) }}
 	}
 	triggerEngine, triggerErr := openTriggers(authManager.StorageDir(), brainStore, brainService)
 	if triggerErr != nil {
@@ -1395,7 +1400,7 @@ const devWebUIDirEnv = "MEWLA_DEV_WEB_UI_DIR"
 
 // errDaemonRestart ends the daemon with a failure so its service manager
 // starts it again.
-var errDaemonRestart = errors.New("restarting Mewla to apply Screen permissions")
+var errDaemonRestart = errors.New("restarting Mewla to apply settings")
 
 // daemonSupervised reports whether launchd (mewla boot) or a systemd unit
 // restarts this daemon after it exits with an error.

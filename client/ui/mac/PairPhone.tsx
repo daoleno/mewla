@@ -3,7 +3,7 @@ import { Button, Dialog } from "nsh/base";
 import { Icon } from "../kit/Icon";
 import { Segmented } from "../kit/Segmented";
 import mark from "./assets/mark.png";
-import { daemonPairing, showMainWindow, type DaemonPairing } from "./local";
+import { daemonPairing, setMacLAN, showMainWindow, type DaemonPairing } from "./local";
 
 /** Pair a phone (DESIGN-MAC.md §2.4, `w-pair`): a 440 dialog over the window, radius 22, padding 20. */
 export const pairPhoneOpen = signal(false);
@@ -45,6 +45,21 @@ function PairPhone() {
   const way = signal<Way>("anywhere");
   const now = signal(Date.now());
   const copied = signal(false);
+  const changing = signal(false);
+  const consent = () => pairing()?.mac_lan === false && !pairing()?.phone_link && !pairing()?.wifi_link;
+  const allowLAN = async () => {
+    if (changing()) return;
+    changing.set(true);
+    problem.set("");
+    try {
+      await setMacLAN(true);
+      pairing.set(await daemonPairing());
+    } catch (error) {
+      problem.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      changing.set(false);
+    }
+  };
   const load = () => {
     problem.set("");
     void daemonPairing()
@@ -90,12 +105,13 @@ function PairPhone() {
           <Icon name="close" size={16} tone="soft" />
         </Button>
       </View>
+      <If when={consent()} else={<>
       <View class="items-center gap-3">
         {/* Made again for each code and way (a component runs once). */}
         <If when={code()} else={<View class="items-center justify-center" style={{ height: CARD }}><Text class="text-sub text-muted-foreground">{problem() || (pairing() ? "Phones can't reach this Mac yet." : "…")}</Text></View>}>
           <Each of={code() ? [`${pairing()!.expires_at}:${way()}`] : []} key={(key) => key}>{() => <QrCode qr={untracked(code)!} />}</Each>
         </If>
-        <Text testID="pair-phone-left" class="text-[13px] text-muted-foreground">{pairing() ? `Scan with the Mewla app · ${left(pairing()!.expires_at, now())}` : " "}</Text>
+        <Text testID="pair-phone-left" class="text-[13px] text-muted-foreground">{code() ? `Scan with the Mewla app · ${left(pairing()!.expires_at, now())}` : " "}</Text>
       </View>
       <If when={ways().length > 1}>
         <Segmented testID="pair-phone-way" options={ways()} value={way()} onChange={(next) => way.set(next)} accessibilityLabel="How the phone reaches this Mac" />
@@ -110,6 +126,14 @@ function PairPhone() {
           <Text class="text-[13px] font-semibold text-foreground">Send to phone</Text>
         </Button>
       </View>
+      </>}>
+        <Text class="text-sub">Allow phones on the same trusted Wi-Fi to reach this Mac? LAN access stays on after you close this window or restart. Turn it off in Settings › Connections.</Text>
+        <If when={problem()}>{(message) => <Text class="text-sub">{message()}</Text>}</If>
+        <View class="flex-row justify-end gap-2">
+          <Button testID="pair-lan-cancel" onPress={() => pairPhoneOpen.set(false)} class="rounded-md bg-accent px-3 py-2"><Text>Cancel</Text></Button>
+          <Button testID="pair-lan-allow" disabled={changing()} onPress={() => void allowLAN()} class="rounded-md bg-foreground px-3 py-2"><Text class="text-background">{changing() ? "Turning on…" : "Allow trusted LAN"}</Text></Button>
+        </View>
+      </If>
     </View>
   );
 }

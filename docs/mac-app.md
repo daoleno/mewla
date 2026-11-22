@@ -21,7 +21,12 @@ you log in, and shows Brain. You need one agent CLI; if the Mac has none, Brain 
 offers to install Claude Code or Codex.
 
 To use Mewla from your phone, choose **Pair a phone…** from the cat in the menu
-bar and scan the code ([Connect and pair](connect-and-pair.md)).
+bar and scan the code. On a fresh installation, choose **Allow trusted LAN** if
+both devices are on a network you trust. Cancel keeps Mewla local. This allows
+plain HTTP on the Mac's network interfaces until you choose **Settings →
+Connections → Turn off LAN**, including after you close the dialog or restart.
+The QR expires after 15 minutes. Devices that have paired keep their keys.
+An existing phone route works without changing LAN access. See [Connect and pair](connect-and-pair.md).
 
 ## What runs
 

@@ -68,6 +68,7 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
+	macLAN            *macLANControl
 	agentEvents       *agentEventService
 	browsers          *browser.Manager
 	connections       *connections.Manager
@@ -103,6 +104,8 @@ const delegatedInitialReadinessBudget = 45 * time.Second
 
 func (a *controlApp) HandleControlRequest(req control.Request) control.Response {
 	switch strings.TrimSpace(req.Type) {
+	case "mac_lan":
+		return a.macLAN.set(req.Operation)
 	case "browser":
 		return a.handleBrowserControl(req)
 	case "connections":
@@ -471,7 +474,11 @@ func (a *controlApp) handlePair() control.Response {
 	if a == nil || a.auth == nil {
 		return control.ErrorResponse("auth_unavailable", "Device authentication is not configured.")
 	}
-	return issuePairingControlResponse(a.auth)
+	response := issuePairingControlResponse(a.auth)
+	if response.Pairing != nil && a.macLAN != nil {
+		response.Pairing.MacLAN = &a.macLAN.enabled
+	}
+	return response
 }
 
 func issuePairingControlResponse(manager *auth.Manager) control.Response {
