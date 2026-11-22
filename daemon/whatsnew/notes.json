@@ -1,10 +1,20 @@
 {
   "releases": [
     {
-      "version": "0.4.22",
+      "version": "0.4.23",
       "date": "2026-11-22",
       "highlights": [],
       "fixes": []
+    },
+    {
+      "version": "0.4.22",
+      "date": "2026-11-22",
+      "highlights": [],
+      "fixes": [
+        "Brain chat only shows an outage for the agent serving that chat.",
+        "When a Worker's agent stops unexpectedly, Mewla tries to resume its task.",
+        "New chat can start with another installed agent when Brain's agent is unavailable."
+      ]
     },
     {
       "version": "0.4.21",

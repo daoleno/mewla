@@ -10,7 +10,7 @@ mount(() => (
     {NAMES.map((name) => (
       <View class="gap-1.5">
         <Text class="text-caption font-semibold text-muted-foreground">{name}</Text>
-        <Scene name={name} version="0.4.22" />
+        <Scene name={name} version="0.4.23" />
       </View>
     ))}
   </Scroll>
