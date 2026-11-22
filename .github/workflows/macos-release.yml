@@ -634,22 +634,29 @@ jobs:
     if: ${{ inputs.walk != '' }}
     runs-on: macos-26
     timeout-minutes: 45
-    permissions:
-      contents: read
-      actions: read
     steps:
       - uses: actions/checkout@v4
-      - name: The .dmg a proof run built (run:<id>)
-        if: ${{ startsWith(inputs.walk, 'run:') }}
+      - name: Where the .dmg comes from
+        id: source
         env:
-          GH_TOKEN: ${{ github.token }}
           WALK: ${{ inputs.walk }}
         run: |
           set -euo pipefail
-          id="${WALK#run:}"
-          [[ "$id" =~ ^[0-9]+$ ]] || { echo "::error::walk must be a URL or run:<id>"; exit 1; }
-          gh run download "$id" --repo "$GITHUB_REPOSITORY" -n "mewla-macos-proof-a-$id" -D "$RUNNER_TEMP/proof"
-          ls -la "$RUNNER_TEMP/proof"
+          if [[ "$WALK" == run:* ]]; then
+            id="${WALK#run:}"
+            [[ "$id" =~ ^[0-9]+$ ]] || { echo "::error::walk is a URL or run:<id>; got '$WALK'"; exit 1; }
+            echo "run=$id" >> "$GITHUB_OUTPUT"
+          else
+            [[ "$WALK" =~ ^https://[A-Za-z0-9./_-]+\.dmg$ ]] || { echo "::error::walk is an https URL of a .dmg or run:<id>; got '$WALK'"; exit 1; }
+          fi
+      - name: The .dmg a proof run built (run:<id>)
+        if: ${{ steps.source.outputs.run != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-proof-a-${{ steps.source.outputs.run }}
+          path: ${{ runner.temp }}/proof
+          run-id: ${{ steps.source.outputs.run }}
+          github-token: ${{ github.token }}
       - name: A stand-in agent CLI (a runner has none), a HiDPI display, a neutral desktop
         run: |
           set -x
