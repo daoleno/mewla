@@ -41,7 +41,7 @@ version without one, so a manual tag cannot ship one either.
   or asked for can be a highlight ("Fixed: …").
 - **media.scene**: the loop drawn in `client/ui/whatsnew/scenes.tsx` (`chat-card`, `update-restart`,
   `agent-windows`, `browser-survives`, `network-hop`, `update-line`, `chat-diagram`, `screen-reflow`, `screen-pointer`, `picture-save`,
-  `work-menu`, `trigger-watch`, `share-in`, `git-button`, `work-closes`). A new feature usually gets a new scene there;
+  `work-menu`, `trigger-watch`, `share-in`, `git-button`, `work-closes`, `mac-app`). A new feature usually gets a new scene there;
   `WhatsNew.test.tsx` fails on a name the app does not draw. To look at them: `client/scripts/shots.sh --entry
   ui/whatsnew/testing/ScenesShots.tsx scripts/shots/whatsnew-scenes.js` (frames of each loop), and
   `--entry ui/whatsnew/testing/WhatsNewShots.tsx` with `scripts/shots/whatsnew.js` (the sheet) or

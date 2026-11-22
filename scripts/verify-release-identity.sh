@@ -286,7 +286,7 @@ for required in (
     # One publication of the complete signed set, only after every check of the run
     # (builds, platform runs, the Android launch, signing) passed.
     'needs: [validate, daemon-build]',
-    'needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, stage]',
+    'needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin, android, android-launch, mac-app, stage]',
     'needs: [validate, release-ready]',
     'RELEASE_IS_PRERELEASE=true',
     'RELEASE_IS_PRERELEASE=false',

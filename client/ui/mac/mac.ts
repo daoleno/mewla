@@ -148,39 +148,56 @@ export function startMac(): void {
   }
 
   // The menu bar cat: a click opens the perch under it; a right-click (or ⌃-click) opens the menu.
-  effect(() => {
+  const traySpec = () => {
     const now = cat();
     const play = playing();
     // The seal's red is drawn in the image, one per appearance: the app's own, as the stock host gives no menu bar
     // appearance (the face is ink on a light bar, white on a dark one).
     const dark = colorScheme() === "dark";
-    const clip = play && MENU_BAR_CLIPS[play.clip === "arrive" ? (dark ? "arrive-dark" : "arrive-light") : play.clip];
+    const clipName = play && (play.clip === "arrive" ? (dark ? "arrive-dark" : "arrive-light") : play.clip);
+    const clip = clipName ? MENU_BAR_CLIPS[clipName] : null;
     // Still images; under reduced motion the arc rests on its frame 03 (DESIGN-MAC.md §2.1).
     const still = { quiet: MENU_BAR_IMAGES.quiet, offline: MENU_BAR_IMAGES.offline, update: MENU_BAR_IMAGES.update, arc: MENU_BAR_CLIPS.arc.frames[3], needs: dark ? MENU_BAR_IMAGES["needs-dark"] : MENU_BAR_IMAGES["needs-light"] };
     const counting = now.needs > 0 && (play?.clip !== "arrive" || play.ms >= ARRIVE_COUNT_MS);
-    Tray.set({
-      icon: clip ? clip.frames[Math.min(play!.frame, clip.frames.length - 1)] : still[now.image],
+    const frame = clip ? Math.min(play!.frame, clip.frames.length - 1) : 0;
+    return {
+      iconName: clip ? `${clipName}:${frame}` : `${now.image}:${dark ? "dark" : "light"}`,
+      icon: clip ? clip.frames[frame] : still[now.image],
       tooltip: connection() === "connected" ? "Mewla" : "Mewla: connecting",
       title: peek() ? [{ text: peek()! }] : counting ? [{ text: String(now.needs) }] : undefined,
-      onClick: ({ bounds }) => togglePerch(bounds),
       // The cat's menu as the design draws it (DESIGN-MAC.md §2.1, `m-menu`).
       menu: [
         { label: "Open Mewla", shortcut: "mod+0", onSelect: showMainWindow },
         { label: "Quick chat", shortcut: perchShortcut() ?? undefined, onSelect: () => openPerch() },
-        { type: "separator" },
+        { type: "separator" as const },
         { label: "Pair a phone…", onSelect: () => void openPairPhone() },
         { label: "Settings…", shortcut: "mod+,", onSelect: openMacSettings },
-        { type: "separator" },
+        { type: "separator" as const },
         {
           label: "Start at login",
           checked: atLogin(),
           onSelect: toggleStartAtLogin,
         },
         ...appUpdateMenuItem(appUpdateOwner().state(), () => appUpdateOwner().press()),
-        { type: "separator" },
+        { type: "separator" as const },
         { label: "Stop Mewla on this Mac…", onSelect: () => void stopMewla() },
         { label: "Quit Mewla", shortcut: "mod+q", onSelect: () => Application.quit() },
       ],
+    };
+  };
+  // Set again only when what it shows changes. Each Tray.set gives the menu's rows new ids and drops the old ones'
+  // handlers, so a row chosen in a menu opened before it did nothing (the walk of 11-22: Pair a phone… from the cat,
+  // while each daemon snapshot set the same tray again). The key names the icon (its clip and frame, or the still);
+  // JSON leaves the handlers out.
+  const trayKey = computed(() => {
+    const { icon: _icon, ...shown } = traySpec();
+    return JSON.stringify(shown);
+  });
+  effect(() => {
+    trayKey();
+    untracked(() => {
+      const { iconName: _name, ...spec } = traySpec();
+      Tray.set({ ...spec, onClick: ({ bounds }) => togglePerch(bounds) });
     });
   });
 
@@ -309,6 +326,8 @@ async function updateProof(hold = 12): Promise<void> {
   const state = owner.state();
   if (state.kind !== "available") return void console.log(`dev script: update none (${state.kind})`);
   console.log(`dev script: update found ${state.update.version}`);
+  // The cat's menu row for this state, from the function the menu's items come from (a run cannot open a menu bar item's menu).
+  console.log(`dev script: menu row ${JSON.stringify(appUpdateMenuItem(state, () => {}).flatMap((item) => ("label" in item ? [item.label] : [])))}`);
   await new Promise((resolve) => setTimeout(resolve, hold * 1000));
   owner.press();
 }

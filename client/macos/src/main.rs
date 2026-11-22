@@ -156,6 +156,19 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     });
 
     let config = std::sync::Arc::new(config);
+    if release {
+        let config = config.clone();
+        host.handle("app.setLAN", move |call| {
+            let enabled = call.data().get("enabled").and_then(Value::as_bool);
+            let Some(reply) = call.into_reply() else { return };
+            let config = config.clone();
+            std::thread::spawn(move || {
+                let result = enabled.ok_or("expected a LAN setting".to_string())
+                    .and_then(|on| config.set_lan(on)).map(|()| Value::Null);
+                reply.reply(result);
+            });
+        });
+    }
     host.handle("app.pairing", move |call| {
         let Some(reply) = call.into_reply() else { return };
         let config = config.clone();
