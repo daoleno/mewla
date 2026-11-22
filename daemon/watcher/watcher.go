@@ -399,6 +399,8 @@ type Watcher struct {
 	approvalHolds         func(sessionID string) bool // whether a permission hook holds the Session's dialog
 	recovery              *turnRecoverySupervisor
 	recoveryOnce          sync.Once
+	relaunch              *agentRelaunchSupervisor
+	relaunchOnce          sync.Once
 	// providerAvailability is each agent family's provider outage state
 	// (provider_availability.go), fed by every provider observation.
 	providerAvailability *providerAvailability
@@ -1644,6 +1646,8 @@ type SessionExit struct {
 	Signal string
 	Ran    time.Duration
 	Tail   string
+	// EndedAt is when the program ended; it names this one end.
+	EndedAt time.Time
 }
 
 // Describe says, for a person, how program ended: how soon, its exit code
@@ -1718,7 +1722,7 @@ func (w *Watcher) SessionExitReport(id string) (SessionExit, bool) {
 	if err != nil || !present || info.Alive {
 		return SessionExit{}, false
 	}
-	exit := SessionExit{Code: info.ExitCode, Signal: info.ExitSignal}
+	exit := SessionExit{Code: info.ExitCode, Signal: info.ExitSignal, EndedAt: info.ExitedAt}
 	if !info.CreatedAt.IsZero() && !info.ExitedAt.IsZero() {
 		exit.Ran = info.ExitedAt.Sub(info.CreatedAt)
 	}
@@ -1740,6 +1744,10 @@ func (w *Watcher) ResolveDelegatedAbsence(target string) (bool, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return false, fmt.Errorf("missing session id")
+	}
+	if w.agentRelaunch().swapping(target) {
+		// Its ended program is being replaced in place this moment.
+		return false, nil
 	}
 	return w.sessions().resolveAbsence(target)
 }
@@ -1846,6 +1854,7 @@ func (w *Watcher) poll() {
 	w.inventoryMu.Unlock()
 	processes := snapshotProcesses()
 	processSnapshotAt := time.Now()
+	w.agentRelaunch().oom.sample(processSnapshotAt)
 
 	observations := observePanes(windows, capturePane)
 	prepared, missing, probe, providerProbe := w.preparePollObservations(observations, processes, processSnapshotAt, inventoryEpoch)
@@ -2043,6 +2052,13 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 			w.ledgerTurns[r.id] = r.turn
 			clearStaleAttemptMetadata(worker)
 			newState, summary = projectDelegatedActivity(worker, r.turn, activity)
+		}
+		// An agent Mewla is starting again, started again, or would not start
+		// again says so on its Session's line (agent_relaunch.go).
+		worker.Relaunch = nil
+		if state, relaunch, ok := w.agentRelaunch().line(r.id, r.alive, newState, r.now); ok {
+			newState, summary = state, relaunch.Line
+			worker.Relaunch = &relaunch
 		}
 		wasBlocked := worker.State == classifier.StateBlocked
 		worker.State = newState
@@ -2264,8 +2280,11 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 				}
 			}
 		}
-		if hasTurn && turnErr == nil && !TurnImmutable(turn.Status) {
-			turn = w.applyPollFacts(item.id, item.alive, item.deadStatus, item.now, turn, provider)
+		// An ended agent Mewla relaunches is not a lost Turn; one it does not
+		// relaunch is, with words of how it ended (agent_relaunch.go).
+		held, ended := w.observeAgentEnd(item, turn, hasTurn && turnErr == nil)
+		if !held && hasTurn && turnErr == nil && !TurnImmutable(turn.Status) {
+			turn = w.applyPollFacts(item.id, item.alive, item.deadStatus, item.now, turn, provider, ended)
 		}
 		if providerProbe != nil && !item.workerSnap.Hidden && !hasPending && (!hasTurn || turnErr != nil || TurnImmutable(turn.Status)) {
 			providerProbe.ForgetProviderActivity(item.id)
@@ -2573,6 +2592,7 @@ func (w *Watcher) applyPollFacts(
 	now time.Time,
 	turn TurnSnapshot,
 	provider ProviderActivityObservation,
+	ended string,
 ) TurnSnapshot {
 	ledger := w.turnLedger
 	if ledger == nil || TurnImmutable(turn.Status) {
@@ -2636,6 +2656,7 @@ func (w *Watcher) applyPollFacts(
 				SourceID:    "liveness\x00" + turn.ProcessIdentity + "\x00process-dead",
 				At:          now,
 				Summary:     "Delegated provider process exited; outcome is unknown",
+				Ended:       ended,
 			})
 		}
 		// PaneAbsent (no dead status readable): transient absence never
@@ -3001,6 +3022,10 @@ func cloneWorker(worker *classifier.Worker) *classifier.Worker {
 	if worker.ProgressRefusedAt != nil {
 		at := *worker.ProgressRefusedAt
 		cp.ProgressRefusedAt = &at
+	}
+	if worker.Relaunch != nil {
+		relaunch := *worker.Relaunch
+		cp.Relaunch = &relaunch
 	}
 	return &cp
 }
@@ -4296,6 +4321,35 @@ type CreateSessionOptions struct {
 // starts in its working directory unless opts names one.
 func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOptions) (string, error) {
 	createdAt := time.Now().UTC()
+	prepared, err := w.prepareSessionCreate(preferredTarget, opts)
+	if err != nil {
+		return "", err
+	}
+	target, err := w.creator().create(prepared.spec)
+	if err != nil {
+		prepared.release()
+		return "", err
+	}
+	w.registerCreatedSession(target, prepared.cwd, prepared.opts, createdAt)
+	return target, nil
+}
+
+// preparedSessionCreate is a Session ready to start: the backend's spec, the
+// working directory and the options as the adapters left them. release frees
+// a resource unit prepared for it when the Session is not started.
+type preparedSessionCreate struct {
+	spec    backendCreateSpec
+	cwd     string
+	opts    CreateSessionOptions
+	release func()
+}
+
+// prepareSessionCreate does everything a create does before the backend
+// starts the Session: the working directory, the delegated resource unit (a
+// new one, or opts.resource when a relaunch keeps the Session's own), the
+// workspace and launch adapters and the agent tools.
+func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessionOptions) (preparedSessionCreate, error) {
+	none := preparedSessionCreate{release: func() {}}
 	if strings.TrimSpace(opts.ExecutorID) == "" {
 		w.mu.RLock()
 		resolve := w.executorResolver
@@ -4308,7 +4362,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	agent := sessionRunsAnAgent(opts)
 	backend := w.creator()
 	if err := backend.checkNear(preferredTarget); err != nil {
-		return "", err
+		return none, err
 	}
 
 	// An app may still offer a folder an older daemon read from a raw OSC 7
@@ -4326,26 +4380,39 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		}
 	}
 	if err := platform.CheckWorkDir(cwd); err != nil {
-		return "", err
+		return none, err
 	}
 	manager := w.resourceManager()
-	resourceCommitted := false
+	release := func() {}
+	committed := false
+	defer func() {
+		if !committed {
+			release()
+		}
+	}()
 	if opts.Delegated && !opts.Hidden {
 		if err := validateDelegatedWorkspace(cwd); err != nil {
-			return "", err
+			return none, err
 		}
 		if opts.PrepareWorkspace != nil {
 			command, err := opts.PrepareWorkspace(opts.Command, cwd, opts.Env)
 			if err != nil {
-				return "", fmt.Errorf("prepare delegated workspace: %w", err)
+				return none, fmt.Errorf("prepare delegated workspace: %w", err)
 			}
 			opts.Command = command
 		}
 		opts.Env = cloneEnvironment(opts.Env)
 		opts.Env[delegatedMarkerEnv] = "1"
-		spec, err := manager.Prepare(w.delegatedSessionCount())
-		if err != nil {
-			return "", err
+		spec := opts.resource
+		if spec == nil {
+			fresh, err := manager.Prepare(w.delegatedSessionCount())
+			if err != nil {
+				return none, err
+			}
+			spec = fresh
+			if spec != nil {
+				release = func() { _ = manager.Release("", fresh.Unit) }
+			}
 		}
 		if spec != nil {
 			opts.resource = spec
@@ -4357,17 +4424,12 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 				opts.Env["TEMP"] = spec.TempDir
 				opts.Env["MEWLA_BUILD_TMPDIR"] = spec.TempDir
 			}
-			defer func() {
-				if !resourceCommitted {
-					_ = manager.Release("", spec.Unit)
-				}
-			}()
 		}
 	}
 	if opts.PrepareLaunch != nil {
 		command, err := opts.PrepareLaunch(opts.Command)
 		if err != nil {
-			return "", err
+			return none, err
 		}
 		opts.Command = command
 	}
@@ -4388,29 +4450,27 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		if adapt != nil {
 			launch, err := adapt(opts.ExecutorID, opts.Command)
 			if err != nil {
-				return "", err
+				return none, err
 			}
 			opts.Command, opts.AgentControl = launch.Command, launch.Control
 		}
 	}
 	shellCommand, err := buildWindowCommand(opts)
 	if err != nil {
-		return "", err
+		return none, err
 	}
-	target, err := backend.create(backendCreateSpec{
-		name:    strings.TrimSpace(opts.Name),
-		cwd:     cwd,
-		command: shellCommand,
-		env:     workerLaunchEnvironment(opts),
-		labels:  createdSessionLabels(opts),
-		agent:   agent,
-	})
-	if err != nil {
-		return "", err
-	}
-	w.registerCreatedSession(target, cwd, opts, createdAt)
-	resourceCommitted = true
-	return target, nil
+	committed = true
+	return preparedSessionCreate{
+		spec: backendCreateSpec{
+			name:    strings.TrimSpace(opts.Name),
+			cwd:     cwd,
+			command: shellCommand,
+			env:     workerLaunchEnvironment(opts),
+			labels:  createdSessionLabels(opts),
+			agent:   agent,
+		},
+		cwd: cwd, opts: opts, release: release,
+	}, nil
 }
 
 func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionOptions, createdAt time.Time) {
@@ -4856,6 +4916,11 @@ func (w *Watcher) KillSession(sessionID string) error {
 	if sessionID == "" {
 		return nil
 	}
+	// A close that comes while the Session's ended agent is being replaced
+	// waits for the replacement and then closes the new one: the close wins.
+	swap := w.agentRelaunch().swapLock(sessionID)
+	swap.Lock()
+	defer swap.Unlock()
 	manager := w.resourceManager()
 	unit := manager.UnitForTarget(sessionID)
 	delegated := unit != ""

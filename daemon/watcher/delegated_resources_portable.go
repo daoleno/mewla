@@ -348,3 +348,47 @@ func (w *Watcher) ReleaseProcess(sessionID string, pid int, start string) error 
 	// process and its descendants are eligible, never sibling workloads.
 	return workerproc.StopOwned(workerproc.Lease{Observed: []workerproc.ProcessIdentity{{PID: pid, Start: start}}}, nil)
 }
+
+// Reuse returns an existing unit's spec, making its TMPDIR and lease again if
+// either is gone.
+func (m *portableDelegatedResourceManager) Reuse(unit string) (*delegatedResourceSpec, error) {
+	unit = strings.TrimSpace(unit)
+	tempDir, err := m.resourceTempDir(unit)
+	if err != nil {
+		return nil, err
+	}
+	if _, statErr := os.Stat(tempDir); os.IsNotExist(statErr) {
+		if tempDir, err = m.createOwnedTempDir(unit); err != nil {
+			return nil, err
+		}
+	}
+	path, err := workerproc.LeasePath(m.leaseDir, unit)
+	if err != nil {
+		return nil, err
+	}
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		if err := workerproc.WriteOwnershipLease(path, unit); err != nil {
+			return nil, err
+		}
+	}
+	return &delegatedResourceSpec{Owner: m.owner, Unit: unit, TempDir: tempDir}, nil
+}
+
+// StopLeftovers ends every process the unit owns; the lease and TMPDIR stay.
+func (m *portableDelegatedResourceManager) StopLeftovers(unit string) error {
+	unit = strings.TrimSpace(unit)
+	if !validDelegatedResourceUnit(m.owner, unit) {
+		return fmt.Errorf("refuse unowned delegated resource unit %q", unit)
+	}
+	path, err := workerproc.LeasePath(m.leaseDir, unit)
+	if err != nil {
+		return err
+	}
+	lease, err := workerproc.ReadLease(path)
+	if os.IsNotExist(err) {
+		lease = workerproc.Lease{Version: 1, ResourceID: unit}
+	} else if err != nil {
+		return err
+	}
+	return workerproc.StopOwned(lease, nil)
+}

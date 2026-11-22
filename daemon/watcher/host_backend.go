@@ -410,8 +410,10 @@ func (b *hostBackend) captureState(id string) (string, bool, int) {
 	if err != nil || !present {
 		return "", false, -1
 	}
+	// A program ended by a signal (kill -9, the OOM killer) has ended as
+	// surely as one that exited: the host reports 128+signal as its code.
 	deadStatus := -1
-	if !info.Alive && info.ExitCode != nil && info.ExitSignal == "" {
+	if !info.Alive && info.ExitCode != nil {
 		deadStatus = *info.ExitCode
 	}
 	return capture.Text, info.Alive, deadStatus
@@ -596,6 +598,51 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 	})
 	if err != nil {
 		return fmt.Errorf("start Worker Session: %w", err)
+	}
+	return nil
+}
+
+// replace starts spec in place of a Session whose program has ended, under
+// the same id: the ended Session is removed and the new one created at once,
+// and the input receipts recorded on the old one are carried over, so an input
+// that already landed is never sent again. A Session that is gone, or whose
+// program still runs, is not replaced.
+func (b *hostBackend) replace(id string, spec backendCreateSpec) error {
+	if !b.validID(id) {
+		return fmt.Errorf("replace Session %q: not a session host id", id)
+	}
+	info, present, err := b.info(id)
+	if err != nil {
+		return err
+	}
+	if !present {
+		return fmt.Errorf("replace Session %s: %w", id, errSessionGone)
+	}
+	if info.Alive {
+		return fmt.Errorf("replace Session %s: its program still runs", id)
+	}
+	client, err := b.conn(false)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := hostCtx()
+	receipts, err := client.GetData(ctx, id, hostDataInputReceipts)
+	cancel()
+	if err != nil {
+		return fmt.Errorf("replace Session %s: read its input receipts: %w", id, err)
+	}
+	if err := b.kill(id); err != nil {
+		return err
+	}
+	if err := b.createAs(id, spec, nil); err != nil {
+		return err
+	}
+	if receipts.Value != "" {
+		ctx, cancel := hostCtx()
+		defer cancel()
+		if err := client.SetData(ctx, id, hostDataInputReceipts, receipts.Value); err != nil {
+			return fmt.Errorf("replace Session %s: keep its input receipts: %w", id, err)
+		}
 	}
 	return nil
 }

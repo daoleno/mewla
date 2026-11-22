@@ -1319,7 +1319,7 @@ func reduceTurnFact(turn *TurnRecord, fact watcher.TurnFact, now time.Time) (tur
 			if status != watcher.TurnUnknown {
 				status = watcher.TurnUnknown
 				attention = ""
-				summary = "Delegated Session ended; outcome is unknown"
+				summary = firstNonEmpty(strings.TrimSpace(fact.Ended), "Delegated Session ended; outcome is unknown")
 			}
 			if fact.SettledAt.IsZero() {
 				settledAt = &now

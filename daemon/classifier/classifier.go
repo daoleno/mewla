@@ -21,6 +21,14 @@ const (
 )
 
 // Worker holds the current state and metadata for a single execution session.
+// Relaunch is a Session's agent ended while its Work was open: State is
+// "restarting", "restarted" or "not_restarted", and Line says it in a few
+// words ("Restarted after SIGKILL", "Gave up after 3 restarts").
+type Relaunch struct {
+	State string `json:"state"`
+	Line  string `json:"line"`
+}
+
 type Worker struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -56,7 +64,10 @@ type Worker struct {
 	ProgressRefused        string     `json:"progress_refused,omitempty"`
 	ProgressRefusedSummary string     `json:"progress_refused_summary,omitempty"`
 	ProgressRefusedAt      *time.Time `json:"progress_refused_at,omitempty"`
-	LastProgressAt         *time.Time `json:"last_progress_at,omitempty"`
+	// Relaunch is what happened to the Session's agent after its program
+	// ended while its Work was open; nil once the agent shows something newer.
+	Relaunch       *Relaunch  `json:"relaunch,omitempty"`
+	LastProgressAt *time.Time `json:"last_progress_at,omitempty"`
 	// RunningSince is when a Session whose own terminal says it is working
 	// (not a delegated Worker's ledger turn) began this run, as the daemon
 	// first saw it; absent otherwise.

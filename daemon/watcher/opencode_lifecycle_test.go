@@ -205,13 +205,13 @@ func TestOpenCodeTransportSubmitThenSignalAndProviderEvidenceSettleTurn(t *testi
 	}
 
 	// Authoritative provider settlement; the terminal Turn is immutable.
-	turn = w.applyPollFacts(sessionID, true, -1, now.Add(21*time.Second), turn, probe.next())
+	turn = w.applyPollFacts(sessionID, true, -1, now.Add(21*time.Second), turn, probe.next(), "")
 	if turn.Status != TurnDone {
 		t.Fatalf("authoritative settlement = %+v, want done", turn)
 	}
 	applied := w.applyPollFacts(sessionID, true, -1, now.Add(26*time.Second), turn, ProviderActivityObservation{
 		ID: "act-turn", Status: "running", StartedAt: now.Add(25 * time.Second), Structured: true,
-	})
+	}, "")
 	if applied.Status != TurnDone {
 		t.Fatalf("terminal turn reopened after settlement: %+v", applied)
 	}
@@ -299,7 +299,7 @@ func TestOpenCodeFollowUpSignalOwnsNewTurnAndOldResultCannotCompleteIt(t *testin
 	}
 
 	// The first turn's stale terminal activity cannot complete turn 2.
-	applied := w.applyPollFacts(sessionID, true, -1, followAt.Add(5*time.Second), turn, probe.next())
+	applied := w.applyPollFacts(sessionID, true, -1, followAt.Add(5*time.Second), turn, probe.next(), "")
 	if applied.Status == TurnDone {
 		t.Fatalf("stale first-turn result completed the new turn: %+v", applied)
 	}
@@ -555,7 +555,7 @@ func TestOpenCodeFollowUpTurnNotTerminalizedByStaleCompletedProviderActivity(t *
 		AdmissionCursor: 5,
 		Structured:      true,
 	}
-	turn = w.applyPollFacts(sessionID, true, -1, now.Add(5*time.Second), turn, stale)
+	turn = w.applyPollFacts(sessionID, true, -1, now.Add(5*time.Second), turn, stale, "")
 	if turn.Status != TurnAccepted {
 		t.Fatalf("stale completed activity terminalized the new turn: %+v", turn)
 	}
