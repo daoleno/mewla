@@ -37,6 +37,12 @@ export type WorkerStatus = 'running' | 'blocked' | 'done' | 'failed' | 'unknown'
 
 export type WorkerCapabilities = WorkerSessionCapabilities;
 
+/** A Session's agent ended while its Work was open: Mewla is starting it again, started it again, or would not. */
+export interface WorkerRelaunch {
+  state: 'restarting' | 'restarted' | 'not_restarted';
+  line: string;
+}
+
 export interface Worker {
   key: string;
   id: string;
@@ -65,6 +71,8 @@ export interface Worker {
   needs_attention?: boolean;
   /** Why Mewla refused its last `mewla worker progress` report, until one is accepted: its report did not land. */
   progress_refused?: string;
+  /** What happened to its agent after the program ended while its Work was open ("Restarted after SIGKILL"), until the agent shows something newer. */
+  relaunch?: WorkerRelaunch;
   last_output_lines: string[];
   started_at?: number;
   updated_at?: number;
@@ -135,6 +143,7 @@ export type RawWorker = {
   details_json?: string;
   needs_attention?: boolean;
   progress_refused?: string;
+  relaunch?: { state?: unknown; line?: unknown };
   last_output_lines?: string[];
   started_at?: string | number | Date;
   updated_at?: string | number | Date;
@@ -437,6 +446,8 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.details_json === right.details_json &&
       left.needs_attention === right.needs_attention &&
       left.progress_refused === right.progress_refused &&
+      left.relaunch?.state === right.relaunch?.state &&
+      left.relaunch?.line === right.relaunch?.line &&
       stringArraysEqual(left.last_output_lines, right.last_output_lines) &&
       left.started_at === right.started_at &&
       left.updated_at === right.updated_at &&
@@ -504,6 +515,7 @@ function normalizeWorker(
     // 11-13): it raises no card, tray row, count or dot here. A prompt or an approval on its terminal still does.
     needs_attention: agent.needs_attention === true && agent.delegated !== true,
     progress_refused: typeof agent.progress_refused === 'string' && agent.progress_refused.trim() ? agent.progress_refused.trim() : undefined,
+    relaunch: normalizeRelaunch(agent.relaunch),
     last_output_lines: Array.isArray(agent.last_output_lines) ? agent.last_output_lines : [],
     started_at: normalizeTimestamp(agent.started_at),
     updated_at: normalizeTimestamp(agent.updated_at),
@@ -673,4 +685,11 @@ function normalizeTimestamp(
   }
 
   return undefined;
+}
+
+function normalizeRelaunch(value: { state?: unknown; line?: unknown } | undefined): WorkerRelaunch | undefined {
+  const state = value?.state;
+  const line = typeof value?.line === 'string' ? value.line.trim() : '';
+  if (!line || (state !== 'restarting' && state !== 'restarted' && state !== 'not_restarted')) return undefined;
+  return { state, line };
 }
