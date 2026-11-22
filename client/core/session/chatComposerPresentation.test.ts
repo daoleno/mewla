@@ -26,6 +26,7 @@ describe("composer placeholder", () => {
   test("names the agent, searches commands only for Codex, and an explicit placeholder wins", () => {
     const connected = { connectionState: "connected" as const, slashQueryActive: false };
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "claude" })).toBe("Message Claude");
+    expect(buildChatComposerPlaceholder({ ...connected, agentKind: "antigravity" })).toBe("Message Antigravity");
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "terminal" })).toBe("Message");
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "codex", slashQueryActive: true })).toBe("Search commands");
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "claude", slashQueryActive: true })).toBe("Message Claude");
