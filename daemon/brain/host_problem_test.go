@@ -260,8 +260,8 @@ func TestSnapshotSaysWhichExecutorsAreInstalledAndSignedIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]ExecutorState{
-		"claude": {Installed: true, SignedIn: true},
-		"codex":  {Installed: true},
+		"claude": {Installed: true, SignedIn: true, AuthState: HostAuthAuthenticated},
+		"codex":  {Installed: true, AuthState: HostAuthUnauthenticated},
 	}
 	if len(snapshot.ExecutorStates) != len(want) {
 		t.Fatalf("states = %+v, want only the installed executors %+v (grok is not installed)", snapshot.ExecutorStates, want)
