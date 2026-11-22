@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -42,6 +43,8 @@ type agentRelaunchDetails struct {
 	FromTurnID   string    `json:"from_turn_id,omitempty"`
 	TurnID       string    `json:"turn_id,omitempty"`
 	Outcome      string    `json:"outcome"`
+	// Error is why a start failed (Outcome "start_failed").
+	Error string `json:"error,omitempty"`
 }
 
 var _ watcher.AgentRelaunchLedger = (*Service)(nil)
@@ -156,25 +159,36 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	}
 	record := records[workWorkerKey(item.ID, sessionID)]
 	launch := strings.TrimSpace(record.LaunchCommand)
-	provider := work.InferWorkerProvider(firstNonEmpty(launch, end.Command))
+	provider := firstNonEmpty(work.InferWorkerProvider(firstNonEmpty(launch, end.Command)), strings.TrimSpace(record.Provider))
 	name := work.AgentProductName(provider, firstNonEmpty(launch, end.Command))
 	plan := watcher.AgentRelaunchPlan{
 		WorkID: item.ID, TurnID: turnID,
-		Name: firstNonEmpty(record.Name, end.Name), Cwd: firstNonEmpty(record.Cwd, end.Cwd),
+		Name: firstNonEmpty(record.Name, end.Name), Cwd: firstNonEmpty(record.Cwd, end.Cwd), Agent: name,
 	}
 	cause, short := end.Cause(), end.ShortCause()
-	startedAt := end.Exit.EndedAt.Add(-end.Exit.Ran)
-	if !end.Exit.EndedAt.IsZero() && work.ProgramUpdatedSince(firstNonEmpty(launch, end.Command), startedAt) {
-		cause += " after it was updated"
-		short = "an update"
-	} else if end.Clean() {
+	if end.Clean() {
 		if turnID == "" {
-			// It ended itself between Turns: finished, or the person exited it.
+			// It ended itself between Turns: finished, or the person exited it
+			// (Claude Code exits 0 on Ctrl-C and /exit). Never started again,
+			// whatever happened to its program since.
 			return watcher.AgentRelaunchPlan{}, nil
 		}
 		return reportAgentEnd(plan, name, cause, "it ended itself before it reported", "Not restarted: it ended itself"), nil
 	}
+	// A death right after the program was replaced on disk is put down to the
+	// update; a replacement after the death is not.
+	startedAt := end.Exit.EndedAt.Add(-end.Exit.Ran)
+	if end.Exit.Ran > 0 && work.ProgramUpdatedBetween(firstNonEmpty(launch, end.Command), startedAt, end.Exit.EndedAt) {
+		cause += " after it was updated"
+		short = "an update"
+	}
 	if launch == "" {
+		if turnID == "" {
+			// A Worker spawned before launches were recorded, idle when it
+			// ended: nothing was lost, and the person saw it end. Log only.
+			log.Printf("agent relaunch: %s %s; not started again: no launch record, and no Turn was in flight", sessionID, cause)
+			return watcher.AgentRelaunchPlan{}, nil
+		}
 		return reportAgentEnd(plan, name, cause, "Mewla has no record of how this Worker was launched", "Not restarted: no launch record"), nil
 	}
 	if missing := work.MissingAgentFor(launch); missing != nil {
@@ -214,19 +228,26 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 			env = mergeStringMaps(env, routeEnv)
 		}
 	}
-	_, at, err := s.store.agentRelaunches(item.ID, sessionID)
+	history, at, err := s.store.agentRelaunches(item.ID, sessionID)
 	if err != nil {
 		return watcher.AgentRelaunchPlan{}, err
 	}
 	now := s.nowUTC()
 	recent := 0
-	for _, when := range at {
+	var last *agentRelaunchDetails
+	for index, when := range at {
 		if now.Sub(when) < agentRelaunchWindow {
 			recent++
+			last = &history[index]
 		}
 	}
 	if recent >= agentRelaunchLimit {
 		minutes := int(agentRelaunchWindow / time.Minute)
+		if last != nil && last.Outcome == "start_failed" {
+			// The tries did not die: they never started. Say why.
+			return reportAgentEnd(plan, name, cause, fmt.Sprintf("it could not be started again (%s), %d times in the last %d minutes", last.Error, recent, minutes),
+				"Stopped: it could not start"), nil
+		}
 		return reportAgentEnd(plan, name, cause, fmt.Sprintf("it was started again %d times in the last %d minutes and ended each time", recent, minutes),
 			fmt.Sprintf("Stopped after %d restarts", recent)), nil
 	}
@@ -266,7 +287,7 @@ func (s *Service) RecordAgentRelaunch(record watcher.AgentRelaunch) error {
 	details, err := json.Marshal(agentRelaunchDetails{
 		SessionID: record.SessionID, Conversation: record.Conversation, Attempt: record.Attempt, Cause: record.Cause,
 		ExitCode: record.ExitCode, ExitSignal: record.ExitSignal, EndedAt: record.EndedAt.UTC(),
-		FromTurnID: record.FromTurnID, TurnID: record.TurnID, Outcome: record.Outcome,
+		FromTurnID: record.FromTurnID, TurnID: record.TurnID, Outcome: record.Outcome, Error: record.Error,
 	})
 	if err != nil {
 		return err
@@ -277,10 +298,15 @@ func (s *Service) RecordAgentRelaunch(record watcher.AgentRelaunch) error {
 		summary += " Whether it received the request to continue is unknown."
 	case "not_ready":
 		summary += " It did not become ready for the request to continue."
+	case "start_failed":
+		summary = strings.TrimSpace(record.Cause+"; Mewla could not start it again: "+record.Error) + "."
+		if name := strings.TrimSpace(record.Name); name != "" {
+			summary = name + " " + summary
+		}
 	}
 	_, err = s.store.appendWorkAuditEvent(WorkEvent{
 		WorkID: record.WorkID, Kind: workEventKindRelaunched,
-		DedupeKey:  fmt.Sprintf("session:%s:relaunched:%d", record.SessionID, record.EndedAt.UTC().UnixNano()),
+		DedupeKey:  fmt.Sprintf("session:%s:relaunched:%d:%d", record.SessionID, record.EndedAt.UTC().UnixNano(), record.Attempt),
 		PayloadRef: "session:" + record.SessionID, SourceName: record.SessionID,
 		Summary: summary, DetailsJSON: string(details), CreatedAt: record.At.UTC(),
 	})

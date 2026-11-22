@@ -69,6 +69,7 @@ const (
 	hostLabelResourceUnit  = "resource-unit"
 	hostLabelResourceOwner = "resource-owner"
 	hostDataInputReceipts  = "input-receipts"
+	hostDataAgentEnd       = "agent-end"
 	hostDefaultCols        = 200
 	hostDefaultRows        = 50
 	hostCallTimeout        = 10 * time.Second
@@ -753,4 +754,28 @@ func (io hostInputIO) writeReceiptLedger(target string, ledger sessionInputRecei
 	ctx, cancel := hostCtx()
 	defer cancel()
 	return client.SetData(ctx, target, hostDataInputReceipts, string(raw))
+}
+
+func (b *hostBackend) agentEndData(id string) (string, error) {
+	client, err := b.conn(false)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := hostCtx()
+	defer cancel()
+	data, err := client.GetData(ctx, id, hostDataAgentEnd)
+	if err != nil {
+		return "", err
+	}
+	return data.Value, nil
+}
+
+func (b *hostBackend) setAgentEndData(id, value string) error {
+	client, err := b.conn(false)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := hostCtx()
+	defer cancel()
+	return client.SetData(ctx, id, hostDataAgentEnd, value)
 }
