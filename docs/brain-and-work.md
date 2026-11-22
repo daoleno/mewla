@@ -292,7 +292,7 @@ Claude Code removes its own transcripts after about 30 days.
 | **Browse workspace** | Brain's notes ([below](#brains-workspace)); a file opens in the preview |
 | **Switch executor** | The agent Brain runs on ([below](#switch-brains-agent)) |
 | **Model** | Brain's model, and **Effort**: **Low**, **Medium** or **High** |
-| **New chat** | After you confirm, a fresh thread. Open requests stay open in it. |
+| **New chat** | After you confirm, a fresh thread. Open requests stay open in it. If Brain's agent cannot run, Brain comes up on another installed agent; with none installed, the current chat stays. |
 
 A row that does not apply right now is dimmed. Earlier threads have no list: a
 notification about one opens it read-only, with **Current chat** to return.
