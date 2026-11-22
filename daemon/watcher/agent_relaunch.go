@@ -895,7 +895,7 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		// update prompt) is Brain's to see now.
 		if presence, err := w.ProbeSession(end.SessionID); err == nil && presence == SessionPresencePresent && !w.SessionExited(end.SessionID) {
 			plan.Words = strings.TrimSpace(plan.Words + " It was started again but did not become ready for input.")
-			w.reportAfterRelaunch(ledger, end, plan, "Restarted; it is not ready")
+			w.reportAfterRelaunch(ledger, end, plan, "Not ready after a restart")
 		}
 		finish("")
 		return

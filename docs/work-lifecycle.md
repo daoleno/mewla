@@ -398,8 +398,8 @@ be ready (90 s at most). Brain's one event says which case applied:
 
 If the agent is not ready in time, the Turn is released as `turn_lost` for
 Brain. No state reads as healthy while nothing runs for an open Turn: after a
-"needs a decision" or "not ready", the Session shows `stopped` with "Restarted;
-its task was not resumed" (or "… it is not ready") while its agent lives. The
+"needs a decision" or "not ready", the Session shows `stopped` with "Task not
+resumed after a restart" (or "Not ready after a restart") while its agent lives. The
 line stays until the agent works again. While Brain still holds an earlier
 review of the Work, the report is asked again every 10 s until Brain has it.
 
