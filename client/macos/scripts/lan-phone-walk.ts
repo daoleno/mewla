@@ -1,6 +1,6 @@
 // Runs on the clean CI Mac, with the signed app's pairing dialog already open.
 import { execFileSync, spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { buildAuthorizationHeader } from "../../core/auth";
@@ -78,13 +78,13 @@ try {
   await until("File did not open trusted LAN consent", () => inspect("consent").status === 0);
   await until("Allow trusted LAN unavailable", () => inspect("click", "Allow trusted LAN").status === 0);
   await until("LAN listener did not open", httpLAN, 120);
-  let scanned = "";
+  const decodedFile = join(privateDir, "decoded");
   await until("no short-lived scannable code after consent", () => {
-    const result = inspect("scan");
-    if (result.status !== 0) return false;
-    scanned = result.stdout.trim();
-    return true;
+    const result = inspect("scan", decodedFile);
+    return result.status === 0 && existsSync(decodedFile);
   });
+  const scanned = readFileSync(decodedFile, "utf8");
+  execFileSync(vision, [screen, "redact", join(out, "06-pair-redacted.png")]);
   installMemoryPlatform({ deviceName: () => "Simulated LAN phone", fetch: (input, init) => fetch(input, init) });
   const target = readPairingLink(scanned);
   if (!target) {
@@ -92,6 +92,7 @@ try {
     const payload = url?.searchParams.get("p") ?? "";
     const bytes = Buffer.from(payload, "base64url");
     const addressLength = bytes.length >= 3 ? bytes.readUInt16BE(1) : -1;
+    console.log(`Decoded QR: url=${!!url}, characters=${scanned.length}, bytes=${bytes.length}, declaredAddressBytes=${addressLength}, version=${bytes[0]}`);
     await until("Copy link unavailable", () => inspect("click", "Copy link").status === 0);
     await wait(500);
     const copied = execFileSync("pbpaste", { encoding: "utf8" }).trim();
@@ -100,7 +101,6 @@ try {
   }
   const host = new URL(target.url).hostname;
   if (!ips.includes(host)) throw new Error("Displayed QR hostname " + host + " differs from LAN interfaces " + ips.join(", "));
-  execFileSync(vision, [screen, "redact", join(out, "06-pair-redacted.png")]);
   const phone = await pairWith(target);
   const socket = await phoneSocket(phone.url, phone.daemonId);
   await roundTrip(socket, "before-dismiss");
