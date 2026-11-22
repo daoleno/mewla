@@ -9,113 +9,84 @@ import (
 	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
-// hostAuthProbeTTL keeps doctor's sign-in probes, which run each agent CLI's
-// own status command, off the path of every snapshot.
-const hostAuthProbeTTL = 30 * time.Second
+const (
+	hostAuthProbeTTL   = 30 * time.Second
+	hostAuthSettledTTL = 15 * time.Minute
+)
 
-// hostAuthSettledTTL is how long the probes are kept once every configured
-// agent has an answer nobody is waiting to change: found, runnable and not
-// signed out. Each run starts every agent CLI, and the daemon is charged for
-// what those processes read (a Node or Bun CLI reads several MB to start), so
-// asking all of them again every 30 seconds was a burst of thousands of reads
-// and tens of MB for nothing. While some agent is missing, signed out or
-// unsupported a person may be fixing exactly that, and the short TTL stays.
-const hostAuthSettledTTL = 15 * time.Minute
-
-// hostProbesSettled reports whether no configured agent is waiting to be
-// installed, signed in or upgraded.
-func hostProbesSettled(items []doctor.ExecutorCheck) bool {
-	for _, item := range items {
-		if !item.BinaryFound || !item.Runnable || item.Auth == doctor.AuthUnauthenticated {
-			return false
-		}
-	}
-	return len(items) > 0
+type hostProbeResult struct {
+	at          time.Time
+	ttl         time.Duration
+	auth        brain.HostAuthState
+	unsupported string
+	account     string
 }
 
-// newHostAuthProbe is the sign-in probe Brain's host choice and host problem
-// report use: the same answer mewla doctor gives, so the two cannot disagree
-// about which agent is signed in.
-func newHostAuthProbe(check func() doctor.ExecutorsCheck, now func() time.Time) func(string) brain.HostAuthState {
-	auth, _ := newHostProbes(check, now)
-	return auth
-}
-
-// newHostProbes answers two questions from one cached doctor run: is the agent
-// signed in, and, when doctor found its binary but will not run it (a version
-// Mewla does not support), what doctor says about it.
-func newHostProbes(check func() doctor.ExecutorsCheck, now func() time.Time) (func(string) brain.HostAuthState, func(string) string) {
-	auth, unsupported, _ := newHostProbesWithAccounts(check, now)
-	return auth, unsupported
-}
-
-// newHostProbesWithAccounts also answers who an agent is signed in as, from the
-// same cached doctor run.
-func newHostProbesWithAccounts(check func() doctor.ExecutorsCheck, now func() time.Time) (func(string) brain.HostAuthState, func(string) string, func(string) string) {
-	var (
-		accounts    map[string]string
-		mu          sync.Mutex
-		at          time.Time
-		results     map[string]brain.HostAuthState
-		unsupported map[string]string
-		ttl         = hostAuthProbeTTL
-	)
-	refresh := func() {
-		if results != nil && now().Sub(at) <= ttl {
+// Snapshot reads use cached evidence. Only a selected agent or explicit
+// diagnostic calls probe, and a probe checks just that configured agent.
+func newHostProbes(check func(string) doctor.ExecutorsCheck, now func() time.Time) (func(string), func(string) brain.HostAuthState, func(string) string, func(string) string) {
+	var mu sync.Mutex
+	results := make(map[string]hostProbeResult)
+	probe := func(id string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if id == "" {
 			return
 		}
-		results = map[string]brain.HostAuthState{}
-		unsupported = map[string]string{}
-		accounts = map[string]string{}
-		items := check().Items
-		ttl = hostAuthProbeTTL
-		if hostProbesSettled(items) {
-			ttl = hostAuthSettledTTL
+		if result, ok := results[id]; ok && now().Sub(result.at) <= result.ttl {
+			return
 		}
-		for _, item := range items {
-			if item.Account != "" {
-				accounts[item.ID] = item.Account
+		result := hostProbeResult{at: now(), ttl: hostAuthProbeTTL, auth: brain.HostAuthUnknown}
+		for _, item := range check(id).Items {
+			if item.ID != id {
+				continue
 			}
 			switch {
 			case item.VerifiedAuthenticated:
-				results[item.ID] = brain.HostAuthAuthenticated
+				result.auth = brain.HostAuthAuthenticated
 			case item.BinaryFound && item.Auth == doctor.AuthUnauthenticated:
-				results[item.ID] = brain.HostAuthUnauthenticated
-			case item.BinaryFound && !item.Runnable:
-				unsupported[item.ID] = item.Summary
+				result.auth = brain.HostAuthUnauthenticated
 			}
+			if item.BinaryFound && !item.Runnable && item.Auth != doctor.AuthUnauthenticated {
+				result.unsupported = item.Summary
+			}
+			result.account = item.Account
+			if item.VerifiedAuthenticated {
+				result.ttl = hostAuthSettledTTL
+			}
+			break
 		}
-		at = now()
+		result.at = now()
+		results[id] = result
 	}
 	auth := func(id string) brain.HostAuthState {
 		mu.Lock()
 		defer mu.Unlock()
-		refresh()
-		if state, ok := results[id]; ok {
-			return state
+		if result, ok := results[id]; ok {
+			return result.auth
 		}
 		return brain.HostAuthUnknown
 	}
-	unsupportedReason := func(id string) string {
+	unsupported := func(id string) string {
 		mu.Lock()
 		defer mu.Unlock()
-		refresh()
-		return unsupported[id]
+		return results[id].unsupported
 	}
 	account := func(id string) string {
 		mu.Lock()
 		defer mu.Unlock()
-		refresh()
-		return accounts[id]
+		return results[id].account
 	}
-	return auth, unsupportedReason, account
+	return probe, auth, unsupported, account
 }
 
 func installHostAuthProbe() {
 	options := doctor.Options{LookPath: hostdeps.LookPath}
-	auth, unsupported, account := newHostProbesWithAccounts(func() doctor.ExecutorsCheck {
+	probe, auth, unsupported, account := newHostProbes(func(id string) doctor.ExecutorsCheck {
+		options.ExecutorID = id
 		return doctor.CheckExecutors(options)
 	}, time.Now)
+	brain.SetHostActiveProbe(probe)
 	brain.SetHostAuthProbe(auth)
 	brain.SetHostAccountProbe(account)
 	brain.SetHostUnsupportedProbe(unsupported)

@@ -38,6 +38,11 @@ A Session's own **⋯ › Model & Effort** opens the same sheet for that Session
 only. Brain picks each Worker's agent and model itself; see
 [Worker routing](brain-and-work.md#worker-routing).
 
+Listing an installed agent does not start its command or check its sign-in.
+The menu says "Sign-in not checked" until Mewla has used that agent. A verified
+signed-out agent says "Not signed in". `mewla doctor` runs explicit version and
+sign-in checks for every configured agent when detailed diagnosis is needed.
+
 ## executors.toml
 
 `~/.mewla/executors.toml` is optional. `mewla setup` writes one with prompts:

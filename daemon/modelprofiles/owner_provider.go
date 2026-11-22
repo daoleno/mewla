@@ -166,7 +166,6 @@ func (o *Owner) projectConnectionModels(profile Profile, discovered discoveryEnt
 	var listedIDs []string
 	var listedMetadata map[string]modelPresentationMetadata
 	if executorID == ExecutorCodex {
-		o.refreshCodexModelsInBackground()
 		listedIDs, listedMetadata, _ = o.codexModels.snapshot()
 	}
 	ids := append([]string(nil), discovered.IDs...)

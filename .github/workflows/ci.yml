@@ -279,6 +279,8 @@ jobs:
         run: go test -count=1 -run 'TestCodexWorkspace|TestCodexRecordedCWDs|TestQueryCodexThreadsUsesMinimalSourceSchema|TestIdleCodexPolls|TestCodexSelectionIsRevisited|TestCodexResumedInAnotherFolder' ./work
       - name: Test a Codex Brain's chat binding on Windows
         run: go test -count=1 -run '^TestCodexBrainBindsItsConversationFromCodexsRecords$' ./brain
+      - name: Test passive Brain agent discovery on Windows
+        run: go test -count=1 -v -run '^TestBrainRefreshDoesNotLaunchUnusedWindowsAgents$' ./cmd/mewla
       - name: Test a Codex launch waiting for its app-server on Windows
         run: go test -count=1 -run 'TestAWrappedCodexLaunch|TestPrepareLaunchWaitsForTheAppServer|TestWaitMain' ./agentevents/codex
       - name: Build mewla.exe

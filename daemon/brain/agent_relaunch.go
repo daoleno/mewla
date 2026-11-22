@@ -244,7 +244,11 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	if missing := work.MissingAgentFor(launch); missing != nil {
 		return reportAgentEnd(plan, name, cause, strings.TrimSuffix(missing.Message(), "."), "Not restarted: not installed"), nil
 	}
-	if authID := firstNonEmpty(record.ExecutorID, provider); authID != "" && ExecutorAuth(authID) == HostAuthUnauthenticated {
+	authID := firstNonEmpty(record.ExecutorID, provider)
+	if authID != "" {
+		hostActiveProbe(authID)
+	}
+	if authID != "" && ExecutorAuth(authID) == HostAuthUnauthenticated {
 		return reportAgentEnd(plan, name, cause, name+" is not signed in on this computer", "Not restarted: signed out"), nil
 	}
 	link, _ := s.store.workConversation(item.ID, sessionID)

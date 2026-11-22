@@ -31,7 +31,7 @@ export type BrainExecutorRef = {
   host?: boolean;
 };
 
-export type BrainExecutorState = { installed: boolean; signed_in: boolean; account?: string };
+export type BrainExecutorState = { installed: boolean; signed_in: boolean; auth_state?: "authenticated" | "unauthenticated" | "unknown"; account?: string };
 
 /** Why Brain has no running host, said by the computer (daemon brain.HostProblem). */
 export type BrainHostProblem = {

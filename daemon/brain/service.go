@@ -4145,6 +4145,18 @@ func ExecutorAuth(executorID string) HostAuthState { return hostAuth(executorID)
 // with SetHostAuthProbe; without one every executor is unknown. Tests replace it.
 var hostAuth = func(string) HostAuthState { return HostAuthUnknown }
 
+// hostActiveProbe refreshes evidence only when the executor is actually being
+// selected, launched or recovered. Client projections never call it.
+var hostActiveProbe = func(string) {}
+
+func SetHostActiveProbe(probe func(executorID string)) {
+	if probe == nil {
+		hostActiveProbe = func(string) {}
+		return
+	}
+	hostActiveProbe = probe
+}
+
 // hostAccount is who an executor is signed in as, when its CLI records it.
 var hostAccount = func(string) string { return "" }
 
@@ -4406,18 +4418,27 @@ func (s *Service) healImplicitHost() bool {
 		return false
 	}
 	problem := s.projectHostProblem(host, executor)
-	target, reason := "", ""
+	reason := ""
 	switch {
 	case problem != nil && (problem.Code == "not_installed" || problem.Code == "not_signed_in" || problem.Code == "unsupported"):
-		target, reason = problem.SuggestExecutor, problem.Code
+		reason = problem.Code
 	case problem != nil && (problem.Code == "not_started" || problem.Code == "not_ready"):
 		s.hostProblemMu.Lock()
 		since := s.hostProblemSince
 		s.hostProblemMu.Unlock()
 		if !since.IsZero() && time.Since(since) >= hostHealGrace {
-			target, reason = problem.SuggestExecutor, problem.Code
+			reason = problem.Code
 		}
 	}
+	if reason == "" {
+		return false
+	}
+	// Recovery is an active attempt to find a replacement. Diagnose only
+	// installed alternatives here, after a real host failure is established.
+	for _, id := range s.installedAlternativeHosts(executor.ID) {
+		hostActiveProbe(id)
+	}
+	target := s.verifiedAlternativeHost(executor.ID)
 	if target == "" || target == executor.ID {
 		return false
 	}
@@ -4519,8 +4540,9 @@ func (s *Service) executorStates(executors []work.WorkerExecutor) map[string]Exe
 		if _, err := hostLookPath(fields[0]); err != nil {
 			continue
 		}
-		signedIn := hostAuth(executor.ID) == HostAuthAuthenticated
-		state := ExecutorState{Installed: true, SignedIn: signedIn}
+		auth := hostAuth(executor.ID)
+		signedIn := auth == HostAuthAuthenticated
+		state := ExecutorState{Installed: true, SignedIn: signedIn, AuthState: auth}
 		if signedIn {
 			state.Account = hostAccount(executor.ID)
 		}
