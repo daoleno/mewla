@@ -4,6 +4,7 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"syscall"
@@ -25,6 +26,10 @@ type relaunchLedger struct {
 	// untold is how many reports Brain does not have yet (an earlier review
 	// of the Work is still with it).
 	untold int
+	// bound, when set, makes the plan a report once that many relaunches
+	// (started or failed) are recorded, worded boundWords.
+	bound      int
+	boundWords string
 }
 
 func (l *relaunchLedger) Turn(string) (TurnSnapshot, bool, error) {
@@ -48,6 +53,9 @@ func (l *relaunchLedger) PlanAgentRelaunch(end AgentEnd) (AgentRelaunchPlan, err
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.plans = append(l.plans, end)
+	if l.bound > 0 && len(l.records) >= l.bound {
+		return AgentRelaunchPlan{Action: AgentEndReport, WorkID: l.plan.WorkID, TurnID: l.plan.TurnID, Words: l.boundWords, Line: "Stopped: it could not start"}, nil
+	}
 	return l.plan, nil
 }
 
@@ -318,5 +326,97 @@ func TestHostAgentNotRestartedIdleIsToldUntilBrainHasIt(t *testing.T) {
 	_, _, reported, plans := ledger.snapshot()
 	if len(reported) != 2 || len(plans) != 1 {
 		t.Fatalf("after Brain had it: reported %d, planned %d", len(reported), len(plans))
+	}
+}
+
+// A decision about an ended agent is kept on its Session: a daemon that starts
+// later (here: a fresh supervisor) reads it and never judges the same end
+// again, and a report Brain already has is not told again.
+func TestHostAgentEndDecisionOutlivesADaemonRestart(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{plan: AgentRelaunchPlan{Action: AgentEndReport, WorkID: "work-1",
+		Words: "sleep was killed (SIGKILL); not started again: it was started again 3 times in the last 30 minutes and ended each time.",
+		Line:  "Stopped after 3 restarts"}}
+	h.w.SetTurnLedger(ledger)
+	killAgent(t, h.w, id, pid)
+	h.w.poll()
+	waitUntil(t, 5*time.Second, "the told decision kept", func() bool {
+		record, ok := h.w.storedAgentEnd(id, mustExit(t, h.w, id).EndedAt)
+		return ok && record.Told
+	})
+	// The daemon restarts: what it knew in memory is gone, and the ledger
+	// would now decide otherwise (the bound's window has passed).
+	h.w.relaunch = newAgentRelaunchSupervisor()
+	ledger.mu.Lock()
+	ledger.plan = AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 302", Words: "started again"}
+	ledger.mu.Unlock()
+	h.w.poll()
+	h.w.poll()
+	_, records, reported, plans := ledger.snapshot()
+	if len(plans) != 1 || len(records) != 0 || len(reported) != 1 {
+		t.Fatalf("after a restart: planned %d, relaunched %d, reported %d", len(plans), len(records), len(reported))
+	}
+	if info, _, _ := h.w.host().info(id); info.Alive {
+		t.Fatal("a judged end was started again after a restart")
+	}
+}
+
+func mustExit(t *testing.T, w *Watcher, id string) SessionExit {
+	t.Helper()
+	exit, ok := w.SessionExitReport(id)
+	if !ok {
+		t.Fatalf("Session %s has not ended", id)
+	}
+	return exit
+}
+
+// A relaunch whose start fails (the workspace refused, the folder gone) is a
+// try: it is recorded with why, counts toward the bound, and at the bound the
+// dead Turn reaches the Turn ledger with the words; it never loops silently
+// (the reviewer's probe, 11-22).
+func TestHostAgentRelaunchThatCannotStartIsCountedAndReported(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{
+		turn: TurnSnapshot{SessionID: id, TurnID: "turn:live", Status: TurnRunning, ProcessIdentity: "x"}, hasTurn: true,
+		bound: 3, boundWords: "sleep was killed (SIGKILL); not started again: it could not be started again (workspace refused), 3 times in the last 30 minutes.",
+		plan: AgentRelaunchPlan{
+			Action: AgentEndRelaunch, WorkID: "work-1", TurnID: "turn:live", Name: "Relaunchee", Command: "exec sleep 301",
+			Conversation: "conv-1", Attempt: 1, Words: "killed; started again",
+			PrepareWorkspace: func(string, string, map[string]string) (string, error) {
+				return "", errors.New("workspace refused")
+			},
+		},
+	}
+	h.w.SetTurnLedger(ledger)
+	killAgent(t, h.w, id, pid)
+	waitUntil(t, 10*time.Second, "three failed starts and the report", func() bool {
+		h.w.poll()
+		facts, _, _, _ := ledger.snapshot()
+		return len(deadFacts(facts)) > 0
+	})
+	facts, records, _, _ := ledger.snapshot()
+	if len(records) != 3 {
+		t.Fatalf("records = %+v", records)
+	}
+	for _, record := range records {
+		if record.Outcome != "start_failed" || !strings.Contains(record.Error, "workspace refused") {
+			t.Fatalf("record = %+v", record)
+		}
+	}
+	dead := deadFacts(facts)
+	if dead[0].Ended != ledger.boundWords || dead[0].TurnID != "turn:live" {
+		t.Fatalf("dead fact = %+v", dead[0])
+	}
+	// The old Session is still there, ended: nothing removed it.
+	if info, present, err := h.w.host().info(id); err != nil || !present || info.Alive {
+		t.Fatalf("the ended Session: present %v alive %v err %v", present, info.Alive, err)
+	}
+	for range 5 {
+		h.w.poll()
+	}
+	if _, more, _, _ := ledger.snapshot(); len(more) != 3 {
+		t.Fatalf("tries after the report: %d", len(more))
 	}
 }

@@ -103,7 +103,7 @@ func TestRelaunchCommandRefusesAnotherAgentsConversation(t *testing.T) {
 	}
 }
 
-func TestProgramUpdatedSince(t *testing.T) {
+func TestProgramUpdatedBetween(t *testing.T) {
 	bin := filepath.Join(t.TempDir(), "claude")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -113,19 +113,26 @@ func TestProgramUpdatedSince(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(SetAgentLookPath(func(string) (string, error) { return link, nil }))
-	started := time.Now().Add(-time.Hour)
-	old := started.Add(-time.Hour)
-	if err := os.Chtimes(bin, old, old); err != nil {
-		t.Fatal(err)
+	set := func(at time.Time) {
+		t.Helper()
+		if err := os.Chtimes(bin, at, at); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if ProgramUpdatedSince("claude --resume x", time.Now().Add(time.Minute)) {
+	start := time.Now().Add(-2 * time.Hour)
+	end := start.Add(time.Hour)
+	set(start.Add(-time.Hour))
+	if ProgramUpdatedBetween("claude --resume x", start, end) {
 		t.Fatal("a program older than the start reads as updated")
 	}
-	now := time.Now()
-	if err := os.Chtimes(bin, now, now); err != nil {
-		t.Fatal(err)
+	set(start.Add(30 * time.Minute))
+	if !ProgramUpdatedBetween("claude --resume x", start, end) {
+		t.Fatal("a program replaced while it ran does not read as updated")
 	}
-	if !ProgramUpdatedSince("claude --resume x", started) {
-		t.Fatal("a program replaced after the start does not read as updated")
+	// Claude Code updates itself about daily: a replacement after the death
+	// says nothing about it.
+	set(end.Add(time.Minute))
+	if ProgramUpdatedBetween("claude --resume x", start, end) {
+		t.Fatal("a program replaced after the end reads as updated before it")
 	}
 }

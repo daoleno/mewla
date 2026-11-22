@@ -261,15 +261,38 @@ func TestAgentRelaunchIsNotDoneFor(t *testing.T) {
 		t.Cleanup(func() { hostAuth = previous })
 		report(t, f, "Claude Code is not signed in on this computer", "Not restarted: signed out")
 	})
-	t.Run("a Worker spawned before launches were recorded", func(t *testing.T) {
+	t.Run("a Worker spawned before launches were recorded, idle", func(t *testing.T) {
+		// After an upgrade: nothing was lost and the person saw it end; log only.
 		f := newRelaunchFixture(t)
-		if _, err := f.store.RecordWorkWorker(WorkWorkerRecord{WorkID: f.item.ID, SessionID: "other", Name: "Old"}); err != nil {
+		if _, err := f.store.RecordWorkWorker(WorkWorkerRecord{WorkID: f.item.ID, SessionID: "other", Name: "Old", Provider: "claude"}); err != nil {
 			t.Fatal(err)
 		}
 		end := killedEnd(time.Now())
-		end.SessionID = "other"
+		end.SessionID, end.Command = "other", ""
 		plan, err := f.service.PlanAgentRelaunch(end)
-		if err != nil || plan.Action != watcher.AgentEndReport || !strings.Contains(plan.Words, "no record of how this Worker was launched") {
+		if err != nil || plan.Action != watcher.AgentEndIgnore {
+			t.Fatalf("plan = %+v, %v", plan, err)
+		}
+	})
+	t.Run("a Worker spawned before launches were recorded, in a Turn", func(t *testing.T) {
+		f := newRelaunchFixture(t)
+		f.fw.sessions["other"] = &classifier.Worker{ID: "other", Delegated: true, State: classifier.StateRunning}
+		if _, err := f.store.RecordWorkWorker(WorkWorkerRecord{WorkID: f.item.ID, SessionID: "other", Name: "Old", Provider: "claude"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.fw.SubmitDelegatedWorkInput("other", "render", f.item.ID, "turn:old", "", "", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.service.ApplyDelegatedTurnProgress(watcher.TurnFact{SessionID: "other", TurnID: "turn:old", Class: watcher.EvidenceControl,
+			Kind: "running", SourceID: "running-old", At: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		end := killedEnd(time.Now())
+		end.SessionID, end.Command, end.TurnID = "other", "", "turn:old"
+		plan, err := f.service.PlanAgentRelaunch(end)
+		// Named from the record, not "The agent".
+		if err != nil || plan.Action != watcher.AgentEndReport ||
+			plan.Words != "Claude Code was killed (SIGKILL); not started again: Mewla has no record of how this Worker was launched." {
 			t.Fatalf("plan = %+v, %v", plan, err)
 		}
 	})
@@ -293,18 +316,49 @@ func TestAgentRelaunchIsNotDoneFor(t *testing.T) {
 // update ended it, not the Worker.
 func TestAgentRelaunchAfterAnUpdate(t *testing.T) {
 	f := newRelaunchFixture(t)
-	end := exitedEnd(0, time.Now())
-	end.Exit.Ran = time.Hour // started before the program file changed (48 h old → touch it now)
+	// It ran an hour; its program was replaced a minute before it died.
+	died := time.Now()
+	end := exitedEnd(1, died)
+	end.Exit.Ran = time.Hour
 	path, _ := work.AgentLookPath("claude")
-	now := time.Now()
-	if err := os.Chtimes(path, now, now); err != nil {
+	updated := died.Add(-time.Minute)
+	if err := os.Chtimes(path, updated, updated); err != nil {
 		t.Fatal(err)
 	}
 	plan, err := f.service.PlanAgentRelaunch(end)
 	if err != nil || plan.Action != watcher.AgentEndRelaunch ||
-		plan.Words != "Claude Code exited with code 0 after it was updated; Mewla started it again in the same conversation." ||
+		plan.Words != "Claude Code exited with code 1 after it was updated; Mewla started it again in the same conversation." ||
 		plan.Line != "Restarted after an update" {
 		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+}
+
+// An agent that exits 0 between Turns is never started again, whatever
+// happened to its program: Claude Code exits 0 on Ctrl-C and /exit, and
+// updates itself about daily (the reviewer's probe, 11-22).
+func TestAgentRelaunchNeverForACleanIdleExit(t *testing.T) {
+	path := func(f *relaunchFixture) string { p, _ := work.AgentLookPath("claude"); return p }
+	for _, test := range []struct {
+		name    string
+		updated func(ended time.Time) time.Time
+	}{
+		{"updated after it ended", func(ended time.Time) time.Time { return ended.Add(30 * time.Minute) }},
+		{"updated while it ran", func(ended time.Time) time.Time { return ended.Add(-time.Minute) }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newRelaunchFixture(t)
+			ended := time.Now().Add(-time.Hour)
+			end := exitedEnd(0, ended)
+			end.Exit.Ran = 10 * time.Minute
+			at := test.updated(ended)
+			if err := os.Chtimes(path(f), at, at); err != nil {
+				t.Fatal(err)
+			}
+			plan, err := f.service.PlanAgentRelaunch(end)
+			if err != nil || plan.Action != watcher.AgentEndIgnore {
+				t.Fatalf("plan = %+v, %v", plan, err)
+			}
+		})
 	}
 }
 
@@ -405,5 +459,41 @@ func TestAgentRelaunchLineSaysItInAPersonsWords(t *testing.T) {
 				t.Fatalf("line %q names a signal or code", plan.Line)
 			}
 		})
+	}
+}
+
+// Starts that fail are tries: three of them reach the bound, and Brain hears
+// the real cause, not "ended each time".
+func TestAgentRelaunchStartsThatFailCountAndSayWhy(t *testing.T) {
+	f := newRelaunchFixture(t)
+	ended := time.Now().UTC().Add(-time.Minute)
+	end := killedEnd(ended)
+	for attempt := 1; attempt <= agentRelaunchLimit; attempt++ {
+		plan, err := f.service.PlanAgentRelaunch(end)
+		if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.Attempt != attempt {
+			t.Fatalf("try %d plan = %+v, %v", attempt, plan, err)
+		}
+		// The same end, tried again: each try is its own record.
+		if err := f.service.RecordAgentRelaunch(watcher.AgentRelaunch{WorkID: f.item.ID, SessionID: "worker", Attempt: attempt,
+			Cause: "was killed (SIGKILL)", EndedAt: ended, Outcome: "start_failed", Name: "Claude Code",
+			Error: "the folder /repo is gone", At: time.Now().UTC()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plan, err := f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndReport ||
+		plan.Words != "Claude Code was killed (SIGKILL); not started again: it could not be started again (the folder /repo is gone), 3 times in the last 30 minutes." ||
+		plan.Line != "Stopped: it could not start" {
+		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+	events := mustWorkEvents(t, f.store, f.item.ID)
+	found := false
+	for _, event := range events {
+		if event.Kind == workEventKindRelaunched && event.Summary == "Claude Code was killed (SIGKILL); Mewla could not start it again: the folder /repo is gone." {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no failed-start event in %+v", events)
 	}
 }

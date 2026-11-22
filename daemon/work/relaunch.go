@@ -118,14 +118,16 @@ func AgentProductName(provider, command string) string {
 	return "The agent"
 }
 
-// ProgramUpdatedSince reports whether the program a launch runs was replaced
-// on disk after since: the agent updated itself (or was updated) while it ran.
-// It looks at the program as the shell finds it and, for a link, at the link
-// and at what it points to.
-func ProgramUpdatedSince(command string, since time.Time) bool {
-	if since.IsZero() {
+// ProgramUpdatedBetween reports whether the program a launch runs was
+// replaced on disk after start and no later than end: the agent was updated
+// while it ran, before it died. A change after end says nothing about the
+// death. It looks at the program as the shell finds it and, for a link, at the
+// link and at what it points to.
+func ProgramUpdatedBetween(command string, start, end time.Time) bool {
+	if start.IsZero() || end.IsZero() || !end.After(start) {
 		return false
 	}
+	within := func(at time.Time) bool { return at.After(start) && !at.After(end) }
 	program := launchProgram(command)
 	if program == "" {
 		return false
@@ -134,10 +136,10 @@ func ProgramUpdatedSince(command string, since time.Time) bool {
 	if err != nil {
 		return false
 	}
-	if info, err := os.Lstat(path); err == nil && info.ModTime().After(since) {
+	if info, err := os.Lstat(path); err == nil && within(info.ModTime()) {
 		return true
 	}
-	if info, err := os.Stat(path); err == nil && info.ModTime().After(since) {
+	if info, err := os.Stat(path); err == nil && within(info.ModTime()) {
 		return true
 	}
 	return false

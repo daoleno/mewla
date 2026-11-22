@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -105,9 +106,11 @@ type AgentRelaunchPlan struct {
 	// TurnID is the Turn in flight the relaunched agent is asked to continue;
 	// "" when the Worker was idle.
 	TurnID string
-	// Name and Cwd are what the Session was created with.
-	Name string
-	Cwd  string
+	// Name and Cwd are what the Session was created with; Agent names the
+	// agent ("Claude Code").
+	Name  string
+	Cwd   string
+	Agent string
 	// Command is the agent's launch, resuming its conversation; Env is the
 	// launch environment (progress tools, a Model Profile route).
 	Command          string
@@ -140,10 +143,14 @@ type AgentRelaunch struct {
 	// continuation's Turn ("" when idle or not submitted).
 	FromTurnID string
 	TurnID     string
-	// Outcome is "continued", "idle", "continuation_unknown" or "not_ready".
+	// Outcome is "continued", "idle", "continuation_unknown", "not_ready",
+	// or "start_failed" (Error says why): every try counts toward the bound.
 	Outcome string
-	Words   string
-	At      time.Time
+	Error   string
+	// Name is the agent's product name ("Claude Code").
+	Name  string
+	Words string
+	At    time.Time
 }
 
 // AgentRelaunchLedger is Brain's half of agent relaunch.
@@ -395,6 +402,22 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if hasTurn && !TurnImmutable(turn.Status) {
 		end.TurnID = turn.TurnID
 	}
+	// An end decided before (by an earlier daemon) keeps its decision: a
+	// restart never judges the same end again.
+	if stored, ok := w.storedAgentEnd(item.id, exit.EndedAt); ok {
+		plan := AgentRelaunchPlan{Action: stored.Action, WorkID: stored.WorkID, TurnID: stored.TurnID, Words: stored.Words, Line: stored.Line}
+		supervisor.mu.Lock()
+		supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan}
+		supervisor.mu.Unlock()
+		if plan.Action != AgentEndReport {
+			return false, ""
+		}
+		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineStopped, text: plan.Line})
+		if stored.TurnID == "" && !stored.Told {
+			w.tellAgentEnd(ledger, end, plan)
+		}
+		return false, plan.Words
+	}
 	if exit.Signal != "" {
 		end.OutOfMemory = supervisor.oom.killedAround(exit.EndedAt, supervisor.now())
 	}
@@ -406,6 +429,11 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	supervisor.mu.Lock()
 	supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan}
 	supervisor.mu.Unlock()
+	if plan.Action != AgentEndRelaunch {
+		// Final: kept on the Session for any later daemon.
+		w.storeAgentEnd(item.id, agentEndRecord{EndedAt: exit.EndedAt, Action: plan.Action, WorkID: plan.WorkID,
+			TurnID: end.TurnID, Words: plan.Words, Line: plan.Line})
+	}
 	switch plan.Action {
 	case AgentEndRelaunch:
 		supervisor.setLine(item.id, agentRelaunchLine{kind: agentLineRestarting, text: restartingLine(plan.Line)})
@@ -446,6 +474,45 @@ func (w *Watcher) tellAgentEnd(ledger AgentRelaunchLedger, end AgentEnd, plan Ag
 		decision.nextTell = supervisor.now().Add(agentEndTellEvery)
 	}
 	supervisor.decided[end.SessionID] = decision
+	if told {
+		go w.storeAgentEnd(end.SessionID, agentEndRecord{EndedAt: end.Exit.EndedAt, Action: plan.Action, WorkID: plan.WorkID,
+			Words: plan.Words, Line: plan.Line, Told: true})
+	}
+}
+
+// agentEndRecord is a final decision about one ended agent, kept on its
+// Session (sessionBackend.agentEndData).
+type agentEndRecord struct {
+	EndedAt time.Time      `json:"ended_at"`
+	Action  AgentEndAction `json:"action"`
+	WorkID  string         `json:"work_id,omitempty"`
+	TurnID  string         `json:"turn_id,omitempty"`
+	Words   string         `json:"words,omitempty"`
+	Line    string         `json:"line,omitempty"`
+	// Told is set once Brain has the report.
+	Told bool `json:"told,omitempty"`
+}
+
+func (w *Watcher) storedAgentEnd(sessionID string, endedAt time.Time) (agentEndRecord, bool) {
+	raw, err := w.sessions().agentEndData(sessionID)
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return agentEndRecord{}, false
+	}
+	var record agentEndRecord
+	if json.Unmarshal([]byte(raw), &record) != nil || !record.EndedAt.Equal(endedAt) {
+		return agentEndRecord{}, false
+	}
+	return record, true
+}
+
+func (w *Watcher) storeAgentEnd(sessionID string, record agentEndRecord) {
+	raw, err := json.Marshal(record)
+	if err == nil {
+		err = w.sessions().setAgentEndData(sessionID, string(raw))
+	}
+	if err != nil {
+		log.Printf("agent relaunch: keep the decision on %s: %v", sessionID, err)
+	}
 }
 
 // relaunchAgent starts the ended agent again in its Session and conversation.
@@ -478,8 +545,16 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 	}
 	plan = fresh
 	if err := w.replaceEndedSession(end.SessionID, plan); err != nil {
-		log.Printf("agent relaunch: %s not started again: %v", end.SessionID, err)
-		supervisor.setLine(end.SessionID, agentRelaunchLine{})
+		// A start that fails is a try: it counts toward the bound, so the next
+		// poll waits its backoff, and at the bound Brain hears why.
+		log.Printf("agent relaunch: %s could not start again: %v", end.SessionID, err)
+		if recordErr := ledger.RecordAgentRelaunch(AgentRelaunch{
+			WorkID: plan.WorkID, SessionID: end.SessionID, Conversation: plan.Conversation, Attempt: plan.Attempt,
+			Cause: end.Cause(), ExitCode: end.Exit.Code, ExitSignal: end.Exit.Signal, EndedAt: end.Exit.EndedAt,
+			FromTurnID: plan.TurnID, Outcome: "start_failed", Error: err.Error(), Name: plan.Agent, At: supervisor.now().UTC(),
+		}); recordErr != nil {
+			log.Printf("agent relaunch: record %s: %v", end.SessionID, recordErr)
+		}
 		supervisor.mu.Lock()
 		delete(supervisor.decided, end.SessionID)
 		supervisor.mu.Unlock()
@@ -490,7 +565,7 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 	record := AgentRelaunch{
 		WorkID: plan.WorkID, SessionID: end.SessionID, Conversation: plan.Conversation, Attempt: plan.Attempt,
 		Cause: end.Cause(), ExitCode: end.Exit.Code, ExitSignal: end.Exit.Signal, EndedAt: end.Exit.EndedAt,
-		FromTurnID: plan.TurnID, Outcome: "idle", Words: plan.Words, At: supervisor.now().UTC(),
+		FromTurnID: plan.TurnID, Outcome: "idle", Name: plan.Agent, Words: plan.Words, At: supervisor.now().UTC(),
 	}
 	if plan.TurnID != "" {
 		turnID := "turn:" + uuid.NewString()
