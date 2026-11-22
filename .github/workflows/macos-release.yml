@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: ""
+      walk:
+        description: "A stranger's walk instead (no build): the .dmg's URL (the site's https://github.com/daoleno/mewla/releases/latest/download/Mewla-macos-arm64.dmg), or run:<id> for that proof run's build A"
+        required: false
+        type: string
+        default: ""
   workflow_call:
     inputs:
       tag:
@@ -59,6 +64,11 @@ on:
         required: false
         type: string
         default: ""
+      walk:
+        description: "Not used by the release track"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -66,6 +76,7 @@ permissions:
 jobs:
   gate:
     name: The release has its certificate
+    if: ${{ inputs.walk == '' }}
     runs-on: ubuntu-latest
     environment: app-store-connect-preview
     outputs:
@@ -613,3 +624,55 @@ jobs:
           path: ${{ runner.temp }}/captures
           if-no-files-found: ignore
           retention-days: 7
+
+  # A stranger's walk (client/macos/scripts/walk.sh) on a clean Mac that holds no secret: the .dmg from the URL the site
+  # links to (or a proof run's build A), Gatekeeper, the drag to Applications, the first launch and its question, the
+  # first window, Pair a phone… from the menu bar cat, Quit and a second launch, then the shipped app's first run,
+  # Settings and Calendar in light and dark. A capture of each step, at 2 px per pt.
+  walk:
+    name: A stranger's walk from the download
+    if: ${{ inputs.walk != '' }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: The .dmg a proof run built (run:<id>)
+        if: ${{ startsWith(inputs.walk, 'run:') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WALK: ${{ inputs.walk }}
+        run: |
+          set -euo pipefail
+          id="${WALK#run:}"
+          [[ "$id" =~ ^[0-9]+$ ]] || { echo "::error::walk must be a URL or run:<id>"; exit 1; }
+          gh run download "$id" --repo "$GITHUB_REPOSITORY" -n "mewla-macos-proof-a-$id" -D "$RUNNER_TEMP/proof"
+          ls -la "$RUNNER_TEMP/proof"
+      - name: A stand-in agent CLI (a runner has none), a HiDPI display, a neutral desktop
+        run: |
+          set -x
+          sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+          F=client/macos/scripts/fidelity
+          clang -fobjc-arc -framework Foundation -framework CoreGraphics "$F/vdisplay.m" -o "$RUNNER_TEMP/vdisplay"
+          nohup "$RUNNER_TEMP/vdisplay" 1512 982 > "$RUNNER_TEMP/vdisplay.out" 2> "$RUNNER_TEMP/vdisplay.err" &
+          for i in $(seq 1 20); do grep -q "^display" "$RUNNER_TEMP/vdisplay.out" && break; sleep 1; done
+          cat "$RUNNER_TEMP/vdisplay.out"
+          sudo scutil --set ComputerName "MacBook Pro"
+          python3 -I "$F/solid.py" "$RUNNER_TEMP/desk.png" 64 64 222 224 228
+          osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk.png\"" || true
+      - name: The walk
+        env:
+          WALK: ${{ inputs.walk }}
+        run: |
+          set -uo pipefail
+          if [[ "$WALK" == run:* ]]; then src="$RUNNER_TEMP/proof/Mewla-macos-arm64.dmg"; else src="$WALK"; fi
+          client/macos/scripts/walk.sh "$src" "$RUNNER_TEMP/walk"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-macos-walk-${{ github.run_id }}
+          path: ${{ runner.temp }}/walk
+          if-no-files-found: ignore
+          retention-days: 14
