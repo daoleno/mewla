@@ -43,6 +43,8 @@ type AntigravityLinkMessage struct {
 	Summary      string           `json:"summary,omitempty"`
 	Stop         string           `json:"stop,omitempty"`
 	Error        string           `json:"error,omitempty"`
+	ErrorCode    string           `json:"error_code,omitempty"`
+	HTTPStatus   int              `json:"http_status,omitempty"`
 	Usage        json.RawMessage  `json:"usage,omitempty"`
 	Ask          *AntigravityAsk  `json:"ask,omitempty"`
 	Asks         []AntigravityAsk `json:"asks,omitempty"`

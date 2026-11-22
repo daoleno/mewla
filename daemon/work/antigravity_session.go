@@ -50,8 +50,8 @@ const (
 	antigravitySessionDirName = "antigravity"
 	antigravitySessionFlag    = agysession.Flag
 	antigravitySessionCommand = agysession.Subcommand
-	// antigravityRestartLimit is how many times agy is started again within
-	// antigravityRestartWindow before the Session gives up and exits.
+	// antigravityRestartLimit is the total agy start attempts, including the
+	// first, within antigravityRestartWindow before the Session gives up.
 	antigravityRestartLimit  = 3
 	antigravityRestartWindow = 2 * time.Minute
 )
@@ -152,6 +152,9 @@ type AntigravitySessionOptions struct {
 	AddDirs         []string
 	// Binary is agy; empty finds it on PATH.
 	Binary string
+	// Supervised delegates a failed agy process to the Worker's outer relaunch
+	// supervisor, which owns the restart budget and provider outage hold.
+	Supervised bool
 	// Socket is the daemon's events socket; empty is AntigravityEventsSocket.
 	Socket string
 	// Terminal is where the conversation is drawn and typed; nil uses stdio.
@@ -199,6 +202,8 @@ type AntigravityLogRecord struct {
 	Stop         string          `json:"stop,omitempty"`
 	Usage        json.RawMessage `json:"usage,omitempty"`
 	Error        string          `json:"error,omitempty"`
+	ErrorCode    string          `json:"error_code,omitempty"`
+	HTTPStatus   int             `json:"http_status,omitempty"`
 	Ask          *AntigravityAsk `json:"ask,omitempty"`
 	Option       string          `json:"option,omitempty"`
 	By           string          `json:"by,omitempty"`
@@ -767,14 +772,19 @@ func (s *antigravitySession) supervise(ctx context.Context) error {
 			}
 		}
 		starts = recent
-		if len(starts) >= antigravityRestartLimit {
+		if !s.opts.Supervised && len(starts) >= antigravityRestartLimit {
 			return fmt.Errorf("agy stopped %d times in %s", len(starts), antigravityRestartWindow)
 		}
 		starts = append(starts, now)
 		agent, err := s.start(ctx)
 		if err != nil {
-			s.log.write(AntigravityLogRecord{T: "agent_exit", Error: err.Error()})
+			if !s.opts.Supervised {
+				s.log.write(AntigravityLogRecord{T: "agent_exit", Error: err.Error()})
+			}
 			s.view.note("Antigravity could not start: " + err.Error())
+			if s.opts.Supervised {
+				return err
+			}
 			if !s.waitRestart(ctx) {
 				return err
 			}
@@ -790,6 +800,9 @@ func (s *antigravitySession) supervise(ctx context.Context) error {
 			reason = "agy exited: " + exitErr.Error()
 		}
 		s.agentGone(agent, reason)
+		if s.opts.Supervised {
+			return errors.New(reason)
+		}
 		s.view.note("Antigravity stopped; starting it again on the same conversation.")
 		if !s.waitRestart(ctx) {
 			return ctx.Err()
@@ -819,12 +832,14 @@ func (s *antigravitySession) agentGone(agent *acpClient, reason string) {
 	asks := s.asks
 	s.asks = map[string]*antigravityPending{}
 	s.mu.Unlock()
-	s.log.write(AntigravityLogRecord{T: "agent_exit", Error: reason, Turn: turn})
+	if !s.opts.Supervised {
+		s.log.write(AntigravityLogRecord{T: "agent_exit", Error: reason, Turn: turn})
+	}
 	for id := range asks {
 		s.log.write(AntigravityLogRecord{T: "answer", Ask: &AntigravityAsk{ID: id}, By: "withdrawn"})
 		s.link.send(map[string]any{"t": "resolved", "id": id, "by": "withdrawn"})
 	}
-	if running {
+	if running && !s.opts.Supervised {
 		s.log.write(AntigravityLogRecord{T: "turn_end", Turn: turn, Stop: "error", Error: reason})
 		s.link.send(map[string]any{"t": "turn_end", "turn": turn, "stop": "error", "error": reason})
 	}
@@ -899,6 +914,10 @@ func (s *antigravitySession) start(ctx context.Context) (*acpClient, error) {
 		err := agent.Call(callCtx, method, map[string]any{"sessionId": conversation, "cwd": s.opts.Cwd, "mcpServers": servers}, &setup)
 		s.log.setReplayed(false)
 		if err != nil {
+			if s.opts.Supervised {
+				agent.Close(callCtx)
+				return nil, fmt.Errorf("agy could not reopen conversation %s: %w", conversation, err)
+			}
 			s.view.note("Could not reopen the earlier conversation (" + err.Error() + "); starting a new one.")
 			s.log.write(AntigravityLogRecord{T: "note", Text: "Could not reopen conversation " + conversation + ": " + err.Error()})
 			conversation = ""
@@ -935,7 +954,11 @@ func (s *antigravitySession) start(ctx context.Context) (*acpClient, error) {
 	// a resumed one starts on agy's defaults, so the Session's own choices are
 	// applied again on every start.
 	if err := s.applyChoices(callCtx, state); err != nil {
-		s.view.note("Could not apply the model: " + err.Error())
+		s.mu.Lock()
+		s.agent = nil
+		s.mu.Unlock()
+		agent.Close(callCtx)
+		return nil, fmt.Errorf("agy could not restore its model and mode: %w", err)
 	}
 	_ = saveAntigravitySessionState(antigravitySessionStatePath(s.opts.StateDir, s.opts.ID), s.snapshotState())
 	s.mu.Lock()
@@ -1139,6 +1162,12 @@ func (s *antigravitySession) drain() {
 			Usage      json.RawMessage `json:"usage"`
 		}
 		err := agent.Call(s.ctx, "session/prompt", map[string]any{"sessionId": conversation, "prompt": content}, &result)
+		var failure *acpError
+		if s.opts.Supervised && (errors.Is(err, errACPClosed) || errors.As(err, &failure) && failure.Code == -32000 && failure.Message == errACPClosed.Error()) {
+			// The process exit owns this unfinished Turn; the outer supervisor
+			// resumes it once, through its budgeted continuation path.
+			return
+		}
 		select {
 		case <-agent.Done():
 			// agentGone settles the turn.
@@ -1149,11 +1178,16 @@ func (s *antigravitySession) drain() {
 		if err != nil {
 			stop, text = "error", err.Error()
 		}
-		s.finishTurn(turn, stop, result.Usage, text)
+		_ = errors.As(err, &failure)
+		s.finishTurnFailure(turn, stop, result.Usage, text, failure)
 	}()
 }
 
 func (s *antigravitySession) finishTurn(turn, stop string, usage json.RawMessage, text string) {
+	s.finishTurnFailure(turn, stop, usage, text, nil)
+}
+
+func (s *antigravitySession) finishTurnFailure(turn, stop string, usage json.RawMessage, text string, failure *acpError) {
 	s.mu.Lock()
 	if s.turn != turn || !s.running {
 		s.mu.Unlock()
@@ -1177,8 +1211,13 @@ func (s *antigravitySession) finishTurn(turn, stop string, usage json.RawMessage
 	if len(withdrawn) > 0 {
 		s.view.answered()
 	}
-	s.log.write(AntigravityLogRecord{T: "turn_end", Turn: turn, Stop: stop, Usage: usage, Error: text})
-	s.link.send(map[string]any{"t": "turn_end", "turn": turn, "stop": stop, "error": text, "usage": usage})
+	record := AntigravityLogRecord{T: "turn_end", Turn: turn, Stop: stop, Usage: usage, Error: text}
+	if failure != nil {
+		record.ErrorCode, record.HTTPStatus = failure.providerDetails()
+	}
+	s.log.write(record)
+	s.link.send(map[string]any{"t": "turn_end", "turn": turn, "stop": stop, "error": text,
+		"error_code": record.ErrorCode, "http_status": record.HTTPStatus, "usage": usage})
 	if text != "" {
 		s.view.note("The turn failed: " + text)
 	}

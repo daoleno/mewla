@@ -6,6 +6,7 @@ const SLOW = { timeout: 10_000 };
 const MIN = 60_000;
 const HOUR = 3_600_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+const todayStart = () => new Date(`${new Date(Date.now() + 8 * HOUR).toISOString().slice(0, 10)}T00:00:00+08:00`).toISOString();
 
 function trigger(id: string, title: string, patch: Record<string, unknown> = {}) {
   return {
@@ -16,7 +17,7 @@ function trigger(id: string, title: string, patch: Record<string, unknown> = {})
 }
 
 const watching = () => trigger("t-pr", "PR heads", {
-  firings: [{ seq: 1, at: ago(5 * HOUR), outputs: 1, payload: "/p/1.txt", event_id: "e1", handled_at: ago(4 * HOUR) }, { seq: 2, at: ago(5 * MIN), outputs: 2, payload: "/p/2.txt", event_id: "e2" }],
+  firings: [{ seq: 1, at: todayStart(), outputs: 1, payload: "/p/1.txt", event_id: "e1", handled_at: todayStart() }, { seq: 2, at: ago(0), outputs: 2, payload: "/p/2.txt", event_id: "e2" }],
   pending_changes: 1,
 });
 const failing = () => trigger("t-ci", "CI on main", { created_at: ago(HOUR), failing: true, failures: 4, last_failure: "exit status 1\ngh: HTTP 502", state: "failing" });

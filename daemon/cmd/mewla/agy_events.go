@@ -30,12 +30,13 @@ import (
 // and model changes back. A Session outlives a daemon restart; it connects
 // again and restates what is still true.
 type agyEvents struct {
-	ctx     context.Context
-	hub     *agentevents.Hub
-	service *agentEventService
-	now     func() time.Time
-	workers func() []*classifier.Worker
-	ackWait time.Duration
+	ctx             context.Context
+	hub             *agentevents.Hub
+	service         *agentEventService
+	now             func() time.Time
+	workers         func() []*classifier.Worker
+	ackWait         time.Duration
+	providerOutcome func(watcher.ProviderActivityObservation)
 
 	mu    sync.Mutex
 	conns map[string]*agyConn
@@ -183,11 +184,28 @@ func (a *agyEvents) serve(conn net.Conn) {
 			for _, e := range events {
 				a.hub.Publish(e)
 			}
+			if msg.T == "turn_end" && a.providerOutcome != nil {
+				a.providerOutcome(agyProviderOutcome(msg, at))
+			}
 			if len(events) > 0 {
 				c.restateQuestions(at)
 			}
 		}
 	}
+}
+
+func agyProviderOutcome(msg work.AntigravityLinkMessage, at time.Time) watcher.ProviderActivityObservation {
+	observation := watcher.ProviderActivityObservation{ID: msg.Turn, ProbeState: watcher.ProbeStateOK, SettledAt: at}
+	switch msg.Stop {
+	case "end_turn", "max_tokens", "max_turn_requests":
+		observation.Status = string(work.ProviderActivityCompleted)
+	case "cancelled":
+		observation.Status = string(work.ProviderActivityInterrupted)
+	default:
+		observation.Status = string(work.ProviderActivityFailed)
+		observation.Error = &watcher.ProviderActivityError{Code: firstNonEmptyString(msg.ErrorCode, msg.Stop), HTTPStatus: msg.HTTPStatus, Message: msg.Error}
+	}
+	return observation
 }
 
 // agyEventsOf maps one Session message to the events it carries.
@@ -226,8 +244,7 @@ func agyEventsOf(workerID string, msg work.AntigravityLinkMessage, at time.Time)
 			e.Status = agentevents.TurnInterrupted
 		default:
 			e.Status = agentevents.TurnFailed
-			// agy reports a failed turn as its error's text only.
-			e.Error = &agentevents.TurnError{Class: agentevents.ErrorUnknown, Code: msg.Stop, Message: strings.TrimSpace(msg.Error)}
+			e.Error = &agentevents.TurnError{Class: agentevents.ErrorUnknown, Code: firstNonEmptyString(msg.ErrorCode, msg.Stop), HTTPStatus: msg.HTTPStatus, Message: strings.TrimSpace(msg.Error)}
 		}
 		return []agentevents.Event{e}
 	}

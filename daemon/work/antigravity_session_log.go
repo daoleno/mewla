@@ -197,7 +197,7 @@ func projectAntigravitySessionLog(path string, records []AntigravityLogRecord) C
 				activity.Error = &ProviderActivityError{Code: "refusal", Message: "agy refused the request"}
 			default:
 				activity.Status = ProviderActivityFailed
-				activity.Error = &ProviderActivityError{Code: firstNonEmpty(lastEnd.Stop, "error"), Message: lastEnd.Error}
+				activity.Error = &ProviderActivityError{Code: firstNonEmpty(lastEnd.ErrorCode, lastEnd.Stop, "error"), HTTPStatus: lastEnd.HTTPStatus, Message: lastEnd.Error}
 			}
 		case lastExit != nil && lastExit.At >= lastStart:
 			activity.Status, activity.SettledAt = ProviderActivityFailed, lastExit.At
