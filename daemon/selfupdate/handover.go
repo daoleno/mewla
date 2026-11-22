@@ -83,7 +83,7 @@ func Stage(installed string, binary []byte, version string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, staged, "version", "--json").Output()
+	output, err := platform.WithoutConsoleWindow(exec.CommandContext(ctx, staged, "version", "--json")).Output()
 	var reported struct {
 		Version string `json:"version"`
 	}
@@ -149,7 +149,7 @@ func (h Handover) Run(ctx context.Context) Outcome {
 		}
 		return Outcome{Reason: reason, Bad: bad}
 	}
-	child := exec.Command(h.Staged, h.Args...)
+	child := platform.WithoutConsoleWindow(exec.Command(h.Staged, h.Args...))
 	child.Env = append(append([]string(nil), h.Env...), ChildEnv+"=1")
 	child.Stdout, child.Stderr = h.Stdout, h.Stderr
 	child.ExtraFiles = h.ExtraFiles
@@ -220,7 +220,7 @@ func promote(installed, staged string) error {
 		return err
 	}
 	prev := target + PrevSuffix
-	if err := os.Remove(prev); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := platform.RetireExecutable(prev, target); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	if err := linkFile(target, prev); err != nil {
