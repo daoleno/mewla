@@ -655,3 +655,37 @@ func TestAgentRelaunchBoundForOneTask(t *testing.T) {
 		t.Fatalf("plan = %+v, %v", plan, err)
 	}
 }
+
+// The continuation a relaunch sends while the killed Turn still holds the
+// Attempt steers that Attempt (the watcher's reuse decision for a live signal
+// Turn); the agent's own report on the continuation's id makes it the Work's
+// Turn, and its done is the Work's result.
+func TestAgentRelaunchContinuationsDoneIsTheWorksResult(t *testing.T) {
+	f := newRelaunchFixture(t)
+	f.startTurn(t)
+	payload := watcher.DelegatedLifecyclePayload(watcher.AgentContinuationPrompt("was killed (SIGKILL)", ""), "turn:cont")
+	if _, created, err := f.store.PrepareInputAdmission(watcher.InputAdmission{
+		WorkID: f.item.ID, SessionID: "worker", ProposedTurnID: "turn:cont", Receipt: "turn:cont",
+		PayloadSHA256: pendingSubmissionDigest(payload), ProcessIdentity: "proc", PaneGeneration: "pane",
+		AcceptedAt: time.Now().UTC(), Mode: watcher.InputAdmissionConditionalSteer,
+		ExistingTurnID: "turn:first", BaselineActivityID: "observed-activity", SignalProtocol: true,
+	}); err != nil || !created {
+		t.Fatalf("continuation prepare created=%v err=%v", created, err)
+	}
+	result, err := f.service.ApplyDelegatedTurnProgress(watcher.TurnFact{SessionID: "worker", TurnID: "turn:cont", Class: watcher.EvidenceControl,
+		Kind: "done", SourceID: "cont-done", Summary: "trailer rendered", At: time.Now()})
+	if err != nil || !result.Changed {
+		t.Fatalf("done on the continuation = %+v, %v", result, err)
+	}
+	if err := f.service.ReconcileWorkChange(); err != nil {
+		t.Fatal(err)
+	}
+	state, err := f.store.FSM().State(lifecycle.WorkID(f.item.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.LastSummary != "trailer rendered" || state.AdmissionByToken("turn:cont").ResultTurnToken != "turn:cont" {
+		t.Fatalf("after the continuation's done: summary %q admission %+v", state.LastSummary, state.AdmissionByToken("turn:cont"))
+	}
+	requireReviewDelivered(t, f.store, f.item.ID)
+}
