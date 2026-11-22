@@ -38,33 +38,32 @@ permissions:
 
 jobs:
   windows-public:
-    name: Public Windows daemon 0.4.22 to 0.4.23
-    if: github.event_name == 'workflow_dispatch' && inputs.to == 'v0.4.23'
+    name: Public Windows daemon 0.4.23 to 0.4.24
+    if: github.event_name == 'workflow_dispatch' && inputs.to == 'v0.4.24'
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: v0.4.23
+          ref: v0.4.24
           fetch-depth: 0
       - name: Install the previous public archive and update the running daemon
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          git merge-base --is-ancestor fdd499a459ab9d5845eb09d10520d8fdc17c1802 HEAD
+          git merge-base --is-ancestor b005fe8dc811db9a28cb9432480c191160c76ded HEAD
           if ($LASTEXITCODE -ne 0) { throw 'The release does not contain the approved fix' }
-          $env:MEWLA_VERSION = 'v0.4.22'
+          $env:MEWLA_VERSION = 'v0.4.23'
           $env:MEWLA_INSTALL_DIR = Join-Path $env:RUNNER_TEMP 'Mewla-public'
           $env:MEWLA_STATE_ROOT = Join-Path $env:RUNNER_TEMP 'Mewla-public-state'
           $env:MEWLA_NO_PATH_UPDATE = '1'
           $env:MEWLA_NO_START = '1'
-          $env:MEWLA_NO_AUTOUPDATE = '1'
           ./install.ps1
           Remove-Item Env:MEWLA_VERSION
           $exe = Join-Path $env:MEWLA_INSTALL_DIR 'mewla.exe'
           $process = Start-Process $exe -ArgumentList 'serve','-addr','127.0.0.1:19876','-loopback-only' -PassThru -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'mewla.err') -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'mewla.out')
-          function Wait-Version([string]$version) {
-            for ($i = 0; $i -lt 90; $i++) {
+          function Wait-Version([string]$version, [int]$seconds) {
+            for ($i = 0; $i -lt $seconds; $i++) {
               try {
                 $health = Invoke-RestMethod -Uri 'http://127.0.0.1:19876/health' -TimeoutSec 2
                 if ($health.version -eq $version -and $health.daemon_id) { return $health }
@@ -73,12 +72,11 @@ jobs:
             }
             throw "Running daemon did not answer with $version"
           }
-          $before = Wait-Version '0.4.22'
-          & $exe update
-          if ($LASTEXITCODE -ne 0) { throw 'Public update failed' }
-          $after = Wait-Version '0.4.23'
+          $before = Wait-Version '0.4.23' 90
+          # The stable daemon checks its signed public update channel after two minutes.
+          $after = Wait-Version '0.4.24' 480
           if ($before.daemon_id -ne $after.daemon_id) { throw 'Daemon identity changed' }
-          Write-Host "Public Windows upgrade passed: $($before.version) to $($after.version), same daemon identity."
+          Write-Host "Public Windows automatic update passed: $($before.version) to $($after.version), same daemon identity."
   android:
     name: Android (${{ inputs.from || 'previous release' }} → ${{ inputs.to || 'main' }})
     if: github.ref == 'refs/heads/main'
