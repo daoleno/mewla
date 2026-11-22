@@ -25,6 +25,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/agentevents"
+	antigravityadapter "github.com/daoleno/mewla/daemon/agentevents/antigravity"
 	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	codexadapter "github.com/daoleno/mewla/daemon/agentevents/codex"
 	cursoradapter "github.com/daoleno/mewla/daemon/agentevents/cursor"
@@ -152,6 +153,8 @@ func run(args []string, stderr io.Writer) error {
 		switch args[0] {
 		case "dsh-session":
 			return runDSHSessionCLI(args[1:])
+		case "agy-session":
+			return runAntigravitySessionCLI(args[1:])
 		case "sh":
 			// Hidden: runs a Session's launch script where there is no
 			// /bin/sh (Windows); see package launchsh.
@@ -534,6 +537,17 @@ func runDaemon(args []string, stderr io.Writer) error {
 		w.ObserveSessions(piFollow.Observe)
 		senders, stops = append(senders, piFollow.send), append(stops, piFollow.interrupt)
 	}
+	agyFollow := newAgyEvents(ctx, eventHub, agentEvents, w.Workers)
+	if err := agyFollow.Listen(work.AntigravityEventsSocket(authManager.StorageDir())); err != nil {
+		logAgyListen(err)
+	} else {
+		w.ObserveSessions(agyFollow.Observe)
+		senders, stops = append(senders, agyFollow.send), append(stops, agyFollow.interrupt)
+	}
+	// An agy launch runs as Mewla's Session program, which holds agy over ACP.
+	// It is registered even without the socket: the program then still writes
+	// its log and takes typed input in its terminal.
+	adapters.Register(antigravityadapter.Provider, antigravityadapter.Adapter{Mewla: watcher.ExecutablePath(), StateDir: authManager.StorageDir()})
 	// Each agent's follower takes the sends and stops of the Workers it
 	// follows; any other Worker is typed into.
 	if codexFollow != nil {

@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"github.com/daoleno/mewla/daemon/agysession"
 	"regexp"
 	"strings"
 	"time"
@@ -135,6 +136,10 @@ func isPiProjectTrustPrompt(command, content string) bool {
 func isWorkerInputReady(command, content string) bool {
 	if workerCommandName(command) == "dsh" {
 		return strings.Contains(content, "DSH ready.")
+	}
+	if agysession.IsCommand(command) {
+		ready, _, _ := agysession.Screen(strings.Split(content, "\n"))
+		return ready
 	}
 	if !needsInputReadinessWait(command, content) {
 		return true
@@ -285,7 +290,7 @@ func HoldsFirstMessage(command string) bool {
 }
 
 func needsInputReadinessWait(command, content string) bool {
-	if workerCommandName(command) == "dsh" {
+	if workerCommandName(command) == "dsh" || agysession.IsCommand(command) {
 		return true
 	}
 	lowerContent := strings.ToLower(content)

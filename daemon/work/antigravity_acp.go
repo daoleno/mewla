@@ -254,6 +254,16 @@ var antigravityExitCodePattern = regexp.MustCompile(`Command exited with code (-
 // into the events of the Brain chat. Consecutive chunks of one kind are one
 // message; a tool call and its later updates are one event.
 func projectAntigravityConversation(id, cwd, path string, updates []antigravityACPUpdate) CodexConversation {
+	return projectAntigravityUpdates(id, cwd, path, updates, nil)
+}
+
+// antigravityBoundary is a pseudo-update that ends the message being
+// streamed, so two messages of one kind in a row stay two messages.
+const antigravityBoundary = "mewla_boundary"
+
+// projectAntigravityUpdates projects updates in order; times, when given, is
+// when each update was seen, and an event carries the time it began.
+func projectAntigravityUpdates(id, cwd, path string, updates []antigravityACPUpdate, times []string) CodexConversation {
 	conversation := CodexConversation{
 		Available: true, Source: antigravityConversationSource, SessionID: id, CWD: cwd, Path: path,
 		Events: []CodexConversationEvent{},
@@ -264,14 +274,23 @@ func projectAntigravityConversation(id, cwd, path string, updates []antigravityA
 		tools     = map[string]int{}
 		users     int
 	)
+	at := ""
 	appendEvent := func(event CodexConversationEvent) int {
 		event.Seq = len(conversation.Events) + 1
 		event.Source = antigravityConversationSource
+		if event.Timestamp == "" {
+			event.Timestamp = at
+		}
 		conversation.Events = append(conversation.Events, event)
 		return len(conversation.Events) - 1
 	}
-	for _, update := range updates {
+	for index, update := range updates {
+		if index < len(times) {
+			at = times[index]
+		}
 		switch update.Kind {
+		case antigravityBoundary:
+			chunkKind, chunkAt = "", -1
 		case "user_message_chunk", "agent_message_chunk", "agent_thought_chunk":
 			text := antigravityChunkText(update.Content)
 			if text == "" {
@@ -768,6 +787,9 @@ type antigravityPin struct {
 // Session is in: the id on its command line when Mewla resumed it, otherwise
 // the newest conversation in its folder written since the process launched.
 func (r *ProviderConversationReader) loadAntigravityConversationForWorker(worker classifier.Worker, now time.Time) (CodexConversation, error) {
+	if IsAntigravitySessionCommand(worker.Command) {
+		return r.loadAntigravitySessionForWorker(worker)
+	}
 	if token, present, err := ProviderResumeToken(WorkerProviderAntigravity, worker.Command); err == nil && present {
 		return r.loadAntigravityConversationByID(token)
 	}

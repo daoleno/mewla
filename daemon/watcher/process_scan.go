@@ -3,6 +3,7 @@ package watcher
 import (
 	"errors"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/agysession"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -488,8 +489,12 @@ func workerCommandFromProcess(proc processInfo) string {
 	// Mewla's own commands name agents as option values (an agent runs
 	// `mewla worker spawn -executor codex`); a mewla process is an agent only
 	// as dsh-session.
-	if lowerComm == "mewla" && !strings.Contains(lowerArgs, " dsh-session ") {
+	if lowerComm == "mewla" && !strings.Contains(lowerArgs, " dsh-session ") && !strings.Contains(lowerArgs, " agy-session ") {
 		return ""
+	}
+	// An Antigravity Session Mewla starts is its own program holding agy.
+	if agysession.IsCommand(proc.args) {
+		return proc.args
 	}
 
 	if lowerComm == "claude" || lowerComm == "claude-code" || lowerComm == "cc" {
