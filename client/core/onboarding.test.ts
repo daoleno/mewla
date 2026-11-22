@@ -41,7 +41,7 @@ describe("onboarding copy follows the homepage", () => {
   });
   test("install and start are the homepage's install steps", () => {
     const script = siteScript.match(/installScript: '([^']+)'/)![1];
-    const pattern = site.match(/data-link="installScript"><code data-cmd="([^"]+)"/)![1];
+    const pattern = site.match(/data-link="installScript"[^>]*><code data-cmd="([^"]+)"/)![1];
     expect(INSTALL_COMMAND).toBe(pattern.replace("{}", script));
     expect(site).toContain(`<p class="small">${INSTALL_NOTE}</p>`);
     expect(site).toContain(`<code>${START_COMMAND}</code>`);
