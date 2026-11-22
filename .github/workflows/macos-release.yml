@@ -636,6 +636,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
       - name: Where the .dmg comes from
         id: source
         env:
