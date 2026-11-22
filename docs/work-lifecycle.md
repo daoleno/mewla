@@ -372,8 +372,28 @@ instead. The list shows each process's command line (secrets, tokens and JSON
 settings redacted) and how long it has run. It goes into the continuation
 prompt and Brain's event ("Still running from before: …"). Mewla's own helpers
 and the agent's own control server (Codex's app-server) are left out of the
-list. On Windows the Session's Job Object still ends its processes with the
-old Session, so nothing survives to list there.
+list.
+
+**On Windows a relaunch stops what the Worker left running.** There the old
+Session's processes live in its ConPTY's Job Object, and the relaunch closes it
+when the new Session takes its place. So everything the dead agent had left
+running ends with it, and there is nothing to list. Brain's event says so in
+one sentence ("What it had left running was stopped: on Windows it ends with
+the old Session."). A continuation says it too, instead of "Mewla stopped
+nothing": the command in flight may have finished or run only in part, and
+nothing of it is running now. This is accepted as it is
+(`jobDelegatedResourceManager.EndsSurvivors`).
+
+**agy today.** agy has two restart layers. Inside its Session, `agy-session`
+starts `agy acp` again itself when it stops, up to 3 times in 2 minutes
+(`work/antigravity_session.go`); Brain does not see those restarts. Only when
+`agy-session` itself ends does this relaunch start `agy-session` again, by the
+rules above. agy also has no provider-outage wait yet. Its errors are not
+classified as transient. Its availability is recorded under the family
+`agy-session` (the Session's observed command), while the relaunch plan looks
+up the family of the recorded launch command (`agy …`), which names none. So an
+agy Worker that dies during an outage is started again at once, like any end. Both belong to the agy Worker
+and are not changed here.
 
 **One launch path for every agent, started before the old one goes.** The launch is
 `work.RelaunchCommand`: the spawn launch with the agent's resume flag, and a
