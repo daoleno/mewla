@@ -10,6 +10,8 @@ Intel Macs.
 
 ## Install
 
+**Already using the Mewla CLI on this Mac?** Keep using it and wait for the fixed app before opening Mewla 0.4.23. Opening the app can stop the existing daemon and disconnect paired phones. The steps below are for a fresh Mac installation.
+
 1. [Download Mewla for Mac](https://github.com/daoleno/mewla/releases/latest/download/Mewla-macos-arm64.dmg)
    (the `.dmg` of the newest release).
 2. Open the disk image and drag **Mewla** onto **Applications**.
@@ -41,11 +43,10 @@ An existing phone route works without changing LAN access. See [Connect and pair
 
 ## If Mewla was installed with `install.sh`
 
-Opening the app takes over: the old login job and `~/Applications/Mewla.app` are
-removed, the daemon keeps its identity and every paired phone and browser stays
-paired. The daemon is down for about a minute, once, while macOS lets go of the
-old login item. From then on the app updates Mewla ([Install and update](install-daemon.md)),
-and `mewla update` says so instead of replacing anything.
+The 0.4.23 app can remove the old login job before macOS can start its replacement.
+This occurred with the public 0.4.21 and 0.4.22 CLI releases. If you already
+opened the app and lost your connection, keep your Mewla state directory and
+the pairing on your phone while the fix is prepared.
 
 ## Updates
 
