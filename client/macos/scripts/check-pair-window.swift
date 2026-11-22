@@ -21,6 +21,8 @@ switch CommandLine.arguments[2] {
 case "title": exit(title ? 0 : 1)
 case "closed": exit(title || link ? 1 : 0)
 case "qr": exit(title && link ? 0 : 1)
+case "connections": exit(lines.contains("phones reach this mac") ? 0 : 1)
+case "no-code": exit((barcode.results ?? []).isEmpty ? 0 : 1)
 case "consent": exit(title && !link && lines.contains("allow trusted lan") ? 0 : 1)
 case "scan":
     guard title, let qr, let value = qr.payloadStringValue,
