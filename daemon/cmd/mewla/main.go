@@ -25,6 +25,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/agentevents"
+	antigravityadapter "github.com/daoleno/mewla/daemon/agentevents/antigravity"
 	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	codexadapter "github.com/daoleno/mewla/daemon/agentevents/codex"
 	cursoradapter "github.com/daoleno/mewla/daemon/agentevents/cursor"
@@ -152,6 +153,8 @@ func run(args []string, stderr io.Writer) error {
 		switch args[0] {
 		case "dsh-session":
 			return runDSHSessionCLI(args[1:])
+		case "agy-session":
+			return runAntigravitySessionCLI(args[1:])
 		case "sh":
 			// Hidden: runs a Session's launch script where there is no
 			// /bin/sh (Windows); see package launchsh.
@@ -534,6 +537,18 @@ func runDaemon(args []string, stderr io.Writer) error {
 		w.ObserveSessions(piFollow.Observe)
 		senders, stops = append(senders, piFollow.send), append(stops, piFollow.interrupt)
 	}
+	work.SetAntigravityStateDir(authManager.StorageDir())
+	agyFollow := newAgyEvents(ctx, eventHub, agentEvents, w.Workers)
+	if err := agyFollow.Listen(work.AntigravityEventsSocket(authManager.StorageDir())); err != nil {
+		logAgyListen(err)
+	} else {
+		w.ObserveSessions(agyFollow.Observe)
+		senders, stops = append(senders, agyFollow.send), append(stops, agyFollow.interrupt)
+	}
+	// An agy launch runs as Mewla's Session program, which holds agy over ACP.
+	// It is registered even without the socket: the program then still writes
+	// its log and takes typed input in its terminal.
+	adapters.Register(antigravityadapter.Provider, antigravityadapter.Adapter{Mewla: watcher.ExecutablePath(), StateDir: authManager.StorageDir()})
 	// Each agent's follower takes the sends and stops of the Workers it
 	// follows; any other Worker is typed into.
 	if codexFollow != nil {
@@ -689,6 +704,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	srv.SetAgentActivity(hubActivity(eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
+	srv.SetAntigravitySessions(agyFollow)
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
 		return fmt.Errorf("open answered requests: %w", err)
@@ -1769,7 +1785,7 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs.StringVar(&cwd, "cwd", "", "scheduled action working directory")
 	fs.StringVar(&executor, "executor", "", "scheduled action: configured executor name (default: the Brain host executor). With none of -executor, -model and -reasoning the action runs on the \"Scheduled action\" row of routing.md, else on the Brain host executor")
 	fs.StringVar(&model, "model", "", "scheduled action: model for each run (codex, claude, pi, grok, agent, agy); empty keeps the client default")
-	fs.StringVar(&reasoning, "reasoning", "", "scheduled action: reasoning level for each run (codex, claude, pi); empty keeps the client default")
+	fs.StringVar(&reasoning, "reasoning", "", "scheduled action: reasoning level for each run (codex, claude, pi, agy); empty keeps the client default")
 	fs.StringVar(&sourceThread, "source-thread", "", "required for scheduled_action: source_thread_id for canonical Calendar result projection")
 	fs.Int64Var(&revision, "revision", 0, "expected revision")
 	if err := fs.Parse(args); err != nil {
@@ -1946,7 +1962,7 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.StringVar(&req.Executor, "executor", "", "configured executor name (default: the Brain host executor)")
 	fs.StringVar(&req.Command, "command", "", "explicit command override (delegated client policy still applies)")
 	fs.StringVar(&req.ModelID, "model", "", "model for this launch (codex, claude, pi, grok, agent, agy); empty keeps the client default")
-	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "reasoning level for this launch (codex, claude, pi); empty keeps the client default")
+	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "reasoning level for this launch (codex, claude, pi, agy); empty keeps the client default")
 	fs.StringVar(&req.Cwd, "cwd", "", "Worker working directory")
 	fs.StringVar(&req.Prompt, "prompt", "", "initial prompt text")
 	fs.StringVar(&req.PromptFile, "prompt-file", "", "file containing the initial prompt")

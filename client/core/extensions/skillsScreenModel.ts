@@ -12,6 +12,7 @@ export const MANAGED_SKILL_AGENTS: readonly ManagedSkillAgent[] = [
   "grok",
   "opencode",
   "pi",
+  "antigravity",
 ];
 
 export type SkillStatusFilter = "all" | "enabled" | "disabled";

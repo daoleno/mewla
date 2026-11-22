@@ -4628,6 +4628,13 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 					return "", err
 				}
 			}
+			// Brain on agy runs as Mewla's Session program, which holds agy over
+			// ACP: its chat is live and each turn ends with agy's own stop.
+			if exe, exeErr := os.Executable(); exeErr == nil {
+				if launched, ok := work.AntigravitySessionLaunchCommand(command, exe, work.AntigravityStateDir()); ok {
+					command = launched
+				}
+			}
 		}
 		return withCLIOnPath(command), nil
 	case work.WorkerProviderOpenCode:

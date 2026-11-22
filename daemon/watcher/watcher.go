@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/daoleno/mewla/daemon/agysession"
 	"log"
 	"net"
 	"os"
@@ -4895,6 +4896,9 @@ func workerProviderFamily(command string) string {
 	if strings.Contains(command, "dsh-session") {
 		return "dsh"
 	}
+	if agysession.IsCommand(command) {
+		return "agy-session"
+	}
 	switch workerCommandName(command) {
 	case "claude", "claude-code", "cc":
 		return "claude"
@@ -4933,6 +4937,9 @@ func mergeWorkerCommandOwnership(previous, detected string) string {
 		return detected
 	}
 	if strings.Contains(previous, "--dsh-session") && workerProviderFamily(detected) == "dsh" {
+		return previous
+	}
+	if agysession.IsCommand(previous) && agysession.ID(previous) == agysession.ID(detected) {
 		return previous
 	}
 	if commandExecutableBase(previous) != "pi" || commandExecutableBase(detected) != "pi" {
@@ -5094,12 +5101,15 @@ func isGrokResumeCommandLine(command string) bool {
 
 func isWorkerCommand(command string) bool {
 	name := workerCommandName(command)
-	return name == "claude" || name == "claude-code" || name == "codex" || name == "cursor-agent" || name == "grok" || name == "cc" || name == "pi" || name == "opencode" || name == "dsh" || name == "agy"
+	return name == "claude" || name == "claude-code" || name == "codex" || name == "cursor-agent" || name == "grok" || name == "cc" || name == "pi" || name == "opencode" || name == "dsh" || name == "agy" || name == "agy-session"
 }
 
 func workerCommandName(command string) string {
 	if strings.Contains(command, " dsh-session --dsh-session ") {
 		return "dsh"
+	}
+	if agysession.IsCommand(command) {
+		return "agy-session"
 	}
 	fields := strings.Fields(strings.TrimSpace(command))
 	if len(fields) == 0 {

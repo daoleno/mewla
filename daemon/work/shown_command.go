@@ -13,6 +13,9 @@ import (
 // about the Session). The launch itself keeps the full command; every other
 // command, and settings that bring hooks of their own, are shown as written.
 func ShownCommand(command string) string {
+	if IsAntigravitySessionCommand(command) {
+		return shownAntigravitySession(command)
+	}
 	if !strings.Contains(command, "agent-event") || !strings.Contains(command, "--settings") {
 		return command
 	}
@@ -88,4 +91,27 @@ func withoutMewlaHooks(raw string) (string, bool) {
 		return "", false
 	}
 	return string(out), true
+}
+
+// shownAntigravitySession is an Antigravity Session as the agy launch it is:
+// Mewla's program, its identity, state folder and the Mewla tools it hands
+// agy are how Mewla runs agy, not what the person chose.
+func shownAntigravitySession(command string) string {
+	fields, ok := shellquote.Fields(command)
+	if !ok {
+		return "agy"
+	}
+	shown := []string{"agy"}
+	for index := 0; index < len(fields); index++ {
+		switch field := fields[index]; field {
+		case "--model", "--effort", "--mode", "--conversation", "--add-dir":
+			if index+1 < len(fields) {
+				shown = append(shown, field, shellquote.Word(fields[index+1]))
+				index++
+			}
+		case "--dangerously-skip-permissions":
+			shown = append(shown, field)
+		}
+	}
+	return strings.Join(shown, " ")
 }

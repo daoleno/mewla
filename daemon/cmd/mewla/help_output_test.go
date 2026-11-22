@@ -60,7 +60,7 @@ func TestEveryCommandsHelpGoesToStdout(t *testing.T) {
 	invocations = append(invocations, []string{"help"})
 	for _, name := range dispatchedCommands(t) {
 		switch name {
-		case "sh", "dsh-session", "agent-event":
+		case "sh", "dsh-session", "agy-session", "agent-event":
 			continue // internal: arguments are a script or a payload
 		case "gcloud", "aws", "gws":
 			invocations = append(invocations, []string{name, "--help"}, []string{name})

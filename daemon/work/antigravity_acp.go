@@ -254,6 +254,16 @@ var antigravityExitCodePattern = regexp.MustCompile(`Command exited with code (-
 // into the events of the Brain chat. Consecutive chunks of one kind are one
 // message; a tool call and its later updates are one event.
 func projectAntigravityConversation(id, cwd, path string, updates []antigravityACPUpdate) CodexConversation {
+	return projectAntigravityUpdates(id, cwd, path, updates, nil)
+}
+
+// antigravityBoundary is a pseudo-update that ends the message being
+// streamed, so two messages of one kind in a row stay two messages.
+const antigravityBoundary = "mewla_boundary"
+
+// projectAntigravityUpdates projects updates in order; times, when given, is
+// when each update was seen, and an event carries the time it began.
+func projectAntigravityUpdates(id, cwd, path string, updates []antigravityACPUpdate, times []string) CodexConversation {
 	conversation := CodexConversation{
 		Available: true, Source: antigravityConversationSource, SessionID: id, CWD: cwd, Path: path,
 		Events: []CodexConversationEvent{},
@@ -262,16 +272,26 @@ func projectAntigravityConversation(id, cwd, path string, updates []antigravityA
 		chunkKind string
 		chunkAt   = -1
 		tools     = map[string]int{}
+		questions = map[string]bool{}
 		users     int
 	)
+	at := ""
 	appendEvent := func(event CodexConversationEvent) int {
 		event.Seq = len(conversation.Events) + 1
 		event.Source = antigravityConversationSource
+		if event.Timestamp == "" {
+			event.Timestamp = at
+		}
 		conversation.Events = append(conversation.Events, event)
 		return len(conversation.Events) - 1
 	}
-	for _, update := range updates {
+	for index, update := range updates {
+		if index < len(times) {
+			at = times[index]
+		}
 		switch update.Kind {
+		case antigravityBoundary:
+			chunkKind, chunkAt = "", -1
 		case "user_message_chunk", "agent_message_chunk", "agent_thought_chunk":
 			text := antigravityChunkText(update.Content)
 			if text == "" {
@@ -301,13 +321,21 @@ func projectAntigravityConversation(id, cwd, path string, updates []antigravityA
 			if callID == "" {
 				continue
 			}
+			// agy's question is a request card in Chat (asked, then "You
+			// chose …"), as Claude's is; its tool call is not a row.
+			if update.Name == "ask_question" {
+				questions[callID] = true
+			}
+			if questions[callID] {
+				continue
+			}
 			index, known := tools[callID]
 			if !known {
 				index = appendEvent(CodexConversationEvent{ID: id + ":tool:" + callID, Kind: "tool_call", CallID: callID})
 				tools[callID] = index
 			}
 			event := &conversation.Events[index]
-			event.ToolName = firstNonEmpty(update.Name, event.ToolName)
+			event.ToolName = firstNonEmpty(antigravitySharedToolName(update.Name, update.ToolKind), event.ToolName)
 			event.Title = firstNonEmpty(update.Title, event.Title)
 			if input := firstNonEmptyRaw(update.Args, update.RawInput); input != "" {
 				event.Input = input
@@ -768,6 +796,9 @@ type antigravityPin struct {
 // Session is in: the id on its command line when Mewla resumed it, otherwise
 // the newest conversation in its folder written since the process launched.
 func (r *ProviderConversationReader) loadAntigravityConversationForWorker(worker classifier.Worker, now time.Time) (CodexConversation, error) {
+	if IsAntigravitySessionCommand(worker.Command) {
+		return r.loadAntigravitySessionForWorker(worker)
+	}
 	if token, present, err := ProviderResumeToken(WorkerProviderAntigravity, worker.Command); err == nil && present {
 		return r.loadAntigravityConversationByID(token)
 	}
@@ -815,6 +846,19 @@ func ResolveAntigravityWorkerTranscript(worker classifier.Worker) HostTranscript
 
 func resolveAntigravityIdentity(worker classifier.Worker, unique bool) HostTranscriptIdentity {
 	unbound := HostTranscriptIdentity{Provider: WorkerProviderAntigravity}
+	if IsAntigravitySessionCommand(worker.Command) {
+		// Mewla's Session program: the conversation it recorded, read from
+		// its own log.
+		conversation := AntigravitySessionConversation(worker.Command)
+		path := AntigravitySessionLogForCommand(worker.Command)
+		if conversation == "" || path == "" {
+			return unbound
+		}
+		if _, err := os.Stat(path); err != nil {
+			return unbound
+		}
+		return HostTranscriptIdentity{Provider: WorkerProviderAntigravity, SessionID: conversation, Path: path}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return unbound
@@ -891,4 +935,23 @@ func ApplyAntigravityProgress(conversation *CodexConversation, state string, at 
 func parseAntigravityActivityTime(value string) time.Time {
 	parsed, _ := time.Parse(time.RFC3339Nano, value)
 	return parsed
+}
+
+// antigravitySharedToolName names an agy tool the way Chat names the same
+// action of every agent: agy's run_command is a command like Codex's
+// exec_command, its file writes are edits. Tools Chat already knows by agy's
+// own name (read_file) and any other keep it.
+func antigravitySharedToolName(name, kind string) string {
+	switch strings.TrimSpace(name) {
+	case "":
+		return ""
+	case "run_command":
+		return "exec_command"
+	case "write_file", "write_to_file", "replace_file_content", "multi_replace_file_content", "edit_file":
+		return "write"
+	}
+	if strings.EqualFold(kind, "execute") {
+		return "exec_command"
+	}
+	return name
 }

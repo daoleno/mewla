@@ -54,11 +54,13 @@ func (s *Service) NewChat() (Snapshot, error) {
 	if err := s.store.SetHostSession("", executor.ID); err != nil {
 		return Snapshot{}, err
 	}
-	if _, err := s.ensureHostWorker(executor); err != nil {
-		return Snapshot{}, err
-	}
+	// The new chat is current before its Host starts: the Host's activation
+	// hands over the current chat, and a New chat hands over nothing.
 	threadID := newChatThreadID()
 	if err := s.store.SetChatState(ChatState{ThreadID: threadID}); err != nil {
+		return Snapshot{}, err
+	}
+	if _, err := s.ensureHostWorker(executor); err != nil {
 		return Snapshot{}, err
 	}
 	return s.Snapshot()

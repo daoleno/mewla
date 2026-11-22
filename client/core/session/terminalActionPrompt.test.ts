@@ -306,3 +306,15 @@ describe("buildTerminalActionPrompt with a decision the agent reported", () => {
     expect(buildTerminalActionPrompt({ approvals: undefined })).toBeNull();
   });
 });
+
+describe("an agent's own question", () => {
+  test("is titled by the question and answers with the chosen option", () => {
+    const card = buildTerminalActionPrompt({
+      approvals: [{ id: "q-call_1", kind: "question", tool: "ask_question", summary: "Which color?", options: [{ id: "1", label: "Red" }, { id: "2", label: "Blue" }] }],
+    });
+    expect(card?.title).toBe("Which color?");
+    expect(card?.requestLabel).toBeUndefined();
+    expect(card?.approvalId).toBe("q-call_1");
+    expect(card?.options.map((option) => [option.label, option.approvalOptionId, option.destructive ?? false])).toEqual([["Red", "1", false], ["Blue", "2", false]]);
+  });
+});

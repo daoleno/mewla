@@ -14,6 +14,19 @@ import (
 // Only files already admitted to the canonical Mewla upload directory may become
 // native image bytes. Provider-authored paths never acquire filesystem authority.
 func dshPromptContent(text string) ([]map[string]any, error) {
+	return uploadPromptContent(text, filepath.Join(filepath.Dir(filepath.Dir(DSHRoot())), "uploads"), func(mime, data, name string) map[string]any {
+		return map[string]any{"type": "image", "mediaType": mime, "data": data, "name": name}
+	})
+}
+
+// acpPromptContent is the same for the Agent Client Protocol's image block.
+func acpPromptContent(text, root string) ([]map[string]any, error) {
+	return uploadPromptContent(text, root, func(mime, data, _ string) map[string]any {
+		return map[string]any{"type": "image", "mimeType": mime, "data": data}
+	})
+}
+
+func uploadPromptContent(text, root string, image func(mime, data, name string) map[string]any) ([]map[string]any, error) {
 	content := []map[string]any{{"type": "text", "text": text}}
 	message, err := attachmentpkg.Split(text)
 	if err != nil {
@@ -25,7 +38,6 @@ func dshPromptContent(text string) ([]map[string]any, error) {
 	if len(message.Files) > 8 {
 		return nil, fmt.Errorf("at most eight attachments are supported")
 	}
-	root := filepath.Join(filepath.Dir(filepath.Dir(DSHRoot())), "uploads")
 	total := 0
 	for _, attachment := range message.Files {
 		relative, err := filepath.Rel(root, attachment.Path)
@@ -66,7 +78,7 @@ func dshPromptContent(text string) ([]map[string]any, error) {
 		if len(bytes) > 5<<20 || total > 40<<20 {
 			return nil, fmt.Errorf("DSH image intake exceeds its byte limit")
 		}
-		content = append(content, map[string]any{"type": "image", "mediaType": mime, "data": base64.StdEncoding.EncodeToString(bytes), "name": attachment.Name})
+		content = append(content, image(mime, base64.StdEncoding.EncodeToString(bytes), attachment.Name))
 	}
 	return content, nil
 }

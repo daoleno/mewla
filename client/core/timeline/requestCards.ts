@@ -105,7 +105,9 @@ function cardOf(request: TrayRequest, input: RequestCardsInput): RequestCard | n
     const approvalId = request.key.slice(`approval:${workerId}:`.length);
     const approval = worker?.approvals?.find((a) => a.id === approvalId);
     if (!approval) return null;
-    return { ...base, ...source, label: "Approve", body: { kind: "action", prompt: buildApprovalPrompt(approval, workerId), workerId } };
+    // An agent's own question (agy's ask_question) asks, like Claude's; it is not an approval.
+    const label = approval.kind === "question" ? "Needs you" : "Approve";
+    return { ...base, ...source, label, body: { kind: "action", prompt: buildApprovalPrompt(approval, workerId), workerId } };
   }
   if (request.kind === "prompt") {
     const prompt = isHost ? input.brainHost?.prompt : worker?.prompt;

@@ -248,6 +248,7 @@ type Server struct {
 	agentLevelsFn      func(*classifier.Worker) map[string]string
 	agentActivityFn    func(workerID string) AgentActivity
 	agentApprovals     AgentApprovals
+	agySessions        AntigravitySessions
 	// answered is the answered-request ledger (answered_requests.go);
 	// prompts tracks open screen prompts for it.
 	answered *answered.Ledger
