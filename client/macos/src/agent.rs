@@ -30,7 +30,9 @@ unsafe extern "C" {
 /// What happened, for the log.
 pub fn adopt_and_register(home: &Path, cli: &Path) -> Vec<String> {
     let mut said = Vec::new();
-    take_over_boot_install(home, &mut said);
+    if !take_over_boot_install(home, &mut said) {
+        return said;
+    }
     link_cli(home, cli, &mut said);
     register(&mut said);
     refresh_daemon(cli, &mut said);
@@ -61,12 +63,19 @@ fn refresh_daemon(cli: &Path, said: &mut Vec<String>) {
     }
 }
 
-fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {
+fn take_over_boot_install(home: &Path, said: &mut Vec<String>) -> bool {
     let plist = home.join("Library/LaunchAgents").join(format!("{LABEL}.plist"));
-    let Ok(text) = std::fs::read_to_string(&plist) else { return };
+    let text = match std::fs::read_to_string(&plist) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return true,
+        Err(err) => {
+            said.push(format!("inspect {}: {err}", plist.display()));
+            return false;
+        }
+    };
     if !text.contains(MANAGED_MARK) {
         said.push(format!("{} is not mewla boot install's: left as it is", plist.display()));
-        return;
+        return false;
     }
     // SAFETY: getuid has no preconditions.
     let target = format!("gui/{}/{LABEL}", unsafe { getuid() });
@@ -87,7 +96,16 @@ fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {
     }
     let old_app = home.join("Applications/Mewla.app");
     let managed = std::fs::read_to_string(old_app.join("Contents/Info.plist")).map(|info| info.contains("MewlaManagedBundle")).unwrap_or(false);
-    if managed && std::fs::remove_dir_all(&old_app).is_ok() {
+    if managed {
+        // Removing a bundle from disk leaves its Launch Services record behind. Both bundles
+        // claim com.daoleno.mewla, so unregister the old URL while it still resolves.
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+        let status = Command::new(lsregister).arg("-u").arg(&old_app).status();
+        said.push(format!("unregister boot install's bundle: {status:?}"));
+        if let Err(err) = std::fs::remove_dir_all(&old_app) {
+            said.push(format!("remove {}: {err}", old_app.display()));
+            return false;
+        }
         said.push(format!("removed {}", old_app.display()));
         // Both bundles have the same identifier. Refresh the surviving app's location before
         // SMAppService asks launchd to resolve its bundle-relative executable.
@@ -97,6 +115,7 @@ fn take_over_boot_install(home: &Path, said: &mut Vec<String>) {
             said.push(format!("Launch Services registered this app after takeover: {status}"));
         }
     }
+    true
 }
 
 /// `~/.local/bin/mewla`: an installed copy of the CLI (install.sh's) becomes a link to the app's, so a terminal runs
@@ -137,14 +156,14 @@ fn link_cli(home: &Path, cli: &Path, said: &mut Vec<String>) {
 }
 
 /// What launchd runs for the job (its `program` or `program identifier` line), when it has it loaded.
-fn launchd_program(target: &str) -> Option<String> {
+fn launchd_listing(target: &str) -> Option<String> {
     let out = Command::new("/bin/launchctl").args(["print", target]).output().ok().filter(|o| o.status.success())?;
-    let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    // Registration can succeed while every spawn exits EX_CONFIG. Only accept a running job.
-    if !text.lines().any(|line| line == "\tstate = running") {
-        return None;
-    }
-    text.lines().map(str::trim).find(|line| line.starts_with("program = ") || line.starts_with("program identifier = ")).map(str::to_owned)
+    Some(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+fn app_job_running(listing: &str) -> bool {
+    listing.lines().any(|line| line == "\tstate = running")
+        && listing.lines().any(|line| line == "\tprogram identifier = Contents/Helpers/mewla")
 }
 
 /// Registers the bundle's LaunchAgent and waits for launchd to load it. `status()` alone is not enough: right after
@@ -155,7 +174,7 @@ fn register(said: &mut Vec<String>) {
     let target = format!("gui/{}/{LABEL}", unsafe { getuid() });
     // The app's job runs the bundle's program (`program identifier = Contents/Helpers/mewla`); boot install's ran
     // `~/Applications/Mewla.app/Contents/MacOS/mewla`.
-    let ours = || launchd_program(&target).is_some_and(|program| program.contains("Contents/Helpers/mewla"));
+    let ours = || launchd_listing(&target).is_some_and(|listing| app_job_running(&listing));
     // SAFETY: plain calls of SMAppService with a valid string.
     unsafe {
         let service = SMAppService::agentServiceWithPlistName(&NSString::from_str(&format!("{LABEL}.plist")));
@@ -172,12 +191,36 @@ fn register(said: &mut Vec<String>) {
         // refuses the registration (Operation not permitted) until it collects it, about a minute after its plist went
         // (proven on a clean macOS 26 runner: registered on the 8th try): try again until it lets go.
         let mut tries = 0;
-        loop {
+        let mut repaired = false;
+        'registration: loop {
             tries += 1;
             match service.registerAndReturnError() {
                 Ok(()) => {
                     said.push(format!("registered the daemon's LaunchAgent (try {tries}; was {}, now {})", status.0, service.status().0));
-                    break;
+                    for _ in 0..40 {
+                        if let Some(listing) = launchd_listing(&target) {
+                            if app_job_running(&listing) {
+                                said.push(format!("launchd runs {target} from the app"));
+                                return;
+                            }
+                            if !repaired && listing.lines().any(|line| matches!(line.trim(), "last exit code = 78: EX_CONFIG" | "last exit code = 78")) {
+                                match service.unregisterAndReturnError() {
+                                    Ok(()) => {
+                                        repaired = true;
+                                        said.push("unregistered the unresolved bundle job after EX_CONFIG".into());
+                                        continue 'registration;
+                                    }
+                                    Err(err) => {
+                                        said.push(format!("unregister unresolved job: {}", err.localizedDescription()));
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                    }
+                    said.push(format!("launchd did not start {target}"));
+                    return;
                 }
                 Err(err) if tries < 10 => {
                     said.push(format!("register try {tries}: {} (code {}, status {})", err.localizedDescription(), err.code(), service.status().0));
@@ -190,14 +233,6 @@ fn register(said: &mut Vec<String>) {
             }
         }
     }
-    for _ in 0..40 {
-        if ours() {
-            said.push(format!("launchd runs {target} from the app"));
-            return;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(500));
-    }
-    said.push(format!("launchd has not loaded {target} after 20 s: {:?}", launchd_program(&target).map(|p| p.chars().take(200).collect::<String>())));
 }
 
 /// Stop Mewla on this Mac…: the LaunchAgent is unregistered, so launchd stops the daemon and does not start it again
