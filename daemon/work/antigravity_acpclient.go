@@ -45,8 +45,9 @@ type acpReply struct {
 }
 
 type acpError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int             `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
 }
 
 func (e *acpError) Error() string {
@@ -54,6 +55,25 @@ func (e *acpError) Error() string {
 		return ""
 	}
 	return strings.TrimSpace(e.Message)
+}
+
+func (e *acpError) providerDetails() (string, int) {
+	if e == nil {
+		return "", 0
+	}
+	var data map[string]json.RawMessage
+	if json.Unmarshal(e.Data, &data) != nil {
+		return "", 0
+	}
+	var code string
+	_ = json.Unmarshal(data["code"], &code)
+	for _, key := range []string{"httpStatus", "http_status", "statusCode"} {
+		var status int
+		if json.Unmarshal(data[key], &status) == nil && status > 0 {
+			return code, status
+		}
+	}
+	return code, 0
 }
 
 // errACPClosed is the answer to every call once agy has exited.

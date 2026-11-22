@@ -5000,9 +5000,11 @@ func workerProviderFamily(command string) string {
 		return "dsh"
 	}
 	if agysession.IsCommand(command) {
-		return "agy-session"
+		return "antigravity"
 	}
 	switch workerCommandName(command) {
+	case "agy":
+		return "antigravity"
 	case "claude", "claude-code", "cc":
 		return "claude"
 	case "codex":

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // The test binary stands in for `agy acp` when MEWLA_FAKE_AGY_ACP is set: a
@@ -29,6 +31,7 @@ func TestMain(m *testing.M) {
 const fakeAgyConversation = "11111111-2222-4333-8444-000000000001"
 
 func fakeAgyACP() {
+	conversation := firstNonEmpty(os.Getenv("MEWLA_FAKE_AGY_CONVERSATION"), fakeAgyConversation)
 	record, _ := os.OpenFile(os.Getenv("MEWLA_FAKE_AGY_RECORD"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	defer record.Close()
 	out := json.NewEncoder(os.Stdout)
@@ -39,10 +42,10 @@ func fakeAgyACP() {
 		_ = out.Encode(v)
 	}
 	update := func(u map[string]any) {
-		send(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": fakeAgyConversation, "update": u}})
+		send(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": conversation, "update": u}})
 	}
 	setup := map[string]any{
-		"sessionId": fakeAgyConversation,
+		"sessionId": conversation,
 		"models":    map[string]any{"currentModelId": "model-default", "availableModels": []map[string]string{{"modelId": "model-default", "name": "Default"}, {"modelId": "model-low", "name": "Low"}}},
 		"modes":     map[string]any{"currentModeId": "default", "availableModes": []map[string]string{{"id": "default", "name": "Default"}, {"id": "plan", "name": "Plan"}}},
 	}
@@ -79,7 +82,7 @@ func fakeAgyACP() {
 			permMu.Unlock()
 			continue
 		}
-		fmt.Fprintf(record, "%s %s\n", message.Method, strings.TrimSpace(string(message.Params)))
+		fmt.Fprintf(record, "%s %s %s\n", conversation, message.Method, strings.TrimSpace(string(message.Params)))
 		reply := func(result any) {
 			send(map[string]any{"jsonrpc": "2.0", "id": message.ID, "result": result})
 		}
@@ -96,12 +99,16 @@ func fakeAgyACP() {
 				SessionID string `json:"sessionId"`
 			}
 			_ = json.Unmarshal(message.Params, &params)
-			if params.SessionID != fakeAgyConversation {
+			if params.SessionID != conversation || os.Getenv("MEWLA_FAKE_AGY_REFUSE_RESUME") == "1" {
 				send(map[string]any{"jsonrpc": "2.0", "id": message.ID, "error": map[string]any{"code": -32603, "message": "Failed to read session"}})
 				continue
 			}
 			reply(setup)
 		case "session/set_model", "session/set_mode", "session/set_config_option":
+			if os.Getenv("MEWLA_FAKE_AGY_REFUSE_MODEL") == "1" {
+				send(map[string]any{"jsonrpc": "2.0", "id": message.ID, "error": map[string]any{"code": -32000, "message": "model unavailable"}})
+				continue
+			}
 			reply(map[string]any{})
 		case "session/cancel":
 		case "session/prompt":
@@ -117,7 +124,12 @@ func fakeAgyACP() {
 			}
 			id := message.ID
 			go func() {
+				refuseFile := os.Getenv("MEWLA_FAKE_AGY_REFUSE_FILE")
+				_, refusing := os.Stat(refuseFile)
 				switch {
+				case strings.Contains(text, "rate limit") || refuseFile != "" && refusing == nil:
+					send(map[string]any{"jsonrpc": "2.0", "id": id, "error": map[string]any{"code": -32000, "message": "provider refused", "data": map[string]any{"code": "rate_limit", "httpStatus": 429}}})
+					return
 				case strings.Contains(text, "crash"):
 					os.Exit(3)
 				case strings.Contains(text, "fruit"):
@@ -145,7 +157,7 @@ func fakeAgyACP() {
 					permissions["p1"] = answer
 					permMu.Unlock()
 					send(map[string]any{"jsonrpc": "2.0", "id": "p1", "method": "session/request_permission", "params": map[string]any{
-						"sessionId": fakeAgyConversation,
+						"sessionId": conversation,
 						"toolCall":  map[string]any{"toolCallId": "call_1", "name": "run_command", "title": "echo hi", "kind": "execute"},
 						"options":   []map[string]string{{"optionId": "allow", "name": "Allow", "kind": "allow_once"}, {"optionId": "deny", "name": "Deny", "kind": "reject_once"}},
 					}})
@@ -202,6 +214,15 @@ func newFakeDaemon(t *testing.T, socket string) *fakeDaemon {
 	}()
 	t.Cleanup(func() { listener.Close() })
 	return d
+}
+
+func shortFakeAgySocket(t *testing.T, dir string) string {
+	t.Helper()
+	socket := platform.SocketPath(filepath.Join(dir, "events.sock"))
+	if err := platform.EnsureSocketDir(socket); err != nil {
+		t.Fatal(err)
+	}
+	return socket
 }
 
 func (d *fakeDaemon) send(v any) {
@@ -424,6 +445,231 @@ func TestAntigravitySessionRunsAgyOverACP(t *testing.T) {
 	imported, _ := os.ReadFile(record)
 	if !strings.Contains(string(imported), "session/load {") {
 		t.Fatalf("an unlogged conversation was not replayed:\n%s", imported)
+	}
+}
+
+func TestSupervisedAntigravityDeathUsesOneAgentAttemptAndResumesOriginalConversation(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	record := filepath.Join(dir, "agy-calls")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", record)
+	socket := shortFakeAgySocket(t, dir)
+	daemon := newFakeDaemon(t, socket)
+	id := "agy-0b6a3c1e-0000-4000-8000-00000000dddd"
+	run := func(text string) error {
+		in, typed := io.Pipe()
+		defer typed.Close()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		done := make(chan error, 1)
+		go func() {
+			done <- RunAntigravitySession(ctx, AntigravitySessionOptions{
+				ID: id, Cwd: dir, StateDir: stateDir, Model: "model-low", Binary: os.Args[0], Socket: socket,
+				In: in, Out: io.Discard, Supervised: true,
+			})
+		}()
+		if hello := daemon.awaitHello(); hello.Conversation != fakeAgyConversation {
+			t.Fatalf("conversation changed: %+v", hello)
+		}
+		daemon.send(map[string]string{"t": "send", "id": text, "text": text})
+		if input := daemon.await("input"); input.Turn == "" {
+			t.Fatalf("input = %+v", input)
+		}
+		if text == "crash now" {
+			select {
+			case err := <-done:
+				return err
+			case <-time.After(10 * time.Second):
+				t.Fatal("supervised bridge retried agy internally")
+			}
+		}
+		if end := daemon.await("turn_end"); end.Stop != "end_turn" {
+			t.Fatalf("continuation end = %+v", end)
+		}
+		cancel()
+		return <-done
+	}
+	if err := run("crash now"); err == nil {
+		t.Fatal("agent death did not end supervised bridge")
+	}
+	calls, _ := os.ReadFile(record)
+	if got := strings.Count(string(calls), "initialize "); got != 1 {
+		t.Fatalf("one failure made %d agy starts: %s", got, calls)
+	}
+	records := mustReadLog(t, AntigravitySessionLogPath(stateDir, fakeAgyConversation))
+	for _, event := range records {
+		if event.T == "turn_end" && event.Turn == fakeAgyConversation+":1" {
+			t.Fatal("the bridge settled the task before the outer supervisor could continue it")
+		}
+		if event.T == "agent_exit" && event.Turn == fakeAgyConversation+":1" {
+			t.Fatal("the bridge made the Turn look failed before process supervision ran")
+		}
+	}
+	conversation, err := ParseAntigravitySessionLog(AntigravitySessionLogPath(stateDir, fakeAgyConversation))
+	if err != nil || conversation.Activity == nil || conversation.Activity.Status != ProviderActivityRunning {
+		t.Fatalf("unfinished task before outer recovery = %+v, %v", conversation.Activity, err)
+	}
+	_ = run("continue safely")
+	calls, _ = os.ReadFile(record)
+	if !strings.Contains(string(calls), `session/resume {"cwd":"`+dir+`","mcpServers":[],"sessionId":"`+fakeAgyConversation+`"}`) ||
+		strings.Count(string(calls), "session/new ") != 1 || strings.Count(string(calls), "initialize ") != 2 {
+		t.Fatalf("outer restart did not make exactly one resumed agy attempt: %s", calls)
+	}
+	state := loadAntigravitySessionState(antigravitySessionStatePath(stateDir, id))
+	if state.Conversation != fakeAgyConversation || state.Model != "model-low" {
+		t.Fatalf("original conversation or model lost: %+v", state)
+	}
+}
+
+func TestSupervisedAntigravityRefusedResumeDoesNotOpenAnotherConversation(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	id := "agy-0b6a3c1e-0000-4000-8000-00000000eeee"
+	if err := os.MkdirAll(AntigravitySessionRoot(stateDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveAntigravitySessionState(antigravitySessionStatePath(stateDir, id), antigravitySessionState{Conversation: fakeAgyConversation, Model: "model-low"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(AntigravitySessionLogPath(stateDir, fakeAgyConversation), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(dir, "agy-calls")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", record)
+	t.Setenv("MEWLA_FAKE_AGY_REFUSE_RESUME", "1")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	in, typed := io.Pipe()
+	defer typed.Close()
+	err := RunAntigravitySession(ctx, AntigravitySessionOptions{
+		ID: id, Cwd: dir, StateDir: stateDir, Binary: os.Args[0], Socket: filepath.Join(dir, "missing.sock"),
+		In: in, Out: io.Discard, Supervised: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "could not reopen conversation") {
+		t.Fatalf("refused resume = %v", err)
+	}
+	calls, _ := os.ReadFile(record)
+	if strings.Count(string(calls), "initialize ") != 1 || strings.Count(string(calls), "session/resume ") != 1 || strings.Contains(string(calls), "session/new ") {
+		t.Fatalf("refused resume opened another conversation or retried: %s", calls)
+	}
+}
+
+func TestSupervisedAntigravityDoesNotContinueOnADifferentModel(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	id := "agy-0b6a3c1e-0000-4000-8000-00000000eeef"
+	if err := os.MkdirAll(AntigravitySessionRoot(stateDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveAntigravitySessionState(antigravitySessionStatePath(stateDir, id), antigravitySessionState{Conversation: fakeAgyConversation, Model: "model-low"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(AntigravitySessionLogPath(stateDir, fakeAgyConversation), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(dir, "agy-calls")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", record)
+	t.Setenv("MEWLA_FAKE_AGY_REFUSE_MODEL", "1")
+	in, typed := io.Pipe()
+	defer typed.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := RunAntigravitySession(ctx, AntigravitySessionOptions{
+		ID: id, Cwd: dir, StateDir: stateDir, Model: "model-default", Binary: os.Args[0],
+		Socket: filepath.Join(dir, "missing.sock"), In: in, Out: io.Discard, Supervised: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "could not restore its model") {
+		t.Fatalf("failed model restoration = %v", err)
+	}
+	calls, _ := os.ReadFile(record)
+	if strings.Count(string(calls), "initialize ") != 1 || !strings.Contains(string(calls), `session/set_model {"modelId":"model-low"`) || strings.Contains(string(calls), "session/prompt ") || strings.Contains(string(calls), "session/new ") {
+		t.Fatalf("a continuation ran on agy's default model: %s", calls)
+	}
+	state := loadAntigravitySessionState(antigravitySessionStatePath(stateDir, id))
+	if state.Conversation != fakeAgyConversation || state.Model != "model-low" {
+		t.Fatalf("saved conversation and model changed: %+v", state)
+	}
+}
+
+func TestPersonalAntigravityModelRestoreUsesItsLocalAttemptLimit(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	id := "agy-0b6a3c1e-0000-4000-8000-00000000eef0"
+	if err := os.MkdirAll(AntigravitySessionRoot(stateDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveAntigravitySessionState(antigravitySessionStatePath(stateDir, id), antigravitySessionState{Conversation: fakeAgyConversation, Model: "model-low"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(AntigravitySessionLogPath(stateDir, fakeAgyConversation), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(dir, "agy-calls")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", record)
+	t.Setenv("MEWLA_FAKE_AGY_REFUSE_MODEL", "1")
+	in, typed := io.Pipe()
+	defer typed.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
+	defer cancel()
+	err := RunAntigravitySession(ctx, AntigravitySessionOptions{
+		ID: id, Cwd: dir, StateDir: stateDir, Binary: os.Args[0],
+		Socket: filepath.Join(dir, "missing.sock"), In: in, Out: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "agy stopped 3 times") {
+		t.Fatalf("local retry budget = %v", err)
+	}
+	calls, _ := os.ReadFile(record)
+	if strings.Count(string(calls), "initialize ") != antigravityRestartLimit || strings.Contains(string(calls), "session/prompt ") {
+		t.Fatalf("personal Session attempts or prompt execution = %s", calls)
+	}
+}
+
+func TestAntigravityStructuredProviderRefusalProjectsToActivity(t *testing.T) {
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, "state")
+	t.Setenv("MEWLA_FAKE_AGY_ACP", "1")
+	t.Setenv("MEWLA_FAKE_AGY_RECORD", filepath.Join(dir, "agy-calls"))
+	socket := shortFakeAgySocket(t, dir)
+	daemon := newFakeDaemon(t, socket)
+	in, typed := io.Pipe()
+	defer typed.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- RunAntigravitySession(ctx, AntigravitySessionOptions{
+			ID: "agy-0b6a3c1e-0000-4000-8000-00000000ffff", Cwd: dir, StateDir: stateDir,
+			Binary: os.Args[0], Socket: socket, In: in, Out: io.Discard,
+		})
+	}()
+	daemon.awaitHello()
+	daemon.send(map[string]string{"t": "send", "id": "r1", "text": "rate limit now"})
+	if end := daemon.await("turn_end"); end.Stop != "error" || end.ErrorCode != "rate_limit" || end.HTTPStatus != 429 {
+		t.Fatalf("refusal end = %+v", end)
+	}
+	conversation, err := ParseAntigravitySessionLog(AntigravitySessionLogPath(stateDir, fakeAgyConversation))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if conversation.Activity == nil || conversation.Activity.Error == nil || conversation.Activity.Error.Code != "rate_limit" || conversation.Activity.Error.HTTPStatus != 429 {
+		t.Fatalf("provider refusal lost its structured code: %+v", conversation.Activity)
+	}
+	cancel()
+	<-done
+}
+
+func TestACPErrorKeepsArbitraryDataFromBreakingTheReply(t *testing.T) {
+	var failure acpError
+	if err := json.Unmarshal([]byte(`{"code":-32000,"message":"provider refused","data":{"code":429,"httpStatus":429,"details":["retry"]}}`), &failure); err != nil {
+		t.Fatal(err)
+	}
+	code, status := failure.providerDetails()
+	if code != "" || status != 429 || failure.Error() != "provider refused" {
+		t.Fatalf("error details = %q %d %q", code, status, failure.Error())
 	}
 }
 

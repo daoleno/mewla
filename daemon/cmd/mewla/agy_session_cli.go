@@ -46,6 +46,6 @@ func runAntigravitySessionCLI(args []string) error {
 	return work.RunAntigravitySession(ctx, work.AntigravitySessionOptions{
 		ID: *id, Cwd: cwd, StateDir: *stateDir, Conversation: *conversation,
 		Model: *model, Effort: *effort, Mode: *mode, SkipPermissions: *skip,
-		MCPServers: servers, AddDirs: addDirs,
+		MCPServers: servers, AddDirs: addDirs, Supervised: os.Getenv("MEWLA_WORKER_DELEGATED") == "1",
 	})
 }

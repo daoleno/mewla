@@ -214,6 +214,13 @@ func (w *Watcher) noteProviderObservation(command string, observation ProviderAc
 	}
 }
 
+// ObserveProviderOutcome accepts an agent-pushed settled Activity. Fast turns
+// can finish between watcher polls, so their provider result must be recorded
+// when the agent reports it.
+func (w *Watcher) ObserveProviderOutcome(command string, observation ProviderActivityObservation) {
+	w.noteProviderObservation(command, observation)
+}
+
 // providerFamilyDown says whether command's agent family is in an outage.
 func (w *Watcher) providerFamilyDown(command string) bool {
 	family := workerProviderFamily(command)

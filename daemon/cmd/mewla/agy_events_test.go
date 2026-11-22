@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
+	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -37,7 +42,65 @@ func TestAgyLinkMessagesBecomeHubEvents(t *testing.T) {
 			t.Fatalf("a failed turn says why: %+v", end[0].Error)
 		}
 	}
+	refusal := work.AntigravityLinkMessage{T: "turn_end", Turn: "c:3", Stop: "error", Error: "provider refused", ErrorCode: "rate_limit", HTTPStatus: 429}
+	end := agyEventsOf("w1", refusal, at)
+	if len(end) != 1 || end[0].Error == nil || end[0].Error.Code != "rate_limit" || end[0].Error.HTTPStatus != 429 {
+		t.Fatalf("structured refusal in hub event = %+v", end)
+	}
+	outcome := agyProviderOutcome(refusal, at)
+	if outcome.Status != "failed" || outcome.Error == nil || outcome.Error.Code != "rate_limit" || outcome.Error.HTTPStatus != 429 ||
+		watcher.ClassifyProviderError(*outcome.Error) != watcher.ProviderErrorTransient {
+		t.Fatalf("structured refusal in availability = %+v", outcome)
+	}
+	if success := agyProviderOutcome(work.AntigravityLinkMessage{T: "turn_end", Turn: "c:4", Stop: "end_turn"}, at.Add(time.Second)); success.Status != "completed" || success.Error != nil {
+		t.Fatalf("provider recovery outcome = %+v", success)
+	}
 	if other := agyEventsOf("w1", work.AntigravityLinkMessage{T: "hello"}, at); other != nil {
 		t.Fatalf("hello is not a hub event: %+v", other)
+	}
+}
+
+func TestAgySocketReportsEveryFastProviderOutcome(t *testing.T) {
+	const session = "agy-0b6a3c1e-0000-4000-8000-00000000abcd"
+	w := watcher.New(0)
+	a := newAgyEvents(context.Background(), agentevents.NewHub(), nil, func() []*classifier.Worker {
+		return []*classifier.Worker{{ID: "worker", Command: "mewla agy-session --agy-session " + session}}
+	})
+	observed := make(chan watcher.ProviderActivityObservation, 3)
+	a.providerOutcome = func(outcome watcher.ProviderActivityObservation) {
+		w.ObserveProviderOutcome("agy", outcome)
+		observed <- outcome
+	}
+	server, client := net.Pipe()
+	defer client.Close()
+	go a.serve(server)
+	encoder := json.NewEncoder(client)
+	if err := encoder.Encode(work.AntigravityLinkMessage{T: "hello", Session: session, Conversation: "conversation"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 2; i++ {
+		if err := encoder.Encode(work.AntigravityLinkMessage{T: "turn_end", Turn: "turn-" + string(rune('0'+i)), Stop: "error", ErrorCode: "rate_limit", HTTPStatus: 429}); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-observed:
+		case <-time.After(5 * time.Second):
+			t.Fatal("agy outcome was not delivered")
+		}
+		_, down := w.ProviderOutage("antigravity")
+		if down != (i == 2) {
+			t.Fatalf("outage after %d refusals = %v", i, down)
+		}
+	}
+	if err := encoder.Encode(work.AntigravityLinkMessage{T: "turn_end", Turn: "turn-3", Stop: "end_turn"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-observed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("agy recovery was not delivered")
+	}
+	if _, down := w.ProviderOutage("antigravity"); down {
+		t.Fatal("agy recovery left the provider held")
 	}
 }

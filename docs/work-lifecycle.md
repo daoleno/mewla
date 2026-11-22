@@ -388,16 +388,19 @@ nothing": the command in flight may have finished or run only in part, and
 nothing of it is running now. This is accepted as it is
 (`jobDelegatedResourceManager.EndsSurvivors`).
 
-**agy today.** agy has two restart layers. Inside its Session, `agy-session`
-starts `agy acp` again itself when it stops, up to 3 times in 2 minutes
-(`work/antigravity_session.go`); Brain does not see those restarts. Only when
-`agy-session` itself ends does this relaunch start `agy-session` again, by the
-rules above. agy also has no provider-outage wait yet. Its errors are not
-classified as transient. Its availability is recorded under the family
-`agy-session` (the Session's observed command), while the relaunch plan looks
-up the family of the recorded launch command (`agy …`), which names none. So an
-agy Worker that dies during an outage is started again at once, like any end. Both belong to the agy Worker
-and are not changed here.
+**Antigravity Workers.** A delegated `agy-session` starts `agy acp` once. If
+that child dies, the bridge exits with an error and leaves its in-flight Turn
+unsettled. The outer supervisor alone restarts the bridge, records the attempt
+and sends a continuation through the normal delegated admission path. It
+resumes the original agy conversation and re-applies its model, thinking level
+and mode. A refused resume never creates a different conversation. A personal
+Session still uses the bridge's local three-start limit because it has no Work
+relaunch supervisor. Bridge and plain `agy` commands share the `antigravity`
+provider family. Each ACP turn outcome reaches the provider tracker as it is
+reported, including fast refusals that finish between watcher polls. Structured
+provider code and HTTP status feed the ordinary outage hold and family probe;
+errors without those fields remain unclassified by the same policy as other
+agents.
 
 **One launch path for every agent, started before the old one goes.** The launch is
 `work.RelaunchCommand`: the spawn launch with the agent's resume flag, and a

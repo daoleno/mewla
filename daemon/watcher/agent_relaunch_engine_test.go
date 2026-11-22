@@ -800,6 +800,58 @@ func TestHostAgentHeldForAnOutageComesBackWhenAnotherWorkerIsAnswered(t *testing
 	}
 }
 
+func TestAgyBridgeUsesProviderFamilyOutageHoldAndRecovery(t *testing.T) {
+	const bridge = "mewla agy-session --agy-session agy-0b6a3c1e-0000-4000-8000-00000000abcd"
+	if family := ProviderFamily(bridge); family != "antigravity" {
+		t.Fatalf("bridge provider family = %q", family)
+	}
+	if family := ProviderFamily("agy --model gemini-4-neon-low"); family != "antigravity" {
+		t.Fatalf("agy launch provider family = %q", family)
+	}
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{}
+	ledger.planFn = func(end AgentEnd) AgentRelaunchPlan {
+		if _, down := h.w.ProviderOutage("antigravity"); down && !end.ProviderTest {
+			return AgentRelaunchPlan{Action: AgentEndWait, WorkID: "work-1", Provider: "antigravity", Line: "Waiting for Antigravity's provider"}
+		}
+		return AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", Command: "exec sleep 307", Conversation: "original-conversation", Attempt: 1}
+	}
+	h.w.SetTurnLedger(ledger)
+	at := time.Now().UTC()
+	h.w.noteProviderObservation(bridge, refused(at.Add(-time.Second)))
+	h.w.noteProviderObservation(bridge, refused(at))
+	if _, down := h.w.ProviderOutage("antigravity"); !down {
+		t.Fatal("two agy refusals did not start the family outage")
+	}
+	supervisor := h.w.agentRelaunch()
+	clock := &lockedClock{at: at}
+	supervisor.now = clock.now
+	killAgent(t, h.w, id, pid)
+	h.w.poll()
+	if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
+		t.Fatalf("a held outage used a restart attempt: %+v", records)
+	}
+	for step := 0; step < 2; step++ {
+		clock.add(agentEndWaitEvery)
+		h.w.poll()
+	}
+	if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
+		t.Fatalf("sustained refusal started competing recovery: %+v", records)
+	}
+	h.w.noteProviderObservation(bridge, answered(clock.now().Add(time.Second)))
+	if _, down := h.w.ProviderOutage("antigravity"); down {
+		t.Fatal("agy success did not end the outage")
+	}
+	clock.add(agentEndWaitEvery + 2*time.Second)
+	h.w.poll()
+	waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive && info.PID != pid })
+	_, records, _, _ := ledger.snapshot()
+	if len(records) != 1 || records[0].Conversation != "original-conversation" || records[0].Attempt != 1 {
+		t.Fatalf("recovery attempts or conversation = %+v", records)
+	}
+}
+
 // An outage that never ends: no held end waits past agentProviderWaitLimit,
 // and every start counts. An agent that keeps dying while the provider still
 // refuses requests is started at each bound and stopped at the relaunch bound
