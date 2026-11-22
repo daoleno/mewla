@@ -15,6 +15,9 @@ const ended = [
   { id: "r-died", work: "w-r-died", title: "Changelog for 0.5", agent: "claude", status: "running", relaunch: { state: "restarting", line: "Restarting after a crash" } },
   { id: "r-back", work: "w-r-back", title: "Invoice export", agent: "codex", status: "done", relaunch: { state: "restarted", line: "Restarted after a crash" } },
   { id: "r-gave", work: "w-r-gave", title: "Search index rebuild", agent: "claude", status: "failed", relaunch: { state: "stopped", line: "Stopped after 3 restarts" } },
+  { id: "r-held", work: "w-r-held", title: "Release notes", agent: "claude", status: "blocked", relaunch: { state: "stopped", line: "Task not resumed after a restart" } },
+  { id: "r-turn", work: "w-r-turn", title: "Schema migration", agent: "codex", status: "running", relaunch: { state: "restarting", line: "Restarting after its turn ends" } },
+  { id: "r-wait", work: "w-r-wait", title: "Docs sweep", agent: "claude", status: "running", relaunch: { state: "restarting", line: "Waiting for Claude Code's provider" } },
 ] as const;
 const sessions = ended.map((s) => ({
   id: s.id, name: s.title, status: s.status, project: "atlas-api", cwd: "/home/me/work/atlas-api", command: s.agent, provider: s.agent,
