@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 )
@@ -928,6 +930,12 @@ func TestHostAgentRelaunchLeavesWhatTheAgentStartedRunning(t *testing.T) {
 		return err == nil && server > 0
 	})
 	t.Cleanup(func() { _ = syscall.Kill(server, syscall.SIGKILL) })
+	// Until setsid has run the server is still in the agent's process group
+	// on its terminal, and the agent's death hangs it up with the terminal.
+	waitUntil(t, 5*time.Second, "server in its own session", func() bool {
+		sid, err := unix.Getsid(server)
+		return err == nil && sid == server
+	})
 	ledger := &relaunchLedger{
 		turn: TurnSnapshot{SessionID: id, TurnID: "turn:live", Status: TurnRunning}, hasTurn: true,
 		plan: AgentRelaunchPlan{Action: AgentEndRelaunch, WorkID: "work-1", TurnID: "turn:live", Command: "exec sleep 308", Attempt: 1, Agent: "sleep",
