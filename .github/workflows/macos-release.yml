@@ -670,6 +670,8 @@ jobs:
           python3 -I "$F/solid.py" "$RUNNER_TEMP/desk.png" 64 64 222 224 228
           osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk.png\"" || true
       - name: The walk
+        # Its own limit, so the captures are uploaded whatever it did.
+        timeout-minutes: 30
         env:
           WALK: ${{ inputs.walk }}
         run: |
