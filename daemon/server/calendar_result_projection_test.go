@@ -44,13 +44,9 @@ func TestBrainSnapshotCarriesNoCalendarResultsAndDoesNotWrite(t *testing.T) {
 	srv := &Server{brain: service, calendar: calendarStore}
 
 	for range 2 {
-		wire, err := srv.brainSnapshotWire(snapshot)
+		payload, err := srv.brainSnapshotWire(snapshot)
 		if err != nil {
 			t.Fatal(err)
-		}
-		payload, ok := wire.(map[string]any)
-		if !ok {
-			t.Fatalf("snapshot wire = %T", wire)
 		}
 		if _, ok := payload["scheduled_results"]; ok {
 			t.Fatalf("brain snapshot carries scheduled results")

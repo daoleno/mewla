@@ -13,6 +13,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -293,6 +294,7 @@ type codexConversationSubscription struct {
 
 type authenticatedClient struct {
 	deviceID string
+	mewlaApp bool
 	revoked  atomic.Bool
 }
 
@@ -664,7 +666,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.auth.RecordClientApp(device.ID, clientAppFromRequest(r)); err != nil {
+	app := clientAppFromRequest(r)
+	if err := s.auth.RecordClientApp(device.ID, app); err != nil {
 		log.Printf("websocket: could not keep the app version of device=%s: %v", device.ID, err)
 	}
 
@@ -676,6 +679,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	keepBacklogInOutbox(conn.UnderlyingConn())
 	owner := &authenticatedClient{
 		deviceID: device.ID,
+		mewlaApp: app.AppPlatform != "",
 	}
 	if !s.bindAuthenticatedClient(conn, owner) {
 		_ = conn.Close()
@@ -3347,6 +3351,16 @@ func (s *Server) sendBrainSnapshot(conn *websocket.Conn, requestID string) {
 		s.sendErrorWithRequestID(conn, requestID, "brain_snapshot_failed", err.Error())
 		return
 	}
+	s.replyBrainSnapshot(conn, requestID, snapshot)
+}
+
+func (s *Server) replyBrainSnapshot(conn *websocket.Conn, requestID string, snapshot brain.Snapshot) {
+	s.mu.Lock()
+	client := s.clients[conn]
+	s.mu.Unlock()
+	if client != nil && client.mewlaApp {
+		snapshot.ProviderOutages = s.chatHostOutages(snapshot)
+	}
 	payload, err := s.brainSnapshotWire(snapshot)
 	if err != nil {
 		s.sendErrorWithRequestID(conn, requestID, "brain_snapshot_failed", err.Error())
@@ -3376,16 +3390,7 @@ func (s *Server) handleBrainSetExecutor(conn *websocket.Conn, raw clientMessage)
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_set_executor_failed", err.Error())
 		return
 	}
-	payload, err := s.brainSnapshotWire(snapshot)
-	if err != nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_snapshot_failed", err.Error())
-		return
-	}
-	s.sendJSON(conn, map[string]any{
-		"type":       "brain_snapshot",
-		"request_id": raw.RequestID,
-		"brain":      payload,
-	})
+	s.replyBrainSnapshot(conn, raw.RequestID, snapshot)
 	select {
 	case s.brainHostRecovery <- struct{}{}:
 	default:
@@ -3541,19 +3546,42 @@ func (s *Server) handleBrainChatNew(conn *websocket.Conn, raw clientMessage) {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_chat_new_failed", err.Error())
 		return
 	}
-	payload, err := s.brainSnapshotWire(snapshot)
-	if err != nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_snapshot_failed", err.Error())
-		return
-	}
-	s.sendJSON(conn, map[string]any{
-		"type":       "brain_snapshot",
-		"request_id": raw.RequestID,
-		"brain":      payload,
-	})
+	s.replyBrainSnapshot(conn, raw.RequestID, snapshot)
 }
 
-func (s *Server) brainSnapshotWire(snapshot brain.Snapshot) (any, error) {
+// The installed app renders every outage it receives at the foot of Chat.
+// During a switch the selected executor can already name the next host.
+// Resolve the observed host using the same command family as the watcher,
+// or the host's configured executor for an opaque launcher.
+func (s *Server) chatHostOutages(snapshot brain.Snapshot) []watcher.ProviderOutage {
+	if len(snapshot.ProviderOutages) == 0 || snapshot.HostWorker == nil {
+		return nil
+	}
+	host := s.lookupWorker(snapshot.HostWorker.ID)
+	if host == nil {
+		return nil
+	}
+	family := watcher.ProviderFamily(host.Command)
+	if family == "" {
+		_, provider := s.workerExecutor(host)
+		switch provider {
+		case work.WorkerProviderCursor:
+			family = "cursor-agent"
+		case work.WorkerProviderAntigravity:
+			family = "agy-session"
+		default:
+			family = provider
+		}
+	}
+	for _, outage := range snapshot.ProviderOutages {
+		if family != "" && outage.Provider == family {
+			return []watcher.ProviderOutage{outage}
+		}
+	}
+	return nil
+}
+
+func (s *Server) brainSnapshotWire(snapshot brain.Snapshot) (map[string]any, error) {
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, err
@@ -3856,7 +3884,24 @@ func (s *Server) emitBrainSnapshotBroadcast(snapshot brain.Snapshot) {
 	if s.brainSnapshotBroadcastHook != nil {
 		s.brainSnapshotBroadcastHook(message)
 	}
-	s.broadcastJSON(message)
+	if len(snapshot.ProviderOutages) == 0 {
+		s.broadcastJSON(message)
+		return
+	}
+	full, err := json.Marshal(message)
+	if err != nil {
+		return
+	}
+	appPayload := maps.Clone(payload)
+	if outages := s.chatHostOutages(snapshot); len(outages) > 0 {
+		appPayload["provider_outages"] = outages
+	} else {
+		delete(appPayload, "provider_outages")
+	}
+	app, err := json.Marshal(map[string]any{"type": "brain_snapshot", "brain": appPayload})
+	if err == nil {
+		s.broadcastAppVariant(full, app)
+	}
 }
 
 func (s *Server) handleCalendarEvent(event calendar.Event) {
@@ -4200,15 +4245,20 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 }
 
 func (s *Server) broadcast(data []byte) {
+	s.broadcastAppVariant(data, nil)
+}
+
+func (s *Server) broadcastAppVariant(data, app []byte) {
 	s.mu.Lock()
-	conns := make([]*websocket.Conn, 0, len(s.clients))
-	for conn := range s.clients {
-		conns = append(conns, conn)
-	}
+	conns := maps.Clone(s.clients)
 	s.mu.Unlock()
 
-	for _, conn := range conns {
-		if err := s.queueMessage(conn, websocket.TextMessage, data, false); err != nil {
+	for conn, client := range conns {
+		message := data
+		if app != nil && client != nil && client.mewlaApp {
+			message = app
+		}
+		if err := s.queueMessage(conn, websocket.TextMessage, message, false); err != nil {
 			s.mu.Lock()
 			work := s.removeClientLocked(conn)
 			s.mu.Unlock()
