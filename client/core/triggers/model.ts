@@ -91,12 +91,17 @@ export function everyWords(trigger: Pick<Trigger, "interval_seconds">): string {
   return `Every ${durationWords(trigger.interval_seconds * 1000)}`;
 }
 
-/** A failure on one line: the reason, then the last line the check wrote to stderr. */
+/**
+ * A failure on one line, in words. The daemon writes its reason ("exit status 1", "timed out after 30s"), then what
+ * the check printed to stderr. The check's own last words lead; an exit status is never shown (gate 0.4.21): a check
+ * that printed nothing "stopped without saying why".
+ */
 export function failureLine(failure: string | undefined): string {
   const lines = (failure ?? "").trim().split("\n");
-  let text = (lines[0] ?? "").trim();
+  const reason = (lines[0] ?? "").trim();
   const last = lines.length > 1 ? (lines[lines.length - 1] ?? "").trim() : "";
-  if (last) text += `: ${last}`;
+  const exited = /^exit status -?\d+$/i.test(reason);
+  const text = exited ? last || "it stopped without saying why" : last ? `${reason}: ${last}` : reason;
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 

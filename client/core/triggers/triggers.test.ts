@@ -64,9 +64,9 @@ describe("a Trigger's row", () => {
 
   test("failing and the runaway pause lead the row and need you", () => {
     const failing = trigger("a", { failing: true, failures: 4, last_failure: "exit status 1\ngh: HTTP 502", state: "failing", last_checked_at: ago(MIN) });
-    expect(triggerLine(failing, NOW)).toBe("Failing: exit status 1: gh: HTTP 502 · checked 1 min ago");
+    expect(triggerLine(failing, NOW)).toBe("Failing: gh: HTTP 502 · checked 1 min ago");
     expect(triggerAttention(failing, NOW)).toBe("failing");
-    expect(attentionWords(failing, NOW)).toBe("Its check keeps failing (4 in a row): exit status 1: gh: HTTP 502");
+    expect(attentionWords(failing, NOW)).toBe("Its check keeps failing (4 in a row): gh: HTTP 502");
     const runaway = trigger("b", { paused: true, pause_reason: "runaway", state: "paused" });
     expect(triggerLine(runaway, NOW)).toBe("Paused: woke Brain 6 times in an hour");
     expect(triggerAttention(runaway, NOW)).toBe("runaway");
@@ -167,6 +167,17 @@ describe("the Triggers page", () => {
   test("the ask card says how long and why", () => {
     const failing = trigger("f", { failing: true, failures: 3, failing_since: "2026-11-18T11:46:00Z", last_failure: "the disk did not answer" });
     expect(askDetail(failing, (at) => new Date(at).toISOString().slice(11, 16))).toBe("3 times in a row since 11:46: the disk did not answer");
+    // The daemon's failure is its reason ("exit status 1", "timed out after 30s"), then what the check printed: the app
+    // shows the check's own words, never an exit code (gate 0.4.21).
+    const time = (at: number) => new Date(at).toISOString().slice(11, 16);
+    const said = trigger("s", { failing: true, failures: 6, failing_since: "2026-11-18T15:02:00Z", last_failure: "exit status 1\nthe disk did not answer" });
+    expect(askDetail(said, time)).toBe("6 times in a row since 15:02: the disk did not answer");
+    const silent = trigger("q", { failing: true, failures: 6, failing_since: "2026-11-18T15:02:00Z", last_failure: "exit status 2" });
+    expect(askDetail(silent, time)).toBe("6 times in a row since 15:02: it stopped without saying why");
+    expect(attentionWords(silent, NOW)).toBe("Its check keeps failing (6 in a row): it stopped without saying why");
+    expect(triggerLine({ ...silent, last_checked_at: undefined }, NOW)).toMatch(/^Failing: it stopped without saying why/);
+    const slow = trigger("t", { failing: true, failures: 3, failing_since: "2026-11-18T15:02:00Z", last_failure: "timed out after 30s" });
+    expect(askDetail(slow, time)).toBe("3 times in a row since 15:02: timed out after 30s");
     expect(askDetail(trigger("r", { paused: true, pause_reason: "runaway" }), () => "")).toBe("It woke Brain 6 times in an hour. Its latest change waits until you resume it.");
   });
 });

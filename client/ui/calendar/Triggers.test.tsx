@@ -93,7 +93,8 @@ describe("Triggers in Calendar", () => {
     await app.press("id:trigger-row-t-ci");
     await app.waitFor("id:trigger-ask", SLOW);
     expect(app.texts()).toContain("Its check keeps failing");
-    expect(app.texts().join(" ")).toMatch(/4 times in a row: exit status 1: gh: HTTP 502/);
+    expect(app.texts().join(" ")).toMatch(/4 times in a row: gh: HTTP 502/);
+    expect(app.texts().join(" ")).not.toMatch(/exit status/);
     expect(app.shows("id:trigger-check-now")).toBe(false);
     expect(app.shows("id:trigger-ask-check")).toBe(true);
     // Paused by the person, a failing check no longer asks for them: the card goes.
