@@ -1,6 +1,40 @@
 {
   "releases": [
     {
+      "version": "0.4.21",
+      "date": "2026-11-22",
+      "highlights": [
+        {
+          "id": "0.4.21-calendar-day",
+          "title": "Calendar shows how your day went",
+          "line": "What happens next, what ran and how it went, with the time now marked.",
+          "media": {
+            "scene": "calendar-day"
+          },
+          "try": {
+            "kind": "open",
+            "target": "calendar"
+          }
+        },
+        {
+          "id": "0.4.21-triggers-page",
+          "title": "Triggers have their own page",
+          "line": "One row shows how many are watching and which needs you. Tap it for the list.",
+          "media": {
+            "scene": "triggers-page"
+          },
+          "try": {
+            "kind": "open",
+            "target": "calendar"
+          }
+        }
+      ],
+      "fixes": [
+        "New session dims an agent this computer does not have, instead of failing after you start.",
+        "On a wide screen Brain's row stays selected while a terminal is open."
+      ]
+    },
+    {
       "version": "0.4.20",
       "date": "2026-11-22",
       "highlights": [
