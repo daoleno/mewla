@@ -37,11 +37,17 @@ import (
 // the installing binary and restarts the job when it changed.
 
 const (
-	bootLaunchdLabel  = "com.daoleno.mewla.daemon"
-	bootLaunchdMarker = "<!-- Managed by mewla boot install -->"
+	bootLaunchdLabel         = "com.daoleno.mewla.daemon"
+	installedAppLaunchdLabel = "com.daoleno.mewla.installed-daemon"
+	bootLaunchdMarker        = "<!-- Managed by mewla boot install -->"
 	// launchctl exits 113 when the domain has no such service.
 	bootLaunchdNotLoaded = 113
 )
+
+func mewlaLaunchdJob() bool {
+	label := os.Getenv("XPC_SERVICE_NAME")
+	return label == bootLaunchdLabel || label == installedAppLaunchdLabel
+}
 
 func bootLaunchdPlistPath() (string, error) {
 	home, err := os.UserHomeDir()
@@ -602,7 +608,7 @@ func bootLaunchdDescribeSigning(metadata bootMetadata) string {
 // phone can't reach and launchd can't replace. kickstart leaves a running
 // job alone. handed reports whether the launch was handed off.
 func bootLaunchdHandOff(args []string, executable string, runner bootRunner) (handed bool, err error) {
-	if bootGOOS != "darwin" || len(args) > 0 || os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel {
+	if bootGOOS != "darwin" || len(args) > 0 || mewlaLaunchdJob() {
 		return false, nil
 	}
 	if resolved, err := filepath.EvalSymlinks(executable); err == nil {

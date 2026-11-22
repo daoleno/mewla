@@ -240,6 +240,20 @@ func TestBootLaunchdUpdateReinstallsWithInstalledConfiguration(t *testing.T) {
 	}
 }
 
+func TestMacAppDaemonSupervision(t *testing.T) {
+	t.Setenv("INVOCATION_ID", "")
+	for _, name := range []string{bootLaunchdLabel, installedAppLaunchdLabel} {
+		t.Setenv("XPC_SERVICE_NAME", name)
+		if !daemonSupervised() {
+			t.Errorf("launchd job %q should be supervised", name)
+		}
+	}
+	t.Setenv("XPC_SERVICE_NAME", "application.com.daoleno.mewla.1234")
+	if daemonSupervised() {
+		t.Fatal("GUI process is not a daemon supervisor")
+	}
+}
+
 func TestOpeningMewlaAppStartsTheLaunchAgent(t *testing.T) {
 	previous := bootGOOS
 	bootGOOS = "darwin"
@@ -264,6 +278,7 @@ func TestOpeningMewlaAppStartsTheLaunchAgent(t *testing.T) {
 		{"the CLI binary", nil, config.Binary, ""},
 		{"a command line with flags", []string{"-lan"}, bundleExecutable, ""},
 		{"launchd's own start", nil, bundleExecutable, bootLaunchdLabel},
+		{"the installed app service", nil, bundleExecutable, installedAppLaunchdLabel},
 	} {
 		t.Setenv("XPC_SERVICE_NAME", launch.xpc)
 		if handed, err := bootLaunchdHandOff(launch.args, launch.executable, runner); handed || err != nil {

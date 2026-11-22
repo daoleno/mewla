@@ -574,7 +574,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		calendarStore:   calendarStore,
 		stateDir:        authManager.StorageDir(),
 	}
-	if runtime.GOOS == "darwin" && len(args) == 0 && os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel && inMacApp() {
+	if runtime.GOOS == "darwin" && len(args) == 0 && mewlaLaunchdJob() && inMacApp() {
 		controlHandler.macLAN = &macLANControl{stateDir: authManager.StorageDir(), enabled: cfg.lan, restart: func() { restartDaemon(errDaemonRestart) }}
 	}
 	triggerEngine, triggerErr := openTriggers(authManager.StorageDir(), brainStore, brainService)
@@ -1441,7 +1441,7 @@ func restrictLogOutputs() {
 }
 
 func daemonSupervised() bool {
-	return os.Getenv("XPC_SERVICE_NAME") == bootLaunchdLabel || os.Getenv("INVOCATION_ID") != ""
+	return mewlaLaunchdJob() || os.Getenv("INVOCATION_ID") != ""
 }
 
 func acquireDaemonAuthOwner(
