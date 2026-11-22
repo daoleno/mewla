@@ -214,6 +214,16 @@ func (w *Watcher) noteProviderObservation(command string, observation ProviderAc
 	}
 }
 
+// providerFamilyDown says whether command's agent family is in an outage.
+func (w *Watcher) providerFamilyDown(command string) bool {
+	family := workerProviderFamily(command)
+	if family == "" {
+		return false
+	}
+	_, down := w.availability().outage(family)
+	return down
+}
+
 // SetProviderAvailabilityListener installs what runs when an agent family's
 // provider becomes unavailable or answers again (Brain's snapshot and lane).
 func (w *Watcher) SetProviderAvailabilityListener(listener func()) {
