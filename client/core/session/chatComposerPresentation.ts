@@ -37,6 +37,8 @@ export function buildChatComposerPlaceholder({
       return 'Message Cursor';
     case 'claude':
       return 'Message Claude';
+    case 'antigravity':
+      return 'Message Antigravity';
     default:
       return 'Message';
   }
