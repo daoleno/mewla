@@ -21,6 +21,9 @@ async function monthSelectionAt(localTime: string) {
   const app = await calendarApp({ calendar_items }, {}, now);
   return { app, picked: shanghaiDay(rent.next_at) };
 }
+function shanghaiTodayStart(): string {
+  return new Date(`${shanghaiDay(new Date().toISOString())}T00:00:00+08:00`).toISOString();
+}
 const SLOW = { timeout: 10_000 };
 
 /** "6:20 PM": an instant on the test phone's clock (Shanghai, GMT+8 all year). */
@@ -298,9 +301,9 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a run whose agent said it failed reads Failed on its row, on its item's page and on its own page, though its status is completed (Brain 2026-11-22)", async () => {
-    const at = new Date(Date.now() - 3_600_000).toISOString();
-    const check = item("Credits check", -1, {
-      kind: "scheduled_action", due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
+    const at = shanghaiTodayStart();
+    const check = item("Credits check", 0, {
+      kind: "scheduled_action", due_at: at, next_at: at, notify_at: undefined, recurrence: "none", status: "completed",
       runs: [{ id: "r-out", scheduled_for: at, started_at: at, finished_at: at, status: "completed", outcome: "failed", result_preview: "Exit code 1: the sign-in expired" }],
     });
     const app = await calendarApp({ calendar_items: [check] });
@@ -318,10 +321,10 @@ describe("the Calendar tab", () => {
   }, 20_000);
 
   test("a result that starts with Markdown reads as plain words on its row, in its item's Runs and on its run page (gate 0.4.21)", async () => {
-    const at = new Date(Date.now() - 3_600_000).toISOString();
+    const at = shanghaiTodayStart();
     const md = "**Disk space check failed.** The check could not run because the disk did not answer.";
-    const check = item("Disk space check", -1, {
-      kind: "scheduled_action", due_at: at, notify_at: undefined, recurrence: "none", status: "completed",
+    const check = item("Disk space check", 0, {
+      kind: "scheduled_action", due_at: at, next_at: at, notify_at: undefined, recurrence: "none", status: "completed",
       runs: [{ id: "r-md", scheduled_for: at, started_at: at, finished_at: at, status: "completed", outcome: "failed", result_preview: md.slice(0, 60) }],
     });
     const app = await calendarApp({ calendar_items: [check] });
