@@ -378,6 +378,7 @@ type Watcher struct {
 	// ending the commands it started (turn_commands.go).
 	turnCommandScope      func(sessionID string) (TurnCommandScope, bool)
 	launchAdapter         func(executorID, command string) (agentevents.Launch, error)
+	relaunchAdapter       func(executorID, command, control string) (agentevents.Launch, error)
 	sessionObservers      []func(SessionEvent)
 	providerActivityProbe ProviderActivityProbe
 	agentTools            func(command string, worker bool) string
@@ -1077,6 +1078,19 @@ func (w *Watcher) SetLaunchAdapter(adapt func(executorID, command string) (agent
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.launchAdapter = adapt
+}
+
+// SetRelaunchAdapter installs how an ended agent is started again
+// (agent_relaunch.go): an agent whose adapter is a Relauncher (Codex) comes
+// back attached to its control server, or with a new one; any other gets its
+// fresh launch adapter.
+func (w *Watcher) SetRelaunchAdapter(adapt func(executorID, command, control string) (agentevents.Launch, error)) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.relaunchAdapter = adapt
 }
 
 // SetAgentTools installs what every visible agent launch gains on this
@@ -2281,7 +2295,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		}
 		// An ended agent Mewla relaunches is not a lost Turn; one it does not
 		// relaunch is, with words of how it ended (agent_relaunch.go).
-		held, ended := w.observeAgentEnd(item, turn, hasTurn && turnErr == nil)
+		held, ended := w.observeAgentEnd(item, turn, hasTurn && turnErr == nil, pendingList, provider)
 		if !held && hasTurn && turnErr == nil && !TurnImmutable(turn.Status) {
 			turn = w.applyPollFacts(item.id, item.alive, item.deadStatus, item.now, turn, provider, ended)
 		}
@@ -3543,20 +3557,24 @@ func (w *Watcher) submitDelegatedInputWhenReadyAttempt(
 		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID},
 			workerInputNotReady(identity.Command)
 	}
+	draft := delegatedTurnDraft{
+		WorkID:            strings.TrimSpace(workID),
+		ID:                strings.TrimSpace(turnID),
+		AcceptedAt:        acceptedAt.UTC(),
+		ProcessIdentity:   delegatedTurnIdentity(identity),
+		TranscriptBinding: transcriptBindingForCommand(identity.Command),
+		SignalProtocol:    true,
+	}
+	// Kept before it is sent: an agent that dies before it checks in on this
+	// prompt gets it again if its conversation never held it.
+	w.keepDelegatedPrompt(sessionID, payload, draft)
 	result, err := w.sessionInputOwner().submitDelegated(
 		sessionID,
 		identity,
 		resolver,
 		identity.Command,
 		payload,
-		delegatedTurnDraft{
-			WorkID:            strings.TrimSpace(workID),
-			ID:                strings.TrimSpace(turnID),
-			AcceptedAt:        acceptedAt.UTC(),
-			ProcessIdentity:   delegatedTurnIdentity(identity),
-			TranscriptBinding: transcriptBindingForCommand(identity.Command),
-			SignalProtocol:    true,
-		},
+		draft,
 		w.delegatedInputConfirmer(
 			sessionID,
 			identity.Command,
@@ -3581,19 +3599,21 @@ func (w *Watcher) SubmitDelegatedInput(
 		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID},
 			definitelyNotSubmitted(turnID, fmt.Errorf("target provider could not be proven"))
 	}
+	draft := delegatedTurnDraft{
+		ID:                strings.TrimSpace(turnID),
+		AcceptedAt:        acceptedAt.UTC(),
+		ProcessIdentity:   delegatedTurnIdentity(identity),
+		TranscriptBinding: transcriptBindingForCommand(identity.Command),
+		SignalProtocol:    true,
+	}
+	w.keepDelegatedPrompt(sessionID, payload, draft)
 	result, err := w.sessionInputOwner().submitDelegated(
 		sessionID,
 		identity,
 		w.targetForSession,
 		identity.Command,
 		payload,
-		delegatedTurnDraft{
-			ID:                strings.TrimSpace(turnID),
-			AcceptedAt:        acceptedAt.UTC(),
-			ProcessIdentity:   delegatedTurnIdentity(identity),
-			TranscriptBinding: transcriptBindingForCommand(identity.Command),
-			SignalProtocol:    true,
-		},
+		draft,
 		w.delegatedInputConfirmer(
 			sessionID,
 			identity.Command,
@@ -3627,13 +3647,14 @@ func (w *Watcher) SubmitDelegatedWorkInput(
 		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID},
 			definitelyNotSubmitted(turnID, fmt.Errorf("target provider could not be proven"))
 	}
+	draft := delegatedTurnDraft{
+		WorkID: strings.TrimSpace(workID), ID: strings.TrimSpace(turnID), AcceptedAt: acceptedAt.UTC(),
+		ProcessIdentity: delegatedTurnIdentity(identity), TranscriptBinding: transcriptBindingForCommand(identity.Command),
+		SignalProtocol: true, Purpose: strings.TrimSpace(purpose), PurposeID: strings.TrimSpace(purposeID),
+	}
+	w.keepDelegatedPrompt(sessionID, payload, draft)
 	result, err := w.sessionInputOwner().submitDelegated(
-		sessionID, identity, w.targetForSession, identity.Command, payload,
-		delegatedTurnDraft{
-			WorkID: strings.TrimSpace(workID), ID: strings.TrimSpace(turnID), AcceptedAt: acceptedAt.UTC(),
-			ProcessIdentity: delegatedTurnIdentity(identity), TranscriptBinding: transcriptBindingForCommand(identity.Command),
-			SignalProtocol: true, Purpose: strings.TrimSpace(purpose), PurposeID: strings.TrimSpace(purposeID),
-		},
+		sessionID, identity, w.targetForSession, identity.Command, payload, draft,
 		w.delegatedInputConfirmer(sessionID, identity.Command),
 	)
 	_, _, _ = w.ledgerTurnAuthoritative(sessionID, time.Now().UTC())
@@ -4313,6 +4334,10 @@ type CreateSessionOptions struct {
 	// AgentControl is the agent's control socket, set by the launch adapter.
 	AgentControl string
 	resource     *delegatedResourceSpec
+	// relaunch starts an ended agent again (agent_relaunch.go) through the
+	// relaunch adapter, with the ended Worker's control socket.
+	relaunch        bool
+	relaunchControl string
 }
 
 // CreateSession starts a Session in the session host and returns its id.
@@ -4341,6 +4366,9 @@ type preparedSessionCreate struct {
 	cwd     string
 	opts    CreateSessionOptions
 	release func()
+	// reattached: a relaunch attaches to the agent's control server that
+	// still runs.
+	reattached bool
 }
 
 // prepareSessionCreate does everything a create does before the backend
@@ -4442,17 +4470,25 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 			opts.Command = tools(opts.Command, opts.ProgressEnv)
 		}
 	}
+	reattached := false
 	if !opts.Hidden {
 		w.mu.RLock()
-		adapt := w.launchAdapter
+		adapt, relaunch := w.launchAdapter, w.relaunchAdapter
 		w.mu.RUnlock()
-		if adapt != nil {
-			launch, err := adapt(opts.ExecutorID, opts.Command)
-			if err != nil {
-				return none, err
-			}
-			opts.Command, opts.AgentControl = launch.Command, launch.Control
+		var launch agentevents.Launch
+		var err error
+		switch {
+		case opts.relaunch && relaunch != nil:
+			launch, err = relaunch(opts.ExecutorID, opts.Command, opts.relaunchControl)
+		case adapt != nil:
+			launch, err = adapt(opts.ExecutorID, opts.Command)
+		default:
+			launch = agentevents.Launch{Command: opts.Command}
 		}
+		if err != nil {
+			return none, err
+		}
+		opts.Command, opts.AgentControl, reattached = launch.Command, launch.Control, launch.Reattached
 	}
 	shellCommand, err := buildWindowCommand(opts)
 	if err != nil {
@@ -4468,7 +4504,7 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 			labels:  createdSessionLabels(opts),
 			agent:   agent,
 		},
-		cwd: cwd, opts: opts, release: release,
+		cwd: cwd, opts: opts, release: release, reattached: reattached,
 	}, nil
 }
 

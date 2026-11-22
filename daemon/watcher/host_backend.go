@@ -59,20 +59,21 @@ func newHostSessionID() (string, error) {
 
 // Label keys the host backend records on its Sessions.
 const (
-	hostLabelName          = "name"
-	hostLabelOrigin        = "origin"
-	hostLabelHidden        = "hidden"
-	hostLabelDelegated     = "delegated"
-	hostLabelExecutor      = "executor"
-	hostLabelAgentControl  = "agent-control"
-	hostLabelPiSession     = "pi-session"
-	hostLabelResourceUnit  = "resource-unit"
-	hostLabelResourceOwner = "resource-owner"
-	hostDataInputReceipts  = "input-receipts"
-	hostDataAgentEnd       = "agent-end"
-	hostDefaultCols        = 200
-	hostDefaultRows        = 50
-	hostCallTimeout        = 10 * time.Second
+	hostLabelName           = "name"
+	hostLabelOrigin         = "origin"
+	hostLabelHidden         = "hidden"
+	hostLabelDelegated      = "delegated"
+	hostLabelExecutor       = "executor"
+	hostLabelAgentControl   = "agent-control"
+	hostLabelPiSession      = "pi-session"
+	hostLabelResourceUnit   = "resource-unit"
+	hostLabelResourceOwner  = "resource-owner"
+	hostDataInputReceipts   = "input-receipts"
+	hostDataAgentEnd        = "agent-end"
+	hostDataDelegatedPrompt = "delegated-prompt"
+	hostDefaultCols         = 200
+	hostDefaultRows         = 50
+	hostCallTimeout         = 10 * time.Second
 )
 
 // ErrSessionHostGone says the host is not running: no socket, or nothing
@@ -543,9 +544,23 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 	if err != nil {
 		return fmt.Errorf("session host: %w", err)
 	}
+	params, err := b.createParams(id, spec, extra)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := hostCtx()
+	defer cancel()
+	if _, err := client.Create(ctx, params); err != nil {
+		return fmt.Errorf("start Worker Session: %w", err)
+	}
+	return nil
+}
+
+// createParams is what the host is asked to start for spec under id.
+func (b *hostBackend) createParams(id string, spec backendCreateSpec, extra map[string]string) (sessionhost.CreateParams, error) {
 	nonce, err := newOriginNonce()
 	if err != nil {
-		return fmt.Errorf("origin marker: %w", err)
+		return sessionhost.CreateParams{}, fmt.Errorf("origin marker: %w", err)
 	}
 	labels := map[string]string{
 		hostLabelName:   spec.name,
@@ -578,17 +593,15 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 	if spec.agent {
 		tmuxDir, err := b.w.privateTmuxDir()
 		if err != nil {
-			return fmt.Errorf("start Worker Session: %w", err)
+			return sessionhost.CreateParams{}, fmt.Errorf("start Worker Session: %w", err)
 		}
 		if tmuxDir != "" {
 			env = withEnv(env, "TMUX_TMPDIR", tmuxDir)
 		}
 	}
-	ctx, cancel := hostCtx()
-	defer cancel()
 	// The Session's first output is its origin marker; the command runs
 	// under /bin/sh -c (`mewla sh -c` on Windows, see hostLaunchArgv).
-	_, err = client.Create(ctx, sessionhost.CreateParams{
+	return sessionhost.CreateParams{
 		ID:     id,
 		Argv:   hostLaunchArgv(originMarkerCommand(nonce) + spec.command),
 		Env:    env,
@@ -596,18 +609,16 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 		Cols:   hostDefaultCols,
 		Rows:   hostDefaultRows,
 		Labels: labels,
-	})
-	if err != nil {
-		return fmt.Errorf("start Worker Session: %w", err)
-	}
-	return nil
+	}, nil
 }
 
 // replace starts spec in place of a Session whose program has ended, under
-// the same id: the ended Session is removed and the new one created at once,
-// and the input receipts recorded on the old one are carried over, so an input
-// that already landed is never sent again. A Session that is gone, or whose
-// program still runs, is not replaced.
+// the same id. The host starts the new program first and only then lets it
+// take the Session's place, with the data recorded on it (the input receipts,
+// so an input that already landed is never sent again): the ended Session is
+// never removed before its replacement runs. A Session that is gone, or whose
+// program still runs, is not replaced. A host from before respawn cannot
+// replace in place: errHostCannotRespawn, and nothing changes.
 func (b *hostBackend) replace(id string, spec backendCreateSpec) error {
 	if !b.validID(id) {
 		return fmt.Errorf("replace Session %q: not a session host id", id)
@@ -626,24 +637,17 @@ func (b *hostBackend) replace(id string, spec backendCreateSpec) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := hostCtx()
-	receipts, err := client.GetData(ctx, id, hostDataInputReceipts)
-	cancel()
+	params, err := b.createParams(id, spec, nil)
 	if err != nil {
-		return fmt.Errorf("replace Session %s: read its input receipts: %w", id, err)
-	}
-	if err := b.kill(id); err != nil {
 		return err
 	}
-	if err := b.createAs(id, spec, nil); err != nil {
-		return err
-	}
-	if receipts.Value != "" {
-		ctx, cancel := hostCtx()
-		defer cancel()
-		if err := client.SetData(ctx, id, hostDataInputReceipts, receipts.Value); err != nil {
-			return fmt.Errorf("replace Session %s: keep its input receipts: %w", id, err)
+	ctx, cancel := hostCtx()
+	defer cancel()
+	if _, err := client.Respawn(ctx, params); err != nil {
+		if sessionhost.IsCode(err, sessionhost.ErrCodeUnknownMethod) {
+			return errHostCannotRespawn
 		}
+		return fmt.Errorf("start the agent again: %w", err)
 	}
 	return nil
 }
@@ -756,26 +760,26 @@ func (io hostInputIO) writeReceiptLedger(target string, ledger sessionInputRecei
 	return client.SetData(ctx, target, hostDataInputReceipts, string(raw))
 }
 
-func (b *hostBackend) agentEndData(id string) (string, error) {
+func (b *hostBackend) relaunchData(id, key string) (string, error) {
 	client, err := b.conn(false)
 	if err != nil {
 		return "", err
 	}
 	ctx, cancel := hostCtx()
 	defer cancel()
-	data, err := client.GetData(ctx, id, hostDataAgentEnd)
+	data, err := client.GetData(ctx, id, key)
 	if err != nil {
 		return "", err
 	}
 	return data.Value, nil
 }
 
-func (b *hostBackend) setAgentEndData(id, value string) error {
+func (b *hostBackend) setRelaunchData(id, key, value string) error {
 	client, err := b.conn(false)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := hostCtx()
 	defer cancel()
-	return client.SetData(ctx, id, hostDataAgentEnd, value)
+	return client.SetData(ctx, id, key, value)
 }

@@ -21,6 +21,16 @@ type Launch struct {
 	// Control is the socket of the agent's own control server, when the launch
 	// starts one for Mewla to attach to; empty for an agent followed by hooks.
 	Control string
+	// Reattached marks a relaunch that attaches to the control server that is
+	// still running (Relauncher): its turn runs on there, untouched.
+	Reattached bool
+}
+
+// Relauncher is an adapter whose agent is started again differently from a
+// fresh launch (agent relaunch): command is the agent's resume of its
+// conversation and control the ended Worker's control socket.
+type Relauncher interface {
+	PrepareRelaunch(command, control string) (Launch, error)
 }
 
 // Registry maps a provider name (an executor's declared provider) to its

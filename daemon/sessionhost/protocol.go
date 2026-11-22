@@ -51,6 +51,10 @@ const (
 	MethodGetData   = "get_data"
 	MethodSetData   = "set_data"
 	MethodAttach    = "attach"
+	// MethodRespawn starts a program in place of an ended Session's (same id,
+	// its data kept): the new program runs first, and only then does it take
+	// the Session's place. Hosts from before it answer unknown_method.
+	MethodRespawn = "respawn"
 )
 
 // Error codes.

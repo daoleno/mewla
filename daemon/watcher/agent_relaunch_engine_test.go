@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // relaunchLedger is a TurnLedger and AgentRelaunchLedger for the relaunch
@@ -30,7 +32,66 @@ type relaunchLedger struct {
 	// (started or failed) are recorded, worded boundWords.
 	bound      int
 	boundWords string
+	// pending are the prompts in flight the ledger holds; aborted and
+	// resolved the ones the watcher aborted or accepted.
+	pending  []InputAdmission
+	aborted  []string
+	resolved []string
 }
+
+func (l *relaunchLedger) PrepareInputAdmission(submission InputAdmission) (InputAdmission, bool, error) {
+	return submission, true, nil
+}
+
+func (l *relaunchLedger) InputAdmission(sessionID, turnID string) (InputAdmission, bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, pending := range l.pending {
+		if pending.SessionID == sessionID && pending.ProposedTurnID == turnID {
+			return pending, true, nil
+		}
+	}
+	return InputAdmission{}, false, nil
+}
+
+func (l *relaunchLedger) PendingInputAdmissions(sessionID string) ([]InputAdmission, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []InputAdmission
+	for _, pending := range l.pending {
+		if pending.SessionID == sessionID {
+			out = append(out, pending)
+		}
+	}
+	return out, nil
+}
+
+func (l *relaunchLedger) ResolveInputAdmission(resolution InputAdmissionResolution) (InputAdmission, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.resolved = append(l.resolved, resolution.ProposedTurnID)
+	l.pending = nil
+	l.turn = TurnSnapshot{SessionID: resolution.SessionID, TurnID: resolution.ProposedTurnID, Status: TurnAdmitted, SignalProtocol: true}
+	l.hasTurn = true
+	return InputAdmission{SessionID: resolution.SessionID, ProposedTurnID: resolution.ProposedTurnID,
+		State: InputAdmissionResolved, ResolvedTurnID: resolution.ProposedTurnID}, nil
+}
+
+func (l *relaunchLedger) AbortInputAdmission(sessionID, turnID, receipt, digest string) (InputAdmission, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.aborted = append(l.aborted, turnID)
+	l.pending = nil
+	return InputAdmission{SessionID: sessionID, ProposedTurnID: turnID, State: InputAdmissionAborted}, nil
+}
+
+// staticProviderProbe answers every Worker with one observation.
+type staticProviderProbe struct{ observation ProviderActivityObservation }
+
+func (p staticProviderProbe) ObserveProviderActivity(classifier.Worker, time.Time) ProviderActivityObservation {
+	return p.observation
+}
+func (staticProviderProbe) ForgetProviderActivity(string) {}
 
 func (l *relaunchLedger) Turn(string) (TurnSnapshot, bool, error) {
 	l.mu.Lock()
@@ -418,5 +479,138 @@ func TestHostAgentRelaunchThatCannotStartIsCountedAndReported(t *testing.T) {
 	}
 	if _, more, _, _ := ledger.snapshot(); len(more) != 3 {
 		t.Fatalf("tries after the report: %d", len(more))
+	}
+}
+
+// The host replaces an ended Session only once the new program runs: a
+// replacement that cannot start leaves the ended Session as it was, with its
+// data; one that starts takes its id and data; a live one is never replaced.
+func TestHostAgentReplaceNeverRemovesBeforeTheNewProgramRuns(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	backend := h.w.sessions()
+	spec := func(cwd string) backendCreateSpec {
+		return backendCreateSpec{name: "Relaunchee", cwd: cwd, command: "exec sleep 303",
+			env: []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}, labels: sessionLabels{delegated: true, executorID: "claude"}}
+	}
+	if err := backend.replace(id, spec(t.TempDir())); err == nil {
+		t.Fatal("a Session whose program still runs was replaced")
+	}
+	if err := backend.setRelaunchData(id, hostDataAgentEnd, `{"kept":true}`); err != nil {
+		t.Fatal(err)
+	}
+	killAgent(t, h.w, id, pid)
+	// The folder is gone: the new program cannot start.
+	if err := backend.replace(id, spec("/nonexistent/mewla-relaunch-folder")); err == nil {
+		t.Fatal("a replacement into a missing folder started")
+	}
+	info, present, err := h.w.host().info(id)
+	if err != nil || !present || info.Alive || info.PID != pid {
+		t.Fatalf("after a failed replacement the ended Session is present %v alive %v pid %d (was %d), %v", present, info.Alive, info.PID, pid, err)
+	}
+	if err := backend.replace(id, spec(t.TempDir())); err != nil {
+		t.Fatal(err)
+	}
+	respawned := waitForHostInfo(t, h.w, id, func(info hostInfo) bool { return info.Alive })
+	if respawned.PID == pid {
+		t.Fatal("the replacement runs the old program")
+	}
+	if kept, err := backend.relaunchData(id, hostDataAgentEnd); err != nil || kept != `{"kept":true}` {
+		t.Fatalf("data after the replacement = %q, %v", kept, err)
+	}
+}
+
+// An agent killed before it checked in on its prompt: the Turn ledger's
+// prompt in flight is the Turn, never an idle Worker. The dead agent's
+// conversation decides: it holds the prompt (accepted and continued), it
+// provably does not (aborted and sent again under a new turn id; nothing
+// ran), or that is unknown (started again, not sent again, Brain told).
+func TestHostAgentKilledBeforeItsFirstCheckIn(t *testing.T) {
+	sent := time.Now().UTC().Add(-30 * time.Second)
+	older := ProviderActivityObservation{ID: "msg-0", Status: "completed", AdmissionAt: sent.Add(-time.Hour), InputSHA256: "digest-earlier", ProbeState: ProbeStateOK}
+	held := ProviderActivityObservation{ID: "msg-1", Status: "running", AdmissionStream: "transcript", AdmissionID: "msg-1", AdmissionCursor: 4,
+		AdmissionAt: sent.Add(time.Second), InputSHA256: "digest-first", ProbeState: ProbeStateOK}
+	unreadable := ProviderActivityObservation{ProbeState: ProbeStateUnreadable}
+	const prompt = "render the trailer\n--turn-id turn:first --status running"
+	for _, tc := range []struct {
+		name     string
+		provider ProviderActivityObservation
+		plan     AgentRelaunchPlan
+		delivery PromptDelivery
+		turnID   string
+		outcome  string
+		resent   bool
+		reported int
+		aborted  []string
+		resolved []string
+	}{
+		{name: "not held", provider: older, delivery: PromptNotHeld, outcome: "resent", resent: true, aborted: []string{"turn:first"},
+			plan: AgentRelaunchPlan{PendingTurnID: "turn:first", Words: "sleep was killed (SIGKILL); Mewla started it again in the same conversation and sent it its task again."}},
+		{name: "unknown", provider: unreadable, delivery: PromptUnknown, outcome: "prompt_unknown", reported: 1,
+			plan: AgentRelaunchPlan{PendingTurnID: "turn:first", Words: "sleep was killed (SIGKILL); Mewla started it again. Whether its task (turn:first) had reached the conversation is unknown."}},
+		{name: "held", provider: held, delivery: PromptHeld, turnID: "turn:first", outcome: "continued", resolved: []string{"turn:first"},
+			plan: AgentRelaunchPlan{TurnID: "turn:first", Words: "sleep was killed (SIGKILL); Mewla started it again in the same conversation and asked it to continue the task."}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHostHarness(t)
+			id, pid := startDelegatedAgent(t, h)
+			plan := tc.plan
+			plan.Action, plan.WorkID, plan.Command, plan.Attempt, plan.Agent = AgentEndRelaunch, "work-1", "exec sleep 304", 1, "sleep"
+			ledger := &relaunchLedger{plan: plan, pending: []InputAdmission{{WorkID: "work-1", SessionID: id, ProposedTurnID: "turn:first",
+				Receipt: "turn:first", PayloadSHA256: "digest-first", AcceptedAt: sent, State: InputAdmissionPending, SignalProtocol: true,
+				PaneGeneration: h.w.currentPaneGeneration(id)}}}
+			h.w.SetTurnLedger(ledger)
+			h.w.SetProviderActivityProbe(staticProviderProbe{observation: tc.provider})
+			h.w.keepDelegatedPrompt(id, prompt, delegatedTurnDraft{ID: "turn:first", WorkID: "work-1"})
+			var mu sync.Mutex
+			var payloads []string
+			h.w.agentRelaunch().submit = func(sessionID, command, payload, workID, turnID string, at time.Time) (InputResult, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				payloads = append(payloads, turnID+"|"+payload)
+				return InputResult{Outcome: InputAccepted, TurnID: turnID}, nil
+			}
+			killAgent(t, h.w, id, pid)
+			h.w.poll()
+			waitUntil(t, 10*time.Second, "relaunch record", func() bool {
+				_, records, _, _ := ledger.snapshot()
+				return len(records) == 1
+			})
+			_, records, reported, plans := ledger.snapshot()
+			if len(plans) == 0 || plans[0].PromptDelivery != tc.delivery || plans[0].TurnID != tc.turnID {
+				t.Fatalf("plan asked for %+v", plans)
+			}
+			record := records[0]
+			if record.Outcome != tc.outcome || record.FromTurnID != "turn:first" {
+				t.Fatalf("record = %+v", record)
+			}
+			ledger.mu.Lock()
+			aborted, resolved := ledger.aborted, ledger.resolved
+			ledger.mu.Unlock()
+			if strings.Join(aborted, ",") != strings.Join(tc.aborted, ",") || strings.Join(resolved, ",") != strings.Join(tc.resolved, ",") {
+				t.Fatalf("aborted %q resolved %q", aborted, resolved)
+			}
+			if len(reported) != tc.reported {
+				t.Fatalf("reported %+v", reported)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case tc.resent:
+				// The same prompt, under its new turn id only.
+				want := strings.ReplaceAll(prompt, "turn:first", record.TurnID)
+				if len(payloads) != 1 || record.TurnID == "" || record.TurnID == "turn:first" || payloads[0] != record.TurnID+"|"+want {
+					t.Fatalf("resent %q, record %+v", payloads, record)
+				}
+			case tc.turnID != "":
+				if len(payloads) != 1 || !strings.Contains(payloads[0], "Mewla stopped nothing") {
+					t.Fatalf("continuation %q", payloads)
+				}
+			default:
+				if len(payloads) != 0 {
+					t.Fatalf("an unknown prompt was sent again: %q", payloads)
+				}
+			}
+		})
 	}
 }
