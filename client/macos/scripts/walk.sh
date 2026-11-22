@@ -187,8 +187,13 @@ if [[ "$x" =~ ^[0-9]+$ ]]; then
   bounded 90 swift "$here/fidelity/click.swift" right $((x + w / 2)) $((y + h / 2)) || true
   sleep 2
   shot 05-cat-menu
-  if osa -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to click menu item \"Pair a phone…\" of menu 1 of menu bar item 1 of menu bar 2" >> "$log" 2>&1; then
-    paired_by="the cat's menu"
+  # The row, clicked where it is (an Accessibility press on a status item's row reports success and does nothing).
+  row=$(osa -e "tell application \"System Events\" to tell (first process whose unix id is $(app_pid)) to get {position, size} of menu item \"Pair a phone…\" of menu 1 of menu bar item 1 of menu bar 2" 2>&1 || true)
+  say "Pair a phone… row: $row"
+  read -r rx ry rw rh < <(tr -d ',' <<<"$row")
+  if [[ "$rx" =~ ^[0-9]+$ && "$ry" =~ ^[0-9]+$ ]]; then
+    bounded 90 swift "$here/fidelity/click.swift" left $((rx + rw / 3)) $((ry + rh / 2)) || true
+    paired_by="a click on the cat's menu row"
   else
     key() { osa -e "tell application \"System Events\" to key code $1" >/dev/null 2>&1 || true; }
     # The menu is open: its fourth row (Open Mewla, Quick chat, a separator, Pair a phone…) by the keyboard.
@@ -230,6 +235,7 @@ for surface in 'settings-general {"settings":"general"}' 'settings-access {"sett
 done
 quit_app || true
 
+for f in "$HOME"/.mewla/logs/*.log; do [[ -f "$f" ]] && { echo "== $f"; tail -400 "$f"; }; done > "$out/daemon-logs.txt" 2>&1 || true
 find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | head -5 | while read -r f; do echo "== $f"; tail -80 "$f"; done > "$out/app-logs.txt" 2>&1 || true
 rm -f "$gatekeeper_scpt"
 say "checks failed: ${#failed[@]}${failed:+ (${failed[*]})}"
