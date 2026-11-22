@@ -158,6 +158,9 @@ func (w *Watcher) readPromptInFlight(end *AgentEnd, pending []InputAdmission, pr
 		}
 	}
 	end.PromptDelivery = delivery
+	log.Printf("agent relaunch: %s ended with prompt %s in flight (sent %s, digest %.12s): %s; its conversation's newest message %q at %s, digest %.12s/%.12s, read %s",
+		end.SessionID, admission.ProposedTurnID, admission.AcceptedAt.Format(time.RFC3339), admission.PayloadSHA256, delivery,
+		provider.ID, provider.AdmissionAt.Format(time.RFC3339), provider.InputSHA256, provider.InputUnwrappedSHA256, provider.ProbeState)
 }
 
 // acceptHeldPrompt accepts the prompt the dead agent's conversation holds as

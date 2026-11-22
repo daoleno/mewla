@@ -397,7 +397,11 @@ be ready (90 s at most). Brain's one event says which case applied:
   released, so it no longer fences the Work's next send.
 
 If the agent is not ready in time, the Turn is released as `turn_lost` for
-Brain. No state reads as healthy while nothing runs for an open Turn.
+Brain. No state reads as healthy while nothing runs for an open Turn: after a
+"needs a decision" or "not ready", the Session shows `stopped` with "Restarted;
+its task was not resumed" (or "… it is not ready") while its agent lives. The
+line stays until the agent works again. While Brain still holds an earlier
+review of the Work, the report is asked again every 10 s until Brain has it.
 
 **Codex.** A Codex Worker is a TUI attached to its own app-server. The
 app-server runs the thread and its turns, and Mewla sends, approves and
@@ -416,7 +420,10 @@ brings back only what died (`agentevents/codex/relaunch.go`):
   fresh Codex Worker's is (trust, MCP servers, permissions moved onto it as
   `-c approval_policy=… -c sandbox_mode=…`). The TUI resumes the same thread
   through it (`--remote`). The Worker's control socket becomes the new one, and
-  structured send, approvals, interrupt and events follow it there. The turn
+  structured send, approvals, interrupt and events follow it there. The new
+  app-server gets the launch's whole config: its model, the folder trust, the
+  MCP servers, and a Model Profile route's `model_provider` and
+  `openai_base_url` (`routes.ResumeLaunch` puts them on the TUI). The turn
   died with the app-server, so a Turn in flight gets its continuation through
   that new app-server, like any other agent.
 
