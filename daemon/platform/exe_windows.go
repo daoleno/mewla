@@ -8,7 +8,24 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
+
+// RetireExecutable removes an obsolete backup. A previous updater may have
+// hard-linked it to an image that still hosts Sessions; Windows allows the
+// link to move aside until SweepReplaced can delete it.
+func RetireExecutable(path, installed string) error {
+	err := os.Remove(path)
+	if !errors.Is(err, windows.ERROR_ACCESS_DENIED) && !errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+		return err
+	}
+	return os.Rename(path, replacedPath(installed))
+}
+
+func replacedPath(target string) string {
+	return target + replacedMarker + strconv.FormatInt(time.Now().UnixNano(), 10)
+}
 
 // ReplaceFile moves source over target. Windows cannot overwrite or delete an
 // executable that is running, but it can rename it: so a target that exists
@@ -19,7 +36,7 @@ func ReplaceFile(source, target string) error {
 	if err := os.Rename(source, target); err == nil {
 		return nil
 	}
-	aside := target + replacedMarker + strconv.FormatInt(time.Now().UnixNano(), 10)
+	aside := replacedPath(target)
 	if err := os.Rename(target, aside); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return os.Rename(source, target)
