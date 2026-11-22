@@ -64,6 +64,12 @@ impl Config {
         command
     }
 
+    pub fn set_lan(&self, enabled: bool) -> Result<(), String> {
+        let output = self.command().args(["mac-lan", if enabled { "on" } else { "off" }])
+            .stdin(Stdio::null()).output().map_err(|err| err.to_string())?;
+        if output.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&output.stderr).trim().to_string()) }
+    }
+
     fn log_path(&self) -> Option<PathBuf> {
         let root = self.state_root.clone().or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".mewla")))?;
         let logs = root.join("logs");
