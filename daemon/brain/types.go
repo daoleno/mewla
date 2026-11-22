@@ -68,7 +68,8 @@ type AgentInstall struct {
 type ExecutorState struct {
 	Installed bool `json:"installed"`
 	// SignedIn is true only when Mewla verified the sign-in; unknown is false.
-	SignedIn bool `json:"signed_in,omitempty"`
+	SignedIn  bool          `json:"signed_in,omitempty"`
+	AuthState HostAuthState `json:"auth_state,omitempty"`
 	// Account is who it is signed in as (an email address), when its CLI
 	// records it. It tells two sign-ins of one CLI apart.
 	Account string `json:"account,omitempty"`
