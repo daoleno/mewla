@@ -77,7 +77,7 @@ export interface ModelStat extends CostBreakdown {
   estimateSource?: string;
   referenceProvider?: string;
   pricingUpdatedAt?: string;
-  unpricedReason?: "missing_model" | "missing_rate" | "insufficient_context" | "missing_usage";
+  unpricedReason?: "missing_model" | "missing_rate" | "insufficient_context" | "missing_usage" | "plan";
   name: string;
   totalTokens: number;
   totalTokensKnown?: boolean;

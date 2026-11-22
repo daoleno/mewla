@@ -206,6 +206,8 @@ type AntigravityLogRecord struct {
 	Mode         string          `json:"mode,omitempty"`
 	Resumed      bool            `json:"resumed,omitempty"`
 	Version      string          `json:"version,omitempty"`
+	// Cwd is the folder agy works in (session records, for Stats).
+	Cwd string `json:"cwd,omitempty"`
 	// Replayed marks history agy replayed when Mewla first opened a
 	// conversation it had not logged; its times are when it was imported.
 	Replayed bool `json:"replayed,omitempty"`
@@ -585,6 +587,25 @@ func (m *antigravityModels) applyConfig(options []acpConfigOption) {
 	}
 }
 
+// setFull takes a full model id agy accepted (a family at a thinking level,
+// "gemini-4-neon-low"): agy's own config update for it can come after the
+// reply, so the family and level are read from the id at once.
+func (m *antigravityModels) setFull(id string) {
+	m.Current = id
+	for _, base := range m.Bases {
+		level, ok := strings.CutPrefix(id, base.ID+"-")
+		if !ok {
+			continue
+		}
+		for _, effort := range m.Efforts {
+			if effort.ID == level {
+				m.ModelBase, m.Effort = base.ID, level
+				return
+			}
+		}
+	}
+}
+
 // antigravitySession is one running Session program.
 type antigravitySession struct {
 	opts  AntigravitySessionOptions
@@ -908,7 +929,7 @@ func (s *antigravitySession) start(ctx context.Context) (*acpClient, error) {
 	s.mu.Lock()
 	models := s.models
 	s.mu.Unlock()
-	s.log.write(AntigravityLogRecord{T: "session", Conversation: setup.SessionID, Resumed: resumed, Model: models.Current, Effort: models.Effort, Mode: models.Mode, Version: initialized.AgentInfo.Version})
+	s.log.write(AntigravityLogRecord{T: "session", Conversation: setup.SessionID, Resumed: resumed, Model: models.Current, Effort: models.Effort, Mode: models.Mode, Version: initialized.AgentInfo.Version, Cwd: s.opts.Cwd})
 	s.view.header(s.opts.Cwd, modelName(models), resumed)
 	s.link.hello()
 	s.drain()
@@ -963,7 +984,7 @@ func (s *antigravitySession) applyChoices(ctx context.Context, state antigravity
 			errs = append(errs, fmt.Errorf("model %s: %w", state.Model, err))
 		} else {
 			s.mu.Lock()
-			s.models.Current = state.Model
+			s.models.setFull(state.Model)
 			s.mu.Unlock()
 		}
 	}
@@ -1014,7 +1035,7 @@ func (s *antigravitySession) setChoices(ctx context.Context, model, effort, mode
 	models := s.models
 	s.mu.Unlock()
 	_ = saveAntigravitySessionState(antigravitySessionStatePath(s.opts.StateDir, s.opts.ID), s.snapshotState())
-	s.log.write(AntigravityLogRecord{T: "session", Conversation: s.snapshotState().Conversation, Model: models.Current, Effort: models.Effort, Mode: models.Mode, Version: s.version})
+	s.log.write(AntigravityLogRecord{T: "session", Conversation: s.snapshotState().Conversation, Model: models.Current, Effort: models.Effort, Mode: models.Mode, Version: s.version, Cwd: s.opts.Cwd})
 	s.view.note("Model: " + modelName(models))
 	return nil
 }

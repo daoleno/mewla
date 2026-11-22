@@ -253,7 +253,12 @@ func scanPiSessionFileCached(path, fallbackProject string, byDate map[string]*da
 		return
 	}
 
-	projectName := piProjectName(headerCwd, fallbackProject)
+	addLedgerRecords(byDate, records, piProjectName(headerCwd, fallbackProject))
+}
+
+// addLedgerRecords adds counted usage records of one local session ledger
+// (Pi's, Antigravity's) to the per-date model, slot and project aggregates.
+func addLedgerRecords(byDate map[string]*dateAgg, records []piLedgerRecord, projectName string) {
 	seenModelDate := make(map[string]bool)
 	seenProjectDate := make(map[string]bool)
 

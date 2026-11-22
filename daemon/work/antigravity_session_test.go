@@ -477,3 +477,19 @@ func TestWithAgentToolsHandsAgyTheToolsThroughItsSession(t *testing.T) {
 		t.Fatalf("print mode got tools it cannot take: %s", kept)
 	}
 }
+
+func TestAntigravityModelsSetFullReadsFamilyAndLevel(t *testing.T) {
+	models := antigravityModels{
+		Current: "gemini-4-neon-high", ModelBase: "gemini-4-neon", Effort: "high",
+		Bases:   []antigravityChoice{{ID: "gemini-4-neon"}, {ID: "gemini-4-argon"}},
+		Efforts: []antigravityChoice{{ID: "low"}, {ID: "medium"}, {ID: "high"}},
+	}
+	models.setFull("gemini-4-argon-low")
+	if models.Current != "gemini-4-argon-low" || models.ModelBase != "gemini-4-argon" || models.Effort != "low" {
+		t.Fatalf("full id = %+v", models)
+	}
+	models.setFull("claude-opus-5-5")
+	if models.Current != "claude-opus-5-5" || models.ModelBase != "gemini-4-argon" || models.Effort != "low" {
+		t.Fatalf("an id with no family keeps the rest: %+v", models)
+	}
+}
