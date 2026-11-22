@@ -15,6 +15,7 @@ import (
 // needs to show the phone QR and to pair itself, without reading the
 // terminal's words.
 type pairingJSON struct {
+	MacLAN          *bool     `json:"mac_lan,omitempty"`
 	ExpiresAt       time.Time `json:"expires_at"`
 	DaemonID        string    `json:"daemon_id"`
 	DaemonPublicKey string    `json:"daemon_public_key"`
@@ -44,6 +45,7 @@ type pairingQR struct {
 
 func writePairingJSON(w io.Writer, info *control.PairingInfo, links pairingLinks) error {
 	out := pairingJSON{
+		MacLAN:          info.MacLAN,
 		ExpiresAt:       info.ExpiresAt,
 		DaemonID:        info.DaemonID,
 		DaemonPublicKey: info.DaemonPublicKey,

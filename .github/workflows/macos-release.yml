@@ -1,15 +1,21 @@
 name: Mewla for Mac release
 
-# Mewla for Mac's release files for an existing release tag: the app signed with Developer ID and notarized (the .dmg
+# Mewla for Mac's release files for a release tag: the app signed with Developer ID and notarized (the .dmg
 # people install from, and the zip the app updates itself from), and the signed update manifest latest.json that tells
 # running apps a newer Mewla exists (NSH's updater; client/macos/package.sh names where they look).
 #
-#   gh workflow run macos-release.yml -f tag=v0.4.19            # builds, signs, notarizes, then attaches
-#   gh workflow run macos-release.yml -f tag=v0.4.19 -f attach=false   # builds and signs only (artifacts kept 7 days)
+#   gh workflow run macos-release.yml -f tag=v0.4.19   # the tag's commit: builds, signs, notarizes (artifacts kept 7 days)
+#   gh workflow run macos-release.yml --ref <branch>   # proof: no tag, from this ref (see below)
 #
-# It does nothing until the owner's Developer ID certificate is in the `app-store-connect-preview` environment, and says
-# exactly which secrets are missing. The release track (release-artifacts.yml) does not build the Mac app yet: this
-# runs beside it, by hand, and joins it when the owner has had the first signed app in his hands.
+# The release track (release-artifacts.yml) calls it (job mac-app) and its `publish` uploads these files with the rest of the
+# release in one draft; no job here holds a write token. Called for a build-only candidate it builds and signs the same,
+# makes no manifest, and the artifacts are only kept.
+#
+# A run without a tag is the proof of the signing and of the signed app on a clean Mac, from the dispatched ref: two
+# builds, A (nsh.json's version) and B (the next patch), both Developer ID signed, notarized and stapled, both with
+# the update source on loopback; then the checks on a clean runner (spctl, stapler, install from the .dmg the way a
+# person does, first launch, the daemon, the Keychain, launchd restarting the daemon, the update from A to B).
+# Nothing is tagged or published.
 #
 # Secrets, in the environment `app-store-connect-preview` (never commit values):
 #   MEWLA_MAC_DEVELOPER_ID_P12_BASE64     the Developer ID Application certificate with its private key (.p12), base64
@@ -17,19 +23,52 @@ name: Mewla for Mac release
 #   ZEN_ASC_API_KEY_BASE64, ZEN_ASC_KEY_ID  the App Store Connect key the iOS release uses (it reaches the notary service)
 #   MEWLA_MAC_UPDATE_KEY                  the update manifest's ed25519 secret key (`nsh keygen`); its public half is
 #                                         client/macos/update-public-key.txt, built into every app
-# The job that holds them never holds a write token; the job that attaches to the release holds the token and no secret.
+# No job here holds a write token.
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "The release tag the Mac files join: vX.Y.Z (the tag's commit is built)"
+        description: "The release tag the Mac files join: vX.Y.Z (the tag's commit is built). Empty: a proof from this ref"
+        required: false
+        type: string
+        default: ""
+      reuse_run:
+        description: "Proof only: the run id of an earlier proof whose two signed builds are used again (no build, no notarization): for the checks on a clean Mac alone"
+        required: false
+        type: string
+        default: ""
+      walk:
+        description: "A stranger's walk instead (no build): the .dmg's URL (the site's https://github.com/daoleno/mewla/releases/latest/download/Mewla-macos-arm64.dmg), or run:<id> for that proof run's build A"
+        required: false
+        type: string
+        default: ""
+  workflow_call:
+    inputs:
+      tag:
+        description: "The release tag vX.Y.Z; for a build-only candidate of the release track, its name (candidate-<12 hex>)"
         required: true
         type: string
-      attach:
-        description: "Attach the files to the release (false: build and sign only)"
-        type: boolean
-        default: true
+      version:
+        description: "A candidate's version X.Y.Z (a release's is its tag's)"
+        required: false
+        type: string
+        default: ""
+      checkout:
+        description: "A candidate's commit (a release's is its tag)"
+        required: false
+        type: string
+        default: ""
+      reuse_run:
+        description: "Not used by the release track"
+        required: false
+        type: string
+        default: ""
+      walk:
+        description: "Not used by the release track"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -37,15 +76,25 @@ permissions:
 jobs:
   gate:
     name: The release has its certificate
+    if: ${{ inputs.walk == '' }}
     runs-on: ubuntu-latest
     environment: app-store-connect-preview
     outputs:
+      proof: ${{ steps.check.outputs.proof }}
+      ref: ${{ steps.check.outputs.ref }}
       version: ${{ steps.check.outputs.version }}
+      builds: ${{ steps.check.outputs.builds }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          # A tag's commit, or a proof's own ref.
+          ref: ${{ inputs.checkout != '' && inputs.checkout || inputs.tag != '' && format('refs/tags/{0}', inputs.tag) || github.sha }}
       - name: Tag and secrets
         id: check
         env:
           TAG: ${{ inputs.tag }}
+          CANDIDATE_VERSION: ${{ inputs.version }}
+          CANDIDATE_CHECKOUT: ${{ inputs.checkout }}
           P12: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD }}
           ASC_KEY: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
@@ -53,8 +102,31 @@ jobs:
           UPDATE_KEY: ${{ secrets.MEWLA_MAC_UPDATE_KEY }}
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::the tag must be vX.Y.Z (a stable release); got '$TAG'"; exit 1; }
-          echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" =~ ^candidate-[0-9a-f]{12}$ ]]; then
+            # The release track's build-only candidate: built, signed and notarized as a release is, and
+            # no manifest (nothing a candidate makes is signed with the updater key).
+            [[ "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && -n "$CANDIDATE_CHECKOUT" ]] || { echo "::error::a candidate needs its version and commit"; exit 1; }
+            version="$CANDIDATE_VERSION"
+            echo "proof=false" >> "$GITHUB_OUTPUT"
+            echo "ref=$CANDIDATE_CHECKOUT" >> "$GITHUB_OUTPUT"
+            python3 -I -c 'import json,sys; print("builds=" + json.dumps([{"leg":"candidate","version":sys.argv[1],"artifact":"mewla-macos-release-"+sys.argv[2],"manifest":False}], separators=(",",":")))' "$version" "$TAG" >> "$GITHUB_OUTPUT"
+          elif [ -n "$TAG" ]; then
+            [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::the tag must be vX.Y.Z (a stable release); got '$TAG'"; exit 1; }
+            version="${BASH_REMATCH[1]}"
+            echo "proof=false" >> "$GITHUB_OUTPUT"
+            echo "ref=refs/tags/$TAG" >> "$GITHUB_OUTPUT"
+            # One build: the release's own.
+            python3 -I -c 'import json,sys; print("builds=" + json.dumps([{"leg":"release","version":sys.argv[1],"artifact":"mewla-macos-release-"+sys.argv[2],"manifest":True}], separators=(",",":")))' "$version" "$TAG" >> "$GITHUB_OUTPUT"
+          else
+            version=$(python3 scripts/lib/release_identity.py version)
+            [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || { echo "::error::this ref's version is '$version', not X.Y.Z"; exit 1; }
+            next="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$((BASH_REMATCH[3] + 1))"
+            echo "proof=true" >> "$GITHUB_OUTPUT"
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            # A and B: two Developer ID builds of one commit, B the next patch, both with the update source on loopback.
+            python3 -I -c 'import json,sys; print("builds=" + json.dumps([{"leg":"a","version":sys.argv[1],"artifact":"mewla-macos-proof-a-"+sys.argv[3],"manifest":True},{"leg":"b","version":sys.argv[2],"artifact":"mewla-macos-proof-b-"+sys.argv[3],"manifest":True}], separators=(",",":")))' "$version" "$next" "$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           missing=()
           [ -n "$P12" ] || missing+=(MEWLA_MAC_DEVELOPER_ID_P12_BASE64)
           [ -n "$P12_PASSWORD" ] || missing+=(MEWLA_MAC_DEVELOPER_ID_P12_PASSWORD)
@@ -67,15 +139,20 @@ jobs:
           fi
 
   sign:
-    name: Build, sign with Developer ID, notarize
+    name: Build ${{ matrix.build.leg }}, sign with Developer ID, notarize
     needs: gate
+    if: ${{ inputs.reuse_run == '' }}
     runs-on: macos-26
     environment: app-store-connect-preview
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        build: ${{ fromJSON(needs.gate.outputs.builds) }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ inputs.tag }}
+          ref: ${{ needs.gate.outputs.ref }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: daemon/go.mod
@@ -91,16 +168,37 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            client/macos/target
+          key: macos-app-v1-${{ hashFiles('client/macos/Cargo.toml', 'client/macos/Cargo.lock') }}
+          restore-keys: macos-app-v1-
       - name: The daemon and CLI
         env:
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+          VERSION: ${{ matrix.build.version }}
         run: |
           set -euo pipefail
           export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
+          # A proof's second build and a candidate are a version the commit does not carry: the daemon is built at it (as the app is).
+          export MEWLA_VERSION="$VERSION"
           ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
-          [ "$("$RUNNER_TEMP/daemon/mewla-darwin-arm64" --version | awk '{print $2}')" = "${{ needs.gate.outputs.version }}" ]
+          [ "$("$RUNNER_TEMP/daemon/mewla-darwin-arm64" --version | awk '{print $2}')" = "$VERSION" ]
       - name: The app
-        run: client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app"
+        env:
+          VERSION: ${{ matrix.build.version }}
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.gate.outputs.proof }}" = true ]; then
+            # A proof's apps look for their update on loopback, signed with the release's own key (the manifest B's job makes).
+            proofs=(--updater-url http://127.0.0.1:8765/latest.json --updater-key "$(cat client/macos/update-public-key.txt)")
+          else
+            proofs=()
+          fi
+          client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app" --version "$VERSION" ${proofs[@]+"${proofs[@]}"}
       - name: Developer ID signature, notarization, the .dmg
         env:
           P12: ${{ secrets.MEWLA_MAC_DEVELOPER_ID_P12_BASE64 }}
@@ -118,9 +216,17 @@ jobs:
           security import "$RUNNER_TEMP/developer-id.p12" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain" >/dev/null
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # The .p12 holds the certificate and its key, not the chain: without Apple's "Developer ID Certification
+          # Authority" (G2) beside it the identity is not valid for signing. Counted before and after, so a run says whether it was needed.
+          echo "valid identities before the intermediate: $(security find-identity -v -p codesigning "$keychain" | tail -1)"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/DeveloperIDG2CA.cer" https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          openssl x509 -inform DER -in "$RUNNER_TEMP/DeveloperIDG2CA.cer" -noout -subject -fingerprint -sha256
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$keychain" -T /usr/bin/codesign
+          echo "valid identities after: $(security find-identity -v -p codesigning "$keychain" | tail -1)"
           # The certificate names itself: "Developer ID Application: Name (TEAMID)".
           IDENTITY=$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ {print $2; exit}')
-          [ -n "$IDENTITY" ] || { echo "::error::the .p12 holds no Developer ID Application identity"; exit 1; }
+          [ -n "$IDENTITY" ] || { echo "::error::the .p12 holds no valid Developer ID Application identity"; security find-identity -p codesigning "$keychain"; exit 1; }
+          echo "signing as: $IDENTITY"
           printf '%s' "$ASC_KEY" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
           chmod 600 "$RUNNER_TEMP/AuthKey.p8"
           mkdir -p "$RUNNER_TEMP/release"
@@ -131,45 +237,452 @@ jobs:
       - name: The update archive (the stapled app) and the signed manifest
         env:
           UPDATE_KEY: ${{ secrets.MEWLA_MAC_UPDATE_KEY }}
+          VERSION: ${{ matrix.build.version }}
+          MANIFEST: ${{ matrix.build.manifest }}
         run: |
           set -euo pipefail
-          version="${{ needs.gate.outputs.version }}"
           out="$RUNNER_TEMP/files"; mkdir -p "$out"
           # The updater reads the platform from the archive's name (macos-aarch64) and swaps the whole .app in.
-          ditto -c -k --keepParent "$RUNNER_TEMP/release/Mewla.app" "$out/Mewla-$version-macos-aarch64.zip"
-          cp "$RUNNER_TEMP"/release/Mewla-"$version"-macos-arm64.dmg "$out/"
-          printf '%s' "$UPDATE_KEY" > "$RUNNER_TEMP/update.secret"; chmod 600 "$RUNNER_TEMP/update.secret"
-          # What `nsh update-manifest` reads the id, version and the key's public half from; the apps' own is the one that counts.
-          mkdir -p "$RUNNER_TEMP/entry"
-          python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"github":"daoleno/mewla","publicKey":open(sys.argv[2]).read().strip()}}, open(sys.argv[3],"w"))' "$version" client/macos/update-public-key.txt "$RUNNER_TEMP/entry/nsh.json"
-          "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/update.secret" --base-url "https://github.com/daoleno/mewla/releases/download/v$version" --out "$out" "$out/Mewla-$version-macos-aarch64.zip"
-          rm -f "$RUNNER_TEMP/update.secret"
-          cat "$out/latest.json"
+          ditto -c -k --keepParent "$RUNNER_TEMP/release/Mewla.app" "$out/Mewla-$VERSION-macos-aarch64.zip"
+          cp "$RUNNER_TEMP"/release/Mewla-"$VERSION"-macos-arm64.dmg "$out/"
+          # The same disk image under a name that holds no version: the site's download links to it
+          # (releases/latest/download/Mewla-macos-arm64.dmg), the newest release's whatever its version.
+          cp "$RUNNER_TEMP"/release/Mewla-"$VERSION"-macos-arm64.dmg "$out/Mewla-macos-arm64.dmg"
+          if [ "$MANIFEST" = true ]; then
+            printf '%s' "$UPDATE_KEY" > "$RUNNER_TEMP/update.secret"; chmod 600 "$RUNNER_TEMP/update.secret"
+            # What `nsh update-manifest` reads the id, version and the key's public half from; the apps' own is the one that counts.
+            mkdir -p "$RUNNER_TEMP/entry"
+            python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"github":"daoleno/mewla","publicKey":open(sys.argv[2]).read().strip()}}, open(sys.argv[3],"w"))' "$VERSION" client/macos/update-public-key.txt "$RUNNER_TEMP/entry/nsh.json"
+            if [ "${{ needs.gate.outputs.proof }}" = true ]; then base=http://127.0.0.1:8765; else base="https://github.com/daoleno/mewla/releases/download/v$VERSION"; fi
+            "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/update.secret" --base-url "$base" --out "$out" "$out/Mewla-$VERSION-macos-aarch64.zip"
+            rm -f "$RUNNER_TEMP/update.secret"
+            cat "$out/latest.json"
+          fi
           (cd "$out" && shasum -a 256 *)
       - uses: actions/upload-artifact@v4
         with:
-          name: mewla-macos-release-${{ inputs.tag }}
+          name: ${{ matrix.build.artifact }}
           path: ${{ runner.temp }}/files
           if-no-files-found: error
           retention-days: 7
 
-  attach:
-    name: Attach to the release
-    needs: sign
-    if: ${{ inputs.attach }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  # A proof's checks on a clean Mac that holds no secret and no identity: the signed, notarized .dmg as a person gets it
+  # (the quarantine a browser puts on a download stays), installed from the disk image into /Applications, first launch
+  # through LaunchServices, then launchd restarting the daemon and the update from A to B.
+  verify:
+    name: The signed app on a clean Mac
+    needs: [gate, sign]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.gate.outputs.proof == 'true' && (needs.sign.result == 'success' || needs.sign.result == 'skipped') }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    env:
+      # The run whose builds are checked: this one, or the one `reuse_run` names.
+      PROOF_RUN: ${{ inputs.reuse_run != '' && inputs.reuse_run || github.run_id }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.ref }}
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/download-artifact@v4
         with:
-          name: mewla-macos-release-${{ inputs.tag }}
-          path: files
-      - name: The release carries the files
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.tag }}
+          name: mewla-macos-proof-a-${{ env.PROOF_RUN }}
+          path: ${{ runner.temp }}/a
+          run-id: ${{ env.PROOF_RUN }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-proof-b-${{ env.PROOF_RUN }}
+          path: ${{ runner.temp }}/b
+          run-id: ${{ env.PROOF_RUN }}
+          github-token: ${{ github.token }}
+      - name: A stub agent, so Brain's host starts (a runner has no agent)
+        run: |
+          sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
+          claude --version
+      - name: Gatekeeper and the notary ticket accept the .dmg and the app
         run: |
           set -euo pipefail
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
-          gh release upload "$TAG" files/* --repo "$GITHUB_REPOSITORY" --clobber
+          dmg=$(ls "$RUNNER_TEMP"/a/Mewla-*-macos-arm64.dmg)
+          # What a browser does to a download.
+          xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" "$dmg"
+          xattr -l "$dmg"
+          spctl -a -t open --context context:primary-signature -vv "$dmg"
+          xcrun stapler validate "$dmg"
+          codesign -dv --verbose=2 "$dmg" 2>&1 | grep -E "Identifier|Authority|TeamIdentifier|Timestamp" || true
+      - name: Installed from the .dmg into /Applications, as a person does
+        run: |
+          set -euo pipefail
+          dmg=$(ls "$RUNNER_TEMP"/a/Mewla-*-macos-arm64.dmg)
+          # Double-clicking the image: LaunchServices mounts it (Gatekeeper judges it first).
+          open "$dmg"
+          for i in $(seq 1 60); do [ -d /Volumes/Mewla/Mewla.app ] && break; sleep 1; done
+          if [ ! -d /Volumes/Mewla/Mewla.app ]; then
+            echo "the image did not mount through open; hdiutil attach instead"
+            hdiutil attach -nobrowse "$dmg"
+          fi
+          ls -la /Volumes/Mewla
+          spctl -a -t exec -vv /Volumes/Mewla/Mewla.app
+          xcrun stapler validate /Volumes/Mewla/Mewla.app
+          # Dragging the app onto Applications (the copy the Finder makes keeps the image's quarantine).
+          ditto /Volumes/Mewla/Mewla.app /Applications/Mewla.app
+          hdiutil detach /Volumes/Mewla || hdiutil detach -force /Volumes/Mewla || true
+          if xattr -p com.apple.quarantine /Applications/Mewla.app >/dev/null 2>&1; then
+            echo "quarantine on the installed app (kept from the image): $(xattr -p com.apple.quarantine /Applications/Mewla.app | cut -d';' -f1)"
+          else
+            # Not carried by this mount: set as the Finder's copy sets it. Nothing removes it afterwards.
+            echo "quarantine set on the installed app as a Finder copy sets it"
+            xattr -w com.apple.quarantine "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" /Applications/Mewla.app
+          fi
+          spctl -a -t exec -vv /Applications/Mewla.app
+          xcrun stapler validate /Applications/Mewla.app
+          codesign --verify --deep --strict --verbose=2 /Applications/Mewla.app
+          codesign -dv --verbose=2 /Applications/Mewla.app 2>&1 | grep -E "Identifier|Authority|TeamIdentifier|Timestamp|flags" || true
+          echo "== A's designated requirement"
+          codesign -d -r- /Applications/Mewla.app 2>&1 | grep -E "designated" | tee "$RUNNER_TEMP/dr-a.txt"
+          codesign -d -r- /Applications/Mewla.app/Contents/Helpers/mewla 2>&1 | grep -E "designated" || true
+          mkdir -p "$RUNNER_TEMP/b-app"
+          ditto -x -k "$RUNNER_TEMP"/b/Mewla-*-macos-aarch64.zip "$RUNNER_TEMP/b-app"
+          echo "== B's designated requirement"
+          codesign -d -r- "$RUNNER_TEMP/b-app/Mewla.app" 2>&1 | grep -E "designated" | tee "$RUNNER_TEMP/dr-b.txt"
+          diff "$RUNNER_TEMP/dr-a.txt" "$RUNNER_TEMP/dr-b.txt" && echo "the designated requirement is the same for A and B"
+          xcrun stapler validate "$RUNNER_TEMP/b-app/Mewla.app"
+      - name: First launch (open), the daemon, the Keychain, a paired device
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/data"
+          cli=/Applications/Mewla.app/Contents/Helpers/mewla
+          # What a person's double-click does; the log directory is the one thing set (so the run can read it).
+          # An app that came in a download asks once, whatever its signature: "Mewla is an app downloaded from the
+          # Internet. Are you sure you want to open it?" The person presses Open; so does this run, after it has
+          # captured the dialog. The quarantine stays on the app.
+          mkdir -p "$RUNNER_TEMP/captures/gatekeeper"
+          open -n --env MEWLA_APP_DATA_DIR="$RUNNER_TEMP/data" /Applications/Mewla.app > "$RUNNER_TEMP/open.out" 2>&1 &
+          echo $! > "$RUNNER_TEMP/open.pid"
+          pressed=""
+          for i in $(seq 1 90); do
+            # The app is up (not the stopped process LaunchServices starts while Gatekeeper asks).
+            state=$(ps -o state= -p "$(pgrep -f '/Applications/Mewla.app/Contents/MacOS/Mewla' | head -1)" 2>/dev/null | tr -d ' ' || true)
+            [ -n "$state" ] && [[ "$state" != T* ]] && break
+            if [ -z "$pressed" ] && [ "$i" -ge 4 ]; then
+              [ "$i" -eq 4 ] && { screencapture -x "$RUNNER_TEMP/captures/gatekeeper/screen-at-4s.png" || true; echo "processes with windows:"; osascript -e 'tell application "System Events" to get {name, (count of windows)} of every process' 2>&1 | head -5 || true; pgrep -l "CoreServicesUIAgent|UserNotification" || true; }
+              # Any process holding a window with an Open button: the question (CoreServicesUIAgent), wherever it lives.
+              out=$(osascript <<'OSA' 2>&1 || true
+          tell application "System Events"
+            repeat with p in (every process)
+              try
+                if (count of windows of p) > 0 then
+                  set b to {}
+                  try
+                    set b to name of every button of window 1 of p
+                  end try
+                  if b contains "Open" then
+                    set t to ""
+                    try
+                      set t to (value of every static text of window 1 of p) as string
+                    end try
+                    click button "Open" of window 1 of p
+                    return (name of p) & " :: " & t
+                  end if
+                end if
+              end try
+            end repeat
+          end tell
+          return ""
+          OSA
+          )
+              if [ -n "$out" ] && [[ "$out" == *"::"* ]]; then pressed=1; echo "pressed Open: $out"; screencapture -x "$RUNNER_TEMP/captures/gatekeeper/after-open.png" || true; fi
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/open.out" || true
+          [ -n "$pressed" ] && echo "Gatekeeper's first-launch question was answered with Open" || echo "no first-launch question was shown"
+          for i in $(seq 1 240); do
+            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
+              && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          pgrep -fl "/Applications/Mewla.app/Contents/MacOS/Mewla"
+          curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-1.json"
+          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
+          # A signed build keeps its secrets in the login Keychain.
+          for i in $(seq 1 60); do grep -q "secrets:" "$RUNNER_TEMP"/data/logs/* 2>/dev/null && break; sleep 1; done
+          grep -h "secrets:" "$RUNNER_TEMP"/data/logs/* | sort -u
+          grep -q "secrets: the Keychain" "$RUNNER_TEMP"/data/logs/*
+          link=$("$cli" pair -details http://127.0.0.1:9876 2>&1 | grep -o 'mewla://settings?p=[A-Za-z0-9_-]*' | head -1)
+          (cd client && bun macos/scripts/pair-proof.ts "$link")
+          "$cli" devices list | tee "$RUNNER_TEMP/devices-1.txt"
+          # The device key is an item of the login Keychain under the app's service (attributes only; the value is never read).
+          for i in $(seq 1 60); do security find-generic-password -s com.daoleno.mewla >/dev/null 2>&1 && break; sleep 1; done
+          security find-generic-password -s com.daoleno.mewla | grep -E '"svce"|"acct"|"cdat"|keychain:' || { echo "no Keychain item under com.daoleno.mewla"; security dump-keychain 2>/dev/null | grep -c svce || true; exit 1; }
+          # The first run's default (start at login) and what Background Task Management says about the app.
+          for i in $(seq 1 60); do grep -q "start at login" "$RUNNER_TEMP"/data/logs/* 2>/dev/null && break; sleep 1; done
+          grep -h "start at login" "$RUNNER_TEMP"/data/logs/* || echo "start at login: no line in the app's log"
+          sudo sfltool dumpbtm 2>/dev/null | grep -B3 -A12 -i "com.daoleno.mewla" | head -50 | tee "$RUNNER_TEMP/btm-1.txt" || true
+      - name: The first window, captured
+        run: |
+          set -euo pipefail
+          sleep 12
+          client/macos/scripts/capture-windows.sh "Mewla" "$RUNNER_TEMP/captures/first-run" "signed-first-run-" || true
+          ls -la "$RUNNER_TEMP/captures/first-run" || true
+          cat "$RUNNER_TEMP"/data/logs/* | tail -40
+      - name: launchd restarts the daemon and the Sessions stay
+        run: |
+          set -euo pipefail
+          cli=/Applications/Mewla.app/Contents/Helpers/mewla
+          # The Sessions are the session host's (it outlives the daemon): Brain's own, started on the stub agent.
+          sessions() { python3 -I -c 'import json,sys; print(" ".join(sorted("%s:%s" % (s["id"], s["pid"]) for s in json.load(sys.stdin).get("sessions", []))))'; }
+          for i in $(seq 1 90); do [ -n "$("$cli" host status --json 2>/dev/null | sessions)" ] && break; sleep 1; done
+          # Brain's own Session on the stand-in agent is one the daemon replaces by itself from time to time; the Session
+          # this step starts is a Worker's, which nothing replaces.
+          pre=$("$cli" host status --json | sessions)
+          # A Worker that only waits (`sleep`; the agent's own arguments are ignored): the stand-in agent is not one the
+          # daemon starts a Worker on.
+          printf '#!/bin/sh\nexec sleep 3000\n' > "$RUNNER_TEMP/hold.sh"; chmod 755 "$RUNNER_TEMP/hold.sh"
+          "$cli" worker spawn -name "Restart proof" -executor claude -command "$RUNNER_TEMP/hold.sh" -cwd "$RUNNER_TEMP" | tee "$RUNNER_TEMP/spawn.json" || true
+          # The Worker's id is its Session's (mh-…): the one the spawn printed.
+          wid=$(grep -o '"id": "mh-[0-9a-f]*"' "$RUNNER_TEMP/spawn.json" | head -1 | grep -o 'mh-[0-9a-f]*')
+          test -n "$wid"
+          mine=""
+          for i in $(seq 1 60); do
+            for one in $("$cli" host status --json | sessions); do [[ "$one" == "$wid":* ]] && mine="$one"; done
+            [ -n "$mine" ] && break
+            sleep 1
+          done
+          echo "the Worker's Session: ${mine:-none}"
+          test -n "$mine"
+          "$cli" host status --json | tee "$RUNNER_TEMP/host-1.json"
+          "$cli" worker list --json | tee "$RUNNER_TEMP/workers-1.json"
+          before=$(sessions < "$RUNNER_TEMP/host-1.json")
+          echo "Sessions before: $before"
+          host_before=$(pgrep -f "mewla host" | sort | tr '\n' ' ')
+          daemon_before=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}')
+          echo "session host pid(s) $host_before, daemon pid $daemon_before"
+          test -n "$host_before"
+          # launchd's own restart of the LaunchAgent, as a crash or a log-out would do it.
+          launchctl kickstart -k "gui/$(id -u)/com.daoleno.mewla.daemon"
+          for i in $(seq 1 120); do
+            now=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}')
+            [ -n "$now" ] && [ "$now" != "$daemon_before" ] && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          daemon_after=$(launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}')
+          host_after=$(pgrep -f "mewla host" | sort | tr '\n' ' ')
+          echo "daemon pid $daemon_before -> $daemon_after; session host pid(s) $host_before -> $host_after"
+          test "$daemon_before" != "$daemon_after"
+          test "$host_before" = "$host_after"
+          curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-2.json"
+          python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"], (a,b); print("same daemon_id", a["daemon_id"])' "$RUNNER_TEMP/health-1.json" "$RUNNER_TEMP/health-2.json"
+          # The restarted daemon takes the host's Sessions as they are: the same ids, the same processes, none replaced.
+          sleep 15
+          "$cli" host status --json | tee "$RUNNER_TEMP/host-2.json"
+          after=$(sessions < "$RUNNER_TEMP/host-2.json")
+          echo "Sessions after:  $after"
+          # The Worker's Session is still there, the same process, listed by the restarted daemon too.
+          [[ " $after " == *" $mine "* ]] || { echo "Session $mine is gone"; exit 1; }
+          "$cli" worker list --json | tee "$RUNNER_TEMP/workers-2.json"
+          grep -q "Restart proof" "$RUNNER_TEMP/workers-2.json" || { echo "the restarted daemon does not list the Worker"; exit 1; }
+          echo "the Sessions stayed through the daemon's restart"
+      - name: A newer release is offered; the Settings row, the cat menu's row, the update
+        run: |
+          set -euo pipefail
+          # The next steps need the app that holds the update source: it is A, which looks on loopback.
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/b" > "$RUNNER_TEMP/serve.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/serve.pid"
+          cat "$RUNNER_TEMP"/b/latest.json
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8765/latest.json >/dev/null 2>&1 && break; sleep 0.5; done
+          curl -fsS http://127.0.0.1:8765/latest.json >/dev/null
+          # Quit as the menu does, then open the app with the update proof's script.
+          osascript -e 'quit app "Mewla"' || true
+          for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null || break; sleep 1; done
+          cli=/Applications/Mewla.app/Contents/Helpers/mewla
+          echo "$("$cli" devices list | wc -l) device lines before the update"
+          cp "$RUNNER_TEMP/devices-1.txt" "$RUNNER_TEMP/devices-before.txt"
+          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | awk '/^\tpid = / {print $3}' | tee "$RUNNER_TEMP/daemon-pid-before.txt"
+          open -n --env MEWLA_APP_DATA_DIR="$RUNNER_TEMP/data" --env MEWLA_APP_DEV_SCRIPT='{"settings":"general","update":true}' /Applications/Mewla.app > "$RUNNER_TEMP/open2.out" 2>&1 &
+          for i in $(seq 1 120); do cat "$RUNNER_TEMP"/data/logs/* 2>/dev/null | grep -q "dev script: update found" && break; sleep 1; done
+          cat "$RUNNER_TEMP"/data/logs/* | grep -E "dev script: (update|menu row)" || true
+          new=$(ls "$RUNNER_TEMP"/b/Mewla-*-macos-aarch64.zip | sed -E 's/.*Mewla-(.*)-macos-aarch64.zip/\1/')
+          echo "new=$new" >> "$GITHUB_ENV"
+          grep -q "dev script: update found $new" "$RUNNER_TEMP"/data/logs/*
+          grep -q "dev script: menu row \[\"Update to $new\"\]" "$RUNNER_TEMP"/data/logs/*
+          sleep 4
+          client/macos/scripts/capture-windows.sh "Mewla" "$RUNNER_TEMP/captures/update-found" "update-found-" || true
+          # The status item's menu, opened as a person right-clicks it (best effort: Control Center owns the item on macOS 26).
+          osascript <<'OSA' > "$RUNNER_TEMP/menu-items.txt" 2>&1 || true
+          tell application "System Events"
+            repeat with p in {"Mewla", "Control Center"}
+              try
+                tell process p
+                  repeat with m in (menu bars)
+                    repeat with i in (menu bar items of m)
+                      set d to ""
+                      try
+                        set d to (description of i) & " " & (name of i)
+                      end try
+                      if d contains "Mewla" then
+                        perform action "AXPress" of i
+                        delay 1
+                        set out to ""
+                        try
+                          repeat with mi in (menu items of menu 1 of i)
+                            set out to out & (name of mi) & " | "
+                          end repeat
+                        end try
+                        key code 53
+                        return p & " :: " & d & " :: " & out
+                      end if
+                    end repeat
+                  end repeat
+                end tell
+              end try
+            end repeat
+          end tell
+          return "no Mewla status item found"
+          OSA
+          echo "status item menu: $(cat "$RUNNER_TEMP/menu-items.txt")"
+      - name: "The app is replaced by B: same daemon, device and login item"
+        run: |
+          set -euo pipefail
+          cli=/Applications/Mewla.app/Contents/Helpers/mewla
+          for i in $(seq 1 180); do
+            v=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Mewla.app/Contents/Info.plist 2>/dev/null || true)
+            if [ "$v" = "$new" ] && pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null; then break; fi
+            sleep 1
+          done
+          installed=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Mewla.app/Contents/Info.plist 2>&1 || true)
+          echo "installed version: '$installed', expected: '$new'"
+          [ "$installed" = "$new" ] || { echo "the installed app is not $new"; pgrep -fl "Mewla" || true; exit 1; }
+          pgrep -fl "/Applications/Mewla.app/Contents/MacOS/Mewla" || { echo "the new app is not running"; exit 1; }
+          sleep 12
+          client/macos/scripts/capture-windows.sh "Mewla" "$RUNNER_TEMP/captures/update-done" "update-done-" || true
+          codesign --verify --deep --strict --verbose=2 /Applications/Mewla.app
+          spctl -a -t exec -vv /Applications/Mewla.app || echo "spctl on the updated app: not accepted (see above)"
+          xcrun stapler validate /Applications/Mewla.app || true
+          echo "quarantine on the updated app: $(xattr -p com.apple.quarantine /Applications/Mewla.app 2>/dev/null || echo none)"
+          codesign -dv --verbose=2 /Applications/Mewla.app 2>&1 | grep -E "Identifier|Authority|TeamIdentifier" || true
+          echo "== the designated requirement of the app that is installed now (B)"
+          codesign -d -r- /Applications/Mewla.app 2>&1 | grep -E "designated" | tee "$RUNNER_TEMP/dr-now.txt"
+          diff "$RUNNER_TEMP/dr-a.txt" "$RUNNER_TEMP/dr-now.txt" && echo "the designated requirement stayed the same across the update"
+          "$cli" --version
+          for i in $(seq 1 240); do
+            v=$(curl -fsS http://127.0.0.1:9876/health 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' || true)
+            [ "$v" = "$new" ] && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9876/health | tee "$RUNNER_TEMP/health-3.json"
+          python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"], (a,b); assert b["version"]==sys.argv[3], b; print("same daemon_id", a["daemon_id"], "now", b["version"])' "$RUNNER_TEMP/health-1.json" "$RUNNER_TEMP/health-3.json" "$new"
+          "$cli" devices list | tee "$RUNNER_TEMP/devices-after.txt"
+          while read -r id _; do grep -q "^$id" "$RUNNER_TEMP/devices-after.txt" || { echo "device $id is gone"; exit 1; }; done < "$RUNNER_TEMP/devices-before.txt"
+          # The login item is the same one: registered for the new bundle, in the same state.
+          sudo sfltool dumpbtm 2>/dev/null | grep -B3 -A12 -i "com.daoleno.mewla" | head -50 | tee "$RUNNER_TEMP/btm-3.txt" || true
+          # The same login item, still enabled and allowed (the "notified" bit is only whether macOS has shown its notice by now).
+          for f in btm-1 btm-3; do
+            grep -q "Identifier: 8.com.daoleno.mewla.daemon" "$RUNNER_TEMP/$f.txt"
+            grep -B4 "Identifier: 8.com.daoleno.mewla.daemon" "$RUNNER_TEMP/$f.txt" | grep -q "Disposition: \[enabled, allowed"
+            grep -q "Identifier: 2.com.daoleno.mewla" "$RUNNER_TEMP/$f.txt" || echo "no app record in $f"
+          done
+          grep -E "Disposition|Identifier: [28]\.com.daoleno" "$RUNNER_TEMP/btm-1.txt" "$RUNNER_TEMP/btm-3.txt" || true
+          echo "the login item is the same record, enabled, before and after the update"
+          launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" | grep -E "program|state|pid"
+          # The Keychain item the old build wrote is still there, and the new build read it without a prompt.
+          security find-generic-password -s com.daoleno.mewla | grep -E '"svce"|"acct"'
+          grep -h "secrets:" "$RUNNER_TEMP"/data/logs/* | sort -u
+          if grep -E "Keychain:" "$RUNNER_TEMP"/data/logs/*; then echo "the Keychain refused the updated build"; exit 1; fi
+          [[ $(pgrep -f "mewla serve" | wc -l) -eq 1 ]] || { pgrep -fl "mewla serve"; exit 1; }
+      - name: Why the app did not come up (a stuck launch)
+        if: failure()
+        run: |
+          pid=$(pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" | head -1 || true)
+          echo "app pid: ${pid:-none}"
+          if [ -n "$pid" ]; then
+            ps -o pid,ppid,state,etime,command -p "$pid" || true
+            sample "$pid" 3 -mayDie 2>&1 | head -80 || true
+            lsof -p "$pid" 2>/dev/null | head -40 || true
+            codesign --verify --deep --strict --verbose=2 /Applications/Mewla.app || true
+            codesign -d --entitlements - /Applications/Mewla.app 2>&1 | head -20 || true
+          fi
+          ls -la "$HOME/Library/Logs" "$HOME/Library/Application Support" 2>/dev/null | head -30 || true
+          log show --last 10m --style compact --predicate 'process == "Mewla" OR process == "amfid" OR process == "syspolicyd" OR process == "CoreServicesUIAgent" OR process == "launchservicesd" OR (process == "trustd" AND eventMessage CONTAINS[c] "mewla") OR eventMessage CONTAINS[c] "com.daoleno.mewla"' 2>/dev/null | grep -v "backgroundtaskmanagement\|veertu" | tail -80 || true
+      - name: What the app, launchd and Background Task Management said
+        if: always()
+        run: |
+          echo "== the app's logs"
+          cat "$RUNNER_TEMP"/data/logs/* 2>/dev/null | tail -120 || true
+          find "$HOME/Library" -path '*com.daoleno.mewla*' \( -name '*.log*' -o -name '*.json' \) 2>/dev/null | head -20 | while read -r f; do echo "== $f"; tail -60 "$f"; done
+          echo "== processes"; pgrep -fl "Mewla|mewla" || true
+          echo "== launchd"; launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>&1 | head -40 || true
+          log show --last 15m --style compact --predicate 'process == "Mewla" OR process == "smd" OR subsystem == "com.apple.backgroundtaskmanagement" OR (process == "launchd" AND eventMessage CONTAINS "mewla")' 2>/dev/null | tail -80 || true
+          echo "== BTM"; sudo sfltool dumpbtm 2>/dev/null | grep -i -B2 -A14 mewla | head -80 || true
+          echo "== Gatekeeper (syspolicyd)"
+          log show --last 15m --style compact --predicate 'process == "syspolicyd" AND (eventMessage CONTAINS "Mewla" OR eventMessage CONTAINS "mewla")' 2>/dev/null | tail -30 || true
+          grep -h "restart" "$HOME"/.mewla/logs/*.log 2>/dev/null | tail -20 || true
+          if [ -f "$RUNNER_TEMP/serve.pid" ]; then kill "$(cat "$RUNNER_TEMP/serve.pid")" 2>/dev/null || true; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-macos-signed-captures-${{ github.run_id }}
+          path: ${{ runner.temp }}/captures
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # A stranger's walk (client/macos/scripts/walk.sh) on a clean Mac that holds no secret: the .dmg from the URL the site
+  # links to (or a proof run's build A), Gatekeeper, the drag to Applications, the first launch and its question, the
+  # first window, Pair a phone… from the menu bar cat, Quit and a second launch, then the shipped app's first run,
+  # Settings and Calendar in light and dark. A capture of each step, at 2 px per pt.
+  walk:
+    name: A stranger's walk from the download
+    if: ${{ inputs.walk != '' }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Where the .dmg comes from
+        id: source
+        env:
+          WALK: ${{ inputs.walk }}
+        run: |
+          set -euo pipefail
+          if [[ "$WALK" == run:* ]]; then
+            id="${WALK#run:}"
+            [[ "$id" =~ ^[0-9]+$ ]] || { echo "::error::walk is a URL or run:<id>; got '$WALK'"; exit 1; }
+            echo "run=$id" >> "$GITHUB_OUTPUT"
+          else
+            [[ "$WALK" =~ ^https://[A-Za-z0-9./_-]+\.dmg$ ]] || { echo "::error::walk is an https URL of a .dmg or run:<id>; got '$WALK'"; exit 1; }
+          fi
+      - name: The .dmg a proof run built (run:<id>)
+        if: ${{ steps.source.outputs.run != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-proof-a-${{ steps.source.outputs.run }}
+          path: ${{ runner.temp }}/proof
+          run-id: ${{ steps.source.outputs.run }}
+          github-token: ${{ github.token }}
+      - name: A stand-in agent CLI (a runner has none), a HiDPI display, a neutral desktop
+        run: |
+          set -x
+          sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
+          F=client/macos/scripts/fidelity
+          clang -fobjc-arc -framework Foundation -framework CoreGraphics "$F/vdisplay.m" -o "$RUNNER_TEMP/vdisplay"
+          nohup "$RUNNER_TEMP/vdisplay" 1512 982 > "$RUNNER_TEMP/vdisplay.out" 2> "$RUNNER_TEMP/vdisplay.err" &
+          for i in $(seq 1 20); do grep -q "^display" "$RUNNER_TEMP/vdisplay.out" && break; sleep 1; done
+          cat "$RUNNER_TEMP/vdisplay.out"
+          sudo scutil --set ComputerName "MacBook Pro"
+          python3 -I "$F/solid.py" "$RUNNER_TEMP/desk.png" 64 64 222 224 228
+          osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk.png\"" || true
+      - name: The walk
+        # Its own limit, so the captures are uploaded whatever it did.
+        timeout-minutes: 30
+        env:
+          WALK: ${{ inputs.walk }}
+        run: |
+          set -uo pipefail
+          if [[ "$WALK" == run:* ]]; then src="$RUNNER_TEMP/proof/Mewla-macos-arm64.dmg"; else src="$WALK"; fi
+          client/macos/scripts/walk.sh "$src" "$RUNNER_TEMP/walk"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-macos-walk-${{ github.run_id }}
+          path: ${{ runner.temp }}/walk
+          if-no-files-found: ignore
+          retention-days: 14
