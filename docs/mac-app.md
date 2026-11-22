@@ -10,7 +10,7 @@ Intel Macs.
 
 ## Install
 
-**Already using the Mewla CLI on this Mac?** Keep using it and wait for the fixed app before opening Mewla 0.4.23. Opening the app can stop the existing daemon and disconnect paired phones. The steps below are for a fresh Mac installation.
+**Already use the CLI?** Use version 0.4.24 or later. Keep the CLI installed and open Mewla on a previously paired phone during the switch.
 
 1. [Download Mewla for Mac](https://github.com/daoleno/mewla/releases/latest/download/Mewla-macos-arm64.dmg)
    (the `.dmg` of the newest release).
@@ -32,7 +32,7 @@ An existing phone route works without changing LAN access. See [Connect and pair
 
 ## What runs
 
-- The daemon is a login item (`com.daoleno.mewla.daemon`, shown in **System
+- The daemon is a login item (shown in **System
   Settings → General → Login Items & Extensions**). Quitting the app leaves it
   running, and so your Sessions and Workers. **Stop Mewla on this Mac…** in the
   cat's menu stops it and removes the login item.
@@ -43,10 +43,17 @@ An existing phone route works without changing LAN access. See [Connect and pair
 
 ## If Mewla was installed with `install.sh`
 
-The 0.4.23 app can remove the old login job before macOS can start its replacement.
-This occurred with the public 0.4.21 and 0.4.22 CLI releases. If you already
-opened the app and lost your connection, keep your Mewla state directory and
-the pairing on your phone while the fix is prepared.
+Open the new app from **Applications**. It starts its daemon with the existing
+identity and waits up to two minutes for a previously paired device to reconnect.
+Open Mewla on that phone. When it reconnects, the app replaces the old login
+item and links the CLI to its bundled helper. If the new daemon fails its
+health check or no paired device reconnects in time, the app restores the
+previous service. If you quit during the switch, reopen the app to recover the
+previous service.
+
+The 0.4.23 app could disconnect a Mac with an existing CLI installation.
+If you already opened it and lost your connection, keep your Mewla state
+directory and your phone's pairing when installing the new version.
 
 ## Updates
 
