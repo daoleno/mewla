@@ -28,7 +28,7 @@ if (mode === "--across-takeover" || mode === "--rollback") {
       await Bun.sleep(500);
     }
   };
-  const { existsSync, readlinkSync, writeFileSync } = await import("node:fs");
+  const { existsSync, lstatSync, readlinkSync, writeFileSync } = await import("node:fs");
   const oldJob = home + "/Library/LaunchAgents/com.daoleno.mewla.daemon.plist";
   const priorBundle = home + "/Applications/Mewla.app";
   execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
@@ -100,6 +100,7 @@ if (mode === "--across-takeover" || mode === "--rollback") {
     await wait(async () => await serves() && !!(await auth()) && await serves(), 60, "original phone failed to authenticate to the installed helper");
     await wait(() => !existsSync(oldJob) && !existsSync(priorBundle)
       && existsSync(home + "/.mewla/mac-app-takeover.complete")
+      && lstatSync(home + "/.local/bin/mewla", { throwIfNoEntry: false })?.isSymbolicLink()
       && readlinkSync(home + "/.local/bin/mewla") === "/Applications/Mewla.app/Contents/Helpers/mewla", 30, "takeover did not commit after the original phone authenticated");
     console.log("Original phone authenticated before retiring the previous login service and CLI bundle.");
   }
