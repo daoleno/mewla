@@ -56,7 +56,7 @@ jobs:
           ditto -x -k "$RUNNER_TEMP/app/Mewla-Dev-"*-macos-aarch64.zip "$RUNNER_TEMP/run-app"
           ditto -x -k "$RUNNER_TEMP/fixture/Mewla-Dev-"*-macos-aarch64.zip "$RUNNER_TEMP/run-fixture"
       - name: A stub agent (no agent on a runner)
-        run: sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+        run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
       - name: The display, the desktop, the computer's name
         run: |
           set -x

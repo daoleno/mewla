@@ -90,7 +90,7 @@ jobs:
       # A stand-in claude (no agent on a runner): Brain's host starts, so Ready, the thread and its terminal show.
       - name: A stub agent for the smoke run
         run: |
-          sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+          sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
           claude --version
       - name: Mewla Dev runs and shows its windows
         run: |
