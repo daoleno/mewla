@@ -85,10 +85,12 @@ try {
     scanned = result.stdout.trim();
     return true;
   });
-  const target = readPairingLink(scanned);
-  if (!target || !ips.includes(new URL(target.url).hostname)) throw new Error("QR does not name the Mac's LAN address");
-  execFileSync(vision, [screen, "redact", join(out, "06-pair-redacted.png")]);
   installMemoryPlatform({ deviceName: () => "Simulated LAN phone", fetch: (input, init) => fetch(input, init) });
+  const target = readPairingLink(scanned);
+  if (!target) throw new Error("Phone client rejected the displayed QR payload");
+  const host = new URL(target.url).hostname;
+  if (!ips.includes(host)) throw new Error("Displayed QR hostname " + host + " differs from LAN interfaces " + ips.join(", "));
+  execFileSync(vision, [screen, "redact", join(out, "06-pair-redacted.png")]);
   const phone = await pairWith(target);
   const socket = await phoneSocket(phone.url, phone.daemonId);
   await roundTrip(socket, "before-dismiss");
