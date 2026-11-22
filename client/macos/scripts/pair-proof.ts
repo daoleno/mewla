@@ -33,11 +33,24 @@ if (mode === "--across-takeover" || mode === "--rollback") {
   const priorBundle = home + "/Applications/Mewla.app";
   execFileSync("/usr/bin/open", ["-g", "/Applications/Mewla.app"]);
   const installed = () => listing("com.daoleno.mewla.installed-daemon");
+  const errFile = process.env.RUNNER_TEMP + "/trial-helper.stderr";
+  let attached = false;
   const snapshot = async () => {
     const s = installed();
     const jobState = s.match(/^\tstate = (.+)$/m)?.[1] ?? "absent";
     const lastExit = s.match(/^\tlast exit code = (.*)$/m)?.[1] ?? "none";
     const jobProgram = s.match(/^\tprogram(?: identifier)? = (.*)$/m)?.[1] ?? "none";
+    if (s && !attached) {
+      const result = spawnSync("/bin/launchctl", ["debug", domain + "/com.daoleno.mewla.installed-daemon", "--stderr", errFile]);
+      attached = result.status === 0;
+    }
+    if (existsSync(errFile)) {
+      const stderr = await Bun.file(errFile).text();
+      const errors = stderr.split("\n").filter(l => /^(?:\d{4}\/\d{2}\/\d{2} [\d:]+ )?(?:unknown command|flag provided but not defined|resolve auth storage directory|open |listen |bind:|another daemon|recover from an interrupted update|acquire |cannot |lock |create |Mewla is|mewla is)/i.test(l));
+      for (const line of errors.slice(-1)) {
+        if (!/token|key|signature|nonce|:\/\//i.test(line)) console.log("Helper startup error", line.slice(0,220));
+      }
+    }
     const h = await fetch("http://127.0.0.1:9876/health", {signal: AbortSignal.timeout(1000)}).then(r => r.json()).catch(() => null);
     return JSON.stringify({jobState, jobProgram, lastExit, version:h?.version, identity:h?.daemon_id === paired.daemonId});
   };
