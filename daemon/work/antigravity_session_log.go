@@ -148,10 +148,12 @@ func projectAntigravitySessionLog(path string, records []AntigravityLogRecord) C
 		case "user":
 			turns++
 			boundary(record.At)
-			content, _ := json.Marshal(map[string]string{"type": "text", "text": record.Text})
-			updates = append(updates, antigravityACPUpdate{Kind: "user_message_chunk", Content: content})
-			times = append(times, record.At)
-			boundary(record.At)
+			if record.Answers == "" {
+				content, _ := json.Marshal(map[string]string{"type": "text", "text": record.Text})
+				updates = append(updates, antigravityACPUpdate{Kind: "user_message_chunk", Content: content})
+				times = append(times, record.At)
+				boundary(record.At)
+			}
 			lastTurn, lastStart, lastEnd, lastExit = record.Turn, record.At, nil, nil
 		case "update":
 			var update antigravityACPUpdate

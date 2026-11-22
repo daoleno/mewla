@@ -207,6 +207,9 @@ type AntigravityLogRecord struct {
 	Mode         string          `json:"mode,omitempty"`
 	Resumed      bool            `json:"resumed,omitempty"`
 	Version      string          `json:"version,omitempty"`
+	// Answers names the question a user record answers (picked in the app);
+	// Chat shows the answer on the question, not as a message.
+	Answers string `json:"answers,omitempty"`
 	// Cwd is the folder agy works in (session records, for Stats).
 	Cwd string `json:"cwd,omitempty"`
 	// Replayed marks history agy replayed when Mewla first opened a
@@ -635,6 +638,9 @@ type antigravitySession struct {
 type antigravityQueued struct {
 	id   string
 	text string
+	// answers is the question this message answers (an answer picked in
+	// the app), "" for a message of the person's own.
+	answers string
 }
 
 type antigravityPending struct {
@@ -1063,6 +1069,12 @@ func (s *antigravitySession) submit(id, text string) error {
 	if id == "" {
 		id = uuid.NewString()
 	}
+	return s.enqueue(antigravityQueued{id: id, text: text})
+}
+
+// enqueue queues one message for agy; while agy waits on its own question,
+// the message is the answer to it.
+func (s *antigravitySession) enqueue(next antigravityQueued) error {
 	s.mu.Lock()
 	// A message while agy waits on its own question is the answer to it.
 	var answered []string
@@ -1072,7 +1084,7 @@ func (s *antigravitySession) submit(id, text string) error {
 			answered = append(answered, key)
 		}
 	}
-	s.queue = append(s.queue, antigravityQueued{id: id, text: text})
+	s.queue = append(s.queue, next)
 	s.mu.Unlock()
 	for _, key := range answered {
 		s.log.write(AntigravityLogRecord{T: "answer", Ask: &AntigravityAsk{ID: key}, By: "message"})
@@ -1115,7 +1127,7 @@ func (s *antigravitySession) drain() {
 	}
 	// The message is in the log the moment it goes to agy, once per message,
 	// so what Mewla sent and what the conversation shows are the same text.
-	s.log.write(AntigravityLogRecord{T: "user", Turn: turn, Text: next.text})
+	s.log.write(AntigravityLogRecord{T: "user", Turn: turn, Text: next.text, Answers: next.answers})
 	s.view.user(next.text)
 	sum := sha256.Sum256([]byte(next.text))
 	s.link.send(map[string]any{"t": "input", "id": next.id, "turn": turn, "sha": fmt.Sprintf("%x", sum)})
@@ -1449,7 +1461,7 @@ func (s *antigravitySession) answer(id, option, by string) error {
 				label = choice.Label
 			}
 		}
-		return s.submit("", label)
+		return s.enqueue(antigravityQueued{id: uuid.NewString(), text: label, answers: id})
 	}
 	if agent == nil {
 		return errACPClosed
