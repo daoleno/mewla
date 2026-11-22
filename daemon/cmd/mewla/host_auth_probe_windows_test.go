@@ -75,6 +75,11 @@ exit 1
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	execs, err := work.LoadExecutors(configPath)
 	if err != nil {
 		t.Fatal(err)
