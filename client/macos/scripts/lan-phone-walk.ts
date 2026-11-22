@@ -1,7 +1,7 @@
 // Runs on the clean CI Mac, with the signed app's pairing dialog already open.
 import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { buildAuthorizationHeader } from "../../core/auth";
 import { confirmPairedDevice } from "../../core/pairing";
@@ -34,6 +34,10 @@ function inspect(mode: string, arg?: string) {
 function osa(script: string) {
   execFileSync("osascript", ["-e", script], { timeout: 20_000, stdio: "ignore" });
 }
+function pressButton(window: string, id: string) {
+  return execFileSync("osascript", [join(import.meta.dir, "lan-button.applescript"), window, id],
+    { timeout: 20_000, encoding: "utf8" }).trim();
+}
 const esc = () => osa('tell application "System Events" to key code 53');
 const fromFile = () => osa('tell application "System Events" to tell process "Mewla" to click menu item "Pair a Phone…" of menu "File" of menu bar item "File" of menu bar 1');
 async function httpLAN() {
@@ -49,6 +53,39 @@ async function proveOff(label: string) {
   const response = await fetch("http://127.0.0.1:9876/health", { signal: AbortSignal.timeout(3000) });
   if (!response.ok || await httpLAN()) throw new Error(label);
   console.log(label);
+}
+function startupChoice() {
+  try {
+    const { choice } = JSON.parse(readFileSync(join(homedir(), ".mewla", "startup-choice.json"), "utf8"));
+    return ["later", "lan", "remote", "own"].includes(choice) ? choice : "unknown";
+  } catch { return "unavailable"; }
+}
+async function probe(host: string) {
+  const start = performance.now();
+  let result: string;
+  try {
+    const response = await fetch(`http://${host}:9876/health`, { signal: AbortSignal.timeout(1500) });
+    if (response.ok) {
+      result = (await response.json()).daemon_id ? "healthy" : "unexpected-body";
+    } else {
+      const tlsOnly = response.status === 400 && (await response.text()).includes("HTTP request to an HTTPS server");
+      result = tlsOnly ? "TLS-only" : `HTTP-${response.status}`;
+    }
+  } catch (error) {
+    result = error instanceof Error && error.name === "TimeoutError" ? "timeout" : "unavailable";
+  }
+  return { result, ms: Math.round(performance.now() - start) };
+}
+async function observeOff(label: string) {
+  const [local, ...lan] = await Promise.all(["127.0.0.1", ...ips].map(probe));
+  const choice = startupChoice();
+  console.log(`Off check ${label}: ` + JSON.stringify({ local, lan, choice }));
+  return choice === "later" && local.result === "healthy" && lan.every((r) => ["unavailable", "TLS-only"].includes(r.result));
+}
+function captureSettings(label: string) {
+  const result = inspect("settings-state");
+  console.log(`Connections ${label}: ${result.status === 0 ? result.stdout.trim() : "page not visible"}`);
+  if (result.status === 0) copyFileSync(screen, join(out, `connections-${label}.png`));
 }
 async function phoneSocket(url: string, daemonId: string) {
   const auth = await buildAuthorizationHeader({ daemonId, purpose: "mewla-connect" });
@@ -69,14 +106,15 @@ async function roundTrip(socket: WebSocket, id: string) {
 
 try {
   await proveOff("Fresh install answers locally with LAN off.");
+  await observeOff("fresh install");
   await until("no trusted LAN consent from cat menu", () => inspect("consent").status === 0);
   copyFileSync(screen, join(out, "06-pair-consent.png"));
-  await until("Cancel unavailable", () => inspect("click", "Cancel").status === 0);
+  console.log(pressButton("Mewla", "pair-lan-cancel"));
   await until("Cancel left the sheet open", () => inspect("closed").status === 0);
   await proveOff("Cancel kept LAN off.");
   fromFile();
   await until("File did not open trusted LAN consent", () => inspect("consent").status === 0);
-  await until("Allow trusted LAN unavailable", () => inspect("click", "Allow trusted LAN").status === 0);
+  console.log(pressButton("Mewla", "pair-lan-allow"));
   await until("LAN listener did not open", httpLAN, 120);
   const decodedFile = join(privateDir, "decoded");
   await until("no short-lived scannable code after consent", () => {
@@ -127,15 +165,24 @@ try {
       return false;
     });
     console.log("Settings showed the phone routes on its Connections page.");
-    await until("Turn off LAN missing on the Connections page", () => inspect("click", "Turn off LAN").status === 0);
+    captureSettings("before");
+    await observeOff("before click");
+    if (startupChoice() !== "lan") throw new Error("expected saved LAN consent before opt-out");
+    console.log(pressButton("Settings", "mac-lan-off"));
+    const start = performance.now();
+    await until("off action did not persist and recover both listeners", async () => {
+      const ok = await observeOff(`${Math.round(performance.now() - start)}ms`);
+      if (!ok) await wait(1500);
+      return ok;
+    }, 100);
+    captureSettings("after-off");
   } catch (error) {
-    if (inspect("no-code").status === 0) copyFileSync(screen, join(out, "settings-at-failure.png"));
+    captureSettings("at-failure");
     throw error;
   }
-  await until("LAN stayed open", async () => !await httpLAN() && (await fetch("http://127.0.0.1:9876/health").catch(() => null))?.ok === true, 90);
   await proveOff("Turn off LAN closed the plain HTTP route.");
   execFileSync("launchctl", ["kickstart", "-k", daemonJob], { timeout: 60_000 });
-  await until("local daemon did not restart", async () => (await fetch("http://127.0.0.1:9876/health").catch(() => null))?.ok === true);
+  await until("LAN setting or listener failed to recover after restart", () => observeOff("after restart"));
   await proveOff("LAN remained off after restart.");
   if (!execFileSync(cli, ["devices", "list"], { encoding: "utf8" }).includes("Simulated LAN phone")) throw new Error("turning off LAN lost phone pairing");
 } finally {

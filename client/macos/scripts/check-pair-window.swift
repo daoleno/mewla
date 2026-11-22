@@ -40,6 +40,11 @@ case "click":
     for type: CGEventType in [.leftMouseDown, .leftMouseUp] {
         CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     }
+case "settings-state":
+    guard (barcode.results ?? []).isEmpty, !title, lines.contains("phones reach this mac") else { exit(1) }
+    let states = ["turn off lan", "turning off", "trusted lan access", "saved the network setting",
+                  "change trusted lan access", "not on wi", "applying its network setting"]
+    print(states.filter { state in lines.contains { $0.contains(state) } }.joined(separator: ","))
 case "redact":
     guard title, let qr, let source = CGImageSourceCreateWithURL(image as CFURL, nil),
           let pixels = CGImageSourceCreateImageAtIndex(source, 0, nil),
