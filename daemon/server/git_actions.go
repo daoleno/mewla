@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/gorilla/websocket"
 )
 
@@ -109,7 +110,7 @@ func gitUsesOwnSSH(envCommand, envProgram, configured string) bool {
 }
 
 func gitConfiguredSSHCommand(repoRoot string) string {
-	out, err := exec.Command("git", "-C", repoRoot, "config", "--get", "core.sshCommand").Output()
+	out, err := gitCommand("-C", repoRoot, "config", "--get", "core.sshCommand").Output()
 	if err != nil {
 		return ""
 	}
@@ -125,7 +126,7 @@ func gitRun(repoRoot string, opts gitRunOptions, args ...string) (gitRunResult, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoRoot}, args...)...)
+	cmd := platform.WithoutConsoleWindow(exec.CommandContext(ctx, "git", append([]string{"-C", repoRoot}, args...)...))
 	cmd.Env = gitActionEnv(repoRoot, opts.network)
 	gitOwnProcessGroup(cmd)
 	cmd.WaitDelay = 5 * time.Second

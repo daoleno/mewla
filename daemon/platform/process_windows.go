@@ -95,8 +95,18 @@ func startOutsideJob(cmd *exec.Cmd, detachedFlags uint32) error {
 	return err
 }
 
+// WithoutConsoleWindow configures a supervised console child. The caller still
+// starts and waits for this command, in its original job and process group.
+func WithoutConsoleWindow(cmd *exec.Cmd) *exec.Cmd {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_NO_WINDOW
+	return cmd
+}
+
 // ExecReplace stands in for exec on Windows, which cannot replace a running
-// image: it starts path detached with the same arguments and environment,
+// image: it starts the successor with a windowless console, arguments and environment,
 // then ends this process. The new process gets a new PID.
 func ExecReplace(path string, argv, env []string) error {
 	args := []string(nil)
@@ -106,7 +116,7 @@ func ExecReplace(path string, argv, env []string) error {
 	cmd := exec.Command(path, args...)
 	cmd.Env = env
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := StartDetached(cmd); err != nil {
+	if err := StartBackground(cmd); err != nil {
 		return fmt.Errorf("start %s: %w", path, err)
 	}
 	_ = cmd.Process.Release()

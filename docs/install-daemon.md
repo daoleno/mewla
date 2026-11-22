@@ -276,6 +276,10 @@ The computer's details show the version it runs. When the app and the computer n
 **Needs fixing** reads **Update required** with **Update**, and the cat
 carries the red dot instead.
 
+On Windows, the updated daemon checks Git repositories and agent sign-in status
+in the background without opening a terminal window or taking keyboard focus.
+You can keep typing in an open Session while these checks run.
+
 An update never leaves the computer without a working Mewla. The running
 process shuts down, then starts the new binary itself and replaces the
 installed one only after the new daemon answers on its health endpoint as the
