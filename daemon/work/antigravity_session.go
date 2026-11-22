@@ -917,6 +917,9 @@ func (s *antigravitySession) submit(id, text string) error {
 		s.log.write(AntigravityLogRecord{T: "answer", Ask: &AntigravityAsk{ID: key}, By: "message"})
 		s.link.send(map[string]any{"t": "resolved", "id": key, "by": "message"})
 	}
+	if len(answered) > 0 {
+		s.view.answered()
+	}
 	s.drain()
 	return nil
 }
@@ -1111,6 +1114,7 @@ func (s *antigravitySession) question(update antigravityACPUpdate) {
 	s.asks[ask.ID] = &antigravityPending{ask: ask, callID: update.ToolCallID}
 	s.mu.Unlock()
 	s.log.write(AntigravityLogRecord{T: "ask", Ask: &ask})
+	s.view.ask(ask)
 	s.link.send(map[string]any{"t": "ask", "ask": ask})
 }
 
@@ -1123,6 +1127,7 @@ func (s *antigravitySession) questionSettled(callID string) {
 	if pending {
 		s.log.write(AntigravityLogRecord{T: "answer", Ask: &AntigravityAsk{ID: id}, By: "agent"})
 		s.link.send(map[string]any{"t": "resolved", "id": id, "by": "agent"})
+		s.view.answered()
 	}
 }
 
@@ -1147,7 +1152,7 @@ func (s *antigravitySession) onRequest(id json.RawMessage, method string, params
 	if json.Unmarshal(params, &request) != nil {
 		return
 	}
-	ask := AntigravityAsk{ID: "p-" + request.ToolCall.ToolCallID, Kind: "permission", Tool: firstNonEmpty(request.ToolCall.Name, request.ToolCall.ToolKind), Summary: firstNonEmpty(request.ToolCall.Title, request.ToolCall.Name), Options: []AntigravityAskOption{}}
+	ask := AntigravityAsk{ID: "p-" + request.ToolCall.ToolCallID, Kind: "permission", Tool: antigravityToolLabel(request.ToolCall), Summary: firstNonEmpty(request.ToolCall.Title, request.ToolCall.Name), Options: []AntigravityAskOption{}}
 	if ask.ID == "p-" {
 		ask.ID = "p-" + uuid.NewString()
 	}
@@ -1258,3 +1263,29 @@ func dshPromptContentIn(text, uploads string) ([]map[string]any, error) {
 }
 
 func bindACPProcess(cmd *exec.Cmd) { bindDSHProcess(cmd) }
+
+// antigravityToolLabel is what a permission card calls agy's tool: the kind of
+// action ACP gives it, in words, never agy's internal tool name.
+func antigravityToolLabel(call antigravityACPUpdate) string {
+	switch call.ToolKind {
+	case "execute":
+		return "Command"
+	case "edit":
+		return "Edit"
+	case "delete":
+		return "Delete"
+	case "move":
+		return "Move"
+	case "read":
+		return "Read"
+	case "search":
+		return "Search"
+	case "fetch":
+		return "Web"
+	}
+	name := strings.ReplaceAll(strings.TrimSpace(call.Name), "_", " ")
+	if name == "" {
+		return "Tool"
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
+}
