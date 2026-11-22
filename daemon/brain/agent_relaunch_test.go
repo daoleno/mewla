@@ -120,7 +120,7 @@ func TestAgentRelaunchIdleResumesTheWorkersNewestConversation(t *testing.T) {
 	if plan.Words != "Claude Code was killed (SIGKILL); Mewla started it again in the same conversation." {
 		t.Fatalf("words = %q", plan.Words)
 	}
-	if plan.Line != "Restarted after SIGKILL" {
+	if plan.Line != "Restarted after a crash" {
 		t.Fatalf("line = %q", plan.Line)
 	}
 }
@@ -185,7 +185,7 @@ func TestAgentRelaunchBound(t *testing.T) {
 		plan.Words != "Claude Code exited with code 1; not started again: it was started again 3 times in the last 30 minutes and ended each time." {
 		t.Fatalf("over the bound = %+v", plan)
 	}
-	if plan.Line != "Gave up after 3 restarts" {
+	if plan.Line != "Stopped after 3 restarts" {
 		t.Fatalf("line = %q", plan.Line)
 	}
 }
@@ -374,5 +374,36 @@ func TestAgentEndNotRelaunchedWaitsForTheResultBrainHas(t *testing.T) {
 	}
 	if again, found, _ := f.store.ClaimNextReviewAction("host"); found {
 		t.Fatalf("a second review reached Brain: %+v", again)
+	}
+}
+
+// The Session's line in the app says what happened in a person's words; the
+// exact signal and exit code stay in the words Brain reads.
+func TestAgentRelaunchLineSaysItInAPersonsWords(t *testing.T) {
+	oom := killedEnd(time.Now())
+	oom.OutOfMemory = true
+	for _, test := range []struct {
+		name  string
+		end   watcher.AgentEnd
+		line  string
+		words string
+	}{
+		{"killed", killedEnd(time.Now()), "Restarted after a crash", "was killed (SIGKILL)"},
+		{"exited with a code", exitedEnd(1, time.Now()), "Restarted after a crash", "exited with code 1"},
+		{"out of memory", oom, "Restarted after running out of memory", "out-of-memory killer (SIGKILL)"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newRelaunchFixture(t)
+			plan, err := f.service.PlanAgentRelaunch(test.end)
+			if err != nil || plan.Action != watcher.AgentEndRelaunch {
+				t.Fatalf("plan = %+v, %v", plan, err)
+			}
+			if plan.Line != test.line || !strings.Contains(plan.Words, test.words) {
+				t.Fatalf("line %q words %q", plan.Line, plan.Words)
+			}
+			if strings.Contains(plan.Line, "SIG") || strings.ContainsAny(plan.Line, "0123456789") {
+				t.Fatalf("line %q names a signal or code", plan.Line)
+			}
+		})
 	}
 }

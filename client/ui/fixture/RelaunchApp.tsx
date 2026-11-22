@@ -12,9 +12,9 @@ const MIN = 60_000;
 const ago = (minutes: number) => new Date(Date.now() - minutes * MIN).toISOString();
 const base = scenario();
 const ended = [
-  { id: "r-died", work: "w-r-died", title: "Changelog for 0.5", agent: "claude", status: "running", relaunch: { state: "restarting", line: "Restarting after SIGKILL" } },
-  { id: "r-back", work: "w-r-back", title: "Invoice export", agent: "codex", status: "done", relaunch: { state: "restarted", line: "Restarted after SIGKILL" } },
-  { id: "r-gave", work: "w-r-gave", title: "Search index rebuild", agent: "claude", status: "failed", relaunch: { state: "not_restarted", line: "Gave up after 3 restarts" } },
+  { id: "r-died", work: "w-r-died", title: "Changelog for 0.5", agent: "claude", status: "running", relaunch: { state: "restarting", line: "Restarting after a crash" } },
+  { id: "r-back", work: "w-r-back", title: "Invoice export", agent: "codex", status: "done", relaunch: { state: "restarted", line: "Restarted after a crash" } },
+  { id: "r-gave", work: "w-r-gave", title: "Search index rebuild", agent: "claude", status: "failed", relaunch: { state: "stopped", line: "Stopped after 3 restarts" } },
 ] as const;
 const sessions = ended.map((s) => ({
   id: s.id, name: s.title, status: s.status, project: "atlas-api", cwd: "/home/me/work/atlas-api", command: s.agent, provider: s.agent,

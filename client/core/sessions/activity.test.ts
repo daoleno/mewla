@@ -40,14 +40,14 @@ describe("a Session's line says what it is doing in words", () => {
   });
 
   test("an agent that ended and was started again, or not, says so in the computer's words", () => {
-    expect(sessionActivity(worker({ status: "done", summary: "said hello", delegated: true, relaunch: { state: "restarted", line: "Restarted after SIGKILL" } })))
-      .toBe("Restarted after SIGKILL");
-    expect(sessionActivity(worker({ status: "running", activity: "Reading files", delegated: true, relaunch: { state: "restarting", line: "Restarting after SIGKILL" } })))
-      .toBe("Restarting after SIGKILL");
-    expect(sessionActivity(worker({ status: "failed", delegated: true, relaunch: { state: "not_restarted", line: "Gave up after 3 restarts" } })))
-      .toBe("Gave up after 3 restarts");
+    expect(sessionActivity(worker({ status: "done", summary: "said hello", delegated: true, relaunch: { state: "restarted", line: "Restarted after a crash" } })))
+      .toBe("Restarted after a crash");
+    expect(sessionActivity(worker({ status: "running", activity: "Reading files", delegated: true, relaunch: { state: "restarting", line: "Restarting after a crash" } })))
+      .toBe("Restarting after a crash");
+    expect(sessionActivity(worker({ status: "failed", delegated: true, relaunch: { state: "stopped", line: "Stopped after 3 restarts" } })))
+      .toBe("Stopped after 3 restarts");
     // What it asks the person still comes first.
-    expect(sessionActivity(worker({ status: "blocked", needs_attention: true, relaunch: { state: "restarted", line: "Restarted after SIGKILL" } }))).toBe("Waiting for you");
+    expect(sessionActivity(worker({ status: "blocked", needs_attention: true, relaunch: { state: "restarted", line: "Restarted after a crash" } }))).toBe("Waiting for you");
   });
 });
 

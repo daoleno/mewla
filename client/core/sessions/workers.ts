@@ -39,7 +39,7 @@ export type WorkerCapabilities = WorkerSessionCapabilities;
 
 /** A Session's agent ended while its Work was open: Mewla is starting it again, started it again, or would not. */
 export interface WorkerRelaunch {
-  state: 'restarting' | 'restarted' | 'not_restarted';
+  state: 'restarting' | 'restarted' | 'stopped';
   line: string;
 }
 
@@ -71,7 +71,7 @@ export interface Worker {
   needs_attention?: boolean;
   /** Why Mewla refused its last `mewla worker progress` report, until one is accepted: its report did not land. */
   progress_refused?: string;
-  /** What happened to its agent after the program ended while its Work was open ("Restarted after SIGKILL"), until the agent shows something newer. */
+  /** What happened to its agent after the program ended while its Work was open ("Restarted after a crash"), until the agent shows something newer. */
   relaunch?: WorkerRelaunch;
   last_output_lines: string[];
   started_at?: number;
@@ -690,6 +690,6 @@ function normalizeTimestamp(
 function normalizeRelaunch(value: { state?: unknown; line?: unknown } | undefined): WorkerRelaunch | undefined {
   const state = value?.state;
   const line = typeof value?.line === 'string' ? value.line.trim() : '';
-  if (!line || (state !== 'restarting' && state !== 'restarted' && state !== 'not_restarted')) return undefined;
+  if (!line || (state !== 'restarting' && state !== 'restarted' && state !== 'stopped')) return undefined;
   return { state, line };
 }

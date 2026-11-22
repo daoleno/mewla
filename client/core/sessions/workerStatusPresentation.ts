@@ -24,7 +24,7 @@ export function workerStatusLabel(status: WorkerStatus): string {
   }
 }
 
-const RELAUNCH_WORD = { restarting: 'Restarting', restarted: 'Restarted', not_restarted: 'Not restarted' } as const;
+const RELAUNCH_WORD = { restarting: 'Restarting', restarted: 'Restarted', stopped: 'Stopped' } as const;
 
 /** The Session header's state word: its agent's restart while that is the news, else its status. */
 export function sessionStateWord(worker: Pick<Worker, 'status' | 'relaunch'>): string {

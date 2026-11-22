@@ -371,8 +371,8 @@ describe("the daemon's run and prompt fields (WIRE §7, §9)", () => {
   });
 
   test("an agent's restart keeps its state and line; one the app does not know is dropped", () => {
-    expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "restarted", line: " Restarted after SIGKILL " } }).relaunch)
-      .toEqual({ state: "restarted", line: "Restarted after SIGKILL" });
+    expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "restarted", line: " Restarted after a crash " } }).relaunch)
+      .toEqual({ state: "restarted", line: "Restarted after a crash" });
     expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "rebooted", line: "Rebooted" } }).relaunch).toBeUndefined();
     expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "restarted", line: "" } }).relaunch).toBeUndefined();
   });
