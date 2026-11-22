@@ -297,7 +297,7 @@ jobs:
           github-token: ${{ github.token }}
       - name: A stub agent, so Brain's host starts (a runner has no agent)
         run: |
-          sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+          sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
           claude --version
       - name: Gatekeeper and the notary ticket accept the .dmg and the app
         run: |
@@ -661,7 +661,7 @@ jobs:
       - name: A stand-in agent CLI (a runner has none), a HiDPI display, a neutral desktop
         run: |
           set -x
-          sudo install -m 755 client/macos/scripts/stub-claude.sh /usr/local/bin/claude
+          sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
           F=client/macos/scripts/fidelity
           clang -fobjc-arc -framework Foundation -framework CoreGraphics "$F/vdisplay.m" -o "$RUNNER_TEMP/vdisplay"
           nohup "$RUNNER_TEMP/vdisplay" 1512 982 > "$RUNNER_TEMP/vdisplay.out" 2> "$RUNNER_TEMP/vdisplay.err" &

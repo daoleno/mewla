@@ -10,7 +10,7 @@
 #
 # Needs a runner's Mac: Screen Recording and Accessibility for the shell (as GitHub's macOS runners have), a HiDPI
 # virtual display (fidelity/vdisplay.m) for captures at 2 px per pt. An agent CLI on PATH makes Brain start (a runner
-# has none: macos-release.yml installs the stand-in stub-claude.sh, as a person with Claude Code installed has).
+# has none: macos-release.yml installs the stand-in stub-claude.c, as a person with Claude Code installed has).
 set -uo pipefail
 src="$1"; out="$2"
 here="$(cd "$(dirname "$0")" && pwd)"
