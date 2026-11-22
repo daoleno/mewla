@@ -31,7 +31,8 @@ export type BrainSessionFinalization = {
 export type BrainWorkAttentionState = "queued" | "reserved" | "reviewing";
 
 /** A Worker Session that joined a Work (daemon WIRE §1): oldest first, live or finished. */
-export type WorkWorkerState = "running" | "blocked" | "done" | "failed" | "ended";
+/** waiting: held with nothing running (its agent waits for its provider); never the running dot. */
+export type WorkWorkerState = "running" | "waiting" | "blocked" | "done" | "failed" | "ended";
 
 export type WorkWorkerSession = {
   session_id: string;

@@ -50,6 +50,8 @@ const LIVE_STATE: Partial<Record<Worker["status"], WorkWorkerState>> = { running
 function liveState(session: Worker): WorkWorkerState | undefined {
   // Started again with nothing running for its task: it waits on Brain, but it does not work.
   if (session.status === "blocked" && session.relaunch?.state === "stopped") return "blocked";
+  // Held for its provider: nothing runs, and nothing is asked of the person.
+  if (session.relaunch?.state === "waiting") return "waiting";
   if (session.status === "blocked" && session.delegated && !session.prompt && !session.approvals?.length) return "running";
   return LIVE_STATE[session.status];
 }
@@ -148,7 +150,7 @@ export function workDetailWorkerRow(worker: WorkWorkerLine, now: number, workPro
     title: named ? worker.name : worker.agentLabel,
     // The project only where the page's eyebrow ("Work · mewla") does not already say it.
     line: [said, worker.summary || (worker.project !== workProject ? worker.project : "")].filter(Boolean).join(" · "),
-    end: live ? elapsedShort(worker.since, now) : needs ? "Needs you" : worker.time,
+    end: live ? elapsedShort(worker.since, now) : needs ? "Needs you" : worker.state === "waiting" ? "Waiting" : worker.time,
     live: live || undefined,
     needs: needs || undefined,
     tile: { kind: "agent", agent: worker.agent, flavor: worker.flavor },

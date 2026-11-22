@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { WorkWorkerSession } from "./types";
-import { liveWorkerIds, sameWorkWorkerLines, workerName, workProject, workWorkerLines } from "./workers";
+import { liveWorkerIds, sameWorkWorkerLines, workDetailWorkerRow, workerName, workProject, workWorkerLines } from "./workers";
 
 const NOW = new Date("2026-11-12T09:10:00Z");
 
@@ -54,6 +54,12 @@ describe("the Workers of a Work", () => {
     const line = workWorkerLines([rows[2]!], new Map([["worker:@c", halted]]), NOW)[0]!;
     expect(line).toMatchObject({ state: "blocked", stateLabel: undefined, summary: "Task not resumed after a restart" });
     expect(line.time).not.toBe("live");
+    // Held for its provider: nothing runs and nothing is asked, so no running dot and no "Needs you".
+    const held = session("worker:@c", { status: "blocked", delegated: true, running_since: "2026-11-12T08:30:00Z", relaunch: { state: "waiting", line: "Waiting for Claude Code's provider" } });
+    const waiting = workWorkerLines([rows[2]!], new Map([["worker:@c", held]]), NOW)[0]!;
+    expect(waiting).toMatchObject({ state: "waiting", stateLabel: undefined, summary: "Waiting for Claude Code's provider" });
+    expect(waiting.time).not.toBe("live");
+    expect(workDetailWorkerRow(waiting, NOW.getTime())).toMatchObject({ end: "Waiting", live: undefined, needs: undefined });
   });
 
   test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {
