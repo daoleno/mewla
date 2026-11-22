@@ -23,13 +23,17 @@ import (
 // say that (workWorkerSessions). Records are append-only facts in
 // state/work_workers.jsonl, one per Work and Session.
 type WorkWorkerRecord struct {
-	WorkID     string    `json:"work_id"`
-	SessionID  string    `json:"session_id"`
-	Name       string    `json:"name,omitempty"`
-	ExecutorID string    `json:"executor_id,omitempty"`
-	Provider   string    `json:"provider,omitempty"`
-	Cwd        string    `json:"cwd,omitempty"`
-	JoinedAt   time.Time `json:"joined_at"`
+	WorkID     string `json:"work_id"`
+	SessionID  string `json:"session_id"`
+	Name       string `json:"name,omitempty"`
+	ExecutorID string `json:"executor_id,omitempty"`
+	Provider   string `json:"provider,omitempty"`
+	Cwd        string `json:"cwd,omitempty"`
+	// LaunchCommand is the agent command the Worker was spawned with, before
+	// a Model Profile route, Mewla's tools and launch adapters were added:
+	// what a relaunch resumes its conversation with (agent_relaunch.go).
+	LaunchCommand string    `json:"launch_command,omitempty"`
+	JoinedAt      time.Time `json:"joined_at"`
 }
 
 // WorkWorkerState is where one Worker Session of a Work stands.
@@ -87,6 +91,7 @@ func (s *Store) RecordWorkWorker(record WorkWorkerRecord) (bool, error) {
 	record.ExecutorID = strings.TrimSpace(record.ExecutorID)
 	record.Provider = strings.TrimSpace(record.Provider)
 	record.Cwd = ghosttyvt.StoredDir(strings.TrimSpace(record.Cwd))
+	record.LaunchCommand = strings.TrimSpace(record.LaunchCommand)
 	if s == nil || record.WorkID == "" || record.SessionID == "" {
 		return false, nil
 	}
@@ -115,6 +120,9 @@ func (s *Store) RecordWorkWorker(record WorkWorkerRecord) (bool, error) {
 		}
 		if merged.Cwd == "" {
 			merged.Cwd = record.Cwd
+		}
+		if merged.LaunchCommand == "" {
+			merged.LaunchCommand = record.LaunchCommand
 		}
 		if merged == existing {
 			return false, nil

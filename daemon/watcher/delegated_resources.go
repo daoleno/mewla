@@ -171,3 +171,14 @@ func pathWithinRoot(path, root string) bool {
 	}
 	return relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)))
 }
+
+// delegatedResourceReuser keeps a delegated Session's resource unit when its
+// ended agent is started again in the same Session (agent_relaunch.go): the
+// unit, its lease and its TMPDIR stay; only what the dead agent left running
+// is stopped.
+type delegatedResourceReuser interface {
+	// Reuse returns the spec of an existing unit, without making a new one.
+	Reuse(unit string) (*delegatedResourceSpec, error)
+	// StopLeftovers ends the processes the unit still owns, keeping the unit.
+	StopLeftovers(unit string) error
+}

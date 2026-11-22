@@ -167,7 +167,7 @@ func TestPollDeadPaneNeverFailsWithoutExactAttribution(t *testing.T) {
 
 			turn, _, _ := ledger.Turn("agent:@1")
 			turn = w.applyPollFacts("agent:@1", false, test.deadStatus,
-				time.Now().UTC(), turn, ProviderActivityObservation{})
+				time.Now().UTC(), turn, ProviderActivityObservation{}, "")
 
 			kinds := map[string]bool{}
 			for _, fact := range ledger.applied {

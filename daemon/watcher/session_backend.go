@@ -78,6 +78,9 @@ type sessionBackend interface {
 	create(spec backendCreateSpec) (string, error)
 	// kill ends a Session. A Session that is already gone is not an error.
 	kill(id string) error
+	// replace starts spec under the id of a Session whose program has ended,
+	// keeping the input receipts recorded on it (agent_relaunch.go).
+	replace(id string, spec backendCreateSpec) error
 
 	// inputIO is the Session input surface: generation proof, paste
 	// submission and the durable input receipt ledger.
