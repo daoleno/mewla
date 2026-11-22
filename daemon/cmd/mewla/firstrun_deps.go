@@ -477,7 +477,7 @@ func refuseInMacApp(what string) error {
 	if !inMacApp() {
 		return nil
 	}
-	return fmt.Errorf("Mewla for Mac %s; use the app (Mewla › Check for Updates…, or its menu bar cat)", what)
+	return fmt.Errorf("Mewla for Mac %s; use the app (its menu bar cat, or Settings › General)", what)
 }
 
 // pinAppCLIOnPath keeps the Mac app's CLI first on the daemon's PATH, so
