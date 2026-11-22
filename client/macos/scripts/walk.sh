@@ -66,8 +66,9 @@ quit_app() {
   return 1
 }
 # Gatekeeper's question, wherever it is shown: the window with an Open button. Captured, then answered Open.
-answer_gatekeeper() {
-  bounded 20 osascript <<'OSA' 2>&1
+# (A file, not a heredoc: bounded runs it in the background, where bash gives it /dev/null for input.)
+gatekeeper_scpt="$out/.gatekeeper.applescript"
+cat > "$gatekeeper_scpt" <<'OSA'
 tell application "System Events"
   set ps to {}
   try
@@ -94,7 +95,7 @@ tell application "System Events"
 end tell
 return ""
 OSA
-}
+answer_gatekeeper() { bounded 20 osascript "$gatekeeper_scpt" 2>&1; }
 press_open() {
   osa -e 'tell application "System Events" to tell process "CoreServicesUIAgent" to click button "Open" of window 1' >/dev/null 2>&1 && { echo CoreServicesUIAgent; return 0; }
   osa -e 'tell application "System Events" to repeat with p in (every process)
@@ -230,5 +231,6 @@ done
 quit_app || true
 
 find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | head -5 | while read -r f; do echo "== $f"; tail -80 "$f"; done > "$out/app-logs.txt" 2>&1 || true
+rm -f "$gatekeeper_scpt"
 say "checks failed: ${#failed[@]}${failed:+ (${failed[*]})}"
 [[ ${#failed[@]} -eq 0 ]]
