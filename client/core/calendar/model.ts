@@ -229,3 +229,46 @@ export function originLabel(origin: { itemId: string; runId?: string }, items: r
   const date = at ? clock.format.shortDate(Date.parse(at), item?.timezone ?? clock.zones.device) : "";
   return date ? `${title} · ${date}` : title;
 }
+
+/**
+ * The agenda by day, for Mewla for Mac's Calendar (w-cal): Today (with what is past, overdue or done), Tomorrow, then
+ * each later day by its date, all in this computer's zone; cancelled items hidden, each day in time order.
+ */
+export function agendaDays(items: readonly CalendarItem[], clock: CalendarClock): { key: string; title: string; items: CalendarItem[] }[] {
+  const zone = clock.zones.device;
+  const today = dayOrdinal(clock.zones.dateKey(clock.now, zone));
+  const days = new Map<string, { key: string; title: string; items: CalendarItem[] }>();
+  const shown = items.filter((item) => item.status !== "cancelled").sort((a, b) => itemInstant(a) - itemInstant(b));
+  for (const item of shown) {
+    const at = itemInstant(item);
+    const key = clock.zones.dateKey(at, zone);
+    const offset = dayOrdinal(key) - today;
+    const group = offset <= 0 ? "today" : key;
+    if (!days.has(group)) days.set(group, { key: group, title: offset <= 0 ? "Today" : offset === 1 ? "Tomorrow" : clock.format.day(at, zone), items: [] });
+    days.get(group)!.items.push(item);
+  }
+  return [...days.values()].sort((a, b) => (a.key === "today" ? -1 : b.key === "today" ? 1 : a.key.localeCompare(b.key)));
+}
+
+/**
+ * A row's one quiet line on the Mac's Calendar (w-cal): what happened ("Done · 2 stale feeds", "Failed · why"), what
+ * it waits on, else how it repeats and who acts ("Every day · Brain", "Reminder"); empty for a plain event.
+ */
+export function quietLine(item: CalendarItem, clock: CalendarClock): string {
+  const last = runsNewestFirst(item)[0];
+  const join = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(" · ");
+  switch (item.status) {
+    case "completed":
+      return join("Done", last ? runPreview(last) : undefined);
+    case "failed":
+      return join("Failed", firstSentence(item.failure_reason || last?.failure_reason, 80));
+    case "waiting":
+      return "Needs you";
+    case "running":
+      return "Running";
+  }
+  const repeat = item.recurrence === "daily" ? "Every day" : item.recurrence === "weekdays" ? "Weekdays"
+    : item.recurrence === "weekly" ? `Every ${clock.format.weekday(itemInstant(item), item.timezone)}` : undefined;
+  const actor = item.kind === "scheduled_action" ? "Brain" : item.kind === "event" ? undefined : kindLabel[item.kind];
+  return join(repeat, actor);
+}

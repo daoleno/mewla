@@ -128,6 +128,7 @@ type Server struct {
 	connections                *connections.Manager
 	auth                       *auth.Manager
 	watcher                    *watcher.Watcher
+	watchSwitch                WatchSwitch
 	terminal                   *terminal.Manager
 	hostTerminal               *terminal.HostBackend // opens session host Sessions; SetVersion names the daemon to the host
 	terminalTarget             func(id string) (watcher.TerminalTarget, error)
@@ -567,6 +568,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/agents", s.handleAgents)
 	mux.HandleFunc("/mcp", s.handleMCP)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
+	mux.HandleFunc("/watch", s.handleWatch)
 	mux.HandleFunc("/brain/grant-request", s.handleGrantRequest)
 	mux.HandleFunc("/daemon-update", s.handleDaemonUpdate)
 	mux.HandleFunc("/daemon-update/terminals", s.handleRestartTerminals)

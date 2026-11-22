@@ -67,6 +67,24 @@ export function changeAgentUse(server: StoredServer, change: AgentUseChange): Pr
   return signedJSON<AgentUseStatus>(server, "POST", "/agent-use", bodyPurpose("mewla-agent-use:POST:/agent-use"), { body: change });
 }
 
+/** Watch's switch (Settings › Privacy & access, "Notice what changes in your projects"). */
+export interface WatchSwitch {
+  enabled: boolean;
+}
+
+/** Watch's switch on the computer, or null when it has none to show: a daemon older than /watch, or no Watch there. */
+export async function getWatch(server: StoredServer): Promise<WatchSwitch | null> {
+  const response = await signedFetch(server, "GET", "/watch", "mewla-watch:GET:/watch");
+  if (response.status === 404 || response.status === 503) return null;
+  if (!response.ok) throw new Error((await response.text().catch(() => "")).trim() || `${server.name} answered ${response.status}`);
+  return (await response.json()) as WatchSwitch;
+}
+
+/** Turns Watch on or off. The signature covers the body. */
+export function setWatch(server: StoredServer, enabled: boolean): Promise<WatchSwitch> {
+  return signedJSON<WatchSwitch>(server, "POST", "/watch", bodyPurpose("mewla-watch:POST:/watch"), { body: { enabled } });
+}
+
 /** The computer's version and update, or null when it is too old to report one. */
 export async function getDaemonUpdate(server: StoredServer): Promise<DaemonUpdateStatus | null> {
   const response = await signedFetch(server, "GET", "/daemon-update", "mewla-daemon-update:GET:/daemon-update");

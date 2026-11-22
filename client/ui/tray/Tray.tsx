@@ -71,6 +71,9 @@ function onAndroidBack(listener: () => boolean): void {
 }
 
 /** A row in Mewla for Mac's pane (RESULT-DESIGN-PAIRS #6): 40 tall, radius 9, on the material; hover and selected the well. */
+/** Running rows Mewla for Mac's pane shows before "N more" (w-home). */
+const MAC_RUNNING_SHOWN = 5;
+
 const MAC_ROW = "min-h-[40px] gap-[9px] overflow-hidden rounded-[9px] px-2 py-1";
 
 /** A section label (caption 600, soft) with an optional link at the right ("Calendar ›", "All ›"). */
@@ -108,13 +111,19 @@ function TrayRow(props: { row: () => Row; onPress: () => void; onTile: (target: 
     <Button testID="tray-row" accessibilityLabel={[row().title, row().line, row().end, row().mark ? progressMarkLabel(row().mark!) : ""].filter(Boolean).join(", ")} selected={props.selected} onPress={props.onPress}
       class={`${mac ? MAC_ROW : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${row().past ? "opacity-55" : ""}`}>
       <If when={props.selected}><SelectedWell /></If>
-      <If when={row().tileTarget} else={<RowTile tile={() => row().tile} mark={() => row().mark} />}>
-        {(target) => <Button testID="tray-row-session" accessibilityLabel="Open its Session" onPress={() => props.onTile(target())} class="-m-2 rounded-full p-2 active:opacity-60">
-          <RowTile tile={() => row().tile} mark={() => row().mark} />
-        </Button>}
+      {/* Mewla for Mac's Today (w-home, mac.js `todayRow`): the time where the tile goes, then the title; no end. */}
+      <If when={mac && row().tile.kind === "calendar" && !row().live} else={<>
+        <If when={row().tileTarget} else={<RowTile tile={() => row().tile} mark={() => row().mark} />}>
+          {(target) => <Button testID="tray-row-session" accessibilityLabel="Open its Session" onPress={() => props.onTile(target())} class="-m-2 rounded-full p-2 active:opacity-60">
+            <RowTile tile={() => row().tile} mark={() => row().mark} />
+          </Button>}
+        </If>
+        <RowText row={row} />
+        <RowEnd row={row} />
+      </>}>
+        <Text testID="tray-today-time" class="text-[11.5px] leading-[15px] text-muted-foreground" style={{ width: /[AP]M/i.test(row().end) ? 50 : 40, fontVariant: ["tabular-nums"] }}>{row().end}</Text>
+        <Text class="min-w-0 flex-1 text-[13px] leading-[17px] line-clamp-1">{row().title}</Text>
       </If>
-      <RowText row={row} />
-      <RowEnd row={row} />
       <If when={!(mac || props.selected || props.last)}><RowHair /></If>
     </Button>
   );
@@ -193,6 +202,9 @@ export function TrayBody(props: TrayBodyProps) {
   // The left pane on Mewla for Mac draws at the Mac's sizes; the phone's tray, a foldable's pane and the perch keep theirs.
   const mac = Boolean(props.pane) && isMacApp();
   const doneOpen = signal(false);
+  // Mewla for Mac's pane (w-home): Running shows its first five and "N more", which opens the rest in place, so Today
+  // stays in view under it. The phone's tray lists them all.
+  const runningOpen = signal(false);
   const filter = signal<TrayFilter>({});
   const busy = signal("");
   const said = signal("");
@@ -313,7 +325,13 @@ export function TrayBody(props: TrayBodyProps) {
             </View></If>
           <If when={f().running.length}><View testID="tray-running">
               <Label title="Running" />
-              <Group>{rows(() => f().running)}</Group>
+              <Group>{rows(() => (mac && !runningOpen() ? f().running.slice(0, MAC_RUNNING_SHOWN) : f().running), () => mac && f().running.length > MAC_RUNNING_SHOWN && !runningOpen())}</Group>
+              <If when={mac && f().running.length > MAC_RUNNING_SHOWN && !runningOpen()}>
+                <Button testID="tray-running-more" accessibilityLabel={`${f().running.length - MAC_RUNNING_SHOWN} more running`} onPress={() => runningOpen.set(true)}
+                  class="min-h-[24px] justify-center rounded-[9px] pb-1.5 pl-[33px] pt-1 hover:bg-accent active:bg-accent">
+                  <Text class="text-[12px] leading-[16px] text-muted-foreground">{`${f().running.length - MAC_RUNNING_SHOWN} more`}</Text>
+                </Button>
+              </If>
             </View></If>
           <If when={f().today.length}><View testID="tray-today">
               <Label title="Today" link="Calendar" testID="tray-calendar" onLink={props.open.calendar} />

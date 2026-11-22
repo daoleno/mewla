@@ -71,7 +71,8 @@ function SearchOrRun() {
 
 /** The Brain row: Brain's mark, "Brain", the last thing Brain said; a live dot while its turn runs. It returns the right pane to Brain. */
 function BrainRow() {
-  const on = () => selected() === "brain";
+  // Brain's thread, or its host's own Session (Brain's terminal): w-session selects the row of the Session in front.
+  const on = () => selected() === "brain" || (Boolean(brain()?.host_worker?.id) && selected() === `session:${brain()?.host_worker?.id}`);
   const running = () => brainThread().conversation?.activity?.status === "running";
   const line = () => brainRowLine(brainThread().conversation?.events);
   return (

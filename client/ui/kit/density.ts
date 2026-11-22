@@ -56,7 +56,7 @@ export function composerSize() {
     },
     window: {
       dock: "px-3 pt-2",
-      field: "min-h-[42px] rounded-[21px] pl-[5px] pr-[5px]",
+      field: "min-h-[42px] rounded-[21px] border border-border pl-[5px] pr-[5px]",
       input: "max-h-[128px] min-h-[42px] px-1 py-[11px] text-[14.5px] leading-[20px]",
       hit: "mb-[6px] size-[30px]",
       circle: "size-[30px]",
@@ -65,7 +65,7 @@ export function composerSize() {
     },
     perch: {
       dock: "px-2.5 pt-2",
-      field: "min-h-[38px] rounded-[19px] pl-[5px] pr-[5px]",
+      field: "min-h-[38px] rounded-[19px] border border-border pl-[5px] pr-[5px]",
       input: "max-h-[128px] min-h-[38px] px-1 py-[9px] text-[14px] leading-[20px]",
       hit: "mb-[5px] size-7",
       circle: "size-7",

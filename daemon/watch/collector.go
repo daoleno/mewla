@@ -315,6 +315,15 @@ func (c *Collector) JudgeDay() brain.WatchJudgeDay {
 }
 
 // Status reports counts per source and project and the last pass.
+// Enabled reports Watch's switch: whether it looks over the projects and judges what it finds.
+func (c *Collector) Enabled() bool { return c.store.Config().Enabled }
+
+// SetEnabled turns Watch on or off, as `mewla watch enable|disable` does, and reports the switch.
+func (c *Collector) SetEnabled(enabled bool) (bool, error) {
+	config, err := c.store.SetEnabled(enabled)
+	return config.Enabled, err
+}
+
 func (c *Collector) Status() Status {
 	status := Status{Config: c.store.Config(), BySource: map[string]map[string]int{}, Placed: map[string]Placement{}}
 	for _, signal := range c.store.Signals(Filter{}) {

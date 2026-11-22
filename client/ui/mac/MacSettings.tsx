@@ -1,7 +1,7 @@
 import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { Window } from "nsh/desktop";
-import { getAgentUse, changeAgentUse, type AgentUseStatus } from "../../core/settings/computer";
+import { getAgentUse, changeAgentUse, getWatch, setWatch, type AgentUseStatus, type WatchSwitch } from "../../core/settings/computer";
 import { chromeAccess, type ChromeAccess } from "../../core/settings/computerModel";
 import { screenRequest, type ScreenPermission } from "../../core/screen/screen";
 import { BrainHostPanel } from "../brain/BrainHostSheet";
@@ -200,6 +200,24 @@ function ChromeRow(props: { access: ChromeAccess | null; fix: () => void }) {
 function Access() {
   const permissions = signal<ScreenPermission[] | null>(null);
   const agentUse = signal<AgentUseStatus | null>(null);
+  // Watch's switch; null hides the group (a daemon without /watch, or no Watch on this Mac).
+  const watch = signal<WatchSwitch | null>(null);
+  const readWatch = () => {
+    const server = untracked(current);
+    if (server && isThisMac(server)) void getWatch(server).then((status) => watch.set(status)).catch(() => watch.set(null));
+  };
+  effect(() => {
+    if (connection() === "connected" && isThisMac(current())) untracked(readWatch);
+  });
+  const turnWatch = (on: boolean) => {
+    const server = untracked(current);
+    if (!server) return;
+    watch.set({ enabled: on });
+    void setWatch(server, on).then((status) => watch.set(status)).catch((error) => {
+      console.warn("watch:", error);
+      readWatch();
+    });
+  };
   const read = () => {
     const server = untracked(current);
     if (!server || !isThisMac(server)) return;
@@ -246,6 +264,9 @@ function Access() {
       <Section title="New devices">
         <Row testID="mac-access-devices" title="A new phone or browser" value="Asks you first" />
       </Section>
+      <If when={watch()}>{(on) => <Section title="Watch">
+        <SwitchRow testID="mac-access-watch" title="Notice what changes in your projects" checked={on().enabled} onChange={turnWatch} />
+      </Section>}</If>
       </></If>
     </View>
   );
