@@ -80,10 +80,11 @@ const MAC_ROW = "min-h-[40px] gap-[9px] overflow-hidden rounded-[9px] px-2 py-1"
 function Label(props: { title: string; link?: string; onLink?: () => void; testID?: string }) {
   const mac = MacPane();
   return (
-    <View class={`${mac ? "mb-1 mt-3 px-2.5" : "mb-2 mt-6 px-4"} min-h-[18px] flex-row items-center justify-between`}>
-      <Text role="header" class="text-caption font-semibold text-muted-foreground">{props.title}</Text>
-      <If when={props.link}>{(link) => <Button testID={props.testID} onPress={props.onLink} class="min-h-[44px] -my-3 flex-row items-center justify-center pl-4 active:opacity-70">
-          <Text class="text-caption font-semibold text-muted-foreground">{link()}</Text>
+    // Mewla for Mac (win.css `.lp .label`): 11.5/600, 10 above and 4 below, 8 in.
+    <View class={`${mac ? "mb-1 mt-[10px] min-h-[15px] px-2" : "mb-2 mt-6 min-h-[18px] px-4"} flex-row items-center justify-between`}>
+      <Text role="header" class={`${mac ? "text-[11.5px] leading-[15px]" : "text-caption"} font-semibold text-muted-foreground`}>{props.title}</Text>
+      <If when={props.link}>{(link) => <Button testID={props.testID} onPress={props.onLink} class={`min-h-[44px] ${mac ? "-my-[14.5px]" : "-my-3"} flex-row items-center justify-center pl-4 active:opacity-70`}>
+          <Text class={`${mac ? "text-[11.5px] leading-[15px]" : "text-caption"} font-semibold text-muted-foreground`}>{link()}</Text>
           <Icon name="chevron-right" size={14} tone="soft" />
         </Button>}</If>
     </View>
@@ -91,8 +92,8 @@ function Label(props: { title: string; link?: string; onLink?: () => void; testI
 }
 
 function Group(props: { children: JSX.Element; testID?: string }) {
-  // On the Mac's pane the rows sit on the material, no card.
-  return <View testID={props.testID} class={MacPane() ? "gap-px" : "overflow-hidden rounded-(--radius-group) bg-sheet-surface"}>{props.children}</View>;
+  // On the Mac's pane the rows sit on the material, no card, 40 apart (win.css `.lp .rows`).
+  return <View testID={props.testID} class={MacPane() ? "" : "overflow-hidden rounded-(--radius-group) bg-sheet-surface"}>{props.children}</View>;
 }
 
 /** The pressed well of the row whose page is in the right pane (the wide layout's left pane). */
@@ -290,7 +291,7 @@ export function TrayBody(props: TrayBodyProps) {
   const bar = mac ? "size-7" : props.pane ? "size-10" : "size-11";
   return (
     <MacPane.Provider value={mac}>
-      <View class={`flex-row items-center ${mac ? "min-h-[40px] gap-0.5 pl-[14px] pr-1.5" : props.pane ? "min-h-[52px] gap-0.5 px-4 pr-2" : "gap-2 px-4 pb-1 pt-4"}`}>
+      <View class={`flex-row items-center ${mac ? "min-h-[37px] gap-0.5 pb-0 pl-[14px] pr-1.5 pt-1.5" : props.pane ? "min-h-[52px] gap-0.5 px-4 pr-2" : "gap-2 px-4 pb-1 pt-4"}`}>
         <If when={counted()} else={<Text testID="tray-title" role="header" class={`flex-1 line-clamp-1 ${mac ? "text-[13px] font-semibold text-muted-foreground" : props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"}`}>{props.title()}</Text>}>
           <TrayCounts pane={props.pane} mac={mac} filter={filter} onPick={pick} />
         </If>

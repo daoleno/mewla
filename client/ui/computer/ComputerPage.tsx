@@ -249,7 +249,7 @@ export function ComputerPage(props: {
                   {/* On the Mac the row's own control (44 rows, as Privacy & access's Allow…); the phone's pill elsewhere. */}
                   <If when={macGroups} else={<PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
                     busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />}>
-                    <RowButton testID={`fix-${row.key}-button`} label={row.button!} disabled={Boolean(busy())} onPress={() => fix(row)} />
+                    <RowButton testID={`fix-${row.key}-button`} label={row.button!} busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />
                   </If>
                 </If>}
               />
