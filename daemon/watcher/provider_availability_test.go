@@ -3,6 +3,8 @@ package watcher
 import (
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func refused(at time.Time) ProviderActivityObservation {
@@ -102,5 +104,50 @@ func TestAnUnavailableProviderGrantsOneProbePerGrowingInterval(t *testing.T) {
 		if ok, _ := a.probe("claude", at); !ok {
 			t.Fatalf("probe after %s not granted", gap)
 		}
+	}
+}
+
+// byWorkerProbe answers each Worker with its own observation.
+type byWorkerProbe map[string]ProviderActivityObservation
+
+func (p byWorkerProbe) ObserveProviderActivity(worker classifier.Worker, _ time.Time) ProviderActivityObservation {
+	return p[worker.ID]
+}
+func (byWorkerProbe) ForgetProviderActivity(string) {}
+
+// The reviewer's P5/P6: a Worker reports done one second before its request
+// finishes, so its Turn is settled when the provider's answer lands. While the
+// family is in an outage every Session of the family is read, and that answer
+// ends it.
+func TestAnAnswerAfterItsTurnSettledEndsTheOutage(t *testing.T) {
+	ledger := newFakeTurnLedger()
+	w := New(0)
+	w.SetTurnLedger(ledger)
+	start := time.Date(2026, 11, 22, 6, 17, 0, 0, time.UTC)
+	w.availability().observe("claude", refused(start.Add(-time.Minute)), start)
+	w.availability().observe("claude", refused(start), start)
+	ledger.turns["p5"] = TurnSnapshot{SessionID: "p5", TurnID: "turn:p5", Status: TurnDone, SignalProtocol: true}
+	ledger.turns["c1"] = TurnSnapshot{SessionID: "c1", TurnID: "turn:c1", Status: TurnDone, SignalProtocol: true}
+	finished := start.Add(5 * time.Minute)
+	probe := byWorkerProbe{"p5": answered(finished), "c1": answered(finished)}
+	item := func(id, command string) preparedPollWorker {
+		return preparedPollWorker{id: id, workerSnap: classifier.Worker{ID: id, Command: command, Delegated: true}, alive: true, now: finished.Add(time.Second)}
+	}
+	// Another family's answer says nothing of Claude's provider.
+	w.collectPollEvidence([]preparedPollWorker{item("c1", "codex resume c1")}, nil, nil, probe)
+	if _, down := w.ProviderOutage("claude"); !down {
+		t.Fatal("a Codex answer ended Claude's outage")
+	}
+	w.collectPollEvidence([]preparedPollWorker{item("p5", "claude --session-id p5")}, nil, nil, probe)
+	if _, down := w.ProviderOutage("claude"); down {
+		t.Fatal("an answer that finished after its Turn settled did not end the outage")
+	}
+	// With no outage a settled Turn is not read at all.
+	probe["p5"] = refused(finished.Add(time.Minute))
+	probe["p5b"] = refused(finished.Add(2 * time.Minute))
+	ledger.turns["p5b"] = TurnSnapshot{SessionID: "p5b", TurnID: "turn:p5b", Status: TurnDone, SignalProtocol: true}
+	w.collectPollEvidence([]preparedPollWorker{item("p5", "claude --session-id p5"), item("p5b", "claude --session-id p5b")}, nil, nil, probe)
+	if _, down := w.ProviderOutage("claude"); down {
+		t.Fatal("settled Turns were read outside an outage")
 	}
 }

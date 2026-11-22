@@ -34,6 +34,9 @@ type fakeSessionBackend struct {
 	created   []backendCreateSpec
 	nextID    string
 	createErr error
+	// replaced records every replace, by id.
+	replaced []string
+	agentEnd map[string]string
 }
 
 var _ sessionBackend = (*fakeSessionBackend)(nil)
@@ -189,3 +192,31 @@ func (b *fakeSessionBackend) kill(id string) error {
 }
 
 func (b *fakeSessionBackend) inputIO() sessionInputIO { return (&hostBackend{}).inputIO() }
+
+func (b *fakeSessionBackend) replace(id string, spec backendCreateSpec) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.states[id] == fakeAbsent {
+		return errSessionGone
+	}
+	b.created = append(b.created, spec)
+	b.replaced = append(b.replaced, id)
+	b.states[id] = fakeOwned
+	return nil
+}
+
+func (b *fakeSessionBackend) relaunchData(id, key string) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.agentEnd[id+"\x00"+key], nil
+}
+
+func (b *fakeSessionBackend) setRelaunchData(id, key, value string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.agentEnd == nil {
+		b.agentEnd = map[string]string{}
+	}
+	b.agentEnd[id+"\x00"+key] = value
+	return nil
+}

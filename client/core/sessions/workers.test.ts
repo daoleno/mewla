@@ -369,6 +369,15 @@ describe("the daemon's run and prompt fields (WIRE §7, §9)", () => {
     const prompt = normalizePrompt({ id: "p", kind: "permission", provider: "claude", title: "Bash command", tool: "Bash", summary: "curl -sI https://example.org", options: [{ number: 1, label: "Yes" }] });
     expect(prompt).toMatchObject({ tool: "Bash", summary: "curl -sI https://example.org" });
   });
+
+  test("an agent's restart keeps its state and line; one the app does not know is dropped", () => {
+    expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "restarted", line: " Restarted after a crash " } }).relaunch)
+      .toEqual({ state: "restarted", line: "Restarted after a crash" });
+    expect(one({ id: "%1", name: "a", status: "blocked", relaunch: { state: "waiting", line: "Waiting for Claude Code's provider" } }).relaunch)
+      .toEqual({ state: "waiting", line: "Waiting for Claude Code's provider" });
+    expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "rebooted", line: "Rebooted" } }).relaunch).toBeUndefined();
+    expect(one({ id: "%1", name: "a", status: "done", relaunch: { state: "restarted", line: "" } }).relaunch).toBeUndefined();
+  });
 });
 
 describe("who a Session's attention is for (owner 2026-11-13, shot 11)", () => {

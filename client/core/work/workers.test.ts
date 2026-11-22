@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Worker } from "../sessions/workers";
 import type { WorkWorkerSession } from "./types";
-import { liveWorkerIds, sameWorkWorkerLines, workerName, workProject, workWorkerLines } from "./workers";
+import { liveWorkerIds, sameWorkWorkerLines, workDetailWorkerRow, workerName, workProject, workWorkerLines } from "./workers";
 
 const NOW = new Date("2026-11-12T09:10:00Z");
 
@@ -41,6 +41,25 @@ describe("the Workers of a Work", () => {
     const row: WorkWorkerSession = { session_id: id, name: `Hello writer (${id})`, provider: "claude", state: "running", summary: footer, live: true, joined_at: "2026-11-12T09:00:00Z", updated_at: "2026-11-12T09:00:00Z" };
     const [line] = workWorkerLines([row], new Map([[id, session(id, { name: row.name, status: "unknown", summary: "⏸ manual mode on · ? for shortcuts" })]]), NOW);
     expect(line).toMatchObject({ name: "Hello writer", summary: "", since: Date.parse("2026-11-12T09:00:00Z") });
+  });
+
+  test("a Worker whose agent ended says it was restarted, or why not, over its last report", () => {
+    const restarted = session("worker:@c", { status: "done", summary: "said hello", phase: "reporting", relaunch: { state: "restarted", line: "Restarted after a crash" } });
+    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", restarted]]), NOW)[0]!.summary).toBe("Restarted after a crash");
+    // The line says it failed: no "Failed ·" before it.
+    const gaveUp = session("worker:@c", { status: "failed", relaunch: { state: "stopped", line: "Stopped after 3 restarts" } });
+    expect(workWorkerLines([rows[2]!], new Map([["worker:@c", gaveUp]]), NOW)[0]).toMatchObject({ state: "failed", stateLabel: undefined, summary: "Stopped after 3 restarts" });
+    // Started again but its task was not resumed: nothing runs, so no live time.
+    const halted = session("worker:@c", { status: "blocked", delegated: true, running_since: "2026-11-12T08:30:00Z", relaunch: { state: "stopped", line: "Task not resumed after a restart" } });
+    const line = workWorkerLines([rows[2]!], new Map([["worker:@c", halted]]), NOW)[0]!;
+    expect(line).toMatchObject({ state: "blocked", stateLabel: undefined, summary: "Task not resumed after a restart" });
+    expect(line.time).not.toBe("live");
+    // Held for its provider: nothing runs and nothing is asked, so no running dot and no "Needs you".
+    const held = session("worker:@c", { status: "blocked", delegated: true, running_since: "2026-11-12T08:30:00Z", relaunch: { state: "waiting", line: "Waiting for Claude Code's provider" } });
+    const waiting = workWorkerLines([rows[2]!], new Map([["worker:@c", held]]), NOW)[0]!;
+    expect(waiting).toMatchObject({ state: "waiting", stateLabel: undefined, summary: "Waiting for Claude Code's provider" });
+    expect(waiting.time).not.toBe("live");
+    expect(workDetailWorkerRow(waiting, NOW.getTime())).toMatchObject({ end: "Waiting", live: undefined, needs: undefined });
   });
 
   test("a row says in words what is not plain running or done: Needs you, Failed, Ended", () => {

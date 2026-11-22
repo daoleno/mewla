@@ -457,7 +457,7 @@ function workCardState(model: WorkCardModel, lines: readonly WorkWorkerLine[]): 
   if (model.kind === "needs" || lines.some((line) => line.state === "blocked")) return { words: "Needs you", dot: "seal" };
   const running = lines.filter((line) => line.state === "running").length;
   if (running > 0) return { words: `${running} running`, dot: "ink" };
-  if (model.state === "Waiting") return { words: "Waiting", dot: null };
+  if (model.state === "Waiting" || lines.some((line) => line.state === "waiting")) return { words: "Waiting", dot: null };
   if (model.state === "Running") return lines.length ? { words: "Queued", dot: null } : { words: "1 running", dot: "ink" };
   return { words: model.state, dot: null };
 }

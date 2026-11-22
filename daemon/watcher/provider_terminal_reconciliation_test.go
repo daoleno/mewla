@@ -37,7 +37,7 @@ func TestApplyPollFactsReconcilesExactHistoricalProviderTerminal(t *testing.T) {
 				SettledAt: now.Add(-30 * time.Minute),
 			},
 		},
-	})
+	}, "")
 	if settled.Status != TurnDone || settled.ActivityID != oldActivityID {
 		t.Fatalf("exact historical terminal did not settle canonical turn: %+v", settled)
 	}
@@ -57,7 +57,7 @@ func TestApplyPollFactsReconcilesExactHistoricalProviderTerminal(t *testing.T) {
 		ID:        "session:activity:native-follow-up",
 		Status:    "running",
 		StartedAt: now.Add(-time.Minute),
-	})
+	}, "")
 	if replayed.Status != TurnDone || len(ledger.applied) != 1 {
 		t.Fatalf("later running poll reopened settled turn: turn=%+v facts=%+v", replayed, ledger.applied)
 	}
@@ -91,7 +91,7 @@ func TestApplyPollFactsHistoricalProviderTerminalRequiresExactActivityID(t *test
 				SettledAt: now.Add(-30 * time.Minute),
 			},
 		},
-	})
+	}, "")
 	if unchanged.Status != TurnRunning {
 		t.Fatalf("non-matching historical terminal settled canonical turn: %+v", unchanged)
 	}
@@ -120,7 +120,7 @@ func TestApplyPollFactsTerminalOlderThanBoundFailsClosed(t *testing.T) {
 		ID: "session:activity:latest", Status: "completed",
 		StartedAt: now.Add(-time.Minute), SettledAt: now,
 		TerminalActivities: terminals,
-	})
+	}, "")
 	if unchanged.Status != TurnRunning || len(ledger.applied) != 1 ||
 		ledger.applied[0].ActivityID == desiredActivityID {
 		t.Fatalf("out-of-bound terminal was guessed or settled: turn=%+v facts=%+v", unchanged, ledger.applied)

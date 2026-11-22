@@ -72,6 +72,8 @@ func Map(workerID string, p Payload, now time.Time) []agentevents.Event {
 		// its submitted digest is the brief's own.
 		if brief, delegated := work.UnwrapClaudeDelegatedInput(p.Prompt); delegated {
 			unwrapped = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
+		} else if brief, typed := work.ClaudeTypedBrief(p.Prompt); typed {
+			unwrapped = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
 		}
 		msg := event(agentevents.KindUserMessage)
 		msg.ID = p.PromptID
