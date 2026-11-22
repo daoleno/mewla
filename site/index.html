@@ -172,6 +172,19 @@
   </div>
 </section>
 
+<section class="band" id="mac">
+  <div class="wrap">
+    <div class="head">
+      <h2 class="display">Now on your&nbsp;Mac.</h2>
+      <ul class="links">
+        <li><a href="https://github.com/daoleno/mewla/releases/latest/download/Mewla-macos-arm64.dmg">Download for Mac<svg class="ic s"><use href="#i-chevron-right"/></svg></a></li>
+        <li><a href="docs/mac-app/">Mewla for Mac<svg class="ic s"><use href="#i-chevron-right"/></svg></a></li>
+      </ul>
+    </div>
+    <figure class="mac-desk rise"><picture><source srcset="shots/mac-dark.webp" media="(prefers-color-scheme: dark)"><img src="shots/mac-light.webp" alt="Brain’s first window on a Mac, ready for a message" width="1440" height="1120" loading="lazy"></picture></figure>
+  </div>
+</section>
+
 <section class="band" id="wide">
   <div class="wrap">
     <div class="head">
@@ -197,21 +210,27 @@
         <div class="step-l"><p class="step-n">1</p><h3>Install</h3></div>
         <div class="step-r">
         <div class="seg os" role="tablist" aria-label="Your computer">
-          <button type="button" role="tab" class="on" aria-selected="true" data-os="unix">macOS · Linux</button>
+          <button type="button" role="tab" class="on" aria-selected="true" data-os="mac">Mac app</button>
+          <button type="button" role="tab" aria-selected="false" data-os="unix">Terminal</button>
           <button type="button" role="tab" aria-selected="false" data-os="win">Windows</button>
         </div>
-        <div class="cmd-card" data-os-cmd="unix" data-link="installScript"><code data-cmd="curl -fsSL {} | sh">curl -fsSL https://mewla.ai/install.sh | sh</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
+        <div class="mac-get" data-os-cmd="mac"><a class="btn ink" href="https://github.com/daoleno/mewla/releases/latest/download/Mewla-macos-arm64.dmg"><svg class="ic s"><use href="#lg-apple"/></svg>Download for Mac</a></div>
+        <div data-os-note="mac"><p class="small">Apple Silicon · macOS 14 or later · <a href="docs/mac-app/">Docs</a> · <a href="#get" data-os-go="unix">Terminal install</a></p></div>
+        <div class="cmd-card" data-os-cmd="unix" data-link="installScript" hidden><code data-cmd="curl -fsSL {} | sh">curl -fsSL https://mewla.ai/install.sh | sh</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
         <div class="cmd-card" data-os-cmd="win" hidden><code>irm https://mewla.ai/install.ps1 | iex</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
-        <div data-os-note="unix"><p class="small">Checksum-verified · no sudo · no telemetry</p></div>
+        <div data-os-note="unix" hidden><p class="small">Checksum-verified · no sudo · no telemetry</p></div>
         <p class="small" data-os-note="win" hidden>Beta · Checksum-verified · no administrator · no telemetry · <a href="https://github.com/daoleno/mewla/issues/new?title=Windows%3A%20&amp;body=Windows%20version%3A%0A%0Amewla%20version%3A%0A%0Amewla%20doctor%3A%0A%0AWhat%20happened%3A%0A">Tell us how it went</a></p>
         </div>
       </li>
       <li class="step">
-        <div class="step-l"><p class="step-n">2</p><h3>Start it and sign in</h3></div>
+        <div class="step-l"><p class="step-n">2</p><h3 data-os-step="mac">Open it</h3><h3 data-os-step="unix win" hidden>Start it and sign in</h3></div>
         <div class="step-r">
+        <div data-os-step="mac"><p class="step-text">Open Mewla from Applications, then choose <b>Pair a phone…</b> from the cat in the menu bar.</p></div>
+        <div data-os-step="unix win" hidden>
         <div class="cmd-card"><code>mewla</code><button type="button" class="copy" data-copy aria-label="Copy"><svg class="ic s"><use href="#i-copy"/></svg></button></div>
 <pre class="term mini-term"><span class="ln b">How should your phone and browsers reach this computer?</span><span class="ln gap"></span><span class="ln opt"><span class="sel">1. Sign in, reach it from anywhere (recommended)</span></span><span class="ln opt">2. Only on the same Wi-Fi</span><span class="ln opt">3. I'll set up Tailscale or HTTPS myself</span><span class="ln opt">4. Decide later</span><span class="ln gap"></span><span class="ln">This computer's address: <span class="b addr">https://quiet-otter-3f9a.m.mewla.ai</span></span></pre>
         <p class="small">Pick 1 and sign in with GitHub. <a href="docs/connect-and-pair/#choose-an-address">Other ways to connect</a></p>
+        </div>
         </div>
       </li>
       <li class="step">

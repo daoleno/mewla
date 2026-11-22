@@ -18,6 +18,10 @@ running as a service, updates, the app builds and uninstalling.
 
 ## Install the daemon
 
+On an Apple Silicon Mac, [Mewla for Mac](mac-app.md) is the app and the daemon in
+one download, with no terminal step. Everywhere else, and on a Mac you reach only
+through a terminal:
+
 ```sh
 curl -fsSL https://mewla.ai/install.sh | sh
 ```
@@ -194,7 +198,8 @@ usual "Next, start Mewla" line.
 | Linux `amd64` / `x86_64` | `mewla-linux-amd64.tar.gz` | Supported |
 | Linux `arm64` / `aarch64` | `mewla-linux-arm64.tar.gz` | Supported |
 | WSL2 on either architecture | The matching Linux archive | Supported |
-| Apple Silicon macOS | `mewla-darwin-arm64.tar.gz` | Supported |
+| Apple Silicon macOS, the app | `Mewla-macos-arm64.dmg` ([Mewla for Mac](mac-app.md)) | Supported, since 0.4.23 |
+| Apple Silicon macOS, the CLI | `mewla-darwin-arm64.tar.gz` | Supported |
 | Windows 10 (1809 or later) and 11, x64 | `mewla-windows-amd64.zip` | Beta, since 0.3.0 |
 | Windows on ARM | None | Not supported |
 | Intel macOS | None | Not supported |
@@ -311,8 +316,8 @@ of yours open, and Brain between turns. Brain comes back in the same
 conversation. Until then Brain's Chat shows **Restart terminals to finish
 updating** with how many terminals it would end, and **Restart** does it now.
 
-Development builds, betas and macOS (until it is verified) do not update
-themselves. `MEWLA_NO_AUTOUPDATE=1` turns automatic updates off. Updating from
+Development builds, betas and the macOS CLI do not update themselves; Mewla
+for Mac updates from its app ([Updates](mac-app.md#updates)). `MEWLA_NO_AUTOUPDATE=1` turns automatic updates off. Updating from
 a version that predates this (0.2.87 and older) is still the manual
 `mewla update`.
 

@@ -9,6 +9,7 @@ New here? [Get started](get-started.md) is one path from install to your first g
 ## Get it running
 
 - [Get started](get-started.md): install, pair, first Session, first goal.
+- [Mewla for Mac](mac-app.md): the signed app for Apple Silicon Macs: download, what runs, updates, permissions.
 - [Install and update](install-daemon.md): Linux, macOS and Windows, manual download, starting at login, updates, the app builds, uninstalling.
 - [Connect and pair](connect-and-pair.md): same Wi-Fi, Tailscale or an HTTPS tunnel; more devices and browsers.
 
