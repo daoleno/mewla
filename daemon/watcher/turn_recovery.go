@@ -722,6 +722,14 @@ func stalledDelegatedTurn(item probedPollWorker) (delegatedStall, bool) {
 	return stall, true
 }
 
+// StaleSignalAdmissionReason is the reason a prompt the provider took its
+// turn over without admitting is released with as delivery-unknown.
+const StaleSignalAdmissionReason = "provider settled and stayed idle without this prompt's progress signal"
+
+// AgentEndedAdmissionReason is the reason a prompt in flight on an agent that
+// ended is released with once Brain is told (agent_relaunch.go).
+const AgentEndedAdmissionReason = "the agent ended before it checked in on this prompt"
+
 // signalAdmissionStaleAfter is how long a provider must stay idle after
 // settling, past a delegated prompt's preparation, before that prompt's
 // missing progress signal proves nothing more will arrive.
@@ -764,8 +772,7 @@ func (w *Watcher) releaseStaleAdmissions(sessionID string, stale []string) {
 		return
 	}
 	for _, pending := range stale {
-		if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, pending,
-			"provider settled and stayed idle without this prompt's progress signal"); err != nil {
+		if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, pending, StaleSignalAdmissionReason); err != nil {
 			log.Printf("delegated turn recovery: release stale admission %s: %v", pending, err)
 		}
 	}

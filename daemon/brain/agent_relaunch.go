@@ -56,16 +56,24 @@ func (s *Service) SetWorkerLaunchEnv(env func() map[string]string) {
 }
 
 // agentEndWork is the open Work an ended agent's Session belongs to: the one
-// whose live Attempt runs on it (turnID is that Attempt's Turn), or else the
-// open Work the Session last joined.
-func (s *Store) agentEndWork(sessionID string) (item Work, turnID string, found bool, err error) {
+// whose live Attempt runs on it (turnID is that Attempt's Turn), the one with
+// a delegated prompt in flight on it that the agent never checked in on
+// (pending is that prompt's turn), or else the open Work the Session last
+// joined.
+func (s *Store) agentEndWork(sessionID string) (item Work, turnID, pending string, found bool, err error) {
 	if st, ok := s.fsmWorkByAttemptSession(sessionID); ok && st.Attempt != nil && st.Attempt.Delegated && !st.Status.Terminal() {
 		item, err = s.Work(string(st.ID))
-		return item, string(st.Attempt.TurnToken), err == nil, err
+		return item, string(st.Attempt.TurnToken), "", err == nil, err
+	}
+	if st, ok := s.fsm.Find(func(candidate *lifecycle.State) bool {
+		return !candidate.Status.Terminal() && promptInFlight(candidate, sessionID) != nil
+	}); ok {
+		item, err = s.Work(string(st.ID))
+		return item, "", string(promptInFlight(st, sessionID).TurnToken), err == nil, err
 	}
 	records, err := s.workWorkerRecords()
 	if err != nil {
-		return Work{}, "", false, err
+		return Work{}, "", "", false, err
 	}
 	candidates := []WorkWorkerRecord{}
 	for _, record := range records {
@@ -80,16 +88,44 @@ func (s *Store) agentEndWork(sessionID string) (item Work, turnID string, found 
 			continue
 		}
 		if readErr != nil {
-			return Work{}, "", false, readErr
+			return Work{}, "", "", false, readErr
 		}
 		if current.Status == WorkDone || current.Status == WorkCancelled {
 			// The newest Work this Session joined is closed: it is no open
 			// Work's Worker any more.
-			return Work{}, "", false, nil
+			return Work{}, "", "", false, nil
 		}
-		return current, "", true, nil
+		return current, "", "", true, nil
 	}
-	return Work{}, "", false, nil
+	return Work{}, "", "", false, nil
+}
+
+// promptInFlight is the delegated prompt a Work sent to sessionID that its
+// agent never checked in on: the Work's newest prompt to that Session, sent
+// (its transport started) and neither accepted nor ended. A prompt released
+// as stale (the agent went idle over it) or already reported with its
+// agent's end is no longer in flight.
+func promptInFlight(st *lifecycle.State, sessionID string) *lifecycle.AdmissionState {
+	var newest *lifecycle.AdmissionState
+	for _, admission := range st.Admissions {
+		if admission.SessionID != sessionID || admission.ClaimToken != "" {
+			continue
+		}
+		if newest == nil || admission.PreparedSeq > newest.PreparedSeq {
+			newest = admission
+		}
+	}
+	if newest == nil || !newest.SignalProtocol || newest.TransportStartedAt == nil {
+		return nil
+	}
+	switch {
+	case newest.Status == lifecycle.AdmissionPrepared:
+		return newest
+	case newest.Status == lifecycle.AdmissionAmbiguous &&
+		newest.Reason != watcher.StaleSignalAdmissionReason && newest.Reason != watcher.AgentEndedAdmissionReason:
+		return newest
+	}
+	return nil
 }
 
 // agentRelaunches are the relaunch records of a Work's Worker, oldest first.
@@ -144,7 +180,7 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	if host, err := s.store.HostSession(); err == nil && strings.TrimSpace(host.ID) == sessionID {
 		return watcher.AgentRelaunchPlan{}, nil // Brain's own Host has its own restart
 	}
-	item, turnID, found, err := s.store.agentEndWork(sessionID)
+	item, turnID, pending, found, err := s.store.agentEndWork(sessionID)
 	if err != nil || !found {
 		return watcher.AgentRelaunchPlan{}, err
 	}
@@ -153,6 +189,12 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		// the moment) is not continued.
 		end.TurnID = ""
 	}
+	if pending != end.PendingTurnID {
+		// The ledger's prompt in flight is the one there is: one the watcher
+		// did not read the conversation for is not known to be held.
+		end.PromptDelivery = watcher.PromptUnknown
+	}
+	inFlight := turnID != "" || pending != ""
 	records, err := s.store.workWorkerRecords()
 	if err != nil {
 		return watcher.AgentRelaunchPlan{}, err
@@ -162,12 +204,12 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 	provider := firstNonEmpty(work.InferWorkerProvider(firstNonEmpty(launch, end.Command)), strings.TrimSpace(record.Provider))
 	name := work.AgentProductName(provider, firstNonEmpty(launch, end.Command))
 	plan := watcher.AgentRelaunchPlan{
-		WorkID: item.ID, TurnID: turnID,
+		WorkID: item.ID, TurnID: turnID, PendingTurnID: pending,
 		Name: firstNonEmpty(record.Name, end.Name), Cwd: firstNonEmpty(record.Cwd, end.Cwd), Agent: name,
 	}
 	cause, short := end.Cause(), end.ShortCause()
 	if end.Clean() {
-		if turnID == "" {
+		if !inFlight {
 			// It ended itself between Turns: finished, or the person exited it
 			// (Claude Code exits 0 on Ctrl-C and /exit). Never started again,
 			// whatever happened to its program since.
@@ -183,7 +225,7 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		short = "an update"
 	}
 	if launch == "" {
-		if turnID == "" {
+		if !inFlight {
 			// A Worker spawned before launches were recorded, idle when it
 			// ended: nothing was lost, and the person saw it end. Log only.
 			log.Printf("agent relaunch: %s %s; not started again: no launch record, and no Turn was in flight", sessionID, cause)
@@ -258,10 +300,16 @@ func (s *Service) PlanAgentRelaunch(end watcher.AgentEnd) (watcher.AgentRelaunch
 		plan.After = agentRelaunchBackoff[recent]
 	}
 	plan.Words = name + " " + cause + "; Mewla started it again in the same conversation"
-	if turnID != "" {
-		plan.Words += " and asked it to continue the task"
+	switch {
+	case turnID != "":
+		plan.Words += " and asked it to continue the task."
+	case pending != "" && end.PromptDelivery == watcher.PromptNotHeld:
+		plan.Words += " and sent it its task again: the task (" + pending + ") had not reached the conversation before it ended, so nothing of it ran."
+	case pending != "":
+		plan.Words += ". Whether its task (" + pending + ") had reached the conversation before it ended is unknown, so it was not sent again and nothing is running for it: decide whether to send it again."
+	default:
+		plan.Words += "."
 	}
-	plan.Words += "."
 	plan.Line = "Restarted after " + short
 	return plan, nil
 }
@@ -326,6 +374,13 @@ func (s *Service) ReportAgentEnd(end watcher.AgentEnd, plan watcher.AgentRelaunc
 	st, live := store.fsmWorkByAttemptSession(sessionID)
 	if live && st.Attempt != nil && string(st.ID) == plan.WorkID {
 		ref = string(st.Attempt.TurnToken)
+	} else if pending := strings.TrimSpace(plan.PendingTurnID); pending != "" {
+		// The prompt the agent never checked in on is the Turn Brain hears is
+		// lost; released, it no longer fences the Work's next prompt.
+		ref = pending
+		if err := store.MarkInputAdmissionAmbiguous(sessionID, pending, watcher.AgentEndedAdmissionReason); err != nil {
+			log.Printf("agent relaunch: release the prompt %s on %s: %v", pending, sessionID, err)
+		}
 	}
 	if _, err := store.appendWorkAuditEvent(WorkEvent{
 		WorkID: plan.WorkID, Kind: "session.uncertain",

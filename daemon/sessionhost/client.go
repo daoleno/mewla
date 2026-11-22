@@ -184,6 +184,14 @@ func (c *Client) Create(ctx context.Context, params CreateParams) (Info, error) 
 	return info, err
 }
 
+// Respawn starts a program in place of an ended Session's (MethodRespawn).
+func (c *Client) Respawn(ctx context.Context, params CreateParams) (Info, error) {
+	var info Info
+	err := c.call(ctx, MethodRespawn, params, &info)
+	info.healCwd()
+	return info, err
+}
+
 // List returns every Session, oldest first.
 func (c *Client) List(ctx context.Context) ([]Info, error) {
 	var infos []Info

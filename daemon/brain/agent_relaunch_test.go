@@ -149,9 +149,15 @@ func TestAgentRelaunchMidTurnContinuesTheLiveTurn(t *testing.T) {
 		plan.Words != "Claude Code was killed (SIGKILL); Mewla started it again in the same conversation and asked it to continue the task." {
 		t.Fatalf("plan = %+v", plan)
 	}
-	if prompt := watcher.AgentContinuationPrompt(end.Cause()); !strings.Contains(prompt, "was killed (SIGKILL)") ||
-		!strings.Contains(prompt, "same conversation") || !strings.Contains(prompt, "were stopped") {
-		t.Fatalf("continuation = %q", prompt)
+	prompt := watcher.AgentContinuationPrompt(end.Cause(), "- npm run dev (running 12m)")
+	for _, want := range []string{"was killed (SIGKILL)", "same conversation", "Mewla stopped nothing",
+		"may have finished, may still be running, or may have run only in part", "- npm run dev (running 12m)", "before you repeat any step"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("continuation lacks %q: %q", want, prompt)
+		}
+	}
+	if prompt := watcher.AgentContinuationPrompt(end.Cause(), ""); !strings.Contains(prompt, "Nothing it started is still running.") {
+		t.Fatalf("continuation with no survivor = %q", prompt)
 	}
 }
 
@@ -495,5 +501,97 @@ func TestAgentRelaunchStartsThatFailCountAndSayWhy(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no failed-start event in %+v", events)
+	}
+}
+
+// sendPrompt prepares a delegated prompt the way a send does and, when sent,
+// marks its transport started; the agent never checks in on it.
+func (f *relaunchFixture) sendPrompt(t *testing.T, turnID string, sent bool) {
+	t.Helper()
+	if _, _, err := f.store.PrepareInputAdmission(watcher.InputAdmission{
+		WorkID: f.item.ID, SessionID: "worker", ProposedTurnID: turnID, Receipt: turnID,
+		PayloadSHA256: pendingSubmissionDigest("render the trailer " + turnID), ProcessIdentity: "delegated-process",
+		PaneGeneration: "delegated-pane", AcceptedAt: time.Now().UTC(), Mode: watcher.InputAdmissionFresh, SignalProtocol: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if sent {
+		if err := f.store.MarkInputAdmissionTransportStarted("worker", turnID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A prompt sent to the Worker that its agent died before checking in on is a
+// Turn in flight, from the Turn ledger alone: it is sent again when the
+// conversation provably lacks it, and Brain is asked to decide when that is
+// unknown. Never an idle relaunch.
+func TestAgentRelaunchPromptInFlightIsATurn(t *testing.T) {
+	f := newRelaunchFixture(t)
+	f.sendPrompt(t, "turn:prompt", true)
+
+	end := killedEnd(time.Now())
+	end.PendingTurnID, end.PromptDelivery = "turn:prompt", watcher.PromptNotHeld
+	plan, err := f.service.PlanAgentRelaunch(end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Action != watcher.AgentEndRelaunch || plan.TurnID != "" || plan.PendingTurnID != "turn:prompt" ||
+		plan.Words != "Claude Code was killed (SIGKILL); Mewla started it again in the same conversation and sent it its task again: "+
+			"the task (turn:prompt) had not reached the conversation before it ended, so nothing of it ran." {
+		t.Fatalf("not held: plan = %+v", plan)
+	}
+
+	// The watcher did not read the conversation for it: not known.
+	end.PendingTurnID, end.PromptDelivery = "", ""
+	plan, err = f.service.PlanAgentRelaunch(end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Action != watcher.AgentEndRelaunch || plan.PendingTurnID != "turn:prompt" ||
+		!strings.Contains(plan.Words, "Whether its task (turn:prompt) had reached the conversation before it ended is unknown, so it was not sent again and nothing is running for it: decide whether to send it again.") {
+		t.Fatalf("unknown: plan = %+v", plan)
+	}
+
+	// Ended by itself with a prompt in flight: reported, never ignored.
+	clean := exitedEnd(0, time.Now())
+	plan, err = f.service.PlanAgentRelaunch(clean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Action != watcher.AgentEndReport || plan.PendingTurnID != "turn:prompt" || !strings.Contains(plan.Words, "it ended itself before it reported") {
+		t.Fatalf("clean exit: plan = %+v", plan)
+	}
+
+	// Brain hears of it once, as that Turn lost; the prompt is released, so it
+	// fences nothing and the next end is no longer about it.
+	told, err := f.service.ReportAgentEnd(clean, plan)
+	if err != nil || !told {
+		t.Fatalf("report = %v, %v", told, err)
+	}
+	st, admission, err := f.store.fsmAdmission("worker", "turn:prompt")
+	if err != nil || admission.Status != lifecycle.AdmissionAmbiguous || admission.Reason != watcher.AgentEndedAdmissionReason {
+		t.Fatalf("admission after report = %+v, %v", admission, err)
+	}
+	if st.Review == nil || st.Review.Reason != "turn_lost" || st.Review.Ref != "turn:prompt" {
+		t.Fatalf("review = %+v", st.Review)
+	}
+	if active := st.ActiveAdmission(); active != nil {
+		t.Fatalf("released prompt still fences: %+v", active)
+	}
+	plan, err = f.service.PlanAgentRelaunch(killedEnd(time.Now().Add(time.Minute)))
+	if err != nil || plan.PendingTurnID != "" {
+		t.Fatalf("after the report: plan = %+v, %v", plan, err)
+	}
+}
+
+// A prompt prepared but never sent (its transport did not start) is nothing
+// the agent could have read: the end is an idle one.
+func TestAgentRelaunchUnsentPromptIsNotInFlight(t *testing.T) {
+	f := newRelaunchFixture(t)
+	f.sendPrompt(t, "turn:unsent", false)
+	plan, err := f.service.PlanAgentRelaunch(killedEnd(time.Now()))
+	if err != nil || plan.Action != watcher.AgentEndRelaunch || plan.PendingTurnID != "" || plan.TurnID != "" {
+		t.Fatalf("plan = %+v, %v", plan, err)
 	}
 }

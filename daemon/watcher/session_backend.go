@@ -81,12 +81,13 @@ type sessionBackend interface {
 	// replace starts spec under the id of a Session whose program has ended,
 	// keeping the input receipts recorded on it (agent_relaunch.go).
 	replace(id string, spec backendCreateSpec) error
-	// agentEndData and setAgentEndData read and write what Mewla decided
-	// about the Session's ended agent (agent_relaunch.go): kept on the
-	// Session, so a daemon restart reads the decision instead of making it
-	// again. "" is none; writing "" removes it.
-	agentEndData(id string) (string, error)
-	setAgentEndData(id, value string) error
+	// relaunchData and setRelaunchData read and write what agent relaunch
+	// keeps on the Session (agent_relaunch.go) under key: the decision about
+	// its ended agent (hostDataAgentEnd), so a daemon restart reads it instead
+	// of deciding again, and the last delegated prompt sent to it
+	// (hostDataDelegatedPrompt). "" is none; writing "" removes it.
+	relaunchData(id, key string) (string, error)
+	setRelaunchData(id, key, value string) error
 
 	// inputIO is the Session input surface: generation proof, paste
 	// submission and the durable input receipt ledger.

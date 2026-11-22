@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
@@ -174,11 +175,21 @@ func pathWithinRoot(path, root string) bool {
 
 // delegatedResourceReuser keeps a delegated Session's resource unit when its
 // ended agent is started again in the same Session (agent_relaunch.go): the
-// unit, its lease and its TMPDIR stay; only what the dead agent left running
-// is stopped.
+// unit, its lease and its TMPDIR stay, and nothing the dead agent left
+// running is stopped: it is listed, for the agent and Brain.
 type delegatedResourceReuser interface {
 	// Reuse returns the spec of an existing unit, without making a new one.
 	Reuse(unit string) (*delegatedResourceSpec, error)
-	// StopLeftovers ends the processes the unit still owns, keeping the unit.
-	StopLeftovers(unit string) error
+	// Survivors lists the processes the unit still owns, oldest first.
+	Survivors(unit string) ([]agentSurvivor, error)
+}
+
+// agentSurvivor is one process a dead agent left running.
+type agentSurvivor struct {
+	PID     int
+	Command string // redacted (survivorCommand)
+	Started time.Time
+	// args is the full command line, never shown: it tells the agent's own
+	// helpers (its control server) from what the agent started.
+	args []string
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -374,21 +375,54 @@ func (m *portableDelegatedResourceManager) Reuse(unit string) (*delegatedResourc
 	return &delegatedResourceSpec{Owner: m.owner, Unit: unit, TempDir: tempDir}, nil
 }
 
-// StopLeftovers ends every process the unit owns; the lease and TMPDIR stay.
-func (m *portableDelegatedResourceManager) StopLeftovers(unit string) error {
+// Survivors lists the processes the unit still owns, oldest first, without
+// touching them. Mewla's own helpers (its tool servers an agent started) are
+// not listed: they belonged to the dead agent and say nothing about its work.
+func (m *portableDelegatedResourceManager) Survivors(unit string) ([]agentSurvivor, error) {
 	unit = strings.TrimSpace(unit)
 	if !validDelegatedResourceUnit(m.owner, unit) {
-		return fmt.Errorf("refuse unowned delegated resource unit %q", unit)
+		return nil, fmt.Errorf("refuse unowned delegated resource unit %q", unit)
 	}
 	path, err := workerproc.LeasePath(m.leaseDir, unit)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	lease, err := workerproc.ReadLease(path)
 	if os.IsNotExist(err) {
 		lease = workerproc.Lease{Version: 1, ResourceID: unit}
 	} else if err != nil {
-		return err
+		return nil, err
 	}
-	return workerproc.StopOwned(lease, nil)
+	records, err := workerproc.Processes(true)
+	if err != nil {
+		return nil, err
+	}
+	self := filepath.Base(selfExecutable())
+	var out []agentSurvivor
+	for pid, process := range workerproc.Owned(records, lease) {
+		args := workerproc.Args(pid)
+		if len(args) == 0 {
+			args = strings.Fields(process.Args)
+		}
+		if len(args) == 0 || (self != "" && filepath.Base(args[0]) == self) {
+			continue
+		}
+		started, _ := workerproc.StartTime(pid)
+		out = append(out, agentSurvivor{PID: pid, Command: survivorCommand(args), Started: started, args: args})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Started.Equal(out[j].Started) {
+			return out[i].Started.Before(out[j].Started)
+		}
+		return out[i].PID < out[j].PID
+	})
+	return out, nil
+}
+
+func selfExecutable() string {
+	path, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return path
 }

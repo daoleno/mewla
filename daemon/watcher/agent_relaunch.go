@@ -39,6 +39,11 @@ import (
 // closed, so it is not started again.
 var errSessionGone = errors.New("the Session is gone")
 
+// errHostCannotRespawn: the running session host is from before respawn, so
+// it cannot start an agent again in place; it is replaced only when no agent
+// runs in it.
+var errHostCannotRespawn = errors.New("this computer's session host is older than Mewla and cannot start an agent again in place")
+
 // AgentEnd is one ended agent program in a delegated Session.
 type AgentEnd struct {
 	SessionID  string
@@ -46,9 +51,18 @@ type AgentEnd struct {
 	Cwd        string
 	Command    string // the Worker's observed command
 	ExecutorID string
-	Exit       SessionExit
+	// Control is the Worker's agent control socket (a Codex app-server's).
+	Control string
+	Exit    SessionExit
 	// TurnID is the live delegated Turn the agent was in when it ended, if any.
 	TurnID string
+	// PendingTurnID is a delegated prompt in flight that the agent never
+	// checked in on (no Turn yet), and PromptDelivery whether its
+	// conversation holds it. A held prompt is accepted as TurnID before the
+	// plan is asked for.
+	PendingTurnID  string
+	PromptDelivery PromptDelivery
+	pending        InputAdmission
 	// OutOfMemory is set when the kernel's OOM killer ran at the time the
 	// agent was killed (Linux; a likely, not a proven, cause).
 	OutOfMemory bool
@@ -104,8 +118,11 @@ type AgentRelaunchPlan struct {
 	Action AgentEndAction
 	WorkID string
 	// TurnID is the Turn in flight the relaunched agent is asked to continue;
-	// "" when the Worker was idle.
-	TurnID string
+	// "" when the Worker was idle. PendingTurnID is a prompt in flight the
+	// agent never checked in on: sent again when its conversation does not
+	// hold it (AgentEnd.PromptDelivery), else reported to Brain.
+	TurnID        string
+	PendingTurnID string
 	// Name and Cwd are what the Session was created with; Agent names the
 	// agent ("Claude Code").
 	Name  string
@@ -166,10 +183,57 @@ type AgentRelaunchLedger interface {
 }
 
 // AgentContinuationPrompt is what a relaunched agent that was in a Turn is
-// sent, with a fresh turn contract.
-func AgentContinuationPrompt(cause string) string {
-	return "Your agent process " + strings.TrimSpace(cause) + " in the middle of this task, and Mewla started it again in the same conversation. " +
-		"Commands it was running when it ended were stopped. Continue the task from where you stopped; check what already finished before you repeat a step."
+// sent, with a fresh turn contract. survivors is survivorList's lines: what
+// the dead agent left running, untouched.
+func AgentContinuationPrompt(cause, survivors string) string {
+	prompt := "Your agent process " + strings.TrimSpace(cause) + " in the middle of this task, and Mewla started it again in the same conversation. " +
+		"Mewla stopped nothing: the command you were running when it ended may have finished, may still be running, or may have run only in part."
+	if strings.TrimSpace(survivors) != "" {
+		prompt += "\n\nStill running from before it ended:\n" + survivors + "\n\n"
+	} else {
+		prompt += " Nothing it started is still running. "
+	}
+	return prompt + "Look at the state of the work (files, outputs, what is still running) before you repeat any step, then continue the task from where you stopped."
+}
+
+// survivorWords is the survivors in one line for Brain's event: "Still
+// running from before: python3 -m http.server 18473 (running 12m)."
+func survivorWords(survivors []agentSurvivor, now time.Time) string {
+	if len(survivors) == 0 {
+		return ""
+	}
+	list := strings.ReplaceAll(strings.TrimPrefix(survivorList(survivors, now), "- "), "\n- ", "; ")
+	return " Still running from before: " + list + "."
+}
+
+// agentSurvivors lists what the Session's dead agent left running in its
+// resource unit; nothing on a Session without one. The agent's own control
+// server (named by its control socket) is the agent's, not something it
+// started: a relaunch attaches to it again.
+func (w *Watcher) agentSurvivors(sessionID, control string) []agentSurvivor {
+	delegated, unit := w.sessions().delegatedResource(sessionID)
+	if !delegated || unit == "" {
+		return nil
+	}
+	reuser, ok := w.resourceManager().(delegatedResourceReuser)
+	if !ok {
+		return nil
+	}
+	survivors, err := reuser.Survivors(unit)
+	if err != nil {
+		log.Printf("agent relaunch: list what %s left running: %v", sessionID, err)
+	}
+	control = strings.TrimSpace(control)
+	if control == "" {
+		return survivors
+	}
+	out := survivors[:0]
+	for _, survivor := range survivors {
+		if !strings.Contains(strings.Join(survivor.args, " "), control) {
+			out = append(out, survivor)
+		}
+	}
+	return out
 }
 
 // agentRelaunchReadyBudget bounds how long a relaunched agent may take to
@@ -367,7 +431,7 @@ func (s *agentRelaunchSupervisor) holds(sessionID, turnID string) bool {
 // Turn facts are applied. It returns hold=true when the ended program is being
 // relaunched, so its death must not reach the Turn ledger, and words to carry
 // on the death when it does.
-func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, hasTurn bool) (hold bool, words string) {
+func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, hasTurn bool, pending []InputAdmission, provider ProviderActivityObservation) (hold bool, words string) {
 	supervisor := w.agentRelaunch()
 	if item.alive {
 		supervisor.mu.Lock()
@@ -397,7 +461,7 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	}
 	end := AgentEnd{
 		SessionID: item.id, Name: item.workerSnap.Window, Cwd: item.workerSnap.Cwd, Command: item.workerSnap.Command,
-		ExecutorID: item.workerSnap.ExecutorID, Exit: exit,
+		ExecutorID: item.workerSnap.ExecutorID, Control: item.workerSnap.AgentControl, Exit: exit,
 	}
 	if hasTurn && !TurnImmutable(turn.Status) {
 		end.TurnID = turn.TurnID
@@ -405,7 +469,7 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	// An end decided before (by an earlier daemon) keeps its decision: a
 	// restart never judges the same end again.
 	if stored, ok := w.storedAgentEnd(item.id, exit.EndedAt); ok {
-		plan := AgentRelaunchPlan{Action: stored.Action, WorkID: stored.WorkID, TurnID: stored.TurnID, Words: stored.Words, Line: stored.Line}
+		plan := AgentRelaunchPlan{Action: stored.Action, WorkID: stored.WorkID, TurnID: stored.TurnID, PendingTurnID: stored.Pending, Words: stored.Words, Line: stored.Line}
 		supervisor.mu.Lock()
 		supervisor.decided[item.id] = agentEndDecision{endedAt: exit.EndedAt, plan: plan}
 		supervisor.mu.Unlock()
@@ -421,6 +485,9 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if exit.Signal != "" {
 		end.OutOfMemory = supervisor.oom.killedAround(exit.EndedAt, supervisor.now())
 	}
+	if end.TurnID == "" {
+		w.readPromptInFlight(&end, pending, provider)
+	}
 	plan, err := ledger.PlanAgentRelaunch(end)
 	if err != nil {
 		log.Printf("agent relaunch: plan for %s: %v", item.id, err)
@@ -432,7 +499,7 @@ func (w *Watcher) observeAgentEnd(item preparedPollWorker, turn TurnSnapshot, ha
 	if plan.Action != AgentEndRelaunch {
 		// Final: kept on the Session for any later daemon.
 		w.storeAgentEnd(item.id, agentEndRecord{EndedAt: exit.EndedAt, Action: plan.Action, WorkID: plan.WorkID,
-			TurnID: end.TurnID, Words: plan.Words, Line: plan.Line})
+			TurnID: end.TurnID, Pending: plan.PendingTurnID, Words: plan.Words, Line: plan.Line})
 	}
 	switch plan.Action {
 	case AgentEndRelaunch:
@@ -476,17 +543,34 @@ func (w *Watcher) tellAgentEnd(ledger AgentRelaunchLedger, end AgentEnd, plan Ag
 	supervisor.decided[end.SessionID] = decision
 	if told {
 		go w.storeAgentEnd(end.SessionID, agentEndRecord{EndedAt: end.Exit.EndedAt, Action: plan.Action, WorkID: plan.WorkID,
-			Words: plan.Words, Line: plan.Line, Told: true})
+			Pending: plan.PendingTurnID, Words: plan.Words, Line: plan.Line, Told: true})
+	}
+}
+
+// decideAgentEnd makes plan, a report, the decision about end after a
+// relaunch was planned: kept, shown, and told (an idle Worker) or carried on
+// the dead Turn by the next poll.
+func (w *Watcher) decideAgentEnd(ledger AgentRelaunchLedger, end AgentEnd, plan AgentRelaunchPlan) {
+	supervisor := w.agentRelaunch()
+	supervisor.mu.Lock()
+	supervisor.decided[end.SessionID] = agentEndDecision{endedAt: end.Exit.EndedAt, plan: plan}
+	supervisor.mu.Unlock()
+	w.storeAgentEnd(end.SessionID, agentEndRecord{EndedAt: end.Exit.EndedAt, Action: plan.Action, WorkID: plan.WorkID,
+		TurnID: plan.TurnID, Pending: plan.PendingTurnID, Words: plan.Words, Line: plan.Line})
+	supervisor.setLine(end.SessionID, agentRelaunchLine{kind: agentLineStopped, text: plan.Line})
+	if plan.TurnID == "" {
+		w.tellAgentEnd(ledger, end, plan)
 	}
 }
 
 // agentEndRecord is a final decision about one ended agent, kept on its
-// Session (sessionBackend.agentEndData).
+// Session (sessionBackend.relaunchData).
 type agentEndRecord struct {
 	EndedAt time.Time      `json:"ended_at"`
 	Action  AgentEndAction `json:"action"`
 	WorkID  string         `json:"work_id,omitempty"`
 	TurnID  string         `json:"turn_id,omitempty"`
+	Pending string         `json:"pending_turn_id,omitempty"`
 	Words   string         `json:"words,omitempty"`
 	Line    string         `json:"line,omitempty"`
 	// Told is set once Brain has the report.
@@ -494,7 +578,7 @@ type agentEndRecord struct {
 }
 
 func (w *Watcher) storedAgentEnd(sessionID string, endedAt time.Time) (agentEndRecord, bool) {
-	raw, err := w.sessions().agentEndData(sessionID)
+	raw, err := w.sessions().relaunchData(sessionID, hostDataAgentEnd)
 	if err != nil || strings.TrimSpace(raw) == "" {
 		return agentEndRecord{}, false
 	}
@@ -508,7 +592,7 @@ func (w *Watcher) storedAgentEnd(sessionID string, endedAt time.Time) (agentEndR
 func (w *Watcher) storeAgentEnd(sessionID string, record agentEndRecord) {
 	raw, err := json.Marshal(record)
 	if err == nil {
-		err = w.sessions().setAgentEndData(sessionID, string(raw))
+		err = w.sessions().setRelaunchData(sessionID, hostDataAgentEnd, string(raw))
 	}
 	if err != nil {
 		log.Printf("agent relaunch: keep the decision on %s: %v", sessionID, err)
@@ -544,7 +628,29 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		return
 	}
 	plan = fresh
-	if err := w.replaceEndedSession(end.SessionID, plan); err != nil {
+	survivors := w.agentSurvivors(end.SessionID, end.Control)
+	plan.Words = strings.TrimSuffix(plan.Words, ".") + "." + survivorWords(survivors, supervisor.now())
+	reattached, err := w.replaceEndedSession(end, plan)
+	if errors.Is(err, errHostCannotRespawn) {
+		// Not the agent's failure, and no try: say it once and leave the
+		// ended Session as it is.
+		w.decideAgentEnd(ledger, end, AgentRelaunchPlan{
+			Action: AgentEndReport, WorkID: plan.WorkID, TurnID: plan.TurnID, PendingTurnID: plan.PendingTurnID,
+			Words: strings.TrimSpace(plan.Agent+" "+end.Cause()) + "; not started again: " + errHostCannotRespawn.Error() + ".",
+			Line:  "Not restarted: needs an update",
+		})
+		finish("")
+		return
+	} else if err != nil && w.sessionClosedDuring(end.SessionID, err) {
+		// The Worker was closed while it waited: nothing to start, no try.
+		log.Printf("agent relaunch: %s was closed before it was started again", end.SessionID)
+		supervisor.setLine(end.SessionID, agentRelaunchLine{})
+		supervisor.mu.Lock()
+		delete(supervisor.decided, end.SessionID)
+		supervisor.mu.Unlock()
+		finish("")
+		return
+	} else if err != nil {
 		// A start that fails is a try: it counts toward the bound, so the next
 		// poll waits its backoff, and at the bound Brain hears why.
 		log.Printf("agent relaunch: %s could not start again: %v", end.SessionID, err)
@@ -567,11 +673,20 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		Cause: end.Cause(), ExitCode: end.Exit.Code, ExitSignal: end.Exit.Signal, EndedAt: end.Exit.EndedAt,
 		FromTurnID: plan.TurnID, Outcome: "idle", Name: plan.Agent, Words: plan.Words, At: supervisor.now().UTC(),
 	}
-	if plan.TurnID != "" {
+	if reattached {
+		// Only the agent's screen had died: its control server kept the
+		// conversation and any turn running. Nothing is sent to it.
+		record.Outcome = "reattached"
+		record.Words = strings.TrimSpace(plan.Agent+" "+end.Cause()) + "; Mewla attached it again to its app-server, which kept the conversation"
+		if plan.TurnID != "" {
+			record.Words += " and its turn running, so nothing was sent to it"
+		}
+		record.Words += "." + survivorWords(survivors, supervisor.now())
+	} else if plan.TurnID != "" {
 		turnID := "turn:" + uuid.NewString()
 		at := supervisor.now().UTC()
 		result, submitErr := supervisor.submit(
-			end.SessionID, plan.Command, DelegatedLifecyclePayload(AgentContinuationPrompt(end.Cause()), turnID),
+			end.SessionID, plan.Command, DelegatedLifecyclePayload(AgentContinuationPrompt(end.Cause(), survivorList(survivors, at)), turnID),
 			plan.WorkID, turnID, at,
 		)
 		outcome := result.Outcome
@@ -589,6 +704,8 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 		if submitErr != nil {
 			log.Printf("agent relaunch: continuation for %s: %v", end.SessionID, submitErr)
 		}
+	} else if plan.PendingTurnID != "" {
+		w.deliverPromptInFlight(ledger, end, plan, &record)
 	}
 	// The record's time is when the agent was back: started, and for a Turn
 	// in flight, its continuation taken.
@@ -612,32 +729,41 @@ func (w *Watcher) relaunchAgent(ledger AgentRelaunchLedger, end AgentEnd, plan A
 	finish(plan.TurnID)
 }
 
+// sessionClosedDuring says a relaunch failed with err because its Session
+// was closed meanwhile (by the person or Brain), not because the agent could
+// not start.
+func (w *Watcher) sessionClosedDuring(sessionID string, err error) bool {
+	if errors.Is(err, errSessionGone) {
+		return true
+	}
+	presence, probeErr := w.ProbeSession(sessionID)
+	return probeErr == nil && presence == SessionPresenceAbsent
+}
+
 // replaceEndedSession starts plan's launch in place of the ended Session,
 // under the same id and resource unit.
-func (w *Watcher) replaceEndedSession(sessionID string, plan AgentRelaunchPlan) error {
+func (w *Watcher) replaceEndedSession(end AgentEnd, plan AgentRelaunchPlan) (reattached bool, err error) {
+	sessionID := end.SessionID
 	supervisor := w.agentRelaunch()
 	backend := w.sessions()
 	delegated, unit := backend.delegatedResource(sessionID)
 	if !delegated {
-		return fmt.Errorf("Session %s is not a delegated Session", sessionID)
+		return false, fmt.Errorf("Session %s is not a delegated Session", sessionID)
 	}
 	manager := w.resourceManager()
 	var resource *delegatedResourceSpec
 	if unit != "" {
 		reuser, ok := manager.(delegatedResourceReuser)
 		if !ok {
-			return fmt.Errorf("this computer cannot keep the Worker's resource unit across a relaunch")
+			return false, fmt.Errorf("this computer cannot keep the Worker's resource unit across a relaunch")
 		}
 		spec, err := reuser.Reuse(unit)
 		if err != nil {
-			return err
+			return false, err
 		}
-		// What the dead agent left running (the command its Turn was in, its
-		// background shells) is stopped, so it never runs beside the
-		// relaunched agent unseen.
-		if err := reuser.StopLeftovers(unit); err != nil {
-			log.Printf("agent relaunch: stop what %s left running: %v", sessionID, err)
-		}
+		// Nothing the dead agent left running is stopped (a server the Worker
+		// was told to leave up, a deploy half-way): relaunchAgent tells the
+		// agent and Brain what is still running.
 		resource = spec
 	}
 	opts := CreateSessionOptions{
@@ -649,11 +775,14 @@ func (w *Watcher) replaceEndedSession(sessionID string, plan AgentRelaunchPlan) 
 		PrepareWorkspace: plan.PrepareWorkspace,
 		Delegated:        true,
 		Env:              plan.Env,
+		ExecutorID:       end.ExecutorID,
 		resource:         resource,
+		relaunch:         true,
+		relaunchControl:  end.Control,
 	}
 	prepared, err := w.prepareSessionCreate("", opts)
 	if err != nil {
-		return err
+		return false, err
 	}
 	lock := supervisor.swapLock(sessionID)
 	lock.Lock()
@@ -676,10 +805,10 @@ func (w *Watcher) replaceEndedSession(sessionID string, plan AgentRelaunchPlan) 
 	err = backend.replace(sessionID, prepared.spec)
 	w.inventoryMu.Unlock()
 	if err != nil {
-		return err
+		return false, err
 	}
 	w.registerCreatedSession(sessionID, prepared.cwd, prepared.opts, supervisor.now().UTC())
-	return nil
+	return prepared.reattached, nil
 }
 
 // restartingLine is the line while the agent is about to start again:
