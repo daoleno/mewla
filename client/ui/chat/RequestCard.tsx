@@ -22,7 +22,7 @@ import { brainChoice, brainHost, sealedRequests, sealRequest, tray } from "../tr
 import { connection, current, currentTransport, workers } from "../session";
 import { BusyLabel, delayed, RING, Spinner } from "../kit/wait";
 import { haptic } from "../shell/haptics";
-import { requestCardSize, threadType } from "../kit/density";
+import { density, requestCardSize, threadType } from "../kit/density";
 
 /**
  * A thread's request cards (soft-final SPEC §1.1, §1.2, §11 Request card): the open requests of
@@ -436,10 +436,26 @@ export function sealedIcon(verb: string): "check-circle-fill" | "close-circle-fi
   return verb === "Not answered" ? "remove-circle" : verb === "Denied" ? "close-circle-fill" : "check-circle-fill";
 }
 
+/** The Mac's answered mark (mac.css `.sealed`): the outline check, or an outline x for Denied, a dash for Not answered. */
+function macSealedIcon(verb: string): "check-circle" | "close-circle" | "remove-circle" {
+  return verb === "Not answered" ? "remove-circle" : verb === "Denied" ? "close-circle" : "check-circle";
+}
+
 /** An answered request's quiet line: a check, what was done, the answer. Tap shows the question again. */
 function SealedLine(props: { sealed: () => SealedRequest; open: () => boolean; onToggle: () => void }) {
   const s = props.sealed;
   const type = threadType();
+  // Mewla for Mac (mac.css `.sealed`): one line, an outline mark, the verb soft, the answer in ink (a command in mono).
+  if (density() !== "phone") return (
+    <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1 active:opacity-70">
+      <View class="flex-row items-center gap-2">
+        <Icon name={macSealedIcon(s().verb)} size={18} tone="soft" />
+        <Text class={`${type.line} text-muted-foreground`}>{s().verb}</Text>
+        <Text class={`min-w-0 flex-1 line-clamp-1 ${s().mono ? `font-mono ${type.mono}` : type.line} text-foreground`}>{s().answer}</Text>
+      </View>
+      <If when={props.open()}><Text class={`pl-[26px] ${type.line} text-muted-foreground`}>{`${s().title} · ${s().source}`}</Text></If>
+    </Button>
+  );
   return (
     <Button testID="request-sealed" accessibilityLabel={`${s().verb}: ${s().answer}`} onPress={props.onToggle} class="gap-1 py-1.5 active:opacity-70">
       {/* The mock's answered line: a 20 pt check, then the caption over the answer (a command in mono). */}

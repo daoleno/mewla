@@ -1158,6 +1158,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		})
 		calendarScheduler.Own(calendar.OwnerWatchBrief, calendar.OwnerDuty{Window: watch.BriefCatchUp, Fire: watchCollector.BriefDue})
 		controlHandler.watch = watchCollector
+		srv.SetWatch(watchCollector)
 		brainService.SetWatchJudgeDay(watchCollector.JudgeDay)
 		watchCollector.SetPresence(func(workerID string) watch.Presence {
 			presence := srv.NotificationPresence(workerID)

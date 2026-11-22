@@ -1,3 +1,4 @@
+import { density } from "../kit/density";
 import { announce, cleanup, effect, Image, lifecycle, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { fixButtonKind, type FixRow } from "../../core/computer/needsFixing";
@@ -140,6 +141,9 @@ export function ComputerPage(props: {
 }) {
   const busy = signal("");
   const notes = signal<Record<string, string>>({});
+  // Mewla for Mac's window: Needs fixing reads like the page's other groups (w-mac), its title in ink and its button
+  // the quiet one; the phone keeps its coloured state words (SPEC §10.4).
+  const macGroups = density() === "window";
   const note = (key: string, text: string) => notes.set({ ...notes(), [key]: text });
 
   if (!followingFriends) {
@@ -240,8 +244,8 @@ export function ComputerPage(props: {
                 testID={`fix-${row.key}`}
                 lead={fixRowLead(row)}
                 title={row.title}
-                titleTone={fixRowTone(row)}
-                trailing={<If when={row.button && row.action}><PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
+                titleTone={macGroups ? undefined : fixRowTone(row)}
+                trailing={<If when={row.button && row.action}><PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={macGroups || row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
                     busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} /></If>}
               />
               <If when={notes()[row.key]}><View class="px-4 pb-3"><Text class="text-sub text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{notes()[row.key]}</Text></View></If>

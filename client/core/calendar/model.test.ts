@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  activeRun, agendaSection, calendarOriginOfWork, firstSentence, groupAgenda, itemSummary, itemsOnDay, mergeRunResults, nextLine,
-  originLabel, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel, type CalendarItem, type CalendarRun,
+  activeRun, agendaDays, agendaSection, calendarOriginOfWork, firstSentence, groupAgenda, itemSummary, itemsOnDay, mergeRunResults, nextLine,
+  originLabel, quietLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel, type CalendarItem, type CalendarRun,
 } from "./model";
 import { testClock } from "./testClock";
 
@@ -123,5 +123,31 @@ describe("where Calendar Work came from", () => {
     expect(originLabel({ itemId: "43754e56", runId: "c08f" }, [yunying], clock)).toBe("运营：从今天的工作里挖稿 · Oct 25");
     expect(originLabel({ itemId: "gone" }, [yunying], clock, { title: "每日论文速读", at: "2026-10-27T01:00:00Z" })).toBe("每日论文速读 · Oct 27");
     expect(originLabel({ itemId: "gone" }, [yunying], clock)).toBeNull();
+  });
+});
+
+describe("the Mac's agenda (w-cal)", () => {
+  test("Today holds the past and overdue, then Tomorrow, then each later day by its date, in this computer's zone", () => {
+    const clock = testClock("2026-11-20T14:02:00Z");
+    const days = agendaDays([
+      make("later", "2026-11-24T09:00:00Z"), make("tomorrow", "2026-11-21T08:00:00Z"), { ...make("gone", "2026-11-20T16:00:00Z"), status: "cancelled" },
+      { ...make("done", "2026-11-20T10:00:00Z"), status: "completed" }, make("overdue", "2026-11-19T09:00:00Z"), make("tonight", "2026-11-20T20:30:00Z"),
+    ], clock);
+    expect(days.map((day) => day.title)).toEqual(["Today", "Tomorrow", "Tue, Nov 24"]);
+    expect(days[0].items.map((item) => item.id)).toEqual(["overdue", "done", "tonight"]);
+    // After midnight in New York it is still the 20th there.
+    expect(agendaDays([make("late", "2026-11-21T03:00:00Z")], testClock("2026-11-20T14:02:00Z", "America/New_York"))[0].title).toBe("Today");
+  });
+  test("one quiet line: what happened, what it waits on, else how it repeats and who acts", () => {
+    const clock = testClock("2026-11-20T14:02:00Z");
+    const run = (status: CalendarRun["status"], extra: Partial<CalendarRun> = {}): CalendarRun => ({ id: "r", scheduled_for: "2026-11-20T10:00:00Z", started_at: "2026-11-20T10:00:00Z", status, ...extra });
+    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z", "scheduled_action"), status: "completed", runs: [run("completed", { result_preview: "2 stale feeds" })] }, clock)).toBe("Done · 2 stale feeds");
+    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z"), status: "completed" }, clock)).toBe("Done");
+    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z", "scheduled_action"), status: "failed", failure_reason: "The repo was gone. Then more." }, clock)).toBe("Failed · The repo was gone.");
+    expect(quietLine({ ...make("a", "2026-11-20T10:00:00Z"), status: "waiting" }, clock)).toBe("Needs you");
+    expect(quietLine({ ...make("a", "2026-11-20T20:30:00Z", "scheduled_action"), recurrence: "daily" }, clock)).toBe("Every day · Brain");
+    expect(quietLine({ ...make("a", "2026-11-23T09:00:00Z", "scheduled_action"), recurrence: "weekly" }, clock)).toBe("Every Monday · Brain");
+    expect(quietLine(make("a", "2026-11-21T08:30:00Z"), clock)).toBe("Reminder");
+    expect(quietLine(make("a", "2026-11-21T08:30:00Z", "event"), clock)).toBe("");
   });
 });

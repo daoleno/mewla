@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost } from "../testing/fixtures";
+import { framesOf, item, paired, phoneHost } from "../testing/fixtures";
 
 // Mewla for Mac (platform macos): the app's computer is this Mac's daemon (`app.pairing`), the menu bar cat's
 // perch is the phone's Brain home in a popup, and Pair a phone shows the daemon's QR.
@@ -21,8 +21,8 @@ const pairing = {
   local_link: "mewla://settings?p=local",
 };
 
-function macHost(devScript: Record<string, unknown>) {
-  const host = phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => pairing });
+function macHost(devScript: Record<string, unknown>, daemon: Record<string, unknown> = {}) {
+  const host = phoneHost({ brain, conversations: { "brain-host": [] }, ...daemon }, { "app.pairing": () => pairing });
   return { ...host, params: { ...host.params, devScript } };
 }
 
@@ -143,6 +143,34 @@ describe("Mewla for Mac", () => {
     await app.waitFor("id:mac-access-chrome >> text:Extension on", { timeout: 10_000 });
   }, 30_000);
 
+  test("Settings › Privacy & access: Watch's switch reads the computer's and sets it (m-access)", async () => {
+    let posted = "";
+    const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const app = await open(APP, {
+      platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ settings: "access" }),
+      network: {
+        "GET http://127.0.0.1:1/watch": json({ enabled: false }),
+        "POST http://127.0.0.1:1/watch": (request: { body?: string | null }) => { posted = request.body ?? ""; return json({ enabled: true }); },
+      },
+    });
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
+    await app.waitFor("id:mac-settings >> id:mac-access-watch", { timeout: 10_000 });
+    expect(app.shows("id:mac-settings >> text:Notice what changes in your projects")).toBe(true);
+    await app.press("id:mac-settings >> id:mac-access-watch");
+    await app.waitUntil(() => posted.includes('"enabled":true'), { timeout: 5_000 });
+  }, 30_000);
+
+  test("Settings › Privacy & access: a daemon without Watch's switch shows no Watch group, not a dead row", async () => {
+    const app = await open(APP, {
+      platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ settings: "access" }),
+      network: { "GET http://127.0.0.1:1/watch": { status: 404, headers: {}, body: "404 page not found" } },
+    });
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
+    await app.waitFor("id:mac-settings >> id:mac-access-devices", { timeout: 10_000 });
+    await app.wait(1_000);
+    expect(app.shows("id:mac-settings >> id:mac-access-watch")).toBe(false);
+  }, 30_000);
+
   test("Settings › General carries this app's update beside its version: Update to X, and the tap goes to the update", async () => {
     const update = { kind: "available", update: { version: "0.4.18", versionCode: 0, fileName: "", url: "", sha256: "", size: 0 } };
     const base = phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => pairing, "app.appUpdatePressed": () => undefined });
@@ -229,6 +257,8 @@ describe("Mewla for Mac", () => {
     await app.wait(4_000);
     expect(active().at(-1)).toBe("brain-host-2");
     expect(app.shows("id:session-mode")).toBe(true);
+    // The pane selects Brain's row while its terminal is in front (w-session selects the Session's row).
+    expect(app.shows("id:pane-brain >> id:selected-well")).toBe(true);
   }, 40_000);
 
   test("no agent on this Mac: Brain can't start, the thread offers the installs, and one runs this Mac's own command in a terminal Session", async () => {
@@ -268,6 +298,32 @@ describe("Mewla for Mac", () => {
     await app.waitFor("id:left-pane", { timeout: 15_000 });
     await app.waitFor("id:calendar-page", { timeout: 10_000 });
     expect(app.count("id:page-back")).toBe(0);
+  }, 30_000);
+
+  test("Calendar is w-cal: \"N today\" and the date, one card per day, the now line, one quiet line a row, local times", async () => {
+    const done = item("Crawler check", -0.01, { kind: "scheduled_action", status: "completed", runs: [{ id: "r1", scheduled_for: new Date().toISOString(), started_at: new Date().toISOString(), status: "completed", result_preview: "2 stale feeds" }] });
+    const later = item("Write the digest", 48, { kind: "scheduled_action", recurrence: "daily" });
+    // Overdue from an earlier day: in Today's card with its date, not counted as today's.
+    const overdue = item("Renew the domain", -30);
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ open: "calendar" }, { calendar_items: [done, later, overdue] }) });
+    await app.waitFor("id:calendar-headline", { timeout: 15_000 });
+    await app.waitFor("id:calendar-item-Write the digest", { timeout: 10_000 });
+    const texts = app.texts();
+    expect(texts).toContain("1 today");
+    expect(texts).toContain("Done · 2 stale feeds");
+    expect(texts).toContain("Every day · Brain");
+    expect(app.shows("id:calendar-day-today >> id:calendar-now")).toBe(true);
+    expect(app.shows("id:calendar-day-today >> id:calendar-item-Crawler check")).toBe(true);
+    // The phone's lines are gone: no zone names, no status words, no kind tiles.
+    expect(texts.some((text) => text.includes("GMT") || text.includes("UTC") || text.startsWith("Scheduled"))).toBe(false);
+    expect(app.count("id:calendar-item-lead")).toBe(0);
+    expect(app.shows("id:calendar-day-today >> id:calendar-item-Renew the domain")).toBe(true);
+    expect(texts.some((text) => /^[A-Z][a-z]{2} \d+ · Reminder$/.test(text))).toBe(true);
+    // Month keeps the Mac's cards under the month.
+    await app.press("id:calendar-view-month");
+    await app.waitFor("id:calendar-month", { timeout: 10_000 });
+    await app.waitFor("id:agenda-month >> id:calendar-item-Write the digest", { timeout: 10_000 });
+    expect(app.count("id:calendar-item-lead")).toBe(0);
   }, 30_000);
 
   test("Brain's thread in the window sits in the mock's column (700 at most), its header the window's width", async () => {
