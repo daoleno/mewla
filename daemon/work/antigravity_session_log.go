@@ -19,7 +19,11 @@ const antigravitySessionSource = "antigravity_session"
 // Worker runs.
 func (r *ProviderConversationReader) loadAntigravitySessionForWorker(worker classifier.Worker) (CodexConversation, error) {
 	id := AntigravitySessionID(worker.Command)
-	path := AntigravitySessionLogPath(AntigravitySessionStateDir(worker.Command), id)
+	path := AntigravitySessionLogForCommand(worker.Command)
+	if path == "" {
+		r.resetSource()
+		return CodexConversation{Reason: "transcript_not_found", SessionID: id, Events: []CodexConversationEvent{}}, nil
+	}
 	if _, err := os.Stat(path); err != nil {
 		r.resetSource()
 		return CodexConversation{Reason: "transcript_not_found", SessionID: id, Events: []CodexConversationEvent{}}, nil
@@ -164,6 +168,7 @@ func projectAntigravitySessionLog(path string, records []AntigravityLogRecord) C
 		}
 	}
 	id := firstNonEmpty(conversation, strings.TrimSuffix(filepathBase(path), ".jsonl"))
+	conversation = id
 	projected := projectAntigravityUpdates(id, "", path, updates, times)
 	projected.Source = antigravitySessionSource
 	for index := range projected.Events {

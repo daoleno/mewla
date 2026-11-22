@@ -49,7 +49,7 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 		return nil
 	}
 	managed, activeSwitch := s.modelProfileSessionCapabilities(worker.ID)
-	if work.DSHSessionID(worker.Command) != "" {
+	if work.DSHSessionID(worker.Command) != "" || work.IsAntigravitySessionCommand(worker.Command) {
 		managed = true
 		activeSwitch = true
 	}

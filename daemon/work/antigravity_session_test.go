@@ -88,6 +88,9 @@ func fakeAgyACP() {
 			reply(map[string]any{"protocolVersion": 1, "agentInfo": map[string]string{"name": "fake", "version": "test"}})
 		case "session/new":
 			reply(setup)
+		case "session/load":
+			update(map[string]any{"sessionUpdate": "user_message_chunk", "content": map[string]string{"type": "text", "text": "from before"}})
+			reply(setup)
 		case "session/resume":
 			var params struct {
 				SessionID string `json:"sessionId"`
@@ -200,8 +203,14 @@ func (d *fakeDaemon) send(v any) {
 // also says hello as soon as it connects, before agy has started).
 func (d *fakeDaemon) awaitHello() AntigravityLinkMessage {
 	d.t.Helper()
+	return d.awaitHelloFrom("")
+}
+
+// awaitHelloFrom is awaitHello for one Session ("" is any).
+func (d *fakeDaemon) awaitHelloFrom(session string) AntigravityLinkMessage {
+	d.t.Helper()
 	for {
-		if hello := d.await("hello"); hello.Conversation != "" {
+		if hello := d.await("hello"); hello.Conversation != "" && (session == "" || hello.Session == session) {
 			return hello
 		}
 	}
@@ -311,7 +320,7 @@ func TestAntigravitySessionRunsAgyOverACP(t *testing.T) {
 	}
 
 	// The log is the conversation, in order, with agy's own words.
-	conversation, err := ParseAntigravitySessionLog(AntigravitySessionLogPath(stateDir, id))
+	conversation, err := ParseAntigravitySessionLog(AntigravitySessionLogPath(stateDir, fakeAgyConversation))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +341,7 @@ func TestAntigravitySessionRunsAgyOverACP(t *testing.T) {
 	if tool := conversation.Events[3]; tool.Status != "completed" || tool.Output != "chosen allow" {
 		t.Fatalf("tool call = %+v", tool)
 	}
-	turns := AntigravitySessionTurns(mustReadLog(t, AntigravitySessionLogPath(stateDir, id)))
+	turns := AntigravitySessionTurns(mustReadLog(t, AntigravitySessionLogPath(stateDir, fakeAgyConversation)))
 	if len(turns) != 3 || turns[0].Usage.TotalTokens != 12 || turns[2].Stop != "error" {
 		t.Fatalf("turns = %+v", turns)
 	}
@@ -350,6 +359,53 @@ func TestAntigravitySessionRunsAgyOverACP(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("the Session did not stop")
+	}
+
+	// Another run on the same conversation (a Brain host resumed by id) keeps
+	// the conversation's log and goes on numbering its turns.
+	second := "agy-0b6a3c1e-0000-4000-8000-00000000abce"
+	command := "/opt/mewla agy-session --agy-session " + second + " --state-dir " + stateDir + " --conversation " + fakeAgyConversation
+	if got := AntigravitySessionLogForCommand(command); got != AntigravitySessionLogPath(stateDir, fakeAgyConversation) {
+		t.Fatalf("log of a resumed Session = %q", got)
+	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	in2, typed2 := io.Pipe()
+	defer typed2.Close()
+	done2 := make(chan error, 1)
+	go func() {
+		done2 <- RunAntigravitySession(ctx2, AntigravitySessionOptions{ID: second, Cwd: cwd, StateDir: stateDir, Conversation: fakeAgyConversation, Binary: os.Args[0], Socket: socket, In: in2, Out: io.Discard})
+	}()
+	daemon.awaitHelloFrom(second)
+	daemon.send(map[string]string{"t": "send", "id": "r4", "text": "again"})
+	if input := daemon.await("input"); input.Turn != fakeAgyConversation+":4" {
+		t.Fatalf("turn of the resumed Session = %q", input.Turn)
+	}
+	daemon.await("turn_end")
+	cancel2()
+	<-done2
+	resumedLog, _ := os.ReadFile(record)
+	if strings.Count(string(resumedLog), "session/load") != 0 {
+		t.Fatal("a logged conversation was replayed instead of resumed")
+	}
+
+	// A conversation Mewla never logged is replayed into its log once.
+	fresh := filepath.Join(dir, "fresh")
+	third := "agy-0b6a3c1e-0000-4000-8000-00000000abcf"
+	ctx3, cancel3 := context.WithCancel(context.Background())
+	defer cancel3()
+	in3, typed3 := io.Pipe()
+	defer typed3.Close()
+	done3 := make(chan error, 1)
+	go func() {
+		done3 <- RunAntigravitySession(ctx3, AntigravitySessionOptions{ID: third, Cwd: cwd, StateDir: fresh, Conversation: fakeAgyConversation, Binary: os.Args[0], Socket: socket, In: in3, Out: io.Discard})
+	}()
+	daemon.awaitHelloFrom(third)
+	cancel3()
+	<-done3
+	imported, _ := os.ReadFile(record)
+	if !strings.Contains(string(imported), "session/load {") {
+		t.Fatalf("an unlogged conversation was not replayed:\n%s", imported)
 	}
 }
 

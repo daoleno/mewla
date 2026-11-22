@@ -837,6 +837,19 @@ func ResolveAntigravityWorkerTranscript(worker classifier.Worker) HostTranscript
 
 func resolveAntigravityIdentity(worker classifier.Worker, unique bool) HostTranscriptIdentity {
 	unbound := HostTranscriptIdentity{Provider: WorkerProviderAntigravity}
+	if IsAntigravitySessionCommand(worker.Command) {
+		// Mewla's Session program: the conversation it recorded, read from
+		// its own log.
+		conversation := AntigravitySessionConversation(worker.Command)
+		path := AntigravitySessionLogForCommand(worker.Command)
+		if conversation == "" || path == "" {
+			return unbound
+		}
+		if _, err := os.Stat(path); err != nil {
+			return unbound
+		}
+		return HostTranscriptIdentity{Provider: WorkerProviderAntigravity, SessionID: conversation, Path: path}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return unbound

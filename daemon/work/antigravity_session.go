@@ -56,8 +56,31 @@ const (
 	antigravityRestartWindow = 2 * time.Minute
 )
 
+var antigravityStateDir struct {
+	sync.Mutex
+	dir string
+}
+
+// SetAntigravityStateDir records the daemon's state directory, which a launch
+// names to the Session program and the readers default to.
+func SetAntigravityStateDir(dir string) {
+	antigravityStateDir.Lock()
+	antigravityStateDir.dir = strings.TrimSpace(dir)
+	antigravityStateDir.Unlock()
+}
+
+// AntigravityStateDir is the daemon's state directory, "" when unknown.
+func AntigravityStateDir() string {
+	antigravityStateDir.Lock()
+	defer antigravityStateDir.Unlock()
+	return antigravityStateDir.dir
+}
+
 // AntigravitySessionRoot is where the Sessions keep their logs and state.
 func AntigravitySessionRoot(stateDir string) string {
+	if strings.TrimSpace(stateDir) == "" {
+		stateDir = AntigravityStateDir()
+	}
 	if strings.TrimSpace(stateDir) == "" {
 		stateDir = os.Getenv("MEWLA_STATE_DIR")
 	}
@@ -68,9 +91,39 @@ func AntigravitySessionRoot(stateDir string) string {
 	return filepath.Join(stateDir, "provider-sessions", antigravitySessionDirName)
 }
 
-// AntigravitySessionLogPath is the conversation log of Session id.
-func AntigravitySessionLogPath(stateDir, id string) string {
-	return filepath.Join(AntigravitySessionRoot(stateDir), id+".jsonl")
+// AntigravitySessionLogPath is the log of one agy conversation. The log
+// belongs to the conversation, not to one run of the program, so a Brain host
+// or Worker started again on the same conversation keeps its history.
+func AntigravitySessionLogPath(stateDir, conversation string) string {
+	return filepath.Join(AntigravitySessionRoot(stateDir), conversation+".jsonl")
+}
+
+// AntigravitySessionConversation is the agy conversation the Session on a
+// command line is in: the one its program recorded, or the one it was started
+// on. "" until agy has opened one.
+func AntigravitySessionConversation(command string) string {
+	id := AntigravitySessionID(command)
+	if id == "" {
+		return ""
+	}
+	state := loadAntigravitySessionState(antigravitySessionStatePath(AntigravitySessionStateDir(command), id))
+	if IsAntigravityConversationID(state.Conversation) {
+		return state.Conversation
+	}
+	if conversation := agysession.Option(command, "--conversation"); IsAntigravityConversationID(conversation) {
+		return conversation
+	}
+	return ""
+}
+
+// AntigravitySessionLogForCommand is the log the Session on a command line
+// writes, "" until agy has opened a conversation.
+func AntigravitySessionLogForCommand(command string) string {
+	conversation := AntigravitySessionConversation(command)
+	if conversation == "" {
+		return ""
+	}
+	return AntigravitySessionLogPath(AntigravitySessionStateDir(command), conversation)
 }
 
 func antigravitySessionStatePath(stateDir, id string) string {
@@ -153,6 +206,9 @@ type AntigravityLogRecord struct {
 	Mode         string          `json:"mode,omitempty"`
 	Resumed      bool            `json:"resumed,omitempty"`
 	Version      string          `json:"version,omitempty"`
+	// Replayed marks history agy replayed when Mewla first opened a
+	// conversation it had not logged; its times are when it was imported.
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 // AntigravityAsk is a decision agy waits on: a tool permission (answered as
@@ -346,22 +402,42 @@ func sortACPServers(servers []ACPMCPServer) {
 	}
 }
 
-// antigravityLog appends records to a Session's log.
+// antigravityLog appends records to the log of the conversation the Session
+// is in; until agy has opened one there is nowhere to write.
 type antigravityLog struct {
 	mu   sync.Mutex
 	file *os.File
+	path string
 	now  func() time.Time
+	// replayed marks the records of a history imported from agy.
+	replayed bool
 }
 
-func openAntigravityLog(path string, now func() time.Time) (*antigravityLog, error) {
+// open makes path the log; a log already open on it is kept.
+func (l *antigravityLog) open(path string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.path == path && l.file != nil {
+		return nil
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, err
+		return err
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &antigravityLog{file: file, now: now}, nil
+	if l.file != nil {
+		_ = l.file.Close()
+	}
+	l.file, l.path = file, path
+	return nil
+}
+
+func (l *antigravityLog) setReplayed(replayed bool) {
+	l.mu.Lock()
+	l.replayed = replayed
+	l.mu.Unlock()
 }
 
 func (l *antigravityLog) write(record AntigravityLogRecord) {
@@ -371,18 +447,28 @@ func (l *antigravityLog) write(record AntigravityLogRecord) {
 	if record.At == "" {
 		record.At = l.now().UTC().Format(time.RFC3339Nano)
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file == nil {
+		return
+	}
+	record.Replayed = record.Replayed || l.replayed
 	line, err := json.Marshal(record)
 	if err != nil {
 		return
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	_, _ = l.file.Write(append(line, '\n'))
 }
 
 func (l *antigravityLog) close() {
-	if l != nil {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
 		_ = l.file.Close()
+		l.file = nil
 	}
 }
 
@@ -491,6 +577,12 @@ func (m *antigravityModels) applyConfig(options []acpConfigOption) {
 			m.ModelBase, m.Bases = option.CurrentValue, choices
 		}
 	}
+	// The full id is the family at its thinking level, when agy lists one.
+	for _, model := range m.Models {
+		if m.ModelBase != "" && (model.ID == m.ModelBase+"-"+m.Effort || model.ID == m.ModelBase) {
+			m.Current = model.ID
+		}
+	}
 }
 
 // antigravitySession is one running Session program.
@@ -563,10 +655,7 @@ func RunAntigravitySession(ctx context.Context, opts AntigravitySessionOptions) 
 		return fmt.Errorf("this Antigravity Session is already open elsewhere: %w", err)
 	}
 	defer unlock()
-	logFile, err := openAntigravityLog(AntigravitySessionLogPath(opts.StateDir, opts.ID), time.Now)
-	if err != nil {
-		return err
-	}
+	logFile := &antigravityLog{now: time.Now}
 	defer logFile.close()
 	s := &antigravitySession{
 		opts:      opts,
@@ -756,9 +845,26 @@ func (s *antigravitySession) start(ctx context.Context) (*acpClient, error) {
 	}
 	var setup sessionSetup
 	resumed := false
+	s.mu.Lock()
 	conversation := s.state.Conversation
+	s.mu.Unlock()
 	if conversation != "" {
-		err := agent.Call(callCtx, "session/resume", map[string]any{"sessionId": conversation, "cwd": s.opts.Cwd, "mcpServers": servers}, &setup)
+		path := AntigravitySessionLogPath(s.opts.StateDir, conversation)
+		_, statErr := os.Stat(path)
+		logged := statErr == nil
+		if err := s.log.open(path); err != nil {
+			agent.Close(callCtx)
+			return nil, err
+		}
+		method := "session/resume"
+		if !logged {
+			// A conversation Mewla has not logged (begun in agy's own UI, or
+			// before this Session): agy replays it once into the log.
+			method = "session/load"
+			s.log.setReplayed(true)
+		}
+		err := agent.Call(callCtx, method, map[string]any{"sessionId": conversation, "cwd": s.opts.Cwd, "mcpServers": servers}, &setup)
+		s.log.setReplayed(false)
 		if err != nil {
 			s.view.note("Could not reopen the earlier conversation (" + err.Error() + "); starting a new one.")
 			s.log.write(AntigravityLogRecord{T: "note", Text: "Could not reopen conversation " + conversation + ": " + err.Error()})
@@ -776,10 +882,19 @@ func (s *antigravitySession) start(ctx context.Context) (*acpClient, error) {
 	if strings.TrimSpace(setup.SessionID) == "" {
 		setup.SessionID = conversation
 	}
+	if err := s.log.open(AntigravitySessionLogPath(s.opts.StateDir, setup.SessionID)); err != nil {
+		agent.Close(callCtx)
+		return nil, err
+	}
+	turns := antigravityLoggedTurns(AntigravitySessionLogPath(s.opts.StateDir, setup.SessionID))
 	s.mu.Lock()
 	s.agent = agent
 	s.version = initialized.AgentInfo.Version
 	s.models.apply(setup)
+	if s.state.Conversation != setup.SessionID || s.state.Turns < turns {
+		// Turn numbers go on from the conversation's own log.
+		s.state.Turns = turns
+	}
 	s.state.Conversation = setup.SessionID
 	state := s.state
 	s.mu.Unlock()
@@ -825,7 +940,26 @@ func (s *antigravitySession) applyChoices(ctx context.Context, state antigravity
 	}
 	var errs []error
 	if state.Model != "" {
-		if err := agent.Call(ctx, "session/set_model", map[string]any{"sessionId": conversation, "modelId": state.Model}, nil); err != nil {
+		s.mu.Lock()
+		family := false
+		for _, base := range s.models.Bases {
+			family = family || base.ID == state.Model
+		}
+		s.mu.Unlock()
+		if family {
+			// A model family the app picked (its thinking level is its own
+			// choice, below).
+			var result struct {
+				ConfigOptions []acpConfigOption `json:"configOptions"`
+			}
+			if err := agent.Call(ctx, "session/set_config_option", map[string]any{"sessionId": conversation, "configId": "model", "value": state.Model}, &result); err != nil {
+				errs = append(errs, fmt.Errorf("model %s: %w", state.Model, err))
+			} else {
+				s.mu.Lock()
+				s.models.applyConfig(result.ConfigOptions)
+				s.mu.Unlock()
+			}
+		} else if err := agent.Call(ctx, "session/set_model", map[string]any{"sessionId": conversation, "modelId": state.Model}, nil); err != nil {
 			errs = append(errs, fmt.Errorf("model %s: %w", state.Model, err))
 		} else {
 			s.mu.Lock()
@@ -1057,6 +1191,12 @@ func (s *antigravitySession) onNotify(method string, params json.RawMessage) {
 	}
 	s.log.write(AntigravityLogRecord{T: "update", Turn: turn, Update: envelope.Update})
 	s.view.update(update)
+	s.log.mu.Lock()
+	replaying := s.log.replayed
+	s.log.mu.Unlock()
+	if replaying {
+		return
+	}
 	switch update.Kind {
 	case "tool_call", "tool_call_update":
 		s.mu.Lock()
@@ -1236,13 +1376,18 @@ func (s *antigravitySession) pendingAsks() []AntigravityAsk {
 func (s *antigravitySession) helloFacts() map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The conversation is named once agy has it open, not while it starts.
+	conversation := ""
+	if s.agent != nil {
+		conversation = s.state.Conversation
+	}
 	return map[string]any{
 		"t":            "hello",
 		"session":      s.opts.ID,
-		"conversation": s.state.Conversation,
+		"conversation": conversation,
 		"running":      s.running,
 		"turn":         s.turn,
-		"log":          AntigravitySessionLogPath(s.opts.StateDir, s.opts.ID),
+		"log":          AntigravitySessionLogPath(s.opts.StateDir, s.state.Conversation),
 		"agent_pid":    pidOf(s.agent),
 	}
 }
@@ -1288,4 +1433,19 @@ func antigravityToolLabel(call antigravityACPUpdate) string {
 		return "Tool"
 	}
 	return strings.ToUpper(name[:1]) + name[1:]
+}
+
+// antigravityLoggedTurns counts the messages already in a conversation's log.
+func antigravityLoggedTurns(path string) int {
+	records, err := ReadAntigravitySessionLog(path)
+	if err != nil {
+		return 0
+	}
+	turns := 0
+	for _, record := range records {
+		if record.T == "user" {
+			turns++
+		}
+	}
+	return turns
 }
