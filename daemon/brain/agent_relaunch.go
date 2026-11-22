@@ -290,9 +290,9 @@ func (s *Service) RecordAgentRelaunch(record watcher.AgentRelaunch) error {
 // ReportAgentEnd tells Brain once that an ended agent is not started again.
 // A Worker still holding a Turn (relaunched but never ready) loses it as
 // turn_lost; an idle Worker's Work gets one turn_lost review of its own end.
-func (s *Service) ReportAgentEnd(end watcher.AgentEnd, plan watcher.AgentRelaunchPlan) error {
+func (s *Service) ReportAgentEnd(end watcher.AgentEnd, plan watcher.AgentRelaunchPlan) (bool, error) {
 	if s == nil || s.store == nil || strings.TrimSpace(plan.WorkID) == "" {
-		return nil
+		return true, nil
 	}
 	store := s.store
 	sessionID := strings.TrimSpace(end.SessionID)
@@ -307,20 +307,27 @@ func (s *Service) ReportAgentEnd(end watcher.AgentEnd, plan watcher.AgentRelaunc
 		PayloadRef: ref, SourceName: sessionID,
 		Summary: plan.Words, CreatedAt: s.nowUTC(),
 	}); err != nil {
-		return err
+		return false, err
 	}
 	if live && st.Attempt != nil && string(st.ID) == plan.WorkID {
 		identity := lifecycle.AttemptIdentity{SessionID: st.Attempt.SessionID, TurnToken: st.Attempt.TurnToken, Fence: st.Attempt.Generation}
 		if _, err := store.fsm.ReportTurnLost(st.ID, identity, "agent_ended"); err != nil {
-			return fsmObservationResult(err)
+			return false, fsmObservationResult(err)
 		}
-		return store.SyncWorkProjection(plan.WorkID)
+		return true, store.SyncWorkProjection(plan.WorkID)
 	}
-	if _, err := store.fsm.OpenReview(lifecycle.WorkID(plan.WorkID), "turn_lost", ref); err != nil {
-		if errors.Is(err, lifecycle.ErrTerminal) {
-			return nil
+	// Brain may still have an earlier review of this Work (its result, say):
+	// the loss is opened once that one has left it, so Brain reads both.
+	opened, err := store.fsm.OpenReview(lifecycle.WorkID(plan.WorkID), "turn_lost", ref)
+	if err != nil {
+		if errors.Is(err, lifecycle.ErrTerminal) || errors.Is(err, lifecycle.ErrUnknownWork) {
+			return true, nil
 		}
-		return err
+		return false, err
 	}
-	return store.SyncWorkProjection(plan.WorkID)
+	told := opened != nil && opened.Review != nil && opened.Review.Reason == "turn_lost" && opened.Review.Ref == ref
+	if !told && opened != nil && opened.Status.Terminal() {
+		told = true
+	}
+	return told, store.SyncWorkProjection(plan.WorkID)
 }

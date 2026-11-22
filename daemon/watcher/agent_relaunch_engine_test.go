@@ -22,6 +22,9 @@ type relaunchLedger struct {
 	facts    []TurnFact
 	records  []AgentRelaunch
 	reported []AgentEnd
+	// untold is how many reports Brain does not have yet (an earlier review
+	// of the Work is still with it).
+	untold int
 }
 
 func (l *relaunchLedger) Turn(string) (TurnSnapshot, bool, error) {
@@ -55,11 +58,15 @@ func (l *relaunchLedger) RecordAgentRelaunch(record AgentRelaunch) error {
 	return nil
 }
 
-func (l *relaunchLedger) ReportAgentEnd(end AgentEnd, _ AgentRelaunchPlan) error {
+func (l *relaunchLedger) ReportAgentEnd(end AgentEnd, _ AgentRelaunchPlan) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.reported = append(l.reported, end)
-	return nil
+	if l.untold > 0 {
+		l.untold--
+		return false, nil
+	}
+	return true, nil
 }
 
 func (l *relaunchLedger) snapshot() (facts []TurnFact, records []AgentRelaunch, reported []AgentEnd, plans []AgentEnd) {
@@ -278,5 +285,38 @@ func TestHostAgentRelaunchLosesToAClose(t *testing.T) {
 	}
 	if _, records, _, _ := ledger.snapshot(); len(records) != 0 {
 		t.Fatalf("records %+v", records)
+	}
+}
+
+// An idle Worker's agent that is not started again is told to Brain; while an
+// earlier review of its Work is still with Brain the report is asked again,
+// and once Brain has it, never again.
+func TestHostAgentNotRestartedIdleIsToldUntilBrainHasIt(t *testing.T) {
+	h := newHostHarness(t)
+	id, pid := startDelegatedAgent(t, h)
+	ledger := &relaunchLedger{untold: 1, plan: AgentRelaunchPlan{Action: AgentEndReport, WorkID: "work-1",
+		Words: "sleep was killed (SIGKILL); not started again: Mewla has no conversation of it to resume.",
+		Line:  "Not restarted: nothing to resume"}}
+	h.w.SetTurnLedger(ledger)
+	now := time.Now()
+	supervisor := h.w.agentRelaunch()
+	supervisor.now = func() time.Time { return now }
+	killAgent(t, h.w, id, pid)
+
+	h.w.poll()
+	if _, _, reported, _ := ledger.snapshot(); len(reported) != 1 || reported[0].TurnID != "" {
+		t.Fatalf("reported = %+v", reported)
+	}
+	h.w.poll()
+	if _, _, reported, _ := ledger.snapshot(); len(reported) != 1 {
+		t.Fatalf("asked again before %s: %d", agentEndTellEvery, len(reported))
+	}
+	now = now.Add(agentEndTellEvery)
+	h.w.poll()
+	now = now.Add(agentEndTellEvery)
+	h.w.poll()
+	_, _, reported, plans := ledger.snapshot()
+	if len(reported) != 2 || len(plans) != 1 {
+		t.Fatalf("after Brain had it: reported %d, planned %d", len(reported), len(plans))
 	}
 }

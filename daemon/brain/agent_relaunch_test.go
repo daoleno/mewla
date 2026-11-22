@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
@@ -318,8 +319,8 @@ func TestAgentEndNotRelaunchedReachesBrainOnce(t *testing.T) {
 		t.Fatalf("plan = %+v, %v", plan, err)
 	}
 	for range 2 {
-		if err := f.service.ReportAgentEnd(end, plan); err != nil {
-			t.Fatal(err)
+		if told, err := f.service.ReportAgentEnd(end, plan); err != nil || !told {
+			t.Fatalf("told = %v, %v", told, err)
 		}
 	}
 	action, found, err := f.store.ClaimNextReviewAction("host")
@@ -337,5 +338,41 @@ func TestAgentEndNotRelaunchedReachesBrainOnce(t *testing.T) {
 	}
 	if rows != 1 {
 		t.Fatalf("evidence rows = %d", rows)
+	}
+}
+
+// A Worker that reported its result and then ended for good: Brain still has
+// the result's review, so the loss waits for it and then reaches Brain once,
+// in its own words.
+func TestAgentEndNotRelaunchedWaitsForTheResultBrainHas(t *testing.T) {
+	f := newRelaunchFixture(t)
+	t.Cleanup(work.SetAgentLookPath(func(string) (string, error) { return "", errors.New("not found") }))
+	result, err := f.store.FSM().OpenReview(lifecycle.WorkID(f.item.ID), "turn_done", "turn-said-hello")
+	if err != nil || result.Review == nil {
+		t.Fatalf("result review = %+v, %v", result, err)
+	}
+	end := killedEnd(time.Now())
+	plan, err := f.service.PlanAgentRelaunch(end)
+	if err != nil || plan.Action != watcher.AgentEndReport {
+		t.Fatalf("plan = %+v, %v", plan, err)
+	}
+	if told, err := f.service.ReportAgentEnd(end, plan); err != nil || told {
+		t.Fatalf("told while the result is with Brain = %v, %v", told, err)
+	}
+	if _, err := f.store.FSM().ResolveReview(lifecycle.WorkID(f.item.ID), result.Review.EventID,
+		lifecycle.ResolveReviewInput{Disposition: lifecycle.DispositionContinue, Actor: "brain"}); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if told, err := f.service.ReportAgentEnd(end, plan); err != nil || !told {
+			t.Fatalf("told after the result = %v, %v", told, err)
+		}
+	}
+	action, found, err := f.store.ClaimNextReviewAction("host")
+	if err != nil || !found || action.Kind != "turn_lost" || action.Summary != plan.Words {
+		t.Fatalf("Brain receives %+v (%v, %v), want %q", action, found, err, plan.Words)
+	}
+	if again, found, _ := f.store.ClaimNextReviewAction("host"); found {
+		t.Fatalf("a second review reached Brain: %+v", again)
 	}
 }
