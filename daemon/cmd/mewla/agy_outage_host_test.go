@@ -66,12 +66,21 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := sessionhost.EnsureSocketDir(socket); err != nil {
+		t.Fatal(err)
+	}
 	hostCtx, stopHost := context.WithCancel(context.Background())
-	hostDone := make(chan error, 1)
+	hostDone := make(chan struct{})
+	var hostErr error
 	host := sessionhost.NewServer(sessionhost.ServerOptions{SocketPath: socket, HostVersion: "test", Logf: t.Logf})
-	go func() { hostDone <- host.Run(hostCtx) }()
+	go func() { hostErr = host.Run(hostCtx); close(hostDone) }()
 	t.Cleanup(func() { stopHost(); <-hostDone })
 	waitAgyOutage(t, 10*time.Second, "isolated session host", func() bool {
+		select {
+		case <-hostDone:
+			t.Fatalf("isolated session host %s exited: %v", socket, hostErr)
+		default:
+		}
 		client, err := sessionhost.Dial(context.Background(), socket, "test")
 		if err != nil {
 			return false
