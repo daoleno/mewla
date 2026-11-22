@@ -69,7 +69,12 @@ quit_app() {
 answer_gatekeeper() {
   bounded 20 osascript <<'OSA' 2>&1
 tell application "System Events"
-  repeat with p in (every process)
+  set ps to {}
+  try
+    set ps to ps & (every process whose name is "CoreServicesUIAgent")
+  end try
+  set ps to ps & (every process)
+  repeat with p in ps
     try
       if (count of windows of p) > 0 then
         set b to {}
@@ -91,6 +96,7 @@ return ""
 OSA
 }
 press_open() {
+  osa -e 'tell application "System Events" to tell process "CoreServicesUIAgent" to click button "Open" of window 1' >/dev/null 2>&1 && { echo CoreServicesUIAgent; return 0; }
   osa -e 'tell application "System Events" to repeat with p in (every process)
 try
 if (count of windows of p) > 0 then
@@ -147,7 +153,7 @@ say "the image is $( [[ -d /Volumes/Mewla ]] && echo "still mounted" || echo eje
 launch /Applications/Mewla.app
 asked=""
 for i in $(seq 1 60); do
-  app_up && break
+  # The question first: while it is up the app's process exists but has no window (its state is not always T).
   q=$(answer_gatekeeper)
   if [[ -n "$q" && "$q" == *"::"* ]]; then
     asked="$q"; sleep 1; shot 02-gatekeeper-asks
@@ -155,6 +161,8 @@ for i in $(seq 1 60); do
     say "pressed Open in: $(press_open)"
     break
   fi
+  up_with_window && break
+  [[ $((i % 10)) == 0 ]] && say "waiting for the first launch: app pid $(app_pid) state $(ps -o state= -p "$(app_pid)" 2>/dev/null | tr -d ' ')"
   sleep 1
 done
 [[ -n "$asked" ]] || say "no first-launch question was seen"
