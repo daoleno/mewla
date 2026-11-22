@@ -104,6 +104,24 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		command += " -c " + shellquote.Word("mcp_servers."+CodexComputerUseName+".enabled=false")
 	}
 	switch InferWorkerProvider(command) {
+	case WorkerProviderAntigravity:
+		// agy takes MCP servers per session over ACP; Mewla's Session program
+		// (which every plain agy launch becomes) hands them on. A launch it
+		// does not take over gets none: agy's terminal UI has no such flag.
+		if _, ok := parseAntigravityLaunch(command); !ok {
+			return command
+		}
+		entries := map[string]any{}
+		for _, s := range servers {
+			// envFrom names variables the Session program passes on from its
+			// own environment (the Worker's), as Codex's env_vars does.
+			entries[s.name] = map[string]any{"command": executable, "args": s.args, "envFrom": s.env}
+		}
+		if len(entries) == 0 {
+			return command
+		}
+		raw, _ := json.Marshal(map[string]any{"mcpServers": entries})
+		return command + " --mcp-config " + shellquote.Word(string(raw))
 	case WorkerProviderCodex:
 		for _, s := range servers {
 			config := "mcp_servers." + s.name + "={command=" + strconv.Quote(executable) + ",args=" + tomlStrings(s.args) + ",enabled=true"

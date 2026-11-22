@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"github.com/daoleno/mewla/daemon/agysession"
 	"regexp"
 	"strings"
 	"time"
@@ -174,6 +175,21 @@ func Classify(paneAlive bool, lines []string, command string) (WorkerState, stri
 			return StateDone, "Session ended (no output)"
 		}
 		return StateUnknown, "No output yet"
+	}
+
+	if agysession.IsCommand(command) {
+		// Mewla's own Antigravity Session program: its screen says exactly
+		// what it waits for, and agy's words in it are the conversation.
+		_, blocked, summary := agysession.Screen(lines)
+		switch {
+		case !paneAlive:
+			return StateDone, truncate(firstNonEmptyText(summary, "Session ended"), 100)
+		case blocked:
+			return StateBlocked, truncate(summary, 100)
+		case summary != "":
+			return StateUnknown, truncate(summary, 100)
+		}
+		return StateUnknown, "Session idle"
 	}
 
 	// Get the last few meaningful lines for pattern matching.
@@ -404,4 +420,13 @@ func summarize(lines []string) string {
 	}
 	last := strings.TrimSpace(lines[len(lines)-1])
 	return truncate(last, 100)
+}
+
+func firstNonEmptyText(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

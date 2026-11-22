@@ -766,6 +766,11 @@ func inferWorkerProviderOne(value string) string {
 	if value == "" {
 		return ""
 	}
+	// Mewla's own Antigravity Session program names agy's model ids as option
+	// values (a claude-* model is still an Antigravity Session).
+	if IsAntigravitySessionCommand(value) {
+		return WorkerProviderAntigravity
+	}
 	fields := strings.Fields(value)
 	candidates := fields
 	if len(candidates) == 0 {
