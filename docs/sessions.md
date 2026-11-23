@@ -297,7 +297,7 @@ Cancel. A file that fails stays as a chip with the reason, Retry and ×.
 | Item | Does |
 | --- | --- |
 | **Files** | The Session's [files](#files) |
-| **Model & Effort** | The model and effort for this Session only |
+| **Model & Effort** | The model and effort for this Session only, from the agent's own list ([A Session's models](executors.md#a-sessions-models)); while you write, the model also shows beside **Send** |
 | **Open Web** | A DSH Session's web page |
 | **New Terminal** | A Shell in the same folder and on the same computer |
 | **Rename** | The Session's name |

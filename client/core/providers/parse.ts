@@ -1,6 +1,5 @@
 import { invalidProviderReply } from "./errors";
 import {
-  isNativeModelClient,
   isSupportedProviderClient,
   normalizeProviderClient,
   normalizeProviderId,
@@ -282,10 +281,11 @@ export function parseThreadRuntimeSelection(
     credential_ready: record.credential_ready === true,
     hot_switchable: record.hot_switchable === true,
   };
+  const agentModels = Array.isArray(record.native_models);
   if (
     !selection.session_id ||
-    (!isSupportedProviderClient(selection.client) &&
-      !isNativeModelClient(selection.client)) ||
+    !selection.client ||
+    (!agentModels && !isSupportedProviderClient(selection.client)) ||
     !selection.connection_id ||
     !selection.connection_name ||
     !selection.model_id ||
@@ -295,7 +295,7 @@ export function parseThreadRuntimeSelection(
   ) {
     return null;
   }
-  if (isNativeModelClient(selection.client) && Array.isArray(record.native_models)) {
+  if (agentModels && Array.isArray(record.native_models)) {
     selection.native_models = record.native_models
       .map(parseProviderModel)
       .filter((model): model is ProviderModel => model !== null);

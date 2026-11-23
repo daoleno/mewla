@@ -213,6 +213,21 @@ describe("Provider DTO parse", () => {
     expect(selection?.reasoning_efforts).toBeUndefined();
   });
 
+  test("any agent's selection that carries its own models parses; without them only Provider clients do", () => {
+    const own = {
+      session_id: "mh-1",
+      client: "opencode",
+      connection_id: "opencode",
+      connection_name: "OpenCode",
+      model_id: "opencode-go/deepseek-v4.1-flash",
+      credential_ready: true,
+      hot_switchable: true,
+      native_models: [{ id: "opencode-go/deepseek-v4.1-flash", available: true, source: "opencode_native", reasoning_efforts: ["low", "high"] }],
+    };
+    expect(parseThreadRuntimeSelection(own)?.native_models?.[0]?.reasoning_efforts).toEqual(["low", "high"]);
+    expect(parseThreadRuntimeSelection({ ...own, native_models: undefined })).toBeNull();
+  });
+
   test("session selection parses the Reasoning Effort projection", () => {
     const selection = parseThreadRuntimeSelection({
       session_id: "mh-1",

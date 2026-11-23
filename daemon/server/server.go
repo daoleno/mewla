@@ -250,7 +250,8 @@ type Server struct {
 	agentLevelsFn      func(*classifier.Worker) map[string]string
 	agentActivityFn    func(workerID string) AgentActivity
 	agentApprovals     AgentApprovals
-	agySessions        AntigravitySessions
+	// sessionModels are the agents' own model menus by provider (session_models.go).
+	sessionModels map[string]SessionModels
 	// answered is the answered-request ledger (answered_requests.go);
 	// prompts tracks open screen prompts for it.
 	answered *answered.Ledger
@@ -409,6 +410,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 	if brainService != nil {
 		srv.brainWorkSubID, srv.brainWorkSub = brainService.SubscribeWork()
 	}
+	srv.sessionModels = map[string]SessionModels{work.WorkerProviderDSH: dshSessionModels{}}
 	srv.codexLiveDial = func(ctx context.Context, socketPath string) (codexctl.LiveControl, error) {
 		return codexctl.Open(ctx, socketPath, codexctl.DialOptions{})
 	}

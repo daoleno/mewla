@@ -8,7 +8,7 @@ import type {
   ProvidersSnapshot,
   ThreadRuntimeChoice,
 } from "../providers/types";
-import { isNativeModelClient, normalizeProviderClient, normalizeProviderId } from "../providers/types";
+import { isAgentModelRuntime, normalizeProviderClient, normalizeProviderId } from "../providers/types";
 
 export type ComposerModelControlPresentation = {
   label: string;
@@ -29,8 +29,9 @@ export type ProviderPickerModelRow = {
   currentEffect: string;
 };
 
-function modelEffectChoices(client: string, effects: string[]): string[] {
-  if (client !== "codex" && !isNativeModelClient(client)) return [];
+/** An agent's own models carry their efforts; of the Providers' models only Codex's take one. */
+function modelEffectChoices(agentModels: boolean, client: string, effects: string[]): string[] {
+  if (!agentModels && client !== "codex") return [];
   return ["", ...effects.filter((effect, index) =>
     effect.trim() !== "" && effects.indexOf(effect) === index
   )];
@@ -45,6 +46,7 @@ export function threadRuntimeRows(input: {
   if (!snapshot || !selection) return [];
   const client = normalizeProviderClient(selection.client);
   const currentConnectionId = normalizeProviderId(selection.connection_id);
+  const agentModels = isAgentModelRuntime(selection);
   const rows: ProviderPickerModelRow[] = [];
   for (const connection of snapshot.connections) {
     if (!connection.clients.map(normalizeProviderClient).includes(client)) continue;
@@ -52,7 +54,7 @@ export function threadRuntimeRows(input: {
     if (connectionId !== currentConnectionId) continue;
     for (const model of snapshot.models[connectionId] ?? []) {
       if (!model.available) continue;
-      const effects = modelEffectChoices(client, [...(model.reasoning_efforts ?? [])]);
+      const effects = modelEffectChoices(agentModels, client, [...(model.reasoning_efforts ?? [])]);
       rows.push({
         key: `${connectionId}:${model.id}`,
         connectionId,
@@ -91,7 +93,7 @@ export function threadRuntimeRows(input: {
       unsupported: false,
       unavailableCurrent: true,
       effectDefault: selection.reasoning_effort_default?.trim() ?? "",
-      effects: modelEffectChoices(client, [...(selection.reasoning_efforts ?? [])]),
+      effects: modelEffectChoices(agentModels, client, [...(selection.reasoning_efforts ?? [])]),
       currentEffect:
         selection.reasoning_effort?.trim() || "",
     });
@@ -116,6 +118,13 @@ export function runtimeChoiceForRow(
   };
 }
 
+/** The Session's model by its agent's own name for it ("Sonnet", "GPT-6-Luna"), else its id. */
+export function runtimeModelLabel(selection: ThreadRuntimeSelection): string {
+  const modelId = normalizeProviderId(selection.model_id);
+  const own = selection.native_models?.find((model) => normalizeProviderId(model.id) === modelId);
+  return own?.display_name?.trim() || modelId;
+}
+
 export function resolveComposerModelControl(input: {
   capabilities?: WorkerSessionCapabilities | null;
   connectionConnected: boolean;
@@ -126,7 +135,7 @@ export function resolveComposerModelControl(input: {
   if (!input.connectionConnected || input.refreshRequired) return null;
   const selection = input.selection;
   if (!selection || selection.hot_switchable !== true) return null;
-  const label = selection.model_id.trim();
+  const label = runtimeModelLabel(selection);
   if (!label) return null;
   return {
     label,
@@ -157,8 +166,11 @@ export function reasoningEffortLabel(value: string): string {
       return "XHigh";
     case "max":
       return "Max";
-    default:
-      return value.trim();
+    default: {
+      // An agent's own level ("ultra", "off"), capitalized as the others.
+      const level = value.trim();
+      return level.charAt(0).toUpperCase() + level.slice(1);
+    }
   }
 }
 

@@ -51,6 +51,8 @@ type piConn struct {
 	writeMu sync.Mutex
 	mu      sync.Mutex
 	acks    map[string]chan error
+	// answers wait for the extension's answer to a models request.
+	answers map[string]chan pi.Message
 }
 
 func newPiEvents(ctx context.Context, hub *agentevents.Hub, workers func() []*classifier.Worker) *piEvents {
@@ -151,6 +153,8 @@ func (p *piEvents) serve(conn net.Conn) {
 			c.ack(msg.ID, nil)
 		case "send_failed":
 			c.ack(msg.ID, errors.New(msg.Error))
+		case "models", "models_failed":
+			c.answer(msg)
 		default:
 			for _, e := range c.mapper.Map(msg, at) {
 				p.hub.Publish(e)
