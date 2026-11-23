@@ -216,7 +216,7 @@ mewla connections list --json
 mewla connections import-gh   # copy your current gh login into the daemon's vault
 
 mewla resources               # one resource sample as JSON
-mewla gc status [--all]       # what this Session holds and what happens to it when it ends; the trash
+mewla gc status [--all]       # what this Session holds and what happens to it when it ends; collected today; held Sessions; the trash
 mewla gc keep PATH --until DATE --why REASON   # keep a path in this Session's TMPDIR past it (30 days at most)
 mewla gc release PATH|<id>    # trash a path in this Session's TMPDIR now, or end one of its keeps
 mewla gc restore <id>         # put a trashed item back where it was

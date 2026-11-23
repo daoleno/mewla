@@ -210,6 +210,7 @@ All paths are under the state directory, `~/.mewla` by default.
 | `gc/keep/`, `gc/kept/` | What a Session kept past its end (`mewla gc keep`): the record (path, date, reason) and the kept files, until the date |
 | `gc/cache/` | `$MEWLA_CACHE_DIR`, caches Sessions share; least recently changed entries are deleted over 64 GiB |
 | `gc/t-root-before.json` | The names in `t/` when the collector began; those items are left alone |
+| `gc/ledger.db` | The collector's ledger: what it moved, restored, deleted or kept, with paths, sizes and resource units; which Session each resource unit was; why a Session is held; a daily size per kind |
 | `session-host/` | The session host's switch and log (see [The session host](#the-session-host)) |
 
 Extension and Model Provider credentials are stored in private files in the state
