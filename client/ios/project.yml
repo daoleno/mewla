@@ -126,7 +126,7 @@ targets:
         MewlaVersion: $(MEWLA_APP_VERSION)
         CADisableMinimumFrameDurationOnPhone: true
         ITSAppUsesNonExemptEncryption: false
-        NSCameraUsageDescription: Allow Mewla to access your camera to scan Mewla pairing QR codes.
+        NSCameraUsageDescription: Allow Mewla to use your camera to scan pairing QR codes and to take photos you attach to messages.
         NSPhotoLibraryAddUsageDescription: Allow Mewla to save pictures from your chats to Photos.
         NSLocalNetworkUsageDescription: Allow Mewla to connect to your self-hosted daemon on the local network.
         NSAppTransportSecurity: { NSAllowsLocalNetworking: true, NSAllowsArbitraryLoads: false }

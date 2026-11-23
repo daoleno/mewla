@@ -11,8 +11,9 @@ import { attachIncoming, type IncomingFiles } from "../../more/files/incoming";
 
 /**
  * A chat composer with its attachments, as home and a Session wire it (`onFiles` and a `FileDrop` around it →
- * `attachIncoming`, a failure as the page's note), for `nsh test`. `network` plays the computer for pasted files
- * (the app uploads those itself). What Send sends shows in `sent`.
+ * `attachIncoming`, a failure as the page's note) and "+" (`attach`, its sheet on a phone), for `nsh test`. `network`
+ * plays the computer for pasted files and picked photos (the app uploads those itself), the host handlers for the
+ * host's own (`files.pick`, `files.capture`, `files.upload`). What Send sends shows in `sent`.
  */
 installPlatform(nshPlatform());
 const server = testServer();
@@ -31,7 +32,8 @@ mount(() => {
       <Text testID="sent">{sent()}</Text>
       <Composer text={text} placeholder="Tell Brain" canSend={() => true} attached={() => uploads.ready().length > 0} running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
         onSend={(value) => sent.set(`${value} ${uploads.ready().map((file) => file.path).join(",")}`)}
-        onFiles={attach}>
+        onFiles={attach}
+        attach={{ uploads, enabled: () => connection() === "connected", onError: (message) => notice.set(message) }}>
         {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
         {notice() ? <Text testID="notice">{notice()}</Text> : null}
       </Composer>

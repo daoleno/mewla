@@ -6,11 +6,6 @@ import { Transport, transportTiming } from "../transport";
 import { effectRowsForRuntime, threadRuntimeRows } from "./sessionModelHelpers";
 import {
   canSwitchModel,
-  chatSlashCommands,
-  codexSkills,
-  codexSlashCommands,
-  codexStatus,
-  filterCodexSkills,
   getThreadRuntime,
   listProviders,
   setThreadRuntime,
@@ -174,59 +169,6 @@ describe("the Model sheet's requests", () => {
     const original = transport.request.bind(transport);
     transport.request = ((type: string, body: Record<string, unknown>, options: { reply: string }) => original(type, body, { ...options, timeoutMs: 5 })) as typeof transport.request;
     await expect(setThreadRuntime(transport, "w1", { connectionId: "c1", modelId: "m" })).rejects.toMatchObject({ kind: "timeout", message: "Timed out while switching model." });
-    await expect(codexStatus(transport, "w1")).rejects.toMatchObject({ code: "timeout", message: "Timed out while loading Codex status." });
-    transport.close();
-  });
-});
-
-describe("Codex requests", () => {
-  test("status asks for the chat by target id and keeps the daemon's code on failure", async () => {
-    const { transport, last, answer } = await connected();
-    const done = codexStatus(transport, "w1");
-    expect(last()).toMatchObject({ type: "codex_status", target_id: "w1" });
-    answer("codex_status", { status: { thread: { id: "th", model: "gpt-6" }, limits: [] } });
-    expect((await done).thread?.model).toBe("gpt-6");
-    const failed = codexStatus(transport, "w2");
-    answer("error", { code: "codex_status_unavailable", message: "not started by mewla" });
-    await expect(failed).rejects.toMatchObject({ code: "codex_status_unavailable", message: "not started by mewla" });
-    transport.close();
-  });
-
-  test("skills for a folder drop the nameless and default scope and enabled", async () => {
-    const { transport, last, answer } = await connected();
-    const done = codexSkills(transport, "/repo");
-    expect(last()).toMatchObject({ type: "codex_skills", cwd: "/repo" });
-    answer("codex_skills", { skills: [{ name: "deploy", path: "/s/deploy", description: "Ship it" }, { name: "", path: "/x" }, { name: "lint", path: "/s/lint", scope: "repo", enabled: false }] });
-    const snapshot = await done;
-    expect(snapshot.cwd).toBe("/repo");
-    expect(snapshot.skills).toEqual([
-      { name: "deploy", path: "/s/deploy", description: "Ship it", scope: "user", enabled: true },
-      { name: "lint", path: "/s/lint", description: undefined, scope: "repo", enabled: false },
-    ]);
-    expect(filterCodexSkills(snapshot.skills, "SHIP").map((s) => s.name)).toEqual(["deploy"]);
-    expect(filterCodexSkills(snapshot.skills, "repo").map((s) => s.name)).toEqual(["lint"]);
-    expect(filterCodexSkills(snapshot.skills, "  ").length).toBe(2);
-    transport.close();
-  });
-
-  test("slash commands drop malformed ones; the chat list applies ChatUI's overrides", async () => {
-    const { transport, answer } = await connected();
-    const raw = codexSlashCommands(transport);
-    const commands = [
-      { value: "/status", name: "status", title: "Status", description: "Show status", category: "session", execution: "terminal-required", chat_supported: false },
-      { value: "/compact", name: "compact", category: "session", execution: "native", chat_supported: true },
-      { value: "review", name: "review" },
-      { value: "/model", name: "model", category: "settings", execution: "unsupported", input: { kind: "picker", required: true } },
-    ];
-    answer("codex_slash_commands", { source: "codex", commands });
-    const snapshot = await raw;
-    expect(snapshot.commands.map((c) => c.name)).toEqual(["status", "compact", "model"]);
-    expect(snapshot.commands[2]).toMatchObject({ terminal_supported: false, input: { kind: "picker", required: true } });
-    const built = chatSlashCommands(transport);
-    answer("codex_slash_commands", { commands });
-    const list = await built;
-    expect(list.map((c) => c.name)).toEqual(["status", "model"]);
-    expect(list[0]).toMatchObject({ execution: "native", chat_supported: true });
     transport.close();
   });
 });

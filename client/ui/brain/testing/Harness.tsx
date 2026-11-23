@@ -8,8 +8,6 @@ import { connection, current, servers } from "../../session";
 import { Composer, createComposerText } from "../../chat/Composer";
 import { AttachmentTray } from "../../more/files/Pages";
 import { FakeDaemon, testServer } from "../../more/testing/fakeDaemon";
-import { CodexStatusSheet } from "../../session/CodexStatusSheet";
-import { ComposerPlusButton, SlashMenu } from "../../session/SlashMenu";
 import { BrainHostSheet } from "../BrainHostSheet";
 import { BrainMenu } from "../BrainMenu";
 import { BrainCantStartNotice, BrainChatFailed, BrainChatUnavailable } from "../BrainStates";
@@ -92,10 +90,10 @@ function Harness() {
   );
 }
 
-/** Brain's composer with what it hosts: the "+" menu (Attach File, Codex's commands), the files, the `@` list. */
+/** Brain's composer with what it hosts: "+" and its sheet, the files, the `@` list. */
 function ComposerHarness(props: { source: BrainSource }) {
   const text = createComposerText(() => null);
-  const composer = createBrainComposer({ text, source: props.source, onOpenTerminal: (id) => say(`terminal:${id}`), onNotice: (line) => say(`notice:${line}`) });
+  const composer = createBrainComposer({ text, source: props.source, onNotice: (line) => say(`notice:${line}`) });
   return (
     <View class="flex-1 justify-end">
       <Out />
@@ -103,12 +101,9 @@ function ComposerHarness(props: { source: BrainSource }) {
       <Composer text={text} placeholder="Tell Brain" canSend={composer.canSend} onSend={composer.send}
         running={() => false} stopping={() => false} canStop={() => true} onStop={() => {}} pickerOpen={composer.pickerOpen}
         disabled={() => Boolean(params.blocked)} disabledReason={() => params.blocked ?? ""}
-        leading={<ComposerPlusButton pinned={composer.pinned} connected={() => true} onPress={() => composer.pinned.set(!untracked(composer.pinned))} />}>
-        <SlashMenu text={text.text} commands={composer.commands} commandsUnavailable={composer.commandsUnavailable} agentKind={composer.kind} connected={() => true}
-          pinned={composer.pinned} onPick={composer.pick} onAttach={composer.attach} uploading={composer.uploading} />
-        {composer.uploads.items().length > 0 ? <AttachmentTray uploads={composer.uploads} /> : null}
+        attach={composer.attach}>
+        <If when={composer.uploads.items().length > 0}><AttachmentTray uploads={composer.uploads} /></If>
       </Composer>
-      <CodexStatusSheet open={composer.statusOpen} onClose={() => composer.statusOpen.set(false)} transport={fake} workerId={snapshot()?.host_worker?.id ?? ""} onOpenTerminal={() => say("terminal")} />
     </View>
   );
 }

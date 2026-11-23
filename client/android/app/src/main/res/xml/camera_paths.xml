@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Where the camera app may write a photo for the composer (files/Camera.kt): the cache's camera folder only. -->
+<paths>
+  <cache-path name="camera" path="camera/" />
+</paths>

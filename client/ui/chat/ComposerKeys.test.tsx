@@ -48,18 +48,15 @@ describe("the composer's keys on a desktop", () => {
     expect(app.value("id:composer")).toBe("");
   }, 20_000);
 
-  test("Return while a typed / list is open waits for a pick", async () => {
+  test("in a Codex chat a typed / is text: Return sends it as typed", async () => {
     const codex = { ...session, provider: "codex", command: "codex", capabilities: { structured_events: true } };
-    const commands = [{ value: "/status", name: "status", description: "Show status", category: "session", chat_supported: true }];
     const base = desk();
-    const app = await open(APP, { ...base, host: { ...base.host, params: { daemon: { ...daemon, worker_sessions: [codex], replies: { codex_slash_commands: { type: "codex_slash_commands", commands } } } } } });
+    const app = await open(APP, { ...base, host: { ...base.host, params: { daemon: { ...daemon, worker_sessions: [codex] } } } });
     await app.waitFor("text:Delete the build folder", { timeout: 10_000 });
     await app.type("id:composer", "/sta");
-    await app.waitFor("id:slash-status");
     await app.submit("id:composer");
-    await app.wait(50);
-    expect(sent(app)).toHaveLength(0);
-    expect(app.value("id:composer")).toBe("/sta");
+    await app.waitUntil(() => sent(app).length === 1);
+    expect(sent(app)[0]).toMatchObject({ worker_id: "w1", text: "/sta" });
   }, 20_000);
 
   test("↑ in the empty composer edits the last message", async () => {
