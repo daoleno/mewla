@@ -43,17 +43,23 @@ func reclaimSet(t *testing.T, store *Store) map[string]ReclaimableTurn {
 
 // mh-f7e9 (11-23): a Worker of a Work that is still running, whose Attempt
 // moved to a newer Worker, sat idle for a day: nothing reclaimed a Session of
-// an open Work. A Session that no longer holds its Work's newest turn has
-// nothing of its own to do.
-func TestASupersededWorkerOfAnOpenWorkIsReclaimed(t *testing.T) {
+// an open Work. Brain does go back to an earlier Worker of the same Work (an
+// author and a reviewer taking turns: DpMcpFeedback, DpGlobalResearch 11-21),
+// so the earlier one is kept for a day after its last turn, then reclaimed.
+func TestASupersededWorkerIsKeptForADayThenReclaimed(t *testing.T) {
 	store, service, fw, item := parkedWorkerFixture(t, WorkUpdate{WaitFor: reclaimText("the next stage")})
 	fw.sessions["newer"] = &classifier.Worker{ID: "newer", Delegated: true, State: classifier.StateRunning}
 	if _, err := fw.SubmitDelegatedWorkInput("newer", "next stage", item.ID, "turn:newer", "", "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
+	if set := reclaimSet(t, store); len(set) != 0 {
+		t.Fatalf("an author and a reviewer taking turns lost one: %+v", set)
+	}
+	later := time.Now().UTC().Add(WaitDefaultEnd + time.Minute)
+	store.now = func() time.Time { return later }
 	set := reclaimSet(t, store)
 	if entry, ok := set["worker"]; !ok || !entry.Open || entry.Why != reclaimSuperseded {
-		t.Fatalf("superseded Worker not reclaimable: %+v", set)
+		t.Fatalf("a Worker superseded a day ago is not reclaimable: %+v", set)
 	}
 	if _, ok := set["newer"]; ok {
 		t.Fatal("the Worker on the Work's Attempt was put in the cleanup set")
