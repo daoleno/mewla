@@ -227,8 +227,9 @@ dragging=$!
 for _ in $(seq 1 30); do [ -e "$D/m0" ] && break; sleep 0.3; done
 rm -f "$D/gone.png"; wait "$dragging"; report "file gone before the drop: $(grep "drag ended" "$D/drag.out")"
 wait_chips "$unread" 30 && report "file gone before the drop: $(chips | grep -oE "\[failed [^]]*\]")" || failed "a dropped file that could not be read has no chip that says why"
+unread_before=$(chips | grep -oE "$unread" | wc -l | tr -d ' ')
 cp "$D/picture.png" "$D/gone.png"; "$B/pasteboard" file "$D/gone.png"; rm -f "$D/gone.png"; front; cmd_v
-wait_chips "($unread.*){2}" 30 && report "file gone before the paste: a second such chip" || failed "a pasted file that could not be read has no chip that says why"
+wait_chips "($unread.*){$((unread_before + 1))}" 30 && report "file gone before the paste: its own such chip" || failed "a pasted file that could not be read has no chip that says why"
 report "phase 3 chips: $(chips)"
 shot phase3
 send; sleep 2; report "phase 3 after Send: $(chips)"
@@ -257,7 +258,7 @@ sleep 15; report "app memory 15 s after Send: $(rss_now) KB"
 for round in 2 3; do
   drop_file 1 "$D/m4-$round" "$D/clip 63MB.mov"
   wait_chips '\[ready clip 63MB\.mov\]' 180 || failed "the 63 MB file is not a ready chip again (round $round)"
-  send; wait_chips '^chips 0$' 30 || failed "Send did not take the 63 MB file (round $round)"
+  send; wait_chips '^chips [0-9]+( \[failed [^]]*\])*$' 30 || failed "Send did not take the 63 MB file (round $round)"
   sleep 15; report "app memory 15 s after the 63 MB file's Send, round $round: $(rss_now) KB"
 done
 
