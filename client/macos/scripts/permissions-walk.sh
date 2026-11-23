@@ -186,6 +186,12 @@ for permission in accessibility screen_recording; do
   quit_gui; quit_settings; drop_row "$service"; foreign_row "$service"
   [[ $permission == accessibility ]] && path_row "$service"
   tcc_reload
+  if [[ $permission == accessibility ]]; then
+    # A running daemon keeps Accessibility as its process last heard it: System Settings tells processes of a change,
+    # an edit of TCC.db does not. The daemon is started afresh, as after an update that finds such a row.
+    launchctl kickstart -k "gui/$(id -u)/com.daoleno.mewla.daemon"
+    for _ in $(seq 1 60); do "$cli" agent-use status --json >/dev/null 2>&1 && break; sleep 1; done
+  fi
   wait_grant "$permission" missing 20 || true; note_grants
   open "x-apple.systempreferences:com.apple.preference.security?Privacy_$([[ $permission == accessibility ]] && echo Accessibility || echo ScreenCapture)"
   sleep 5; shot "$n-$permission-0-stale-listed-on"
