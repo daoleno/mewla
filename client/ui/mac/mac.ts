@@ -18,6 +18,7 @@ import { appUpdateOwner } from "../update/update";
 import { appUpdateMenuItem } from "./appUpdateMenu";
 import { grantRequestAction } from "../../core/screen/grantRequest";
 import { getAgentUse } from "../../core/settings/computer";
+import { grantOf } from "../../core/settings/macGrants";
 import { allowGrant } from "./permissionGuide";
 import { isMacApp, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
 import { MENU_BAR_CLIPS, MENU_BAR_IMAGES } from "./menubarImages";
@@ -229,6 +230,8 @@ export function startMac(): void {
     if (script.imageInput) imageInputLog();
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
+    // The connection to the daemon, each time it changes: a daemon restart shows as waiting, then connected again.
+    effect(() => console.log(`dev script: connection ${connection()}`));
     effect(() => {
       if (!current() || connection() !== "connected") return;
       const chat = Boolean(brainChat());
@@ -309,7 +312,7 @@ function imageInputLog(): void {
 }
 
 /**
- * The permission flow's proof (macos-permissions.yml): Privacy & access's Allow… for one grant (the panel beside System
+ * The permission flow's proof (macos-permissions.yml): Privacy & access's Allow for one grant (the panel beside System
  * Settings, the daemon following the grant), then every state the daemon reads for the grants, as it changes.
  */
 async function allowProof(permission: "screen_recording" | "accessibility"): Promise<void> {
@@ -321,9 +324,10 @@ async function allowProof(permission: "screen_recording" | "accessibility"): Pro
     const line = (status.computer?.permissions ?? []).map((grant) => `${grant.id}=${grant.state}`).join(" ");
     if (line !== last) console.log(`dev script: grants ${(last = line)}`);
   };
+  const first = await getAgentUse(server).catch(() => null);
   await read().catch(() => {});
   try {
-    await allowGrant(server, permission);
+    await allowGrant(server, permission, grantOf(first?.computer?.permissions, permission)?.state);
     console.log(`dev script: allow ${permission}`);
   } catch (error) {
     console.log(`dev script: allow failed ${error instanceof Error ? error.message : String(error)}`);

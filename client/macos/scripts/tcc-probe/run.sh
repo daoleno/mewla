@@ -11,6 +11,7 @@
 # the bundle denied. Then the request APIs from L and A with no row, and with a denied row.
 #   client/macos/scripts/tcc-probe/run.sh <out dir>
 set -euo pipefail
+[[ "${GITHUB_ACTIONS:-}" == true ]] || { echo "this script edits the system TCC.db: a CI Mac only" >&2; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
 out="${1:?out dir}"
 mkdir -p "$out"

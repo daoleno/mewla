@@ -2,18 +2,27 @@ name: Mewla for Mac permissions
 
 # Which process macOS charges for Screen Recording and Accessibility, and Mewla's permission flow walked through
 # its states, on a CI Mac where the system TCC.db stands in for System Settings (client/macos/scripts/tcc-probe).
-# A push to a mac-perm/ branch, or a dispatch.
+# A push to a mac-perm/ branch, or a dispatch. A dispatch with `signed_run` (a proof run of macos-release.yml, which
+# builds with Developer ID and notarizes without a tag) checks that build's grants and the update from 0.4.25 instead.
 
 on:
   workflow_dispatch:
+    inputs:
+      signed_run:
+        description: "A macos-release.yml proof run id: its Developer ID build A is checked (grants, the update from 0.4.25)"
+        required: false
+        type: string
+        default: ""
   push:
     branches: ["mac-perm/**"]
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   probe:
+    if: ${{ !inputs.signed_run }}
     name: Which identity TCC charges
     runs-on: macos-26
     timeout-minutes: 20
@@ -28,6 +37,7 @@ jobs:
           path: ${{ runner.temp }}/tcc-probe
 
   build:
+    if: ${{ !inputs.signed_run }}
     name: Build Mewla (the release's layout, signed ad hoc)
     runs-on: macos-26
     timeout-minutes: 75
@@ -76,6 +86,7 @@ jobs:
   walk:
     name: The permission flow, state by state
     needs: build
+    if: ${{ !inputs.signed_run }}
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -84,6 +95,8 @@ jobs:
         with:
           name: mewla-perm-app-${{ github.sha }}
           path: ${{ runner.temp }}/new
+      - name: A stand-in agent CLI (a runner has none), for the Worker the walk keeps through a restart
+        run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
       - name: Walk the flow
         run: |
           ditto -x -k "$RUNNER_TEMP/new/Mewla.zip" "$RUNNER_TEMP/new"
@@ -94,6 +107,29 @@ jobs:
           name: permissions-walk-${{ github.sha }}
           path: ${{ runner.temp }}/walk
 
+  # The drag itself, once: synthetic pointer events from the panel's icon into System Settings' list.
+  drag:
+    name: The drag into System Settings, attempted with synthetic events
+    needs: build
+    if: ${{ !inputs.signed_run }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-perm-app-${{ github.sha }}
+          path: ${{ runner.temp }}/new
+      - name: Drag
+        run: |
+          ditto -x -k "$RUNNER_TEMP/new/Mewla.zip" "$RUNNER_TEMP/new"
+          client/macos/scripts/drag-attempt.sh "$RUNNER_TEMP/new/Mewla.app" "$RUNNER_TEMP/drag"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drag-attempt-${{ github.sha }}
+          path: ${{ runner.temp }}/drag
+
   # The owner's own path (11-23): `mewla boot install`, then Mewla for Mac 0.4.25 (the public disk image) taking that
   # daemon over as its installed-daemon job, whose program was the bare helper (Accessibility charged to it, not to
   # Mewla.app); then this build over it, as the app's update puts it. Its job must run the app's executable, with
@@ -101,6 +137,7 @@ jobs:
   upgrade:
     name: An older Mewla's daemon job moves onto the app's executable
     needs: build
+    if: ${{ !inputs.signed_run }}
     runs-on: macos-26
     timeout-minutes: 30
     env:
@@ -111,6 +148,8 @@ jobs:
         with:
           name: mewla-perm-app-${{ github.sha }}
           path: ${{ runner.temp }}/new
+      - name: A stand-in agent CLI (a runner has none)
+        run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
       - name: boot install, then Mewla 0.4.25 from its release takes the daemon over
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,6 +175,8 @@ jobs:
           launchctl print "$job" | grep -q "program = /Applications/Mewla.app/Contents/Helpers/mewla"
           test -e "$HOME/.mewla/mac-app-takeover.complete"
           ps -axo pid,ppid,command | grep -E "Mewla.app/Contents/(MacOS|Helpers)" | grep -v grep
+          # A Worker with a running command, which must outlive the job's move.
+          client/macos/scripts/session-proof.sh start /Applications/Mewla.app/Contents/Helpers/mewla "$RUNNER_TEMP/session"
       - name: This build over it moves the job onto the app's executable
         run: |
           set -euo pipefail
@@ -160,8 +201,36 @@ jobs:
           [[ $(wc -w <<<"$serve") -eq 1 ]]
           test "$(ps -o ppid= -p "$serve" | tr -d ' ')" = "$jobpid"
           echo "the daemon $serve is the child of the job's process $jobpid"
+          client/macos/scripts/session-proof.sh check /Applications/Mewla.app/Contents/Helpers/mewla "$RUNNER_TEMP/session" "across the job's move"
       - name: What the app and launchd said
         if: always()
         run: |
           find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | while read -r f; do echo "== $f"; grep -E "takeover|WARN" "$f" | tail -40; done
           tail -40 "$HOME/.mewla/logs/launchd.log" 2>/dev/null || true
+
+  # The Developer ID build (macos-release.yml's proof A, notarized): Mewla.app's rows alone give both grants, and a
+  # Screen Recording grant given to the public 0.4.25's Mewla.app is kept by this build put in its place.
+  signed:
+    name: The Developer ID build keeps 0.4.25's grant and takes both
+    if: ${{ inputs.signed_run }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-macos-proof-a-${{ inputs.signed_run }}
+          path: ${{ runner.temp }}/signed
+          run-id: ${{ inputs.signed_run }}
+          github-token: ${{ github.token }}
+      - name: A stand-in agent CLI (a runner has none)
+        run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
+      - name: The grants across the update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: client/macos/scripts/signed-grants.sh "$RUNNER_TEMP/signed" "$RUNNER_TEMP/signed-out"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-grants-${{ github.run_id }}
+          path: ${{ runner.temp }}/signed-out

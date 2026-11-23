@@ -125,13 +125,25 @@ func (s *Service) FollowPermission(permission string) (Status, error) {
 	return s.Status(), nil
 }
 
-// RestartForPermission starts Mewla again so a given grant takes effect.
+// ErrNothingToRestart: no grant waits for Mewla to start again, so the app's
+// restart is refused (it is only ever offered for one that does).
+var ErrNothingToRestart = errors.New("no permission waits for Mewla to restart")
+
+// RestartForPermission starts Mewla again so a given grant takes effect; only
+// while one does wait for it (state "restart").
 func (s *Service) RestartForPermission() (Status, error) {
 	s.mu.Lock()
 	hooks := s.computer
 	s.mu.Unlock()
 	if hooks == nil || hooks.Restart == nil {
 		return Status{}, errors.New("Mewla can't restart itself here")
+	}
+	waiting := false
+	for _, grant := range hooks.Status().Permissions {
+		waiting = waiting || grant.State == "restart"
+	}
+	if !waiting {
+		return Status{}, ErrNothingToRestart
 	}
 	status := s.Status()
 	return status, hooks.Restart()

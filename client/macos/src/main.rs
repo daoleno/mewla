@@ -155,8 +155,8 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
         call.reply(Ok::<Value, String>(Value::Null));
     });
 
-    // `app.permissionGuide {permission}`: System Settings on the permission's list and the panel beside it with Mewla's
-    // icon to drag in (permissions.rs); `{given}`: the daemon reads that grant as given, so the panel asking for it
+    // `app.permissionGuide {permission, state?}`: System Settings on the permission's list and the panel beside it with
+    // Mewla's icon to drag in (permissions.rs), after clearing Mewla's own rows that do not count (`state`: the daemon's); `{given}`: the daemon reads that grant as given, so the panel asking for it
     // closes and Mewla comes to the front; `{}` closes the panel.
     host.handle("app.permissionGuide", |call| {
         if let Some(given) = call.data().get("given").and_then(Value::as_str).and_then(permissions::Permission::from_id) {
@@ -173,6 +173,10 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
         if let Some(None) = permission {
             call.reply(Err::<Value, String>(format!("no such permission: {}", id.unwrap_or_default())));
             return;
+        }
+        // The grant's state as the daemon read it: Mewla's own rows that do not count are cleared before asking.
+        if let Some(permission) = permission.flatten() {
+            permissions::clear_stale(permission, call.data().get("state").and_then(Value::as_str));
         }
         dispatch2::DispatchQueue::main().exec_async(move || {
             let Some(mtm) = nsh_platform_macos::objc2::MainThreadMarker::new() else { return };

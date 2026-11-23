@@ -190,7 +190,7 @@ function Agents() {
 
 /**
  * One of macOS's grants as the daemon reads it afresh (the same state the card in Brain's thread follows; no second
- * toggle): Allowed; Allow…, which opens its list in System Settings with the panel to drag Mewla in (whether Mewla's row
+ * toggle): Allowed; Allow, which opens its list in System Settings with the panel to drag Mewla in (whether Mewla's row
  * is off or gone); or, given but not yet in effect, Restart Mewla, which Mewla also does by itself once quiet.
  */
 function Grant(props: { title: string; row: GrantRow | null; onAllow: () => void; onRestart: () => void; testID: string }) {
@@ -198,7 +198,7 @@ function Grant(props: { title: string; row: GrantRow | null; onAllow: () => void
     <Row testID={props.testID} title={props.title}
       trailing={<>
         <If when={props.row === "allowed"}><StateLine testID={`${props.testID}-state`} tone="ok" label="Allowed" /></If>
-        <If when={props.row === "allow"}><RowButton testID={`${props.testID}-allow`} label="Allow…" accessibilityLabel={`Allow ${props.title}`} onPress={props.onAllow} /></If>
+        <If when={props.row === "allow"}><RowButton testID={`${props.testID}-allow`} label="Allow" accessibilityLabel={`Allow ${props.title}`} onPress={props.onAllow} /></If>
         <If when={props.row === "restart"}><RowButton testID={`${props.testID}-restart`} label="Restart Mewla" accessibilityLabel={`Restart Mewla to apply ${props.title}`} onPress={props.onRestart} /></If>
       </>} />
   );
@@ -254,7 +254,8 @@ function Access() {
   const allow = (id: string) => {
     const server = untracked(current);
     if (!server) return;
-    void allowGrant(server, id).then((next) => agentUse.set(next)).catch((error) => console.warn("follow:", error));
+    const state = grantOf(untracked(agentUse)?.computer?.permissions, id)?.state;
+    void allowGrant(server, id, state).then((next) => agentUse.set(next)).catch((error) => console.warn("follow:", error));
   };
   // Given in System Settings, in effect only after Mewla starts again: the daemon restarts, Sessions and Workers keep running.
   const restart = () => {

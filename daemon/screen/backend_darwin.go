@@ -333,7 +333,7 @@ func (b *macBackend) Capability(ctx context.Context) Capability {
 			State: permissionState(counts, live[id], listed || !known, b.stale[id])}
 		if p.State == PermissionRestart {
 			p.Granted, p.RestartRequired = false, true
-			p.Guidance = "Allowed. Restart Mewla on this computer to apply it."
+			p.Guidance = "Allowed. Mewla restarts to apply it."
 		}
 		return p
 	}

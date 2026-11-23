@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -85,6 +86,10 @@ func (s *Server) handleAgentUse(w http.ResponseWriter, r *http.Request) {
 			status, err = s.agentUse.FollowPermission(action.Follow)
 		default:
 			status, err = s.agentUse.RestartForPermission()
+		}
+		if errors.Is(err, agentuse.ErrNothingToRestart) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

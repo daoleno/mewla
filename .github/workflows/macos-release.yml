@@ -361,7 +361,7 @@ jobs:
           pressed=""
           for i in $(seq 1 90); do
             # The app is up (not the stopped process LaunchServices starts while Gatekeeper asks).
-            state=$(ps -o state= -p "$(pgrep -f '/Applications/Mewla.app/Contents/MacOS/Mewla' | head -1)" 2>/dev/null | tr -d ' ' || true)
+            state=$(ps -o state= -p "$(pgrep -f '/Applications/Mewla.app/Contents/MacOS/Mewla$' | head -1)" 2>/dev/null | tr -d ' ' || true)
             [ -n "$state" ] && [[ "$state" != T* ]] && break
             if [ -z "$pressed" ] && [ "$i" -ge 4 ]; then
               [ "$i" -eq 4 ] && { screencapture -x "$RUNNER_TEMP/captures/gatekeeper/screen-at-4s.png" || true; echo "processes with windows:"; osascript -e 'tell application "System Events" to get {name, (count of windows)} of every process' 2>&1 | head -5 || true; pgrep -l "CoreServicesUIAgent|UserNotification" || true; }
@@ -397,7 +397,7 @@ jobs:
           cat "$RUNNER_TEMP/open.out" || true
           [ -n "$pressed" ] && echo "Gatekeeper's first-launch question was answered with Open" || echo "no first-launch question was shown"
           for i in $(seq 1 240); do
-            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/Helpers/mewla" \
+            launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -q "program identifier = Contents/MacOS/Mewla" \
               && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
             sleep 1
           done
@@ -493,7 +493,7 @@ jobs:
           curl -fsS http://127.0.0.1:8765/latest.json >/dev/null
           # Quit as the menu does, then open the app with the update proof's script.
           osascript -e 'quit app "Mewla"' || true
-          for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null || break; sleep 1; done
+          for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla$" >/dev/null || break; sleep 1; done
           cli=/Applications/Mewla.app/Contents/Helpers/mewla
           echo "$("$cli" devices list | wc -l) device lines before the update"
           cp "$RUNNER_TEMP/devices-1.txt" "$RUNNER_TEMP/devices-before.txt"
@@ -546,13 +546,13 @@ jobs:
           cli=/Applications/Mewla.app/Contents/Helpers/mewla
           for i in $(seq 1 180); do
             v=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Mewla.app/Contents/Info.plist 2>/dev/null || true)
-            if [ "$v" = "$new" ] && pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" >/dev/null; then break; fi
+            if [ "$v" = "$new" ] && pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla$" >/dev/null; then break; fi
             sleep 1
           done
           installed=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" /Applications/Mewla.app/Contents/Info.plist 2>&1 || true)
           echo "installed version: '$installed', expected: '$new'"
           [ "$installed" = "$new" ] || { echo "the installed app is not $new"; pgrep -fl "Mewla" || true; exit 1; }
-          pgrep -fl "/Applications/Mewla.app/Contents/MacOS/Mewla" || { echo "the new app is not running"; exit 1; }
+          pgrep -fl "/Applications/Mewla.app/Contents/MacOS/Mewla$" || { echo "the new app is not running"; exit 1; }
           sleep 12
           client/macos/scripts/capture-windows.sh "Mewla" "$RUNNER_TEMP/captures/update-done" "update-done-" || true
           codesign --verify --deep --strict --verbose=2 /Applications/Mewla.app
@@ -592,7 +592,7 @@ jobs:
       - name: Why the app did not come up (a stuck launch)
         if: failure()
         run: |
-          pid=$(pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla" | head -1 || true)
+          pid=$(pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla$" | head -1 || true)
           echo "app pid: ${pid:-none}"
           if [ -n "$pid" ]; then
             ps -o pid,ppid,state,etime,command -p "$pid" || true

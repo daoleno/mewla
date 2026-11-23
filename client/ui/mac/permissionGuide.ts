@@ -6,12 +6,14 @@ import { isThisMac } from "./local";
 
 /**
  * On this Mac: System Settings on the permission's list, with the host's panel beside it holding Mewla's icon to drag in
- * (client/macos/src/permissions.rs). The same panel brings Mewla back after its row was removed. False where there is no
- * such panel (another computer, a phone, a permission that is not a Mac's).
+ * (client/macos/src/permissions.rs). The same panel brings Mewla back after its row was removed. `state` is the
+ * daemon's reading of the grant: where Mewla has no row that counts, the host first clears Mewla's own rows. False where
+ * there is no such panel (another computer, a phone, a permission that is not a Mac's).
  */
-export function showPermissionGuide(server: StoredServer | null | undefined, permission: string): boolean {
+export function showPermissionGuide(server: StoredServer | null | undefined, permission: string, state?: string): boolean {
   if (!server || !isThisMac(server) || (permission !== "screen_recording" && permission !== "accessibility")) return false;
-  void host.call("app.permissionGuide", { permission }).catch((error) => console.warn("permission panel:", error));
+  const data = state ? { permission, state } : { permission };
+  void host.call("app.permissionGuide", data).catch((error) => console.warn("permission panel:", error));
   watchUntilGiven(server, permission);
   return true;
 }
@@ -39,10 +41,10 @@ function watchUntilGiven(server: StoredServer, permission: string): void {
 }
 
 /**
- * Privacy & access's Allow…: the panel, and the daemon told to follow the grant, which it applies by itself once given
+ * Privacy & access's Allow: the panel, and the daemon told to follow the grant, which it applies by itself once given
  * (a restart in place where macOS needs one). Its answer is the computer's new status.
  */
-export async function allowGrant(server: StoredServer, permission: string): Promise<AgentUseStatus> {
-  showPermissionGuide(server, permission);
+export async function allowGrant(server: StoredServer, permission: string, state?: string): Promise<AgentUseStatus> {
+  showPermissionGuide(server, permission, state);
   return changeAgentUse(server, { follow: permission });
 }

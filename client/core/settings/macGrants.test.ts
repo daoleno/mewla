@@ -4,7 +4,7 @@ import { grantOf, grantRow, type ComputerGrant } from "./macGrants";
 describe("a Mac's grants", () => {
   test("each state the daemon reads has one row", () => {
     expect(grantRow("granted")).toBe("allowed");
-    // In the list switched off, or not in the list at all (never asked, removed with −): the same Allow… opens System
+    // In the list switched off, or not in the list at all (never asked, removed with −): the same Allow opens System
     // Settings with the panel, which says which of the two to do.
     expect(grantRow("off")).toBe("allow");
     expect(grantRow("missing")).toBe("allow");
