@@ -80,5 +80,20 @@ export function ownEntryPlan(
 export function thisMacWords(input: { kind: string; diagnosis?: string; problem: string; words: string }): string {
   if (input.problem) return input.problem;
   const unreachable = !input.diagnosis || input.diagnosis === "Server unreachable" || input.diagnosis === "Daemon refused connection";
-  return input.kind === "offline" && unreachable ? "Mewla is not running" : input.words;
+  return input.kind === "offline" && unreachable ? NOT_RUNNING : input.words;
+}
+
+/** What the Mac app says when nothing answers at this Mac's own loopback address. */
+export const NOT_RUNNING = "Mewla is not running";
+
+/**
+ * This Mac's row in the computers list while another computer is current, also before its entry exists (owner
+ * 11-23: with this Mac removed and manjaro current, nothing said that this Mac's Mewla did not answer). The join's
+ * own error first; before the join has given it an entry, it is starting; then the probe's word, where a loopback
+ * computer that is offline can only be one whose Mewla is not running.
+ */
+export function thisMacRowWords(input: { problem: string; joined: boolean; word: string }): string {
+  if (input.problem) return input.problem;
+  if (!input.joined) return "Starting…";
+  return input.word === "Offline" || input.word === "Can't connect" ? NOT_RUNNING : input.word;
 }

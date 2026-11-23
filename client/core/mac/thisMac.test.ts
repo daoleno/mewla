@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
-import { httpOrigin, ownEntryPlan, phonesAndBrowsers, seenWords, thisMacWords } from "./thisMac";
+import { httpOrigin, ownEntryPlan, phonesAndBrowsers, seenWords, thisMacRowWords, thisMacWords } from "./thisMac";
 
 const now = new Date(2026, 10, 20, 14, 5);
 const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).toISOString();
@@ -84,5 +84,20 @@ describe("thisMacWords", () => {
     expect(thisMacWords({ kind: "offline", diagnosis: "Daemon rejected handshake", problem: "", words: "Offline · Daemon rejected handshake" })).toBe("Offline · Daemon rejected handshake");
     expect(thisMacWords({ kind: "online", problem: "", words: "Online" })).toBe("Online");
     expect(thisMacWords({ kind: "connecting", problem: "", words: "Connecting…" })).toBe("Connecting…");
+  });
+});
+
+describe("thisMacRowWords", () => {
+  test("the join's error first, also before any entry", () => {
+    expect(thisMacRowWords({ problem: "Mewla is not running", joined: false, word: "" })).toBe("Mewla is not running");
+    expect(thisMacRowWords({ problem: "mewla pair: state is locked", joined: true, word: "Online" })).toBe("mewla pair: state is locked");
+  });
+  test("no entry yet and no error: starting", () => {
+    expect(thisMacRowWords({ problem: "", joined: false, word: "" })).toBe("Starting…");
+  });
+  test("joined: the probe's word, offline said as not running", () => {
+    expect(thisMacRowWords({ problem: "", joined: true, word: "Offline" })).toBe("Mewla is not running");
+    expect(thisMacRowWords({ problem: "", joined: true, word: "Online" })).toBe("Online");
+    expect(thisMacRowWords({ problem: "", joined: true, word: "" })).toBe("");
   });
 });
