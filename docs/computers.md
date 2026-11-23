@@ -87,10 +87,15 @@ question with `--reply-to <message-id>` arrives as input in that Session and
 wakes it just like a Brain follow-up; the Worker does not need a polling loop.
 Brain can read the message in the Work's events without relaying it.
 
-If the original Session is gone, the reply stays with its Work for Brain to
-handle. If that Work no longer exists, it goes to Brain's chat. A recycled
-Session target does not inherit the old Session's replies. Messages sent by
-Brain, Calendar's host, or a terminal without a Worker identity go to Brain.
+A reply goes to the asking Session only while that Session can still take
+input: an open Work owns it, or its Work was closed by Mewla and reopens for
+the follow-up. Otherwise (the Session is gone, or it is still open but no open
+Work owns it, like a Calendar run that already finished) the reply goes to its
+Work for Brain to handle while that Work is open, and to Brain's chat when the
+Work is closed or no longer exists. A recycled Session target does not inherit
+the old Session's replies. A Worker waiting on a permission or question takes
+the reply once that is answered. Messages sent by Brain, Calendar's host, or a
+terminal without a Worker identity go to Brain.
 
 Answer a remote question directly, referencing the question's own message ID:
 
@@ -114,6 +119,11 @@ outcome is recorded, delivery is **uncertain** and is not automatically
 replayed. Check the recipient before choosing to send a new message.
 Routing and delivery identities remain after the bounded card/outbox history
 is pruned, so a long job can still reply to its original asker.
+
+A received message this computer cannot take yet (the asking Worker waits on a
+prompt, say) is logged on this computer with its message ID and the cause, and
+`mewla computers status -id <message-id>` shows it here with that cause while
+the sending computer retries.
 
 ## What the app sees of the other computers
 
@@ -177,6 +187,7 @@ unreachable · 13:40"). The page keeps it across a restart of the app.
 mewla computers list                     # who you can reach, online or not
 mewla computers send mac "…"             # what Brain runs to hand over a task
 mewla computers status                   # delivery of sent messages
+mewla computers status -id <message-id>  # one sent message, or one received here
 mewla computers remove mac               # forget a computer (see below)
 ```
 

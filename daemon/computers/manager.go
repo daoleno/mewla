@@ -74,6 +74,9 @@ type Manager struct {
 	loops      map[string]context.CancelFunc
 	runCtx     context.Context
 	inflight   map[string]bool
+	// refused is the last refusal of each incoming message this computer
+	// could not take yet, by delivery identity; its sender retries it.
+	refused map[string]refusal
 	// running tracks every live channel and outbound loop so Run returns
 	// only after they stop touching the state file.
 	running sync.WaitGroup
@@ -129,6 +132,7 @@ func NewManager(opts Options) (*Manager, error) {
 		conns: map[string]*peerConn{}, hellos: map[string]Hello{},
 		lastSeen: map[string]time.Time{}, lastErr: map[string]string{},
 		loops: map[string]context.CancelFunc{}, inflight: map[string]bool{},
+		refused: map[string]refusal{},
 	}
 	for key, seen := range m.state.Seen {
 		m.lastSeen[key] = seen.At
@@ -606,8 +610,13 @@ func (m *Manager) deliver(key string, message Message) DeliveryResult {
 	defer m.mu.Unlock()
 	if result.Disposition == DispositionNotSubmitted {
 		delete(m.state.Deliveries, identity)
+		m.noteRefusalLocked(identity, from, message, result.Error)
 	} else {
-		record := deliveryRecord{Disposition: result.Disposition, Error: result.Error}
+		if previous, ok := m.refused[identity]; ok {
+			log.Printf("computers: message %s from %s taken (%s) after %d refused attempts", message.ID, from, result.Disposition, previous.Attempts)
+			delete(m.refused, identity)
+		}
+		record := deliveryRecord{Disposition: result.Disposition, Error: result.Error, Kind: message.Kind, ReplyTo: message.ReplyTo, At: time.Now().UTC()}
 		if result.Disposition == DispositionPending {
 			record.Pending = &delivery
 		}
@@ -618,6 +627,71 @@ func (m *Manager) deliver(key string, message Message) DeliveryResult {
 		m.state.Deliveries[identity] = deliveryRecord{Disposition: result.Disposition, Error: result.Error}
 	}
 	return result
+}
+
+// refusal is why an incoming message was not taken yet.
+type refusal struct {
+	Kind, ReplyTo, Error string
+	Attempts             int
+	First, Last          time.Time
+}
+
+// noteRefusalLocked keeps the cause of a refused incoming message for status
+// and logs it on the first refusal and whenever the cause changes, not on
+// every retry.
+func (m *Manager) noteRefusalLocked(identity, from string, message Message, cause string) {
+	now := time.Now().UTC()
+	if strings.TrimSpace(cause) == "" {
+		cause = "no cause given"
+	}
+	previous, seen := m.refused[identity]
+	if !seen || previous.Error != cause {
+		log.Printf("computers: message %s from %s was not taken: %s; %s sends it again", message.ID, from, cause, from)
+	}
+	if !seen {
+		previous.First = now
+	}
+	m.refused[identity] = refusal{Kind: message.Kind, ReplyTo: message.ReplyTo, Error: cause, Attempts: previous.Attempts + 1, First: previous.First, Last: now}
+}
+
+// inboundViewLocked finds a message another computer sent here: taken, or
+// refused so far with its cause.
+func (m *Manager) inboundViewLocked(id string) (OutboxView, bool) {
+	for identity, record := range m.state.Deliveries {
+		key, ok := inboundKeyOf(identity, id)
+		if !ok {
+			continue
+		}
+		state := StateDelivered
+		switch record.Disposition {
+		case DispositionUncertain:
+			state = StateUncertain
+		case DispositionPending:
+			state = StateQueued
+		}
+		return OutboxView{ID: id, Direction: DirectionIn, Computer: m.peerNameLocked(key), Kind: record.Kind, ReplyTo: record.ReplyTo,
+			State: state, Disposition: record.Disposition, Error: record.Error, UpdatedAt: record.At}, true
+	}
+	for identity, refused := range m.refused {
+		key, ok := inboundKeyOf(identity, id)
+		if !ok {
+			continue
+		}
+		return OutboxView{ID: id, Direction: DirectionIn, Computer: m.peerNameLocked(key), Kind: refused.Kind, ReplyTo: refused.ReplyTo,
+			State: StateQueued, Disposition: DispositionNotSubmitted, Error: refused.Error, Attempt: refused.Attempts,
+			CreatedAt: refused.First, UpdatedAt: refused.Last}, true
+	}
+	return OutboxView{}, false
+}
+
+// inboundKeyOf splits a delivery identity ("computer:<peer key>:<message id>").
+func inboundKeyOf(identity, id string) (string, bool) {
+	rest, ok := strings.CutPrefix(identity, "computer:")
+	if !ok || id == "" {
+		return "", false
+	}
+	key, ok := strings.CutSuffix(rest, ":"+id)
+	return key, ok && key != ""
 }
 
 // Envelope is the text the receiving Brain reads. The sender is a relay of
@@ -980,6 +1054,9 @@ func (m *Manager) status(req Request) (Result, error) {
 	}
 	if id != "" {
 		if len(views) == 0 {
+			if view, ok := m.inboundViewLocked(id); ok {
+				return Result{Message: &view}, nil
+			}
 			return Result{}, fmt.Errorf("no message %s", id)
 		}
 		return Result{Message: &views[0]}, nil

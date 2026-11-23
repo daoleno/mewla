@@ -23,6 +23,9 @@ const (
 	KindCancel   = "cancel"
 )
 
+// DirectionIn marks a status view of a message another computer sent here.
+const DirectionIn = "in"
+
 // Outbox states.
 const (
 	StateQueued    = "queued"
@@ -161,7 +164,10 @@ type PeerView struct {
 }
 
 type OutboxView struct {
-	ID          string    `json:"id"`
+	ID string `json:"id"`
+	// Direction is DirectionIn for a message another computer sent here;
+	// empty for one this computer sent.
+	Direction   string    `json:"direction,omitempty"`
 	Computer    string    `json:"computer"`
 	Kind        string    `json:"kind"`
 	ReplyTo     string    `json:"reply_to,omitempty"`

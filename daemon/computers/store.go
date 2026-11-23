@@ -52,6 +52,10 @@ type deliveryRecord struct {
 	Pending     *Delivery `json:"pending,omitempty"`
 	Disposition string    `json:"disposition"`
 	Error       string    `json:"error,omitempty"`
+	// What was taken and when, for status on this computer.
+	Kind    string    `json:"kind,omitempty"`
+	ReplyTo string    `json:"reply_to,omitempty"`
+	At      time.Time `json:"at,omitempty"`
 }
 
 type persisted struct {
