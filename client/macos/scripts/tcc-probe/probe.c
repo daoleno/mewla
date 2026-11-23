@@ -11,6 +11,33 @@
 #include <unistd.h>
 
 typedef int (*preflight_fn)(CFStringRef, CFDictionaryRef);
+typedef CFArrayRef (*info_fn)(CFBundleRef);
+
+// What System Settings lists for this bundle (TCC.framework's TCCAccessCopyInformationForBundle): each service's
+// entry with its switch, appended as text to $PROBE_OUT.info under the label.
+static void list_info(const char *label) {
+  void *tcc = dlopen("/System/Library/PrivateFrameworks/TCC.framework/TCC", RTLD_LAZY);
+  info_fn fn = tcc ? (info_fn)dlsym(tcc, "TCCAccessCopyInformationForBundle") : NULL;
+  const char *out = getenv("PROBE_OUT");
+  char path[1024];
+  snprintf(path, sizeof path, "%s.info", out ? out : "/tmp/probe");
+  FILE *f = fopen(path, "a");
+  if (!f) return;
+  fprintf(f, "=== %s (pid %d)\n", label, getpid());
+  CFBundleRef bundle = CFBundleGetMainBundle();
+  CFArrayRef info = (fn && bundle) ? fn(bundle) : NULL;
+  if (!info) {
+    fprintf(f, "%s\n", fn ? "(null)" : "(no symbol)");
+  } else {
+    CFStringRef d = CFCopyDescription(info);
+    char buf[16384];
+    if (CFStringGetCString(d, buf, sizeof buf, kCFStringEncodingUTF8)) fputs(buf, f);
+    fputc('\n', f);
+    CFRelease(d);
+    CFRelease(info);
+  }
+  fclose(f);
+}
 
 static int tcc_preflight(const char *service) {
   static preflight_fn fn;
@@ -39,6 +66,7 @@ int main(int argc, char **argv) {
     CFRelease(options);
     sleep(3);
   }
+  list_info(label);
   char line[1024];
   snprintf(line, sizeof line,
            "{\"label\":\"%s\",\"mode\":\"%s\",\"pid\":%d,\"ppid\":%d,\"screen\":%s,\"ax\":%s,"
