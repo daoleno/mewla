@@ -435,8 +435,15 @@ To keep something on purpose:
 | A process | A user `systemd` unit, registered: see [Keep a service after its Session ends](#keep-a-service-after-its-session-ends). |
 
 Do not make directories next to TMPDIR in `~/.mewla/t`. An unmarked item
-there goes to the trash once nothing uses it and nothing in it has changed for
-48 hours.
+there goes to the trash once nothing uses it and nothing in it has been
+changed or read for 48 hours. On a file system mounted `noatime`, reads leave
+no trace, so an item there holding any file stays.
+
+A helper that must outlast its Session, such as a script a Trigger runs or a
+tool Brain runs again, does not belong in `~/.mewla/t`. Brain keeps its own in
+its workspace under `worklog/<topic>/`, which nothing collects, and runs the
+Trigger there (`mewla trigger create -cwd`). A Worker's helper goes in the project's worktree, or
+`mewla gc keep` keeps it from its TMPDIR.
 
 On a daemon without `mewla gc keep`, write what must stay outside TMPDIR: in
 the project's worktree or the Brain worklog. Anything collected by mistake

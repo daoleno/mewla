@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/gc"
@@ -44,6 +45,9 @@ type goneLeases struct {
 	lastFinalize time.Time
 	absent       map[string]goneEvidence
 	releasing    bool
+	// unread is the last list of t/ items the sweep kept because their file
+	// system records no reads; it is logged when it changes.
+	unread string
 }
 
 // goneCandidates records one inventory's evidence and returns the units whose
@@ -219,12 +223,20 @@ func (m *portableDelegatedResourceManager) collect() {
 	if !ok {
 		return
 	}
-	swept, err := gc.SweepUnmarked(root, usage, now)
+	swept, unread, err := gc.SweepUnmarked(root, usage, now)
 	if err != nil {
 		log.Printf("watcher: t/ sweep: %v", err)
 	}
 	for _, item := range swept {
 		log.Printf("watcher: moved %s to the trash (%s): %s", item.Original, item.ID, item.Reason)
+	}
+	held := strings.Join(unread, ", ")
+	m.mu.Lock()
+	changed := held != m.gone.unread
+	m.gone.unread = held
+	m.mu.Unlock()
+	if changed && held != "" {
+		log.Printf("watcher: t/ is mounted noatime, so reads leave no trace: kept %d unmarked item(s) holding files: %s", len(unread), held)
 	}
 	evicted, err := gc.EvictCache(root, gc.CacheBudget, usage)
 	if err != nil {
