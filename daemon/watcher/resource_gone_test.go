@@ -5,6 +5,7 @@ package watcher
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -400,5 +401,41 @@ func TestTheManagerKnowsItsOwnSessionTokens(t *testing.T) {
 		if m.ownsSessionToken(token) {
 			t.Fatalf("token %q is taken for its own", token)
 		}
+	}
+}
+
+// What a Session kept (mewla gc keep) moves out of its scratch when the
+// Session ends; the rest of the scratch goes to the trash.
+func TestReleaseMovesWhatTheSessionKept(t *testing.T) {
+	m, clock := newGoneTestManager(t)
+	unit, tempDir := addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	kept := filepath.Join(tempDir, "artifact.bin")
+	if err := os.WriteFile(kept, []byte("a"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	k, err := gc.AddKeep(m.stateRoot(), kept, unit, clock.now().Add(72*time.Hour), "the release gate reads it", clock.now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := stopSessionSlice
+	stopSessionSlice = func(string) ([]string, error) { return nil, nil }
+	t.Cleanup(func() { stopSessionSlice = previous })
+	if err := m.Release("", unit); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(gc.KeptPath(m.stateRoot(), k)); err != nil || string(raw) != "a" {
+		t.Fatalf("kept file not moved out: %q, %v", raw, err)
+	}
+	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+		t.Fatalf("scratch not moved: %v", err)
+	}
+	m.collect()
+	if keeps, _ := gc.ListKeeps(m.stateRoot()); len(keeps) != 1 {
+		t.Fatalf("keep ended early: %+v", keeps)
+	}
+	clock.advance(73 * time.Hour)
+	m.collect()
+	if keeps, _ := gc.ListKeeps(m.stateRoot()); len(keeps) != 0 {
+		t.Fatalf("keep outlived its date: %+v", keeps)
 	}
 }

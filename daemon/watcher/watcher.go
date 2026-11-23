@@ -24,6 +24,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/sessionhost"
@@ -4462,6 +4463,11 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 				opts.Env["TMP"] = spec.TempDir
 				opts.Env["TEMP"] = spec.TempDir
 				opts.Env["MEWLA_BUILD_TMPDIR"] = spec.TempDir
+				// What must outlive the Session and can be rebuilt (package gc).
+				cache := gc.CacheDir(filepath.Dir(filepath.Dir(spec.TempDir)))
+				if err := os.MkdirAll(cache, 0o700); err == nil {
+					opts.Env["MEWLA_CACHE_DIR"] = cache
+				}
 			}
 		}
 	}

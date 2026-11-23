@@ -446,8 +446,9 @@ func TestContextReportsNoteBudgetsWithoutInliningPrivateNotes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(report.RecommendedNextSteps, "\n"), "Compact current.md") {
-		t.Fatalf("over-budget current.md not flagged: %v", report.RecommendedNextSteps)
+	// An over-budget note is a compaction Work now (note_budget.go), not a step.
+	if strings.Contains(strings.Join(report.RecommendedNextSteps, "\n"), "Compact current.md") {
+		t.Fatalf("over-budget current.md still a housekeeping step: %v", report.RecommendedNextSteps)
 	}
 }
 
