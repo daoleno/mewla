@@ -270,7 +270,8 @@ export function Composer(props: {
             const paths = platform.os === "web" ? [] : uris;
             const attaches = pasteAttaches({ text, html, files: files.length, uris: paths });
             if (disabled() || (!attaches.files && !attaches.uris)) return;
-            props.onFiles?.({ files: attaches.files ? files : [], uris: attaches.uris ? paths : [] });
+            // With Finder's files named, `files` are their contents (the Mac): `attachIncoming` sorts them from icons.
+            props.onFiles?.({ files: attaches.files || attaches.uris ? files : [], uris: attaches.uris ? paths : [] });
             // A file copied in Finder carries its name as text, which the field inserts itself: it goes back out.
             if (attaches.uris && text) {
               if (!(Date.now() - lastChange.at < 500 && takeOut(lastChange.before, lastChange.after, text))) nameToTakeOut = { text, until: Date.now() + 1000 };

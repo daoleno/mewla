@@ -30,6 +30,7 @@ import { bottomBarInset } from "../shell/below";
 import { createMenuAnchor, showMenu, type MenuItem } from "../kit/Menu";
 import { FileDrop } from "../chat/FileDrop";
 import { attachIncoming, type IncomingFiles } from "../more/files/incoming";
+import { markNewestUploads } from "../more/files/newestUploads";
 import { AppSheet } from "../shell/AppSheet";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
@@ -420,6 +421,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   // The dock (SPEC §11): the shared composer, its words and files kept on this page only.
   const text = createComposerText(() => null);
   const files = createAttachmentUploads();
+  markNewestUploads(files);
   // Leaving the page drops what was picked and stops an upload still going.
   cleanup(() => files.dispose());
   const attachFailure = signal("");
