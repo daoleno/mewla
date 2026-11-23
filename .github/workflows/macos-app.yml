@@ -605,6 +605,9 @@ jobs:
           # What the updater leaves beside the app while it works is gone.
           ls -la /Applications | grep -i -E "mewla|nsh" || true
           test "$(ls -A /Applications | grep -c -i 'nsh-updater')" -eq 0
+          # The updated app claims mewla:// links (the whole bundle came with the update, its Info.plist too).
+          test "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw /Applications/Mewla.app/Contents/Info.plist)" = mewla
+          echo "the updated Mewla claims mewla://"
       - name: What the app and its daemon said
         if: always()
         run: |

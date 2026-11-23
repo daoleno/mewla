@@ -20,6 +20,7 @@ serde_json = "1"
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 rustls-webpki = { version = "0.103.17", default-features = false, features = ["ring", "std", "alloc"] }
 ring = "0.17"
+libc = "0.2"
 
 # Pinned to the NSH the bundle is built with (client/scripts/fetch-nsh.sh, client/README.md): the bytecode and the
 # runtime must be the same version. The features are those of NSH's release runner (nsh-macos-app): the app uses

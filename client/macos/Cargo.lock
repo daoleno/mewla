@@ -2127,6 +2127,7 @@ version = "0.4.17"
 dependencies = [
  "core-foundation",
  "dispatch2",
+ "libc",
  "log",
  "nsh-base",
  "nsh-core",
