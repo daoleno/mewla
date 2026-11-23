@@ -211,14 +211,24 @@ for folder in Desktop Documents Downloads; do
   if [ "$folder" = Documents ]; then folder_case "$folder" drag "Don't Allow"; else folder_case "$folder" drag Allow; fi
   folder_case "$folder" paste Allow
 done
-# A file Mewla Dev may not read (no read permission): dropped, then copied as Finder copies it and pasted.
+# A file this user may not read (mode 000): macOS's pasteboard leaves its URL out for every other app (the item keeps
+# only its name as text), so no app hears of it: the drag is refused (no copy cursor) and a paste is its name as text.
 cp "$D/picture.png" "$D/locked.png"; chmod 000 "$D/locked.png"
 drop_file 1 "$D/m0" "$D/locked.png"
-# Its name when macOS resolves the file's reference for Mewla Dev; "File" when it does not.
-unread='\[failed (locked\.png|File): Mewla can.t read this file\.\]'
-wait_chips "$unread" 30 && report "unreadable file dropped: $(chips | grep -oE "\[failed [^]]*\]")" || failed "an unreadable dropped file has no chip that says why"
-"$B/pasteboard" file "$D/locked.png"; front; cmd_v
-wait_chips "($unread.*){2}" 30 && report "unreadable file pasted: a second such chip; onPaste reported '$(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //')'" || failed "an unreadable pasted file has no chip that says why"
+grep -q "drag ended: none" "$D/drag.out" && report "mode-000 file: macOS refused the drag (no file URL reached Mewla Dev)" || failed "a mode-000 file's drag was taken"
+"$B/pasteboard" file "$D/locked.png"; front; cmd_v; sleep 3
+report "mode-000 file pasted: onPaste reported '$(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //')'"
+key 'keystroke "a" using command down'; key 'key code 51'
+# A file that reaches Mewla Dev but cannot be read when it reads it (it went in between): a chip that says so.
+unread='\[failed (gone\.png|File): Mewla can.t read this file\.\]'
+cp "$D/picture.png" "$D/gone.png"
+"$B/drag" "$mid_x" "$mid_y" 2 "$D/m0" "$D/gone.png" > "$D/drag.out" 2>&1 &
+dragging=$!
+for _ in $(seq 1 30); do [ -e "$D/m0" ] && break; sleep 0.3; done
+rm -f "$D/gone.png"; wait "$dragging"
+wait_chips "$unread" 30 && report "file gone before the drop: $(chips | grep -oE "\[failed [^]]*\]")" || failed "a dropped file that could not be read has no chip that says why"
+cp "$D/picture.png" "$D/gone.png"; "$B/pasteboard" file "$D/gone.png"; rm -f "$D/gone.png"; front; cmd_v
+wait_chips "($unread.*){2}" 30 && report "file gone before the paste: a second such chip" || failed "a pasted file that could not be read has no chip that says why"
 report "phase 3 chips: $(chips)"
 shot phase3
 send; sleep 2; report "phase 3 after Send: $(chips)"
