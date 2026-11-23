@@ -66,6 +66,8 @@ import { showAlert } from "../shell/alert";
 import { getGitRepository } from "../../core/git/requests";
 import { gitReview, heldGitReview } from "../more/git/state";
 import { headerSize } from "../kit/density";
+import { FileDrop } from "../chat/FileDrop";
+import { attachIncoming, type IncomingFiles } from "../more/files/incoming";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -394,6 +396,9 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     pinned.set(false);
     void uploads.pickAndUpload().catch((error) => notice.set(error instanceof Error ? error.message : "Could not attach the file."));
   };
+  // Pasted into the field or dropped on the chat: chips, as picked ones.
+  const attachDropped = (incoming: IncomingFiles) =>
+    void attachIncoming(uploads, incoming).catch((error) => notice.set(error instanceof Error ? error.message : "Could not attach the file."));
 
   const modelChip = computed(() => resolveComposerModelControl({ capabilities: worker()?.capabilities, connectionConnected: connected(), selection: runtime(), refreshRequired: false }));
 
@@ -742,7 +747,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View></If>
             </View>
           </View>
-          <If when={mode() === "chat"}><View class="absolute inset-0 bg-background">
+          <If when={mode() === "chat"}><FileDrop testID={`file-drop-session-${props.workerId}`} class="absolute inset-0 bg-background" onFiles={() => attachDropped}>
               <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
@@ -753,13 +758,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
-                onFiles={(files) => {
-                  try {
-                    uploads.add(files);
-                  } catch (error) {
-                    notice.set(error instanceof Error ? error.message : "Could not attach the file.");
-                  }
-                }}
+                onFiles={attachDropped}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
@@ -773,7 +772,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 <Each of={dshRun() ? [dshRun()] : []} key={(run) => run}>{(run) => <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(run().split("|")[0]), startedAt: Number(run().split("|")[1]) }} />}</Each>
                 <If when={notice()}><Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
               </Composer>
-            </View></If>
+            </FileDrop></If>
         </View>
       </View>
       <ModelSheet open={modelOpen} onClose={() => modelOpen.set(false)} transport={transport} workerId={props.workerId} onRuntime={(selection) => runtime.set(selection)} />

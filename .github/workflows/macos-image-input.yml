@@ -54,7 +54,7 @@ jobs:
         run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
       - name: Paste and drop into Brain's composer
         run: |
-          set -uo pipefail
+          set +e -u -o pipefail
           D="$RUNNER_TEMP/image-run"; C="$D/captures"; mkdir -p "$D/data" "$C"
           printf '%s' '{"mewla:theme_preference":"classic-light"}' > "$D/data/storage.json"
           ditto -x -k "$RUNNER_TEMP/app/Mewla-Dev-"*-macos-aarch64.zip "$D"
@@ -114,6 +114,8 @@ jobs:
           drag=$!
           for i in $(seq 1 30); do [ -e "$D/holding" ] && break; sleep 0.5; done
           sleep 1.5; shot dragging
+          # The whole screen too: the drag's own image is a window of the system's, not the app's.
+          screencapture -x "$C/dragging/screen.png"
           wait "$drag"; echo "drag exit $?"; cat "$D/drag.out"
           front; sleep 4; shot dropped
 
@@ -126,6 +128,17 @@ jobs:
           for i in $(seq 1 60); do pgrep -f "$D" >/dev/null || break; sleep 1; done
           pkill -TERM -f "$D" || true
           if log | grep -E "ERROR (js|nsh)"; then exit 1; fi
+          # What a person would see: four chips (the screenshot, Copy Image, the Finder file, the dragged file; none for
+          # the spreadsheet cell), all uploaded, then one message with the cell's text (not the Finder file's name) and the four files.
+          fail=0
+          grep -q "drag ended: copy" "$D/drag.out" || { echo "FAIL: the drag was not taken"; fail=1; }
+          chips=$(log | grep "dev script: chips" | tail -2 | head -1)
+          echo "chips before Send: $chips"
+          [ "$(grep -o "\[ready " <<<"$chips" | wc -l | tr -d ' ')" = 4 ] || { echo "FAIL: not four ready chips"; fail=1; }
+          [ "$(grep -o "\[ready dragged picture.png\]" <<<"$chips" | wc -l | tr -d ' ')" = 2 ] || { echo "FAIL: the Finder file and the dragged file are not chips under their names"; fail=1; }
+          log | grep -qE 'dev script: sent "Q3 revenue 4,210.* with 4 files' || { echo "FAIL: the message did not go with the cell's text and four files"; fail=1; }
+          [ "$(find "$D/state" -path "*uploads*" -type f | wc -l | tr -d ' ')" -ge 4 ] || { echo "FAIL: the daemon has fewer than four uploads"; fail=1; }
+          exit $fail
       - uses: actions/upload-artifact@v4
         if: always()
         with:
