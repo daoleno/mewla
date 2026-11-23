@@ -54,6 +54,11 @@ export interface Platform {
   fetch(input: string, init?: RequestInit): Promise<Response>;
   /** Absent where no host carries them (a browser, an old build). */
   linkTunnels?: LinkTunnels;
+  /**
+   * The page's origin, on the web: its policy lets it reach only the computer that serves it (the daemon's
+   * `connect-src`), so a browser pairs only with that one.
+   */
+  pageOrigin?: string;
 }
 
 let current: Platform | null = null;

@@ -1,4 +1,4 @@
-import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, View } from "nsh";
+import { cleanup, colorScheme, effect, host, lifecycle, mount, platform, safeArea, Storage, Text, UrlScheme, View } from "nsh";
 import { openedForSomething } from "./whatsnew/state";
 import { installPlatform } from "../core/platform";
 import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPlace";
@@ -8,7 +8,7 @@ import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { brainDraft, connection, current, loadSession, networkChanged, openBrainThread, ready, resumeConnection, setConnectionAway } from "./session";
 import { FirstRun, openPhonePage, openSettingsLink, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
-import { readPairingLink } from "../core/pairFlow";
+import { isPairingLink } from "../core/pairFlow";
 import { openNotificationLink, startNotifications } from "./push/push";
 import { startShareIn } from "./more/files/shareIn";
 import { goHome } from "./shell/nav";
@@ -34,13 +34,15 @@ async function start(): Promise<void> {
 // (its draft; the thread came back at its newest row) to open them anew, and registered notifications, app update
 // and the listeners below once more. The flag is on globalThis, which a re-run keeps.
 const processState = globalThis as { __mewlaStarted?: boolean };
+/** The app's start (its computers loaded): links opened before it wait for it. */
+let started: Promise<void> = Promise.resolve();
 
 /** The app's start: its platform, its computer and connection, notifications, app update, links. Runs once per process. */
 export function startApp(): void {
   if (processState.__mewlaStarted) return;
   processState.__mewlaStarted = true;
   installPlatform(nshPlatform());
-  void start();
+  started = start().catch((error) => console.warn("start:", error));
   startNotifications();
   startAppUpdate();
   startMac();
@@ -83,17 +85,23 @@ export function startApp(): void {
     },
   );
 
-  // Links the system opens in the app: a pairing link pairs, like a scan; the others open their page.
+  // Links the system opens in the app: the phone hosts send them as `links.open`; a Mac's come through NSH's
+  // UrlScheme (the bundle claims `mewla`, nsh.json `schemes`). Each waits for the app's computers to load.
   host.on("links.open", (payload) => {
     const url = (payload as { url?: string } | null)?.url;
-    if (!url) return;
-    openedForSomething();
-    if (readPairingLink(url)) return void pairFromText(url);
-    if (isPhoneLink(url)) return void openPhonePage();
-    if (openSettingsLink(url)) return;
-    // Brain, a Session, the Calendar, a live answer, Friends: what a notification, an alert or a widget sends.
-    openNotificationLink(url);
+    if (url) void started.then(() => openLink(url));
   });
+  if (platform.os === "macos") UrlScheme.on("open", ({ url }) => void started.then(() => openLink(url)));
+}
+
+/** A link the system opened: a pairing link pairs, like a scan (an expired one says so); the others open their page. */
+function openLink(url: string): void {
+  openedForSomething();
+  if (isPairingLink(url)) return void pairFromText(url);
+  if (isPhoneLink(url)) return void openPhonePage();
+  if (openSettingsLink(url)) return;
+  // Brain, a Session, the Calendar, a live answer, Friends: what a notification, an alert or a widget sends.
+  openNotificationLink(url);
 }
 startApp();
 
