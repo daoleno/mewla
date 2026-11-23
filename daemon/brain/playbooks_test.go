@@ -86,15 +86,15 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlaybookCatalog() error = %v", err)
 	}
-	if len(catalog.Playbooks) != 5 {
-		t.Fatalf("catalog playbooks = %d, want 5: %#v", len(catalog.Playbooks), catalog.Playbooks)
+	if len(catalog.Playbooks) != 6 {
+		t.Fatalf("catalog playbooks = %d, want 6: %#v", len(catalog.Playbooks), catalog.Playbooks)
 	}
 
 	byName := map[string]PlaybookEntry{}
 	for _, entry := range catalog.Playbooks {
 		byName[entry.Name] = entry
 	}
-	for _, name := range []string{"delegate-brief", "slice-work", "wayfind", "friends"} {
+	for _, name := range []string{"delegate-brief", "slice-work", "wayfind", "friends", "size-proof"} {
 		entry, ok := byName[name]
 		if !ok {
 			t.Fatalf("catalog missing playbook %q: %#v", name, catalog.Playbooks)
@@ -108,6 +108,9 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 	}
 	if !strings.Contains(byName["wayfind"].Description, "check reuse before building") {
 		t.Fatalf("wayfind description = %q", byName["wayfind"].Description)
+	}
+	if !strings.Contains(byName["size-proof"].Description, "budget it in the brief") {
+		t.Fatalf("size-proof description = %q", byName["size-proof"].Description)
 	}
 }
 
@@ -172,7 +175,7 @@ func TestHousekeepingCreatesMissingPlaybooks(t *testing.T) {
 			t.Fatalf("changed paths %v missing %q", report.ChangedPaths, path)
 		}
 	}
-	if len(report.PlaybookPaths) != 5 {
+	if len(report.PlaybookPaths) != 6 {
 		t.Fatalf("playbook paths = %#v", report.PlaybookPaths)
 	}
 	if _, err := os.Stat(store.playbookPath("delegate-brief.md")); err != nil {
@@ -227,7 +230,7 @@ func TestGatedPlaybookFollowsItsFeature(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("untouched friends playbook stayed on disk while off: %v", err)
 	}
-	if containsString(store.shownPlaybookPaths(), "playbooks/friends.md") || len(store.shownPlaybookPaths()) != 4 {
+	if containsString(store.shownPlaybookPaths(), "playbooks/friends.md") || len(store.shownPlaybookPaths()) != 5 {
 		t.Fatalf("shown paths = %v", store.shownPlaybookPaths())
 	}
 

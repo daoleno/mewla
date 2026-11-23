@@ -54,7 +54,7 @@ func TestEngineeringScenarioBriefsReachNativeWorkers(t *testing.T) {
 	if err := json.Unmarshal(raw, &scenarios); err != nil {
 		t.Fatal(err)
 	}
-	if len(scenarios) != 5 {
+	if len(scenarios) != 6 {
 		t.Fatalf("scenario count=%d", len(scenarios))
 	}
 	for _, provider := range []string{"pi", "codex"} {

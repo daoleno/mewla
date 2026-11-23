@@ -39,8 +39,11 @@ existing catalog in `daemon/brain/playbooks.go`:
 | `wayfind` | How a system works, why it has that shape, prior decisions, or uncertain library fit. |
 | `slice-work` | A high-risk first experiment, coherent decomposition, or a repeatedly failing approach. |
 | `delegate-brief` | A context-bearing brief, workflow-specific proof, and evidence-based acceptance. |
+| `size-proof` | How much proof a change needs, its budget in the brief, which review findings block, and when proving has outgrown the building. |
 
-The managed `AGENTS.md` names when each method helps. Brain discovers paths
+The managed `AGENTS.md` names when the first three help; `policies/delegation.md`,
+read before every brief and review, points to `size-proof` beside `delegate-brief`
+(kind of proof there, amount here), as it points to `permission-block`. Brain discovers paths
 with the normal `mewla brain playbooks --json` catalog and reads only relevant files. This is a
 Brain skill expressed through native playbooks, not new user commands. The former
 `align` playbook is now two sentences in the AGENTS.md Role section; an
@@ -60,7 +63,7 @@ Managed `AGENTS.md` and policy blocks are updated; text outside them is retained
 Nonempty profile, memory, current context and worklogs remain user-owned.
 
 Playbooks are seed files, not managed policy blocks. The seeded files
-(`current.md`, `routing.md`, `worklog/README.md` and the three playbooks) are
+(`current.md`, `routing.md`, `worklog/README.md` and the playbooks) are
 written once and followed across releases without a table of past digests: the
 state directory keeps `workspace-seeds.json`, the SHA-256 of what Mewla last
 wrote to each file. A file still matching that digest is untouched, so a new

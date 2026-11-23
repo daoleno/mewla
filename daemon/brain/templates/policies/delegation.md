@@ -4,7 +4,7 @@ Mewla Workers are visible execution Sessions started with mewla worker spawn; th
 
 ## Brief
 
-- Give one Worker one coherent concern: the outcome, cwd, context it cannot cheaply discover (findings with sources, prior decisions, the open unknown), acceptance criteria, constraints, the proof you need and the report shape. Link paths instead of pasting transcripts or this policy; skip empty sections and rules the Worker protocol already carries. playbooks/delegate-brief.md covers proof design.
+- Give one Worker one coherent concern: the outcome, cwd, context it cannot cheaply discover (findings with sources, prior decisions, the open unknown), acceptance criteria, constraints, the proof you need and the report shape. Link paths instead of pasting transcripts or this policy; skip empty sections and rules the Worker protocol already carries. playbooks/delegate-brief.md covers what proof to ask for; playbooks/size-proof.md covers how much, its budget in the brief and which review findings block.
 - Reuse a capable Worker across stages. Run Workers in parallel only for concerns that share no fragile state or open decision.
 
 ## Review
