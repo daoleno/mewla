@@ -20,8 +20,18 @@ written() { last_tick < "$dir/ticks.txt"; }
 
 case "$mode" in
   start)
-    # Quiet at first: the spawn hands the Worker its brief once the terminal is still, as at an agent's prompt.
-    printf '#!/bin/sh\nsleep 20\ni=0\nwhile :; do i=$((i+1)); echo "tick $i"; echo "tick $i" >> "%s"; sleep 1; done\n' "$dir/ticks.txt" > "$dir/tick.sh"
+    # The counter is the Worker's own process (exec: a shell in front reads as an agent still launching).
+    cat > "$dir/tick.py" <<'PY'
+import sys, time
+i = 0
+while True:
+    i += 1
+    print("tick %d" % i, flush=True)
+    with open(sys.argv[1], "a") as f:
+        f.write("tick %d\n" % i)
+    time.sleep(1)
+PY
+    printf '#!/bin/sh\nexec /usr/bin/python3 -u "%s" "%s"\n' "$dir/tick.py" "$dir/ticks.txt" > "$dir/tick.sh"
     chmod 755 "$dir/tick.sh"
     : > "$dir/ticks.txt"
     before=" $(sessions) "
@@ -47,7 +57,8 @@ walk(json.load(sys.stdin))' || true)
     echo "${mine%%:*}" > "$dir/worker-id"
     test -n "$mine"
     echo "$mine" > "$dir/session"
-    pgrep -f "$dir/tick.sh" | sort | tr '\n' ' ' > "$dir/tick-pid"
+    pgrep -f "$dir/tick.py" | sort | tr '\n' ' ' > "$dir/tick-pid"
+    [[ -s "$dir/tick-pid" ]] || { echo "no counter process"; exit 1; }
     echo "session $mine, counter pid $(cat "$dir/tick-pid"), tick $(written), captured tick $(captured)"
     ;;
   check)
@@ -56,7 +67,7 @@ walk(json.load(sys.stdin))' || true)
     for _ in $(seq 1 90); do [[ " $(sessions 2>/dev/null || true) " == *" $mine "* ]] && break; sleep 1; done
     now=$(sessions)
     [[ " $now " == *" $mine "* ]] || { echo "$label: Session $mine is gone (now: $now)"; exit 1; }
-    pid_now=$(pgrep -f "$dir/tick.sh" | sort | tr '\n' ' ')
+    pid_now=$(pgrep -f "$dir/tick.py" | sort | tr '\n' ' ')
     [[ "$pid_now" == "$(cat "$dir/tick-pid")" ]] || { echo "$label: the counter's process changed: $(cat "$dir/tick-pid")-> $pid_now"; exit 1; }
     a=$(written); c1=$(captured)
     sleep 4
