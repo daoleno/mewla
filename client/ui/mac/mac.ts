@@ -414,15 +414,15 @@ async function updateProof(hold = 12): Promise<void> {
 
 /**
  * Mewla Dev's terminal attach proof (macos-app.yml, `attach`): through the terminal's own Attach, one file that goes up
- * (its path typed at the prompt), one that can't (a name over the 1024 bytes uploads allow: a failed chip), then a large one
- * still uploading when the run captures the window; then Cancel on the large one and Retry on the failed one, as their
- * buttons call them.
+ * (its path typed at the prompt), one that can't (a name over the 1024 bytes uploads allow: a failed chip), a large one
+ * cancelled while it uploads, another large one still uploading when the run captures the window; then Retry on the
+ * failed one. Cancel and Retry are called as their buttons call them.
  */
 async function attachProof(): Promise<void> {
-  const until = async (ok: () => boolean, ms = 60_000) => {
-    for (let waited = 0; !ok(); waited += 250) {
+  const until = async (ok: () => boolean, ms = 60_000, step = 250) => {
+    for (let waited = 0; !ok(); waited += step) {
       if (waited > ms) throw new Error("timed out");
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, step));
     }
   };
   try {
@@ -435,17 +435,22 @@ async function attachProof(): Promise<void> {
     uploads.add([new File(["refused"], `${"n".repeat(1100)}.txt`, { type: "text/plain" })]);
     await until(() => uploads.items().some((item) => item.status === "failed"));
     console.log(`dev script: attach failed ${uploads.items().find((item) => item.status === "failed")?.error ?? ""}`);
-    // 1 GB: still going when the run has captured the window (384 MB went up in 6 s on the runner).
-    uploads.add([new File([new Uint8Array(1 << 30)], "screen recording.mov", { type: "video/quicktime" })]);
-    await until(() => uploads.items().some((item) => item.status === "uploading"));
-    console.log("dev script: attach uploading");
-    // Long enough for the run to capture the chip, short enough that the 1 GB one is still going (a busy runner's timers lag).
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    const large = uploads.items().find((item) => item.status === "uploading");
+    // Cancel lands while the 1 GB one uploads: as soon as the queue starts it, seen within 10 ms, where 1 GB takes seconds
+    // even on a fast runner (a cancel after a fixed hold missed it once runners got faster, run 45193456865).
+    const bytes = new Uint8Array(1 << 30);
+    const uploading = () => uploads.items().find((item) => item.status === "uploading");
+    uploads.add([new File([bytes], "screen recording.mov", { type: "video/quicktime" })]);
+    await until(() => Boolean(uploading()), 60_000, 10);
+    const large = uploading();
     if (large) {
       uploads.remove(large.id);
       console.log(`dev script: attach cancelled (${uploads.items().some((item) => item.id === large.id) ? "still listed" : "gone"})`);
     } else console.log("dev script: attach cancel missed (the large one was up already)");
+    // Another large one, left uploading for the run's capture of the chip over the grid (not asserted).
+    uploads.add([new File([bytes], "screen recording 2.mov", { type: "video/quicktime" })]);
+    await until(() => Boolean(uploading()));
+    console.log("dev script: attach uploading");
+    await new Promise((resolve) => setTimeout(resolve, 3000));
     const failed = uploads.items().find((item) => item.status === "failed");
     if (failed) {
       uploads.retry(failed.id);
