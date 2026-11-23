@@ -38,6 +38,7 @@ func TestRestComesFromTheAgentsRecordAndTheScreenOnlyVetoes(t *testing.T) {
 		{"idle at the prompt, turn settled", idleClaudePane, settled, true, true},
 		{"ended on a provider error, the composer shows its placeholder", providerErrorPane, failed, true, true},
 		{"provider error placeholder with no readable record", providerErrorPane, unreadable, true, false},
+		{"403 placeholder with no readable record", "● Please run /login · API Error: 403\n────\n❯ Once fixed, resend your message\n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle)", unreadable, true, false},
 		{"idle at the prompt, no provider record", idleClaudePane, nil, true, false},
 		{"provider record unreadable falls back to the screen", idleClaudePane, unreadable, true, false},
 		{"a readable record with no turn yet falls back to the screen", idleClaudePane, noTurn, true, false},
