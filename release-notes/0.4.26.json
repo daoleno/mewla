@@ -7,7 +7,7 @@
       "title": "Drop pictures into a message",
       "line": "Drag an image into the input, or paste a copied one, and it goes with your message.",
       "media": {
-        "scene": "share-in"
+        "scene": "mac-app"
       },
       "try": {
         "kind": "open",
