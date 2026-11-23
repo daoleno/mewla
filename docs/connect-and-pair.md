@@ -166,7 +166,12 @@ code**. Another computer: tap the cat, then **Pair a computer**. Scan the QR
 code, or paste the printed link: **Paste a pairing link** on first run, the
 **Pairing link** field and **Pair** on **Pair a computer**, which also has
 **Pick QR image** for a screenshot or photo of the code. Opening a `mewla://`
-link on the phone works too. Confirm with **Pair and grant access**.
+link on the phone works too. Confirm with **Pair and grant access**: the
+question names the address the app will talk to and the computer's name, so
+check the address before you confirm. A code for a computer this app already
+pairs, at the address it already uses, pairs again without asking; the same
+computer at a new address (after `mewla login -name`, say, or its first Mewla
+Relay code) asks again, with the new address.
 
 When it says **Brain is home.**, tap **Open Brain**: the app opens that
 computer's Brain, whether it is the first computer or one added later.

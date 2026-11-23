@@ -64,3 +64,58 @@ describe("an expired Mewla Relay code opened while the app runs", () => {
     await app.waitFor("text:Code expired", { timeout: 10_000 });
   }, 20_000);
 });
+
+// Security review 11-23, finding 1: a link anyone can make named a computer this app had paired, at another host, and
+// paired it there with no confirmation (a recorded `/pair` answer passes there). Now the confirmation comes, naming
+// that host; a code at the address the app holds still re-pairs without one.
+describe("a pairing link to a computer this app has, at another address", () => {
+  const desk = testComputer("http://10.0.0.8:9876", 11);
+  const deskElsewhere = testComputer("http://10.9.9.9:9876", 11);
+  const withDesk = {
+    ...paired,
+    "mewla:v3:servers": JSON.stringify([
+      ...JSON.parse(paired["mewla:v3:servers"]),
+      { id: "s2", name: "Desk", url: "ws://10.0.0.8:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: desk.publicKey },
+    ]),
+  };
+  const servers = (app: Awaited<ReturnType<typeof open>>) => JSON.parse(app.storage()["mewla:v3:servers"] ?? "[]") as { id: string; url: string }[];
+
+  for (const [platform, word, ready] of [["android", "phone", "text:Brain is starting…"], ["macos", "Mac", "text:Waking up"]] as const) {
+    test(`on ${platform}, asks first, naming the host`, async () => {
+      const app = await open(APP, {
+        host: phoneHost({ brain: {} }, { "app.pairing": () => ({ expires_at: "2099-01-01T00:00:00Z", daemon_id: "a".repeat(64), daemon_public_key: "b".repeat(64) }) }),
+        storage: withDesk, platform, ...(platform === "macos" ? { width: 1280, height: 800 } : {}),
+        network: { [deskElsewhere.pairURL]: deskElsewhere.answer() },
+      });
+      const asked: string[] = [];
+      app.onDialog((dialog) => {
+        asked.push(`${dialog.title}\n${dialog.message}`);
+        return "Cancel";
+      });
+      await app.waitFor(ready, { timeout: 10_000 });
+      const link = deskElsewhere.link("Desk");
+      if (platform === "macos") await app.openWithUrl(link);
+      else await app.host.send("links.open", { url: link });
+      await app.waitUntil(() => asked.length > 0, { timeout: 10_000 });
+      expect(asked[0].startsWith(`Pair this ${word}?\n`)).toBe(true);
+      expect(asked[0]).toContain(`access to 10.9.9.9:9876 (Desk),`);
+      expect(servers(app).map((server) => server.url)).toEqual(["ws://127.0.0.1:1/ws", "ws://10.0.0.8:9876/ws"]);
+      expect(app.storage()["mewla:v1:current_server_id"]).toBe("s1");
+    }, 20_000);
+  }
+
+  test("at the address this app holds, re-pairs without asking", async () => {
+    const app = await open(APP, { host: phoneHost({ brain: {} }), storage: withDesk, platform: "android", network: { [desk.pairURL]: desk.answer() } });
+    const asked: string[] = [];
+    app.onDialog((dialog) => {
+      asked.push(dialog.title ?? "");
+      return "Cancel";
+    });
+    await app.waitFor("text:Brain is starting…", { timeout: 10_000 });
+    await app.host.send("links.open", { url: desk.link("Desk") });
+    await app.waitFor("text:Connected to Desk.", { timeout: 10_000 });
+    expect(app.storage()["mewla:v1:current_server_id"]).toBe("s2");
+    expect(asked).toEqual([]);
+    expect(servers(app).map((server) => server.id)).toEqual(["s2", "s1"]);
+  }, 20_000);
+});

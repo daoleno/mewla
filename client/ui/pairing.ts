@@ -1,6 +1,6 @@
 import { Clipboard, host, platform, signal } from "nsh";
 import { PairLatch } from "../core/onboarding";
-import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOTHING_TO_PASTE, pairingLinkProblem, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOTHING_TO_PASTE, pairingLinkProblem, alreadyPairedWith, pairingTarget, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 import { haptic } from "./shell/haptics";
@@ -26,6 +26,8 @@ export const linkPairing = signal<{ problem: PairingProblem | null } | null>(nul
 /** Counts finished pairings, on every platform: a pairing page closes when it moves. */
 export const pairings = signal(0);
 const device = () => (platform.os === "web" ? "browser" : "phone");
+/** What the confirmation calls this device. */
+const deviceWord = () => (platform.os === "web" ? "browser" : platform.os === "macos" ? "Mac" : "phone");
 
 const latch = new PairLatch();
 
@@ -44,8 +46,9 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   }
   // A pairing code found in the finder: one of the app's two light ticks (SPEC §16.3 Haptics).
   if (source === "camera") haptic.impact("light");
-  if (!alreadyPairedWith(servers(), payload)) {
-    const copy = pairingScopeCopy(device());
+  const target = await pairingTarget(payload);
+  if (!alreadyPairedWith(servers(), payload, target)) {
+    const copy = pairingScopeCopy(deviceWord(), target);
     const { action } = await showAlert({
       title: copy.title,
       description: copy.message,

@@ -38,7 +38,10 @@ function hostedPairing(extra: Partial<StoredServer> = {}): StoredServer {
 function routeFrame(input: { signer?: nacl.SignKeyPair; pin?: string; signedPin?: string; issuedAtMs?: number; candidates?: { name: string; url: string }[] } = {}) {
   const candidates = input.candidates ?? [{ name: "region-a", url: HOSTED }, { name: "region-b", url: "wss://quiet-otter.b.link.test/ws" }];
   const issuedAtMs = input.issuedAtMs ?? Date.now();
-  const binding = linkRouteBinding({ daemonId: DAEMON_ID, daemonPublicKey: PUBLIC_KEY, routeId: ROUTE, transportPin: input.signedPin ?? input.pin ?? PIN, issuedAtMs, candidates });
+  const pin = input.signedPin ?? input.pin ?? PIN;
+  // A field with a control character has no binding: such a frame is signed over the plain join, as a daemon that did not refuse would.
+  const binding = linkRouteBinding({ daemonId: DAEMON_ID, daemonPublicKey: PUBLIC_KEY, routeId: ROUTE, transportPin: pin, issuedAtMs, candidates })
+    ?? new TextEncoder().encode(["1", DAEMON_ID, PUBLIC_KEY, ROUTE, pin, String(issuedAtMs), ...candidates.flatMap((candidate) => [candidate.name.trim(), candidate.url.trim()])].join("\n"));
   const domain = new TextEncoder().encode("mewla-link-route-v1\u0000");
   const signed = new Uint8Array(domain.length + binding.length);
   signed.set(domain);
@@ -103,9 +106,27 @@ describe("the computer's route, told over the connection a pairing by address al
         { name: " region-b ", url: "wss://quiet-otter.b.link.test:8443/ws" },
       ],
     });
-    expect(new TextDecoder().decode(binding)).toBe(
+    expect(new TextDecoder().decode(binding!)).toBe(
       "1\naa\nbb\ncc\ndd\n1700000000000\nregion-a\nwss://quiet-otter.a.link.test/ws\nregion-b\nwss://quiet-otter.b.link.test:8443/ws",
     );
+    // A control character in a name or URL has no binding (review 11-23, finding 4; the daemon refuses the same).
+    // U+0085 is one Go's TrimSpace would strip and JavaScript's trim keeps.
+    for (const bad of ["\n", "\r", "\u0000", "\t", "\u007f", "\u0085"]) {
+      for (const candidate of [
+        { name: `region-a${bad}wss://evil.test/ws`, url: "wss://quiet-otter.a.link.test/ws" },
+        { name: "region-a", url: `wss://quiet-otter.a.link.test/ws${bad}` },
+        { name: `${bad}region-a`, url: "wss://quiet-otter.a.link.test/ws" },
+      ]) {
+        expect(linkRouteBinding({ daemonId: "AA", daemonPublicKey: "BB", routeId: "CC", transportPin: "DD", issuedAtMs: 1700000000000, candidates: [candidate] })).toBeNull();
+      }
+    }
+  });
+
+  test("a route whose names hold a newline is refused even under the computer's own signature", () => {
+    installMemoryPlatform({ os: "android", linkTunnels: fakeTunnels().tunnels });
+    const split = [{ name: "region-a\nwss://other.link.test/ws", url: HOSTED }];
+    expect(linkRouteChange(hostedPairing(), routeFrame({ candidates: split }))).toBeNull();
+    expect(linkRouteChange(hostedPairing(), routeFrame({ candidates: [{ name: "region-a", url: HOSTED }] }))).not.toBeNull();
   });
 
   test("makes the pairing a Mewla Relay route in place: same address and computer, pinned to the route's transport key", () => {

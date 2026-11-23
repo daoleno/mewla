@@ -18,7 +18,11 @@ export interface LinkRouteChange {
   transportCandidates: StoredTransportCandidate[];
 }
 
-/** What the daemon key signs for a route: daemon/link RouteBindingPayload, line for line. */
+/**
+ * What the daemon key signs for a route: daemon/link RouteBindingPayload, line for line, or null for a field that holds
+ * a control character (a newline would let the same bytes read as another candidate list), which the daemon refuses to
+ * sign too. Checked before trimming: Go's TrimSpace strips U+0085, JavaScript's trim keeps it.
+ */
 export function linkRouteBinding(input: {
   daemonId: string;
   daemonPublicKey: string;
@@ -26,7 +30,9 @@ export function linkRouteBinding(input: {
   transportPin: string;
   issuedAtMs: number;
   candidates: { name: string; url: string }[];
-}): Uint8Array {
+}): Uint8Array | null {
+  const fields = [input.daemonId, input.daemonPublicKey, input.routeId, input.transportPin, ...input.candidates.flatMap((candidate) => [candidate.name, candidate.url])];
+  if (fields.some((field) => /\p{Cc}/u.test(field))) return null;
   const lines = [
     "1",
     input.daemonId.trim().toLowerCase(),
@@ -68,7 +74,7 @@ export function linkRouteChange(server: StoredServer, frame: Record<string, unkn
   }
   if (!candidates.length) return null;
   const binding = linkRouteBinding({ daemonId, daemonPublicKey, routeId, transportPin: pin, issuedAtMs: issued, candidates });
-  if (!verifyLinkRouteSignature({ daemonPublicKey, bindingPayload: binding, signatureHex: signature })) return null;
+  if (!binding || !verifyLinkRouteSignature({ daemonPublicKey, bindingPayload: binding, signatureHex: signature })) return null;
   // Only the pairing at one of the route's own addresses (the hosted one): a pairing by a LAN or other address stays.
   const here = normalizeServerURL(server.url);
   if (!here || !candidates.some((candidate) => normalizeServerURL(candidate.url) === here)) return null;
