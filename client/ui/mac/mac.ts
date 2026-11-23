@@ -20,7 +20,7 @@ import { grantRequestAction } from "../../core/screen/grantRequest";
 import { getAgentUse } from "../../core/settings/computer";
 import { grantOf } from "../../core/settings/macGrants";
 import { allowGrant } from "./permissionGuide";
-import { isMacApp, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
+import { isMacApp, isThisMac, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
 import { MENU_BAR_CLIPS, MENU_BAR_IMAGES } from "./menubarImages";
 import { startMacMenus } from "./menus";
 import { atLogin, readStartAtLogin, setStartAtLogin, toggleStartAtLogin } from "./login";
@@ -96,6 +96,12 @@ export function startMac(): void {
   effect(() => {
     if (!ready() || joined) return;
     joined = true;
+    void untracked(joinLocalDaemon);
+  });
+  // This Mac's own connection dropped: its daemon is asked again, so the pane says why in its words while it is down
+  // (`mewla pair`'s own error), and its entry is made again if it went (owner 11-23).
+  effect(() => {
+    if (!joined || connection() !== "waiting" || !isThisMac(current())) return;
     void untracked(joinLocalDaemon);
   });
 
