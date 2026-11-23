@@ -1865,7 +1865,13 @@ func (w *Watcher) poll() {
 		// and Brain's host, which starts after the first inventory, never starts.
 		windows = nil
 	} else {
-		w.resourceManager().Reconcile(windows)
+		manager := w.resourceManager()
+		manager.Reconcile(windows)
+		if releaser, ok := manager.(goneReleaser); ok {
+			if host, ok := w.sessions().(hostIdentifier); ok {
+				releaser.releaseGone(windows, host.hostIdentity())
+			}
+		}
 	}
 	w.inventoryMu.Unlock()
 	processes := snapshotProcesses()

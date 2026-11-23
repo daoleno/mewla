@@ -132,6 +132,19 @@ Consumers additionally include `id` (stable group key), `process_count`,
 `mewla worker release -id SESSION -pid PID -start START` to release a selected
 owned tool tree. This command refuses stale/unowned processes and the provider's
 ancestor chain. Worker close/Work acceptance remain the full cleanup commands.
+A Session's own resources (its processes and its TMPDIR scratch) are released
+when the Session ends, however it ends: Worker close, a reclaim, or a session
+host that went away and took its Sessions with it (a reboot, a crash). For that
+last case the watcher needs positive evidence: the Session's resource unit is on
+no Session in two successful inventories at least two minutes apart from the
+same session host (same pid and start time), the lease is older than two
+minutes and not a spawn still being prepared, and none of its processes is a
+direct child of that host (a live pane). A Session whose agent exited stays on
+the host and keeps its resources until it is closed or reclaimed; its agent can
+be relaunched. A release stops the processes first, then moves the scratch to
+`gc/trash/` under the state root, then removes the lease. The trash keeps it
+for three days: `mewla gc status` lists it and `mewla gc restore <id>` puts it
+back.
 No command-line arguments or environment variables are exposed by telemetry.
 Java is labelled `gradle` as a notable workload family, without claiming all Java
 processes are Gradle. Container identifiers come from cgroup paths; no Docker

@@ -157,6 +157,17 @@ func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 	return client, nil
 }
 
+// hostIdentity names the host of the current connection; zero without one.
+func (b *hostBackend) hostIdentity() sessionHostIdentity {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.client == nil {
+		return sessionHostIdentity{}
+	}
+	welcome := b.client.Welcome()
+	return sessionHostIdentity{PID: welcome.PID, StartedAt: welcome.StartedAt}
+}
+
 // hasReached reports whether this process has had a connection to a host.
 func (b *hostBackend) hasReached() bool {
 	b.mu.Lock()

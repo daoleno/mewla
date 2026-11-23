@@ -216,6 +216,8 @@ mewla connections list --json
 mewla connections import-gh   # copy your current gh login into the daemon's vault
 
 mewla resources               # one resource sample as JSON
+mewla gc status [--all]       # what this Session holds and what happens to it when it ends; the trash
+mewla gc restore <id>         # put a trashed item back where it was
 
 mewla watch status            # signals per source and project, last pass, errors
 mewla watch projects

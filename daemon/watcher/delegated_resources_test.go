@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/gc"
 )
 
 type fakeDelegatedResourceManager struct {
@@ -250,6 +252,10 @@ func TestPortableResourceReleaseRemovesOnlyOwnedTemporaryDirectory(t *testing.T)
 	if _, err := os.Stat(foreignTemp); err != nil {
 		t.Fatalf("foreign directory was touched: %v", err)
 	}
+	items, err := gc.List(root)
+	if err != nil || len(items) != 1 || items[0].Original != ownedTemp || items[0].Owner != unit || !items[0].Moved {
+		t.Fatalf("trash = %+v, %v", items, err)
+	}
 }
 
 func TestPortableResourceTempDirCollisionFailsClosed(t *testing.T) {
@@ -311,7 +317,7 @@ func TestPortableResourceReleaseLeavesForeignOrCorruptTempUntouched(t *testing.T
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = makeOwnedTreeDirsOwnerAccessible(tempDir)
+		_ = gc.MakeDirsOwnerAccessible(tempDir)
 	})
 	if err := manager.Release("", unit); err != nil {
 		t.Fatal(err)
@@ -372,6 +378,16 @@ func TestPortableResourceReleaseRemovesShortRestrictedNestedTrees(t *testing.T) 
 			}
 			if _, err := os.Stat(ownedTemp); !os.IsNotExist(err) {
 				t.Fatalf("owned short temp still exists: %v", err)
+			}
+			tc.check(t, ownedTemp, foreign)
+			// The scratch is in the trash; finalizing it deletes the
+			// restricted tree.
+			deleted, err := gc.Finalize(manager.stateRoot(), time.Now().Add(gc.TrashGrace+time.Minute))
+			if err != nil || len(deleted) != 1 {
+				t.Fatalf("finalize = %v, %v", deleted, err)
+			}
+			if _, err := os.Lstat(deleted[0].Path); !os.IsNotExist(err) {
+				t.Fatalf("trashed tree still exists: %v", err)
 			}
 			tc.check(t, ownedTemp, foreign)
 		})
@@ -449,7 +465,7 @@ func writeReadonlyNestedCache(t *testing.T, root string) {
 	}
 	// TempDir teardown uses RemoveAll; restore owner rwx if the tree survives the test.
 	t.Cleanup(func() {
-		_ = makeOwnedTreeDirsOwnerAccessible(root)
+		_ = gc.MakeDirsOwnerAccessible(root)
 	})
 }
 
@@ -470,7 +486,7 @@ func writeModeZeroNestedDir(t *testing.T, root string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_ = makeOwnedTreeDirsOwnerAccessible(root)
+		_ = gc.MakeDirsOwnerAccessible(root)
 	})
 }
 
