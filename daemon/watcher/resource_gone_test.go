@@ -5,6 +5,7 @@ package watcher
 import (
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -274,5 +275,72 @@ func TestReleaseGoneKeepsALeaseWithALivePane(t *testing.T) {
 	}
 	if _, err := os.Stat(tempDir); err != nil {
 		t.Fatalf("scratch of a live Session moved: %v", err)
+	}
+}
+
+// A process still running from a gone Session's scratch (here its cwd; an
+// escaped daemon's exe is the same) keeps the scratch and the lease: moving
+// the directory would take the evidence of whose that process is. Once the
+// process is gone the next scan releases.
+func TestReleaseKeepsScratchAProcessStillUses(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("scratch users are read from /proc")
+	}
+	m, clock := newGoneTestManager(t)
+	unit, tempDir := addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	// No unit in its environment: the release cannot stop it (an escaped
+	// process, as PR 2 will contain).
+	user := exec.Command("sleep", "60")
+	user.Dir = tempDir
+	user.Env = []string{"PATH=" + os.Getenv("PATH")}
+	if err := user.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan struct{})
+	go func() { _ = user.Wait(); close(exited) }()
+	t.Cleanup(func() { _ = user.Process.Kill(); <-exited })
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := scratchUser(tempDir); ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the process never read as a user of the scratch")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	scan := func() {
+		m.releaseGone(nil, goneTestHost)
+		waitGoneIdle(t, m)
+		clock.advance(goneConfirm)
+	}
+	scan()
+	scan()
+	if !leaseExists(t, m, unit) {
+		t.Fatal("lease released while a process still uses the scratch")
+	}
+	if _, err := os.Stat(tempDir); err != nil {
+		t.Fatalf("scratch moved while a process still uses it: %v", err)
+	}
+	if !strings.Contains(m.keptLogged[unit], "is still using it") {
+		t.Fatalf("kept line = %q", m.keptLogged[unit])
+	}
+	// The closed path keeps them too, and says the release is done.
+	if err := m.Release("", unit); err != nil || !leaseExists(t, m, unit) {
+		t.Fatalf("closed release: err=%v lease=%v", err, leaseExists(t, m, unit))
+	}
+
+	_ = user.Process.Kill()
+	<-exited
+	scan()
+	if leaseExists(t, m, unit) {
+		t.Fatal("lease kept after the process using the scratch exited")
+	}
+	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+		t.Fatalf("scratch not moved after the process exited: %v", err)
+	}
+	if items, err := gc.List(m.stateRoot()); err != nil || len(items) != 1 {
+		t.Fatalf("trash = %+v, %v", items, err)
 	}
 }

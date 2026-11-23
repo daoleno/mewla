@@ -3,6 +3,7 @@
 package watcher
 
 import (
+	"errors"
 	"log"
 	"sort"
 	"time"
@@ -167,7 +168,12 @@ func (m *portableDelegatedResourceManager) releaseDue(due []workerproc.Lease, ho
 		evidence := m.gone.absent[unit]
 		m.mu.Unlock()
 		if err := m.releaseUnit(unit, releaseReasonGone); err != nil {
-			log.Printf("watcher: release lease %s of a gone Session: %v", unit, err)
+			var inUse *scratchInUseError
+			if errors.As(err, &inUse) {
+				m.noteScratchKept(unit, inUse)
+			} else {
+				log.Printf("watcher: release lease %s of a gone Session: %v", unit, err)
+			}
 			continue
 		}
 		m.forgetGone(unit)
