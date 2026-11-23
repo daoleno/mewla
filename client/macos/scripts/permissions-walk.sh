@@ -154,9 +154,7 @@ for permission in accessibility screen_recording; do
   wait_grant "$permission" off 20 || true; note_grants
   open_and_wait "{\"settings\":\"access\",\"allow\":\"$permission\"}" "dev script: allow $permission"; sleep 5
   shot "$n-$permission-2-denied-panel"
-  # Screen Recording's row switched off stays (the panel says turn it on); Accessibility's is cleared (TCC answers the
-  # same for it and for another signature's row; the panel says drag Mewla in).
-  say "$permission: after Allow on a row switched off, Mewla.app's rows: $(rows | grep "$service" | grep -v "$cli" | tr '\n' ' ')"
+  say "$permission: after Allow on a row switched off, the row stays: $(rows | grep "$service" | grep -v "$cli" | tr '\n' ' ')"
 
   say "$permission: row removed (−)"
   quit_settings; drop_row "$service"; tcc_reload
@@ -206,8 +204,12 @@ for permission in accessibility screen_recording; do
   if sudo sqlite3 "$db" "select count(*) from access where service = '$service' and client = 'com.daoleno.mewla';" | grep -qx 0; then
     say "$permission: the stale row is gone"
   else
-    say "$permission: the stale row is STILL THERE"
+    # Accessibility: TCC answers off for another signature's row as for Mewla.app's row switched off (the probe's
+    # bundle-stale-req), so Allow leaves it.
+    say "$permission: the stale row is still there"
   fi
+  app_log | grep -E "permission panel: .*$([[ $permission == accessibility ]] && echo Accessibility || echo Screen)" | tail -3 | tee -a "$walk"
+  # (insert or replace: where the stale row stayed, this row takes its place, as a valid row would.)
   say "$permission: a new grant (the drag, stood in for by its row)"
   row "$service" 2; tcc_reload
   if wait_grant "$permission" granted 60; then say "$permission: granted in the daemon after the stale row"; else say "$permission: NOT granted after the stale row"; fi

@@ -7,7 +7,7 @@ import { isThisMac } from "./local";
 /**
  * On this Mac: System Settings on the permission's list, with the host's panel beside it holding Mewla's icon to drag in
  * (client/macos/src/permissions.rs). The same panel brings Mewla back after its row was removed. `state` is the
- * daemon's reading of the grant: where Mewla.app's row does not count and the daemon does not count the grant, the
+ * daemon's reading of the grant: where Mewla.app has no row that counts and the daemon does not count the grant, the
  * host first clears Mewla's own rows (client/macos/src/permissions.rs `clears`). False where
  * there is no such panel (another computer, a phone, a permission that is not a Mac's).
  */
