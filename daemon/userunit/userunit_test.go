@@ -1,6 +1,9 @@
 package userunit
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const (
 	owner = "b1d37f5b0839c9fa8d5ccdc1dc8f6f56"
@@ -84,5 +87,18 @@ func TestNestingSliceSkipsTheMewlasOwnSessions(t *testing.T) {
 	}
 	if got := sliceToken(inner); got != tokB {
 		t.Fatalf("sliceToken(%q) = %q", inner, got)
+	}
+}
+
+func TestSessionTokensListsEverySessionSliceOutermostFirst(t *testing.T) {
+	outer, inner := strings.Repeat("a", 32), strings.Repeat("b", 32)
+	cgroup := "0::/user.slice/user-1000.slice/user@1000.service/mewla.slice/mewla-worker.slice/" +
+		"mewla-worker-o1.slice/mewla-worker-o1-" + outer + ".slice/mewla-worker-o1-" + outer + "-" + inner + ".slice/" +
+		"mewla-worker-o1-" + outer + "-" + inner + "-p0000beef.scope\n"
+	if got := strings.Join(SessionTokens(cgroup), ","); got != outer+","+inner {
+		t.Fatalf("tokens = %s", got)
+	}
+	if got := SessionTokens("0::/user.slice/user-1000.slice/session-2.scope\n"); len(got) != 0 {
+		t.Fatalf("tokens outside a Session = %v", got)
 	}
 }
