@@ -10,7 +10,7 @@
 #      ⌘V, each on macOS's privacy state for those folders reset first. Whether macOS asks, what the prompt says, and
 #      what the composer then shows. Documents' drag answers "Don't Allow"; the rest "Allow". Send.
 #   4. Sizes: one file of 63 MB, five of 20 MB at once, one of 600 MB (past what a drop reads): time and the app's
-#      memory. Send.
+#      memory. Send; then the 63 MB file dropped and sent twice more, memory after each.
 #   5. A Session's chat (a Session made on this daemon with the stub agent): ⌘V of an image and a drag of a file. Send.
 #   6. A Work's reply box (a Work made on this daemon): the same. Send.
 #
@@ -225,7 +225,7 @@ cp "$D/picture.png" "$D/gone.png"
 "$B/drag" "$mid_x" "$mid_y" 2 "$D/m0" "$D/gone.png" > "$D/drag.out" 2>&1 &
 dragging=$!
 for _ in $(seq 1 30); do [ -e "$D/m0" ] && break; sleep 0.3; done
-rm -f "$D/gone.png"; wait "$dragging"
+rm -f "$D/gone.png"; wait "$dragging"; report "file gone before the drop: $(grep "drag ended" "$D/drag.out")"
 wait_chips "$unread" 30 && report "file gone before the drop: $(chips | grep -oE "\[failed [^]]*\]")" || failed "a dropped file that could not be read has no chip that says why"
 cp "$D/picture.png" "$D/gone.png"; "$B/pasteboard" file "$D/gone.png"; rm -f "$D/gone.png"; front; cmd_v
 wait_chips "($unread.*){2}" 30 && report "file gone before the paste: a second such chip" || failed "a pasted file that could not be read has no chip that says why"
@@ -252,6 +252,14 @@ kill "$sampler" 2>/dev/null
 report "app memory peak during sizes: $(sort -n "$D/rss.txt" | tail -1 | tr -d ' ') KB"
 send; sleep 3; report "phase 4 after Send: $(chips)"
 sleep 15; report "app memory 15 s after Send: $(rss_now) KB"
+# Whether memory comes back: the same 63 MB file dropped and sent twice more. Flat is what the allocator keeps; a
+# climb of about the file's size each time is a drop kept alive.
+for round in 2 3; do
+  drop_file 1 "$D/m4-$round" "$D/clip 63MB.mov"
+  wait_chips '\[ready clip 63MB\.mov\]' 180 || failed "the 63 MB file is not a ready chip again (round $round)"
+  send; wait_chips '^chips 0$' 30 || failed "Send did not take the 63 MB file (round $round)"
+  sleep 15; report "app memory 15 s after the 63 MB file's Send, round $round: $(rss_now) KB"
+done
 
 report "== 5. A Session's chat"
 MEWLA_STATE_ROOT="$D/state" "$CLI" worker spawn -name "Drop check" -executor claude -cwd "$D/project" -prompt "Wait for files." > "$D/spawn.out" 2>&1 \
