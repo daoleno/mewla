@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -120,6 +121,14 @@ type Manager struct {
 	// reexecAt is when this process asked to restart itself in place: until it
 	// has gone (or a minute has passed) the card is left as it is.
 	reexecAt time.Time
+	// following are the grants the person is giving at this computer now,
+	// without a card (the Mac app's panel), until when they are watched.
+	following map[string]time.Time
+	// followTried: this process already restarted (or tried) for a followed
+	// grant; a second try is the person's (RestartNow).
+	followTried map[string]bool
+	// FollowFor is how long a followed grant is watched.
+	FollowFor time.Duration
 }
 
 // New makes the manager; Run drives it.
@@ -129,6 +138,85 @@ func New(backend Backend, cards Cards, restarter Restarter) *Manager {
 		now: time.Now, Poll: 2 * time.Second, Suppress: 6 * time.Hour, QuietWait: 90 * time.Second,
 		afterFunc: func(d time.Duration, f func()) { time.AfterFunc(d, f) },
 		wake:      make(chan struct{}, 1), staleSince: map[string]time.Time{},
+		following: map[string]time.Time{}, followTried: map[string]bool{}, FollowFor: 15 * time.Minute,
+	}
+}
+
+// Follow is the person giving a grant at this computer now, from the Mac app's
+// panel rather than a card: until it counts (or FollowFor passes) it is
+// watched like a card, and once given but not counting in this process, Mewla
+// restarts itself in place at a quiet moment to apply it.
+func (m *Manager) Follow(permission string) error {
+	if permission != ScreenRecording && permission != Accessibility {
+		return ErrUnknownPermission
+	}
+	if !m.backend.Supported(permission) {
+		return ErrUnsupported
+	}
+	m.mu.Lock()
+	m.following[permission] = m.now().Add(m.FollowFor)
+	m.mu.Unlock()
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// RestartNow is the person's Restart Mewla: the process starts again (under
+// launchd, a new process), after the answer is out.
+func (m *Manager) RestartNow() error {
+	m.afterFunc(300*time.Millisecond, func() {
+		if err := m.restarter.Process(); err != nil {
+			log.Printf("grants: restart: %v", err)
+		}
+	})
+	return nil
+}
+
+// followed are the grants still watched, oldest first by name.
+func (m *Manager) followed() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var ids []string
+	for id, until := range m.following {
+		if m.now().After(until) {
+			delete(m.following, id)
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// checkFollowed applies one followed grant: done once it counts; once given
+// but not counting, restarted in place at a quiet moment, once.
+func (m *Manager) checkFollowed(ctx context.Context, permission string) {
+	switch m.backend.State(ctx, permission) {
+	case Granted:
+		m.mu.Lock()
+		delete(m.following, permission)
+		m.mu.Unlock()
+	case Stale:
+		m.mu.Lock()
+		tried := m.followTried[permission]
+		restarting := !m.reexecAt.IsZero() && m.now().Sub(m.reexecAt) < time.Minute
+		m.mu.Unlock()
+		if tried || restarting || !m.restarter.Quiet() {
+			return
+		}
+		m.mu.Lock()
+		m.followTried[permission] = true
+		m.reexecAt = m.now()
+		m.mu.Unlock()
+		log.Printf("grants: %s was just allowed but is not counting yet; restarting in place to apply it", permission)
+		if err := m.restarter.InPlace(); err != nil {
+			log.Printf("grants: restart in place: %v", err)
+			m.mu.Lock()
+			m.reexecAt = time.Time{}
+			m.mu.Unlock()
+		}
 	}
 }
 
@@ -298,7 +386,8 @@ func (m *Manager) line(card brain.TimelineItem) string {
 func (m *Manager) Run(ctx context.Context) {
 	for {
 		open := m.open()
-		if len(open) == 0 {
+		followed := m.followed()
+		if len(open) == 0 && len(followed) == 0 {
 			select {
 			case <-ctx.Done():
 				return
@@ -308,6 +397,9 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 		for _, card := range open {
 			m.check(ctx, card)
+		}
+		for _, permission := range followed {
+			m.checkFollowed(ctx, permission)
 		}
 		select {
 		case <-ctx.Done():

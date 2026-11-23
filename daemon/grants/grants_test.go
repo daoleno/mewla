@@ -433,3 +433,72 @@ func TestRunPollsOnlyWhileACardIsOpen(t *testing.T) {
 	cancel()
 	<-done
 }
+
+// The Mac app's panel, with no card: a followed grant is applied by Mewla itself once the person gives it (in place,
+// at a quiet moment, once), and watched no longer once it counts or the watch runs out.
+func TestFollowAppliesAGrantGivenFromTheAppItself(t *testing.T) {
+	r := newRig()
+	if err := r.m.Follow(Chrome); err != ErrUnknownPermission {
+		t.Fatalf("followed Chrome: %v", err)
+	}
+	r.backend.unsupported = map[string]bool{ScreenRecording: true}
+	if err := r.m.Follow(ScreenRecording); err != ErrUnsupported {
+		t.Fatalf("followed a grant this computer lacks: %v", err)
+	}
+	if err := r.m.Follow(Accessibility); err != nil {
+		t.Fatal(err)
+	}
+	// Not given yet: nothing happens, and no card is made.
+	r.passFollowed()
+	if in, proc := r.restart.counts(); in+proc != 0 || r.cards.count() != 0 {
+		t.Fatalf("restarts %d/%d, cards %d", in, proc, r.cards.count())
+	}
+	// Given, not counting, busy: it waits for a quiet moment.
+	r.backend.set(Accessibility, Stale)
+	r.restart.quiet = false
+	r.passFollowed()
+	if in, _ := r.restart.counts(); in != 0 {
+		t.Fatal("restarted while busy")
+	}
+	r.restart.quiet = true
+	r.passFollowed()
+	r.clock = r.clock.Add(2 * time.Minute)
+	r.passFollowed()
+	if in, _ := r.restart.counts(); in != 1 {
+		t.Fatalf("in place %d: once only", in)
+	}
+	if got := r.m.followed(); len(got) != 1 {
+		t.Fatalf("followed %v", got)
+	}
+	// It counts: no longer followed.
+	r.backend.set(Accessibility, Granted)
+	r.passFollowed()
+	if got := r.m.followed(); len(got) != 0 {
+		t.Fatalf("still followed %v", got)
+	}
+	// A watch runs out on its own.
+	_ = r.m.Follow(Accessibility)
+	r.clock = r.clock.Add(r.m.FollowFor + time.Second)
+	if got := r.m.followed(); len(got) != 0 {
+		t.Fatalf("followed past its watch: %v", got)
+	}
+	// The person's Restart Mewla: the process, after the answer is out.
+	if err := r.m.RestartNow(); err != nil {
+		t.Fatal(err)
+	}
+	if _, proc := r.restart.counts(); proc != 0 {
+		t.Fatal("restarted before the answer went out")
+	}
+	for _, f := range r.later {
+		f()
+	}
+	if _, proc := r.restart.counts(); proc != 1 {
+		t.Fatalf("process restarts %d", proc)
+	}
+}
+
+func (r *rig) passFollowed() {
+	for _, permission := range r.m.followed() {
+		r.m.checkFollowed(context.Background(), permission)
+	}
+}

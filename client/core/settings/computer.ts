@@ -2,6 +2,7 @@ import { getOrCreateLocalDeviceIdentity } from "../auth";
 import { verifyDaemonAssertion } from "../deviceAuthContract";
 import { bodyPurpose, sha256Hex, signedFetch, signedJSON } from "../more/daemon";
 import type { StoredServer } from "../storedServerContract";
+import type { ComputerGrant } from "./macGrants";
 
 /** One computer as Settings shows it: whether it answers, what agents may use there, its Mewla. */
 
@@ -27,10 +28,20 @@ export interface AgentUseStatus {
     permission?: string;
     active?: { worker: string; name?: string; since: string };
     agents?: { worker: string; name?: string; since: string }[];
+    /** Each operating-system grant the screen needs (a Mac's), read afresh. */
+    permissions?: ComputerGrant[];
   };
 }
 
-export type AgentUseChange = { enabled: boolean } | { fix: AgentUseFix } | { key: string } | { stop_agent: true };
+export type AgentUseChange =
+  | { enabled: boolean }
+  | { fix: AgentUseFix }
+  | { key: string }
+  | { stop_agent: true }
+  /** The person is giving this grant at the Mac now (the panel beside System Settings): Mewla applies it once given. */
+  | { follow: string }
+  /** Restart Mewla so a given grant takes effect. */
+  | { restart: true };
 
 /** What a computer reports about its own Mewla. */
 export interface DaemonUpdateStatus {

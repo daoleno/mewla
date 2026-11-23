@@ -53,7 +53,7 @@ for w in list where (w[kCGWindowOwnerName as String] as? String) == "Mewla" && (
 }
 appearance() { osa -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $1" >/dev/null 2>&1 || true; sleep 3; }
 both() { appearance false; shot "$1-light"; windows "$1-light"; appearance true; shot "$1-dark"; windows "$1-dark"; appearance false; }
-app_pid() { pgrep -f '/Applications/Mewla.app/Contents/MacOS/Mewla' | head -1; }
+app_pid() { pgrep -f '/Applications/Mewla.app/Contents/MacOS/Mewla$' | head -1; }
 app_up() { local p; p=$(app_pid); [[ -n "$p" ]] && [[ "$(ps -o state= -p "$p" | tr -d ' ')" != T* ]]; }
 has_window() { bounded 60 swift -e 'import CoreGraphics
 let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]

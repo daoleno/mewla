@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,6 +45,19 @@ func TestStopWithParentNeedsAPid(t *testing.T) {
 	for _, value := range []string{"", "x", "1", "0"} {
 		t.Setenv(exitWithParentEnv, value)
 		stopWithParent(context.Background(), func(error) { t.Errorf("stopped with %q", value) })
+	}
+	time.Sleep(10 * time.Millisecond)
+}
+
+// The app's host (Mewla for Mac's launchd job runs the daemon as its child): the variable leaves the daemon's
+// environment, and without a pid nothing is watched.
+func TestStopWithHostNeedsAPidAndLeavesTheEnvironment(t *testing.T) {
+	for _, value := range []string{"", "x", "1", "0"} {
+		t.Setenv(stopWithHostEnv, value)
+		stopWithHost(context.Background(), func(error) { t.Errorf("stopped with %q", value) })
+		if _, set := os.LookupEnv(stopWithHostEnv); set {
+			t.Fatalf("%s left set", stopWithHostEnv)
+		}
 	}
 	time.Sleep(10 * time.Millisecond)
 }

@@ -90,6 +90,42 @@ type Permission struct {
 	// RestartRequired means the grant exists but takes effect only after
 	// Mewla restarts.
 	RestartRequired bool `json:"restart_required,omitempty"`
+	// State is where the grant stands (PermissionGranted, PermissionOff,
+	// PermissionMissing or PermissionRestart); empty where the system can't
+	// tell (not a Mac).
+	State string `json:"state,omitempty"`
+}
+
+// A permission's state, as macOS holds it for Mewla.
+const (
+	// PermissionGranted: given and in effect.
+	PermissionGranted = "granted"
+	// PermissionOff: Mewla is in the permission's list, switched off (or
+	// denied when macOS asked).
+	PermissionOff = "off"
+	// PermissionMissing: Mewla is not in the list for this identity: never
+	// asked, its row removed with −, or a row left by another signature of
+	// Mewla, which macOS ignores.
+	PermissionMissing = "missing"
+	// PermissionRestart: given, in effect only for a new Mewla process.
+	PermissionRestart = "restart"
+)
+
+// permissionState is where one grant stands: own is this process's answer,
+// live a fresh process's (macOS keeps answering a process from the state it
+// started with), listed whether macOS has a row for Mewla at all (true when it
+// can't say), stale that this process saw the grant refused to it.
+func permissionState(own, live, listed, stale bool) string {
+	switch {
+	case live && (stale || !own):
+		return PermissionRestart
+	case live:
+		return PermissionGranted
+	case listed:
+		return PermissionOff
+	default:
+		return PermissionMissing
+	}
 }
 
 // displayWoke is when this process last declared activity to wake a

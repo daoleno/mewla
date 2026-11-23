@@ -246,7 +246,7 @@ export function ComputerPage(props: {
                 title={row.title}
                 titleTone={macGroups ? undefined : fixRowTone(row)}
                 trailing={<If when={row.button && row.action}>
-                  {/* On the Mac the row's own control (44 rows, as Privacy & access's Allow…); the phone's pill elsewhere. */}
+                  {/* On the Mac the row's own control (44 rows, as Privacy & access's Allow); the phone's pill elsewhere. */}
                   <If when={macGroups} else={<PillButton testID={`fix-${row.key}-button`} title={row.button!} small kind={row.key === "update-optional" ? "ghost" : fixButtonKind(fixRows())}
                     busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />}>
                     <RowButton testID={`fix-${row.key}-button`} label={row.button!} busy={busy() === row.key} disabled={Boolean(busy())} onPress={() => fix(row)} />

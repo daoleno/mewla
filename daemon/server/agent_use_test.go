@@ -71,4 +71,42 @@ func TestAgentUseSwitchIsSignedOverItsBody(t *testing.T) {
 	if code, _ := do(http.MethodPost, postPurpose(two), two); code != http.StatusBadRequest {
 		t.Fatalf("two changes at once accepted: %d", code)
 	}
+
+	// The Mac app's permission rows: each grant's state in the status, "the person is giving this now" and
+	// Restart Mewla, none of them behind a Screen approval of the app.
+	var followed []string
+	restarts := 0
+	accessibility := "missing"
+	service.SetComputer(agentuse.ComputerHooks{
+		Status: func() agentuse.ComputerStatus {
+			return agentuse.ComputerStatus{State: agentuse.ComputerPermission, Permissions: []agentuse.ComputerGrant{
+				{ID: "screen_recording", Name: "Screen Recording", State: "granted"},
+				{ID: "accessibility", Name: "Accessibility", State: accessibility},
+			}}
+		},
+		Stop:    func() {},
+		Follow:  func(permission string) error { followed = append(followed, permission); return nil },
+		Restart: func() error { restarts++; return nil },
+	})
+	if code, status := do(http.MethodGet, "mewla-agent-use:GET:/agent-use", nil); code != http.StatusOK || status.Computer == nil ||
+		len(status.Computer.Permissions) != 2 || status.Computer.Permissions[1].State != "missing" {
+		t.Fatalf("permissions: %d %+v", code, status.Computer)
+	}
+	follow := []byte(`{"follow":"accessibility"}`)
+	if code, _ := do(http.MethodPost, postPurpose(follow), follow); code != http.StatusOK || len(followed) != 1 || followed[0] != "accessibility" {
+		t.Fatalf("follow: %d %v", code, followed)
+	}
+	// Nothing waits for a restart: refused, so no paired device restarts Mewla at will.
+	restart := []byte(`{"restart":true}`)
+	if code, _ := do(http.MethodPost, postPurpose(restart), restart); code != http.StatusConflict || restarts != 0 {
+		t.Fatalf("restart with nothing waiting: %d %d", code, restarts)
+	}
+	accessibility = "restart"
+	if code, _ := do(http.MethodPost, postPurpose(restart), restart); code != http.StatusOK || restarts != 1 {
+		t.Fatalf("restart: %d %d", code, restarts)
+	}
+	both := []byte(`{"follow":"accessibility","restart":true}`)
+	if code, _ := do(http.MethodPost, postPurpose(both), both); code != http.StatusBadRequest || restarts != 1 {
+		t.Fatalf("follow and restart at once: %d", code)
+	}
 }

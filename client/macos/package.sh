@@ -112,8 +112,10 @@ cp "$daemon" "$app/Contents/Helpers/mewla"
 chmod 755 "$app/Contents/MacOS/$name" "$app/Contents/Helpers/mewla"
 cp -R "$work/nsh" "$app/Contents/Resources/nsh"
 
-# The daemon's LaunchAgent, which the app registers with SMAppService (src/agent.rs). Mewla Dev runs its daemon as
-# its child on its own state and carries none.
+# The daemon's LaunchAgent, which the app registers with SMAppService (src/agent.rs). Its program is the app's own
+# executable, which runs the daemon as its child (`Mewla --daemon serve`, src/host.rs), so that macOS charges both of
+# the daemon's permissions to Mewla.app rather than Accessibility to the bare helper. Mewla Dev runs its daemon as its
+# child on its own state and carries none.
 if [[ $dev == 0 ]]; then
   mkdir -p "$app/Contents/Library/LaunchAgents"
   cat > "$app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist" <<'PLIST'
@@ -122,8 +124,8 @@ if [[ $dev == 0 ]]; then
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.daoleno.mewla.daemon</string>
-  <key>BundleProgram</key><string>Contents/Helpers/mewla</string>
-  <key>ProgramArguments</key><array><string>mewla</string><string>serve</string></array>
+  <key>BundleProgram</key><string>Contents/MacOS/Mewla</string>
+  <key>ProgramArguments</key><array><string>Mewla</string><string>--daemon</string><string>serve</string></array>
   <key>EnvironmentVariables</key><dict><key>MEWLA_NO_AUTOUPDATE</key><string>1</string></dict>
   <key>AssociatedBundleIdentifiers</key><array><string>com.daoleno.mewla</string></array>
   <key>RunAtLoad</key><true/>
@@ -142,17 +144,17 @@ PLIST
   cp "$app/Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist" "$installed_plist"
   plutil -replace Label -string com.daoleno.mewla.installed-daemon "$installed_plist"
   plutil -remove BundleProgram "$installed_plist"
-  plutil -insert Program -string /Applications/Mewla.app/Contents/Helpers/mewla "$installed_plist"
+  plutil -insert Program -string /Applications/Mewla.app/Contents/MacOS/Mewla "$installed_plist"
   # Build the complete argv in one operation. Replacing element zero on this Mac
   # left the original "mewla" word before "serve".
-  plutil -replace ProgramArguments -json '["/Applications/Mewla.app/Contents/Helpers/mewla","serve"]' "$installed_plist"
+  plutil -replace ProgramArguments -json '["/Applications/Mewla.app/Contents/MacOS/Mewla","--daemon","serve"]' "$installed_plist"
   python3 - "$installed_plist" <<'CHECK_ARGV'
 import plistlib
 import sys
 
 with open(sys.argv[1], "rb") as plist:
     job = plistlib.load(plist)
-assert job["ProgramArguments"] == [job["Program"], "serve"], "incorrect installed helper argv"
+assert job["ProgramArguments"] == [job["Program"], "--daemon", "serve"], "incorrect installed helper argv"
 CHECK_ARGV
   plutil -lint "$installed_plist" >/dev/null
 fi
