@@ -412,6 +412,7 @@ func (s *Service) reconcileCompletedSessionsWith(workID string, periodic bool) e
 		if entry.Open && resting == nil {
 			continue // only a watcher that can wait for rest may close an open Work's Session
 		}
+		listed := s.watcher.GetWorker(turn.SessionID) != nil
 		err := s.teardownSessionWith(turn.SessionID, func(id string) error {
 			if entry.Open {
 				return resting.KillRestingSession(id, turn.TurnID)
@@ -437,7 +438,9 @@ func (s *Service) reconcileCompletedSessionsWith(workID string, periodic bool) e
 		}
 		if err == nil {
 			reclaimed = append(reclaimed, turn)
-			log.Printf("brain reclaimed Session %s: %s and it has nothing of its own running", turn.SessionID, entry.Why)
+			if listed {
+				log.Printf("brain reclaimed Session %s: %s and it has nothing of its own running", turn.SessionID, entry.Why)
+			}
 		}
 		result = errors.Join(result, err)
 	}
