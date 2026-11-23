@@ -280,9 +280,12 @@ picture the same way.
 On Mewla for Mac and in a browser, drag files from Finder, the desktop or another
 app onto the conversation or the composer: "Drop to attach" shows while they are
 over it, and dropped they become chips, the same as attached ones (in Brain's
-chat, a Session's chat and a Work's reply). A folder is not attached. On the Mac a
-dropped or copied file is read from disk, up to 64 MB each; for a larger one use
-**+**. Text dragged into the field goes in as text, as before.
+chat, a Session's chat and a Work's reply). On the Mac an image dragged out of a
+web page (Safari, Chrome) and the screenshot thumbnail that floats in the corner
+after ⌘⇧3 or ⌘⇧4 drop the same way. A folder is not attached. One drop or paste
+takes up to 512 MB in all, as **+** does; a file past that is a chip that says
+so, and a file macOS would not let Mewla read is a chip that says it can't be
+read. Text dragged into the field goes in as text, as before.
 
 In a terminal, **Attach** sends a file to the computer and types its path at the
 prompt, quoted for the shell. On the phone it is the first key of the key bar;

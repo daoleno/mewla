@@ -140,7 +140,8 @@ folder_case() { # <folder> <drag|paste> <Allow|Don't Allow>
   "$B/windows" | cut -d'|' -f1 | sort -u > "$D/owners-before.txt"
   open "$HOME/$folder"; sleep 3; place Finder 0 30 440 440; sleep 1
   local at=""
-  for _ in $(seq 1 10); do at=$("$B/ax" find Finder "$name") && break; sleep 1; done
+  # Finder shows the name without its extension unless it is set to show them all.
+  for _ in $(seq 1 10); do at=$("$B/ax" find Finder "$name" || "$B/ax" find Finder "${name%.*}") && break; sleep 1; done
   [ -n "$at" ] || { failed "$tag: no '$name' in the Finder window"; "$B/ax" texts Finder | head -40; return; }
   local t0; t0=$(now)
   if [ "$how" = drag ]; then
@@ -202,6 +203,7 @@ front; shot phase4
 kill "$sampler" 2>/dev/null
 report "app memory peak during sizes: $(sort -n "$D/rss.txt" | tail -1 | tr -d ' ') KB"
 send; sleep 3; report "phase 4 after Send: $(chips)"
+sleep 15; report "app memory 15 s after Send: $(rss_now) KB"
 
 report "== 5. A Session's chat"
 MEWLA_STATE_ROOT="$D/state" "$CLI" worker spawn -name "Drop check" -executor claude -cwd "$D/project" -prompt "Wait for files." > "$D/spawn.out" 2>&1 \
