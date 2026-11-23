@@ -24,6 +24,10 @@ type StartOptions struct {
 	// LogPath receives the host's output, appended.
 	LogPath       string
 	ClientVersion string
+	// EnclosingSlice is the Session slice of another Mewla this daemon runs
+	// in (userunit.NestingSliceOf), "" when none: the host's unit goes in it
+	// and the host nests its Sessions' slices under it.
+	EnclosingSlice string
 	// Wait bounds how long a started host may take to answer (default 10 s).
 	Wait time.Duration
 }
@@ -94,6 +98,9 @@ func spawnHost(opts StartOptions) (<-chan error, error) {
 		defer logFile.Close()
 	}
 	args := append([]string{"host", "--socket", opts.SocketPath}, opts.Args...)
+	if opts.EnclosingSlice != "" {
+		args = append(args, "--enclosing-slice", opts.EnclosingSlice)
+	}
 	cmd, inUnit := hostUnitCommand(opts, args, logFile)
 	if !inUnit {
 		cmd = exec.Command(opts.Executable, args...)

@@ -7,8 +7,8 @@ import "time"
 // Available: no user manager outside Linux.
 func Available() bool { return false }
 
-// EnclosingSlice: no Session slices outside Linux.
-func EnclosingSlice() string { return "" }
+// NestingSliceOf: no Session slices outside Linux.
+func NestingSliceOf(func(string) bool) string { return "" }
 
 // PlaceInScope: no user manager outside Linux.
 func PlaceInScope(int, string, string) (string, error) { return "", ErrUnsupported }

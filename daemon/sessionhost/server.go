@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
-	"github.com/daoleno/mewla/daemon/userunit"
 )
 
 const (
@@ -38,6 +37,10 @@ type ServerOptions struct {
 	// Session ends every process it started. Only the real host sets it: the
 	// program is first this binary, which must handle ScopeExecArg.
 	SessionScopes bool
+	// EnclosingSlice is the Session slice of another Mewla this host is part
+	// of, as the daemon that started it decided (StartOptions.EnclosingSlice);
+	// its Sessions' slices go under it.
+	EnclosingSlice string
 
 	// Test seams.
 	newScreen   func(ghosttyvt.Options) (screen, error)
@@ -86,7 +89,7 @@ func NewServer(opts ServerOptions) *Server {
 		s.newScreen = newEngineScreen
 	}
 	if opts.SessionScopes {
-		s.enclosing = userunit.EnclosingSlice()
+		s.enclosing = opts.EnclosingSlice
 	}
 	if opts.engine != nil {
 		s.engine = *opts.engine

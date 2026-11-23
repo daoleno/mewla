@@ -63,9 +63,13 @@ func sessionSlicePattern(token string) string {
 	return unitPrefix + "*" + token + sliceSuffix
 }
 
-// EnclosingSliceOf is the innermost Session slice in a /proc/<pid>/cgroup
-// text, "" when the process is in none.
-func EnclosingSliceOf(cgroup string) string {
+// NestingSlice is the Session slice a Mewla nests in, given its cgroup text:
+// the innermost Session slice that is not one of its own Sessions (own
+// reports whether a Session token is one of this Mewla's). A daemon started
+// or restarted from a shell inside one of its own Sessions must not nest
+// there: its host and every Session would go under that one, and that
+// Session's end would end them all.
+func NestingSlice(cgroup string, own func(token string) bool) string {
 	for _, line := range strings.Split(cgroup, "\n") {
 		path, ok := strings.CutPrefix(line, "0::")
 		if !ok {
@@ -73,12 +77,18 @@ func EnclosingSliceOf(cgroup string) string {
 		}
 		parts := strings.Split(path, "/")
 		for i := len(parts) - 1; i >= 0; i-- {
-			if isSessionSlice(parts[i]) {
+			if isSessionSlice(parts[i]) && (own == nil || !own(sliceToken(parts[i]))) {
 				return parts[i]
 			}
 		}
 	}
 	return ""
+}
+
+// sliceToken is the token of the Session a Session slice is: its last one.
+func sliceToken(slice string) string {
+	name := strings.TrimSuffix(slice, sliceSuffix)
+	return name[strings.LastIndex(name, "-")+1:]
 }
 
 func isSessionSlice(name string) bool {

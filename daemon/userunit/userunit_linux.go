@@ -26,14 +26,14 @@ const (
 	placeWait = 2 * time.Second
 )
 
-// EnclosingSlice is the innermost Session slice this process runs in, ""
-// when none (see EnclosingSliceOf).
-func EnclosingSlice() string {
+// NestingSliceOf is the Session slice this process nests in (see
+// NestingSlice); "" when none.
+func NestingSliceOf(own func(token string) bool) string {
 	raw, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
 		return ""
 	}
-	return EnclosingSliceOf(string(raw))
+	return NestingSlice(string(raw), own)
 }
 
 // Available reports whether there is a user bus to reach the user manager on.

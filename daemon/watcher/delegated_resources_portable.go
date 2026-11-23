@@ -220,6 +220,20 @@ func (m *portableDelegatedResourceManager) stopLease(unit, reason string) error 
 	return nil
 }
 
+// ownsSessionToken reports whether token names one of this daemon's leases.
+func (m *portableDelegatedResourceManager) ownsSessionToken(token string) bool {
+	unit := delegatedResourceUnit(m.owner, token)
+	if unit == "" {
+		return false
+	}
+	path, err := workerproc.LeasePath(m.leaseDir, unit)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
 // stateRoot is the state root the scratch root sits in; the trash is under it.
 func (m *portableDelegatedResourceManager) stateRoot() string {
 	return filepath.Dir(m.tempRoot)
