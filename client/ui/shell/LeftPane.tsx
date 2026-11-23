@@ -12,7 +12,7 @@ import { StateDotMark } from "../tray/StateControl";
 import { refreshOpened, tray } from "../tray/state";
 import { homeHeaderInset, SelectedWell, TrayBody, type TrayOpeners } from "../tray/Tray";
 import { currentBrain } from "../brain";
-import { isMacApp, isThisMac, macLightsRow } from "../mac/local";
+import { isMacApp, isThisMac, localProblem, macLightsRow } from "../mac/local";
 import { paletteOpen } from "./desktop/Overlays";
 import { paneRange, paneWidth, setPaneWidth } from "./layout";
 import { goHome, nav, openPage } from "./nav";
@@ -50,7 +50,7 @@ function PaneHeader() {
             {/* On the Mac, online is the 6 pt `ok` dot (win.css `.lp .who span i`); the other states keep theirs. */}
             <If when={MAC && line().dot === "ink"} else={<StateDotMark dot={line().dot} small={MAC} />}><View testID="state-dot-ok" class="size-1.5 rounded-full bg-ok" /></If>
             {/* On the Mac it is this Mac: "This Mac · Online", 12 (RESULT-DESIGN-PAIRS #6). */}
-            <Text testID="pane-state" class={`${MAC ? "text-[12px] leading-[16px]" : "text-sub"} line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{MAC && isThisMac(current()) ? `This Mac · ${line().words}` : line().words}</Text>
+            <Text testID="pane-state" class={`${MAC ? "text-[12px] leading-[16px]" : "text-sub"} line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{MAC && isThisMac(current()) ? `This Mac · ${localProblem() || line().words}` : line().words}</Text>
           </View></If>
       </View>
     </View>

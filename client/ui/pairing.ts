@@ -3,6 +3,7 @@ import { PairLatch } from "../core/onboarding";
 import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOTHING_TO_PASTE, pairingLinkProblem, alreadyPairedWith, pairingTarget, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
+import { isThisMac, joinLocalDaemon } from "./mac/local";
 import { haptic } from "./shell/haptics";
 import { showAlert } from "./shell/alert";
 
@@ -46,6 +47,13 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   }
   // A pairing code found in the finder: one of the app's two light ticks (SPEC §16.3 Haptics).
   if (source === "camera") haptic.impact("light");
+  // This Mac's own daemon is never paired by a code (owner 11-23): its entry is the app's, at its own loopback address
+  // (mac/local.ts `joinLocalDaemon`). A code naming this Mac, from anywhere, only brings that entry forward.
+  if (isThisMac({ daemonPublicKey: payload.daemonPublicKey })) {
+    if (source === "link") linkPairing.set({ problem: null });
+    await joinLocalDaemon();
+    return latch.release(value);
+  }
   const target = await pairingTarget(payload);
   if (!alreadyPairedWith(servers(), payload, target)) {
     const copy = pairingScopeCopy(deviceWord(), target);

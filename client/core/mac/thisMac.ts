@@ -1,4 +1,5 @@
 import type { PairedDevice } from "../settings/computer";
+import { normalizeServerURL, type StoredServer } from "../storedServerContract";
 
 /** A row of This Mac's Phones and browsers (DESIGN-MAC.md §2.4, `w-mac`). */
 export interface DeviceRow {
@@ -45,4 +46,28 @@ export function httpOrigin(address: string): string {
   if (!match) return "";
   const scheme = match[1].toLowerCase();
   return `${scheme === "wss" || scheme === "https" ? "https" : "http"}://${match[2]}`;
+}
+
+/**
+ * This Mac's own computer among the stored ones (owner 11-23: "a Mac app always has its own computer"): the one entry
+ * for its daemon's key, reached at its own loopback address. `keep` is that entry (the one already at `localURL`, else
+ * the current one, else the first), `drop` the other entries for the same key (no second "MacBook Pro"), and `rewrite`
+ * whether `keep` must move to `localURL` in place (an old pairing by the hosted name or Mewla Relay: same id, so its
+ * Sessions, alerts and name stay). With no entry, `keep` is null: the app pairs its daemon over loopback.
+ */
+export function ownEntryPlan(
+  servers: readonly StoredServer[],
+  daemonPublicKey: string,
+  localURL: string,
+  currentId: string | null,
+): { keep: StoredServer | null; drop: string[]; rewrite: boolean } {
+  const key = daemonPublicKey.trim().toLowerCase();
+  const local = normalizeServerURL(localURL);
+  const mine = servers.filter((server) => server.daemonPublicKey.trim().toLowerCase() === key);
+  const keep = mine.find((server) => server.url === local) ?? mine.find((server) => server.id === currentId) ?? mine[0] ?? null;
+  return {
+    keep,
+    drop: mine.filter((server) => server !== keep).map((server) => server.id),
+    rewrite: Boolean(keep && (keep.url !== local || keep.transportKind === "link" || keep.transportPin || keep.linkRouteId || keep.transportCandidates?.length)),
+  };
 }
