@@ -32,6 +32,10 @@
     <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notification_icon_color" />
     <!-- NSH's own provider: a chat's picture, staged in the cache, goes to the share sheet as a content:// URI (files/PictureSave.kt). -->
     <provider android:name="com.longbridge.nsh.FilesProvider" android:authorities="${applicationId}.files" android:exported="false" android:grantUriPermissions="true" />
+    <!-- The camera app writes a photo taken for the composer here (files/Camera.kt): NSH's provider opens files read-only. -->
+    <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.camera" android:exported="false" android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/camera_paths" />
+    </provider>
     <service android:name=".push.MewlaFirebaseMessagingService" android:exported="false">
       <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
     </service>

@@ -139,9 +139,6 @@ type codexSession struct {
 	mu     sync.Mutex
 	client *codexctl.Client
 	thread string
-	// tokens is the latest token use the server pushed for the thread; it
-	// serves no read for it.
-	tokens *codexctl.TokenDetails
 	// commands holds, per turn, the commandExecution items that started and
 	// have not completed: a Stop ends the ones of its own turn that still run
 	// as background terminals. turns orders the turns, oldest first.
@@ -229,9 +226,6 @@ func (s *codexSession) run(ctx context.Context) {
 				s.publish(agentevents.Event{WorkerID: s.workerID, Kind: agentevents.KindExit, At: s.owner.now().UTC()})
 				return
 			}
-			if notification.Method == "thread/tokenUsage/updated" {
-				s.noteTokens(notification.Params)
-			}
 			if notification.Method == "item/started" || notification.Method == "item/completed" {
 				s.noteCommand(notification.Method, notification.Params)
 			}
@@ -284,20 +278,6 @@ func (s *codexSession) run(ctx context.Context) {
 			}
 		}
 	}
-}
-
-func (s *codexSession) noteTokens(params json.RawMessage) {
-	if tokens, ok := codexctl.ParseTokenUsage(params); ok {
-		s.mu.Lock()
-		s.tokens = &tokens
-		s.mu.Unlock()
-	}
-}
-
-func (s *codexSession) latestTokens() *codexctl.TokenDetails {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.tokens
 }
 
 // noteCommand keeps the commandExecution items each turn has open. An
@@ -514,25 +494,3 @@ func (c *codexEvents) send(sessionID, payload, receipt string, begin func() erro
 // ErrNoCodexStatus says a Worker has no app-server connection to ask: a Codex
 // opened by hand, or one whose thread has not been announced yet.
 var ErrNoCodexStatus = errors.New("this Codex was not started by Mewla, so it has no app-server to ask")
-
-// Status reads a Worker's status from its own app-server.
-func (c *codexEvents) Status(ctx context.Context, workerID string) (codexctl.Status, error) {
-	c.mu.Lock()
-	s := c.sessions[workerID]
-	c.mu.Unlock()
-	if s == nil {
-		return codexctl.Status{}, ErrNoCodexStatus
-	}
-	client, thread := s.connection()
-	if client == nil || thread == "" {
-		return codexctl.Status{}, ErrNoCodexStatus
-	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	status, err := client.ReadStatus(ctx, thread, s.cwd)
-	if err != nil {
-		return codexctl.Status{}, err
-	}
-	status.Tokens = s.latestTokens()
-	return status, nil
-}

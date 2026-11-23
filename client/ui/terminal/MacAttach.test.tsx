@@ -53,16 +53,15 @@ describe("Mewla for Mac's terminal Attach", () => {
     await app.waitFor("text:plan notes", { state: "gone" });
   }, 30_000);
 
-  test("the chat composer's + attaches on the Mac too (the same pick, no host files.*)", async () => {
+  test("the chat composer's + is the Mac's open panel at once (the same pick, no host files.*)", async () => {
     const agent = { ...shell, id: "w7", name: "chat", command: "claude", provider: "claude" };
     const host = phoneHost({ brain: {}, worker_sessions: [agent], conversations: { w7: [] } }, { "app.pairing": () => pairing });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host, network: { [UPLOAD]: () => done } });
     await app.host.send("links.open", { url: "mewla://sessions/w7" });
     await app.waitFor("id:composer-plus", { timeout: 10_000 });
     app.onPick(() => [file]);
-    await pressUntil(app, "id:composer-plus", "id:attach-file");
-    await app.press("id:attach-file");
-    await app.waitFor("text:Ready", { timeout: 10_000 });
+    await pressUntil(app, "id:composer-plus", "text:Ready");
+    expect(app.count("id:attach-sheet")).toBe(0);
     expect(uploads(app).length).toBe(1);
   }, 30_000);
 

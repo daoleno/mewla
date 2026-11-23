@@ -260,7 +260,6 @@ type Server struct {
 	// afterPromptLeft runs a prompt's check once it has stayed off the
 	// screen for the grace; nil is time.AfterFunc. Tests run it themselves.
 	afterPromptLeft func(grace time.Duration, check func())
-	codexStatus     func(ctx context.Context, workerID string) (any, error)
 }
 
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
@@ -1287,10 +1286,6 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleCodexConversationSubscribe(conn, raw)
 	case "codex_conversation_unsubscribe":
 		s.handleCodexConversationUnsubscribe(conn, raw)
-	case "codex_slash_commands":
-		s.handleCodexSlashCommands(conn, raw)
-	case "codex_skills":
-		s.handleCodexSkills(conn, raw)
 	case "skills_inventory":
 		s.handleSkillsInventory(conn, raw)
 	case "skills_command":
@@ -1305,8 +1300,6 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handlePluginCommand(conn, raw)
 	case "plugin_mutation":
 		s.handlePluginMutation(conn, raw)
-	case "codex_status":
-		go s.handleCodexStatus(conn, raw)
 	case "terminal_snapshot":
 		s.handleTerminalMessage(conn, raw)
 	case "codex_asset":
@@ -3288,25 +3281,6 @@ func clientStartedAt(raw json.RawMessage) time.Time {
 		return parsed.UTC()
 	}
 	return time.Time{}
-}
-
-func (s *Server) handleCodexSlashCommands(conn *websocket.Conn, raw clientMessage) {
-	snapshot := bundledCodexSlashCommands()
-	s.sendJSON(conn, map[string]any{
-		"type":       "codex_slash_commands",
-		"request_id": raw.RequestID,
-		"source":     snapshot.Source,
-		"commands":   snapshot.Commands,
-	})
-}
-
-func (s *Server) handleCodexSkills(conn *websocket.Conn, raw clientMessage) {
-	s.sendJSON(conn, map[string]any{
-		"type":       "codex_skills",
-		"request_id": raw.RequestID,
-		"cwd":        raw.Cwd,
-		"skills":     discoverCodexSkills(raw.Cwd),
-	})
 }
 
 func (s *Server) handleCodexAsset(conn *websocket.Conn, raw clientMessage) {

@@ -15,7 +15,8 @@ import com.longbridge.nsh.NshView
 import java.util.concurrent.Executors
 
 /**
- * `files.*` (client/ui/more/files/host.ts): the system picker for attachments, a folder
+ * `files.*` (client/ui/more/files/host.ts): the system picker for attachments, a photo taken
+ * now (`files.canCapture`, `files.capture`: Camera), a folder
  * for downloads, the streaming upload and download, a chat's picture saved to the gallery or
  * shared (`files.saveImage`, `files.shareImage`, PictureSave), and the `mewla.pdf` component.
  * Transfers run on their own threads; replies may come from any thread, events are
@@ -27,6 +28,7 @@ class FilesHost(private val activity: ComponentActivity, private val nsh: NshVie
   private val transfers = Transfers(activity.contentResolver) { uploadId, sent, total ->
     main.post { nsh.send("files.uploadProgress", mapOf("uploadId" to uploadId, "bytesSent" to sent, "totalBytes" to total)) }
   }
+  private val camera = Camera(activity)
   // The folders the person chose while the app ran: a download goes only into one of them.
   private val folders = mutableMapOf<String, Uri>()
 
@@ -108,6 +110,9 @@ class FilesHost(private val activity: ComponentActivity, private val nsh: NshVie
         reply.reject("Could not open the file picker.")
       }
     }
+    // This build takes photos for the composer: "+" shows Camera when the device has one.
+    nsh.handle("files.canCapture") { _, reply -> reply.resolve(camera.available()) }
+    nsh.handle("files.capture") { _, reply -> camera.capture(reply) }
     nsh.handle("files.upload") { data, reply ->
       val request = try { Transfers.UploadRequest.from(data) } catch (error: Exception) { return@handle reply.reject(error.message ?: "Upload request is invalid.") }
       run(reply) { transfers.upload(request) }

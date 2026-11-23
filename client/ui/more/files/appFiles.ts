@@ -1,11 +1,14 @@
+import { platform } from "nsh";
 import { pastedFileName } from "../../../core/files/pastedFiles";
 import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../../../core/files/uploads";
 
 /**
  * Files the app itself holds: what a person pastes or drops into a field (`onPaste`'s
- * `File`s) on any platform. The host never saw them, so they are kept here under an
- * `app-file:<n>` uri and uploaded with `fetch`, the File as the body. `fetch` does not
- * report upload progress, so such a file goes from 0 to whole when the computer answers.
+ * `File`s) on any platform, and the photos the phone's photo picker gives (`pickPhotos`).
+ * The host never saw them, so they are kept here under an `app-file:<n>` uri and uploaded
+ * with `fetch`. On a phone the body is the file read as a stream, counted as it is sent, so
+ * its chip shows progress; elsewhere it is the File itself (a browser streams a body only
+ * over HTTP/2), which goes from 0 to whole when the computer answers.
  */
 
 const KEPT = 64;
@@ -53,6 +56,25 @@ export function releaseAppFiles(uris: readonly string[]): void {
   }
 }
 
+/** NSH's fetch on a phone sends a stream as it reads it. */
+const STREAMS = platform.os === "ios" || platform.os === "android";
+
+/** `file`'s bytes as a stream that reports how many have been read for sending. */
+function counted(file: File, report: (bytesSent: number) => void): ReadableStream<Uint8Array> {
+  const reader = file.stream().getReader();
+  let sent = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) return controller.close();
+      sent += value.byteLength;
+      report(sent);
+      controller.enqueue(value);
+    },
+    cancel: (reason) => reader.cancel(reason),
+  });
+}
+
 const running = new Map<string, AbortController>();
 const listeners = new Map<string, Set<(progress: NativeUploadProgress) => void>>();
 
@@ -65,7 +87,8 @@ export const appFileUploadHost: UploadHost = {
     const report = (bytesSent: number) => listeners.get(request.uploadId)?.forEach((listener) => listener({ bytesSent, totalBytes: file.size }));
     try {
       report(0);
-      const response = await fetch(request.url, { method: "POST", headers: request.headers, body: file, signal: controller.signal });
+      const sending = STREAMS ? counted(file, report) : file;
+      const response = await fetch(request.url, { method: "POST", headers: request.headers, body: sending, signal: controller.signal, ...(STREAMS ? { duplex: "half" as const } : {}) });
       const body = await response.text();
       report(file.size);
       return { status: response.status, body };

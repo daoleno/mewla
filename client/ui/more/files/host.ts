@@ -2,6 +2,7 @@ import { host, nativeComponent, Picker, platform } from "nsh";
 import type { SessionFileDownloadHost } from "../../../core/files/sessionFilePreviewDownload";
 import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../../../core/files/uploads";
 import { appFileImageUrl, appFileUploadHost, isAppFileUri, keepAppFiles } from "./appFiles";
+import { pickedPhotoName } from "../../../core/files/attachSources";
 
 /**
  * `files.*`, what only the host can do with files: Android (client/android/…/files/),
@@ -12,6 +13,12 @@ import { appFileImageUrl, appFileUploadHost, isAppFileUri, keepAppFiles } from "
  * - `files.pick {maxCount}` → `UploadDocumentAsset[]`; `[]` when the picker was closed.
  *   The system picker (Android SAF ACTION_GET_CONTENT, iOS document picker); each `uri`
  *   is the host's own handle of the picked file (a content:// URI, an iOS token).
+ * - `files.canCapture` → boolean: this host takes photos (`files.capture`) and the device has a camera. A host
+ *   from before it answers nothing (the call rejects): no Camera.
+ * - `files.capture` → `UploadDocumentAsset` or null when the person closed the camera: a photo taken now
+ *   (Android ACTION_IMAGE_CAPTURE after the system's camera prompt, iOS UIImagePickerController), kept by the
+ *   host as a JPEG in its cache, its `uri` streamed by `files.upload` like a picked file. Rejects with what to
+ *   read when the camera was refused or cannot open.
  * - `files.upload {uploadId, url, fileUri, expectedSize, headers}` → `{status, body}`:
  *   POSTs the file's bytes as they are read; `files.uploadProgress {uploadId, bytesSent,
  *   totalBytes}` at most every 200 ms (`totalBytes` -1 when unknown), the last one whole.
@@ -69,6 +76,32 @@ async function pickAppFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
 function cancel(name: string, data: Record<string, string>): void {
   if (platform.os === "web") void host.call(name, data).catch(() => {});
   else host.post(name, data);
+}
+
+/**
+ * Photos and screenshots from the system's photo picker (NSH's `Picker.pickImages`: Android's Photo Picker, iOS's
+ * PHPicker; no permission), up to `maxCount`, as the app's own files. HEIC and other formats an agent cannot read
+ * come as JPEG; sizes are kept.
+ */
+export async function pickPhotos(maxCount: number): Promise<UploadDocumentAsset[]> {
+  const picked = await Picker.pickImages({ multiple: maxCount > 1, limit: Math.max(1, maxCount), format: "compatible" });
+  const now = new Date();
+  return keepAppFiles(picked.map((pick) => pick.file), now).map((asset, index) => ({ ...asset, name: pickedPhotoName(asset.name, asset.mimeType ?? "", now, index) }));
+}
+
+let capture: Promise<boolean> | null = null;
+
+/** Whether "+" offers Camera: asked of the host once per run (a host from before `files.capture` does not answer). */
+export function canCapture(): Promise<boolean> {
+  if (platform.os !== "ios" && platform.os !== "android") return Promise.resolve(false);
+  capture ??= host.call<boolean>("files.canCapture", null).then((answer) => answer === true, () => false);
+  return capture;
+}
+
+/** A photo taken now (`files.capture`), as a picked file; `[]` when the camera was closed. */
+export async function capturePhoto(): Promise<UploadDocumentAsset[]> {
+  const asset = await host.call<UploadDocumentAsset | null>("files.capture", null, WAIT);
+  return asset && typeof asset.uri === "string" ? [asset] : [];
 }
 
 export function pickFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
