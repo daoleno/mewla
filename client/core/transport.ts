@@ -1,5 +1,5 @@
 import { buildAuthorizationHeader } from "./auth";
-import { bindingFor, CONNECT_PROOF_PURPOSE, daemonProves, newChallenge, noteDaemonProves, olderMewlaLine, proofAnswers, runsOlderMewla } from "./daemonProof";
+import { bindingFor, CONNECT_PROOF_PURPOSE, daemonProves, newChallenge, noteDaemonProves, noteProvedAt, olderMewlaLine, proofAnswers, runsOlderMewla } from "./daemonProof";
 import {
   checkDirectPath,
   invalidateStoredServerTransport,
@@ -218,7 +218,7 @@ export class Transport {
    * that has proved before is held to it (`gate`): until its proof verifies the socket is not connected, so nothing
    * is sent to it and nothing it sends is heard (security review 11-23, PR B item 6).
    */
-  private proof: { attempt: number; nonceHex: string; gate: Array<{ data: unknown }> | null; passed: boolean } | null = null;
+  private proof: { attempt: number; nonceHex: string; url: string; gate: Array<{ data: unknown }> | null; passed: boolean } | null = null;
   /**
    * Why a computer held to its proof is not connected, when the cause is known: it runs a Mewla from before proofs (a
    * downgrade), which refuses this app's bound connect. Said in place of a bare "error" until a connect succeeds.
@@ -456,7 +456,7 @@ export class Transport {
     try {
       const [authorization, url, proves] = await ready;
       if (attempt !== this.attempt) return;
-      this.proof = { attempt, nonceHex, gate: proves ? [] : null, passed: false };
+      this.proof = { attempt, nonceHex, url, gate: proves ? [] : null, passed: false };
       socket = platform().openSocket(url, [authSubprotocol(authorization), ...frameSubprotocols()]);
     } catch (error) {
       if (attempt === this.attempt) this.failed(error instanceof Error ? error.message : String(error), true);
@@ -521,6 +521,7 @@ export class Transport {
       (await proofAnswers({ purpose: CONNECT_PROOF_PURPOSE, challengeHex: proof.nonceHex, daemonId: this.server.daemonId, daemonPublicKey: this.server.daemonPublicKey, proof: frame }));
     if (attempt !== this.attempt || this.socket !== socket || this.proof !== proof || !proof) return;
     if (!proved) return this.kill(`${this.server.name || "The computer"} did not prove it is the computer this app paired`);
+    noteProvedAt(this.server.daemonPublicKey, proof.url);
     proof.passed = true;
     proof.gate = null;
     this.opened();
@@ -908,6 +909,7 @@ export class Transport {
           (await proofAnswers({ purpose: CONNECT_PROOF_PURPOSE, challengeHex: nonceHex, daemonId: this.server.daemonId, daemonPublicKey: this.server.daemonPublicKey, proof: frame }));
         if (this.moving?.socket !== socket) return;
         if (!ok) return this.failMove();
+        noteProvedAt(this.server.daemonPublicKey, found.url);
         proved = true;
         ready();
       })();

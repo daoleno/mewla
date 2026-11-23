@@ -264,7 +264,16 @@ export class ScreenConnection {
     if (!this.route && this.watch && this.worker) params.worker = this.worker;
     if (this.drawsPointer) params.pointer = "local";
     const url = viewerURL(this.server, this.route?.path ?? "/screen/viewer", params);
-    const authorization = await deviceAuthorization(this.server, this.route?.purpose ?? "mewla-screen-view", { url });
+    let authorization: string;
+    try {
+      // A computer held to proofs proves itself at this address first (round 2 F4).
+      authorization = await deviceAuthorization(this.server, this.route?.purpose ?? "mewla-screen-view", { url });
+    } catch (error) {
+      if (this.closed) return;
+      this.reason = error instanceof Error ? error.message : null;
+      this.finish();
+      return;
+    }
     if (this.closed) return;
     let socket: SocketLike;
     try {

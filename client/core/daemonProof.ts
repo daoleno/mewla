@@ -69,9 +69,41 @@ export async function noteDaemonProves(daemonPublicKey: string): Promise<void> {
   await platform().storage.setItem(PROVING_KEY, JSON.stringify([...keys])).catch(() => {});
 }
 
+/**
+ * Where a computer held to proofs proved itself a moment ago (its key, at an http(s) origin): its socket's proof
+ * (Transport) or a probe's (`more/daemon.ts` `heldToProof`). Signed HTTP, uploads and the Screen viewer go to a
+ * computer held to proofs only at such an origin (security review 11-23, round 2 F4).
+ */
+export const PROVED_AT_MS = 2 * 60_000;
+const provedAt = new Map<string, number>();
+
+/** The key of `url`'s origin for `daemonPublicKey` (a socket's ws(s) address is its http(s) origin), or null. */
+export function provedAtKey(daemonPublicKey: string, url: string): string | null {
+  const key = normalizePublicKeyHex(daemonPublicKey);
+  try {
+    const address = new URL(url);
+    const scheme = address.protocol === "wss:" || address.protocol === "https:" ? "https:" : address.protocol === "ws:" || address.protocol === "http:" ? "http:" : "";
+    if (!key || !scheme || !address.host) return null;
+    return `${key} ${scheme}//${address.host}`;
+  } catch {
+    return null;
+  }
+}
+
+export function noteProvedAt(daemonPublicKey: string, url: string): void {
+  const key = provedAtKey(daemonPublicKey, url);
+  if (key) provedAt.set(key, Date.now() + PROVED_AT_MS);
+}
+
+export function provedAtRecently(daemonPublicKey: string, url: string): boolean {
+  const key = provedAtKey(daemonPublicKey, url);
+  return !!key && (provedAt.get(key) ?? 0) > Date.now();
+}
+
 /** Tests: forget what was read from the store (a new app start). */
 export function resetDaemonProofsForTests(): void {
   proving = null;
+  provedAt.clear();
 }
 
 /**

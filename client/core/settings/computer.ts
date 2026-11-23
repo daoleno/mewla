@@ -121,7 +121,7 @@ export function restartComputerTerminals(server: StoredServer): Promise<DaemonUp
 export async function checkComputer(server: StoredServer): Promise<ComputerCheck> {
   try {
     const challengeHex = newChallenge();
-    const response = await signedFetch(server, "GET", "/auth-check", "mewla-probe", { timeoutMs: 8_000, nonceHex: challengeHex });
+    const response = await signedFetch(server, "GET", "/auth-check", "mewla-probe", { timeoutMs: 8_000, nonceHex: challengeHex, answerProves: true });
     if (response.status === 401) return { state: "unpaired" };
     if (!response.ok) return { state: "offline" };
     const body = (await response.json()) as { name?: unknown; proof?: unknown; assertion_timestamp?: string; assertion_nonce?: string; assertion_signature?: string };
