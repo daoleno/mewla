@@ -36,6 +36,9 @@ An existing phone route works without changing LAN access. See [Connect and pair
   Settings → General → Login Items & Extensions**). Quitting the app leaves it
   running, and so your Sessions and Workers. **Stop Mewla on this Mac…** in the
   cat's menu stops it and removes the login item.
+- **This Mac** is always one of the app's computers. The app reaches it at its own
+  loopback address, with no pairing step, and it cannot be removed. When its
+  Mewla is not running, its row in the computers list says so.
 - The `mewla` command ([CLI](cli.md)) is the app's own, linked into
   `~/.local/bin/mewla`.
 - The daemon's device key and other secrets are kept in your login Keychain

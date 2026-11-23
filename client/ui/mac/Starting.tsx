@@ -2,7 +2,9 @@ import { Button } from "nsh/base";
 import { Text, View } from "nsh";
 import { PetSprite } from "../pets/PetSprite";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
-import { joinLocalDaemon, localProblem, macLightsRow } from "./local";
+import { Icon } from "../kit/Icon";
+import { current } from "../session";
+import { joinLocalDaemon, localProblem, macLightsRow, thisMacChosen } from "./local";
 
 /**
  * First run while Brain wakes (DESIGN-MAC.md §2.4, `m-waking`): the waking cat in the middle and "Waking up". Home's
@@ -29,6 +31,9 @@ export function MacStarting() {
   return (
     <View testID="mac-starting" class="flex-1 bg-background text-foreground">
       <View class="h-[46px] flex-row items-center pr-3" style={{ paddingLeft: macLightsRow() > 0 ? 84 : 18 }}>
+        {/* Chosen in the computers list while another computer is current: back to that one. */}
+        <If when={thisMacChosen() && current()}><Button testID="mac-starting-back" accessibilityLabel={`Back to ${current()?.name || "the computer"}`} onPress={() => thisMacChosen.set(false)}
+            class="mr-1 size-7 items-center justify-center active:opacity-70"><Icon name="chevron-left" size={18} tone="soft" /></Button></If>
         <Text role="header" class="text-[13.5px] leading-[18px] font-semibold">Brain</Text>
       </View>
       <MacWaking problem={localProblem} onRetry={() => void joinLocalDaemon()} />

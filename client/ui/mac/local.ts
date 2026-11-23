@@ -1,6 +1,7 @@
 import { host, signal, untracked } from "nsh";
 import { titleBar, Window, type TitleBarOptions } from "nsh/desktop";
-import { httpOrigin, ownEntryPlan } from "../../core/mac/thisMac";
+import { httpOrigin, NOT_RUNNING, ownEntryPlan } from "../../core/mac/thisMac";
+import { PairingUnreachableError } from "../../core/pairing";
 import { pairWith, readPairingLink } from "../../core/pairFlow";
 import { platform } from "../../core/platform";
 import { getServers, removeServer, saveServer } from "../../core/servers";
@@ -60,6 +61,20 @@ const localDaemonKey = signal("");
 /** This Mac's daemon's own (loopback) http origin, once it answered this launch. */
 const localOrigin = signal("");
 
+/** Whether this launch's join has given this Mac its entry. */
+export const localJoined = signal(false);
+
+/**
+ * The person chose This Mac in the computers list before it has an entry: the window shows it starting, or why not,
+ * with Try Again, until the join makes it the computer (or they go back).
+ */
+export const thisMacChosen = signal(false);
+
+/** This Mac's name before its entry exists: the Mac's own (System Settings › Sharing). */
+export function thisMacName(): string {
+  return (host.params as { computerName?: string }).computerName || "This Mac";
+}
+
 /** Whether `server` is this Mac's own daemon (This Mac's page, DESIGN-MAC.md §2.4). */
 export function isThisMac(server: { daemonPublicKey: string } | null | undefined): boolean {
   return Boolean(server && isMacApp() && localDaemonKey() && sameKey(server.daemonPublicKey, localDaemonKey()));
@@ -116,6 +131,8 @@ async function join(): Promise<void> {
     localOrigin.set(payload ? httpOrigin(payload.url) : own ? httpOrigin(own.url) : "");
     localProblem.set("");
     if (own) {
+      localJoined.set(true);
+      thisMacChosen.set(false);
       if (untracked(current)?.id !== own.id) switchTo(own);
       // A daemon that revoked this app (the entry removed while it answered) is paired again, in place.
       const entry = own;
@@ -129,8 +146,11 @@ async function join(): Promise<void> {
     if (!payload) throw new Error("This Mac's Mewla gave no address.");
     const params = host.params as { computerName?: string };
     await addPairedServer(await pairWith({ ...payload, name: params.computerName || payload.name }));
+    localJoined.set(true);
+    thisMacChosen.set(false);
   } catch (error) {
-    localProblem.set(error instanceof Error ? error.message : String(error));
+    // Nothing answered at its own loopback address: its Mewla is not running (never the phone's adb-reverse advice).
+    localProblem.set(error instanceof PairingUnreachableError ? NOT_RUNNING : error instanceof Error ? error.message : String(error));
     retry = setTimeout(() => void joinLocalDaemon(), 20_000);
   }
 }
