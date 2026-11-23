@@ -17,6 +17,8 @@ export function buildLinkPairingTestLink(input: {
   domain: string;
   name?: string;
   admissionAlias?: string;
+  /** More relays the computer is on, after the first: no admission of their own. */
+  moreRelays?: { name: string; domain: string }[];
 }): string {
   const text = new TextEncoder();
   const name = input.name ?? "main";
@@ -38,6 +40,7 @@ export function buildLinkPairingTestLink(input: {
       name,
       admission,
       stable,
+      ...(input.moreRelays ?? []).flatMap((relay) => [relay.name, "", `wss://${input.label}.${relay.domain}/ws`]),
     ].join("\n"),
   );
   const domainSeparator = text.encode("mewla-link-pairing-v2\u0000");
@@ -62,12 +65,13 @@ export function buildLinkPairingTestLink(input: {
     expiry,
     signature,
     ...short(input.label),
-    Uint8Array.of(1),
+    Uint8Array.of(1 + (input.moreRelays?.length ?? 0)),
     ...short(name),
     ...short(input.domain),
     Uint8Array.of(443 >> 8, 443 & 0xff),
     Uint8Array.of(input.admissionAlias ? 1 : 0),
     ...(input.admissionAlias ? [hexToBytes(input.admissionAlias)] : []),
+    ...(input.moreRelays ?? []).flatMap((relay) => [...short(relay.name), ...short(relay.domain), Uint8Array.of(443 >> 8, 443 & 0xff), Uint8Array.of(0)]),
   ];
   const bytes = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
   let offset = 0;
