@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localFilePath, pastedFileName, pasteAttaches, withoutInserted } from "./pastedFiles";
+import { localFileContents, localFileName, localFilePath, pastedFileName, pasteAttaches, withoutInserted } from "./pastedFiles";
 
 describe("pastedFileName", () => {
   const at = new Date(2026, 10, 11, 8, 5, 9);
@@ -60,6 +60,29 @@ describe("localFilePath", () => {
     expect(localFilePath("https://example.com/a.png")).toBeNull();
     expect(localFilePath("file://server/share/a.png")).toBeNull();
     expect(localFilePath("file:///bad%E5")).toBeNull();
+  });
+});
+
+describe("localFileContents", () => {
+  const report = "file:///Users/me/Downloads/report%201.pdf";
+  const shot = "file:///Users/me/Desktop/shot.png";
+
+  test("with no local file named, every delivered file is kept", () => {
+    expect(localFileContents(["image.png", "picture.png"], [])).toEqual({ keep: [true, true], unread: [], folders: 0 });
+  });
+
+  test("named files keep their contents; an icon beside them is not one", () => {
+    expect(localFileContents(["report 1.pdf", "shot.png", "icon.tiff"], [report, shot])).toEqual({ keep: [true, true, false], unread: [], folders: 0 });
+  });
+
+  test("a named file that came without contents could not be read", () => {
+    expect(localFileContents(["shot.png"], [report, shot])).toEqual({ keep: [true], unread: [{ uri: report, name: "report 1.pdf" }], folders: 0 });
+    expect(localFileContents([], [report])).toEqual({ keep: [], unread: [{ uri: report, name: "report 1.pdf" }], folders: 0 });
+  });
+
+  test("folders never come, and are counted apart", () => {
+    expect(localFileContents(["shot.png"], ["file:///Users/me/Projects/", shot])).toEqual({ keep: [true], unread: [], folders: 1 });
+    expect(localFileName("file:///Users/me/Projects/")).toBe("Projects");
   });
 });
 

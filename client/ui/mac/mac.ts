@@ -4,10 +4,11 @@ import { Application, GlobalShortcut, Tray, Window } from "nsh/desktop";
 import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWords, type MenuBarItem, type MenuBarReaction } from "../../core/mac/menuBar";
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
-import { brain, brainChat, connection, current, ready } from "../session";
-import { nav, openBrainTerminal, openPage, openSession } from "../shell/nav";
+import { brain, brainChat, connection, current, ready, workers } from "../session";
+import { nav, openBrainTerminal, openPage, openSession, openWorkDetail } from "../shell/nav";
 import { focusComposer } from "../shell/desktop/keys";
-import { newestBrainUploads } from "../brain/composer";
+import { newestUploads } from "../more/files/newestUploads";
+import { workSurface } from "../work/state";
 import { dayKey } from "../../core/calendar/agenda";
 import { showCalendarDay } from "../calendar/CalendarPage";
 import { clock } from "../calendar/clock";
@@ -39,7 +40,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; relay?: string; allow?: "screen_recording" | "accessibility" } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; imageSession?: string; imageWork?: string; relay?: string; allow?: "screen_recording" | "accessibility" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -228,6 +229,10 @@ export function startMac(): void {
       if (now !== top) console.log(`dev script: page ${(top = now)}`);
     });
     if (script.imageInput) imageInputLog();
+    // Image input in a Session's chat and a Work's reply box too: the run makes them on this daemon (a Session of
+    // that name, a Work of that id); each opens once it exists, its composer taking the keyboard.
+    if (script.imageSession) openOnceThere("session", () => untracked(workers).find((worker) => worker.name === script.imageSession)?.id, () => workers(), openSession);
+    if (script.imageWork) openOnceThere("work", () => untracked(workSurface).slips.find((slip) => slip.workId === script.imageWork)?.workId, () => workSurface(), openWorkDetail);
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
     // The connection to the daemon, each time it changes: a daemon restart shows as waiting, then connected again.
@@ -300,13 +305,30 @@ export function startMac(): void {
   }
 }
 
+/** Opens the page of what `find` names once it exists (`watch` changes as it may come), then focuses its composer. */
+function openOnceThere(what: string, find: () => string | undefined, watch: () => unknown, open: (id: string) => void): void {
+  let opened = false;
+  effect(() => {
+    watch();
+    const id = find();
+    if (opened || !id) return;
+    opened = true;
+    untracked(() => open(id));
+    setTimeout(() => {
+      focusComposer();
+      console.log(`dev script: ${what} ready ${id}`);
+    }, 1500);
+  });
+}
+
 /**
- * The image input run's log (macos-image-input.yml): the chips of Brain's composer each time they change (how many,
- * each one's state and name). Send empties them; the run's capture shows the message they went with.
+ * The image input run's log (macos-image-input.yml): the chips of the newest composer (Brain's, then a Session's or
+ * a Work's as the run opens them) each time they change (how many, each one's state and name). Send empties them; the
+ * run's capture shows the message they went with.
  */
 function imageInputLog(): void {
   effect(() => {
-    const items = newestBrainUploads()?.items() ?? [];
+    const items = newestUploads()?.items() ?? [];
     console.log(`dev script: chips ${items.length}${items.map((item) => ` [${item.status} ${item.asset.name}${item.error ? `: ${item.error}` : ""}]`).join("")}`);
   });
 }
