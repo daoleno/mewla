@@ -176,7 +176,7 @@ jobs:
           test -e "$HOME/.mewla/mac-app-takeover.complete"
           ps -axo pid,ppid,command | grep -E "Mewla.app/Contents/(MacOS|Helpers)" | grep -v grep
           # A Worker with a running command, which must outlive the job's move.
-          client/macos/scripts/session-proof.sh start /Applications/Mewla.app/Contents/Helpers/mewla "$RUNNER_TEMP/session"
+          client/macos/scripts/session-proof.sh start /Applications/Mewla.app/Contents/Helpers/mewla "$HOME/mewla-session-proof"
       - name: This build over it moves the job onto the app's executable
         run: |
           set -euo pipefail
@@ -201,7 +201,7 @@ jobs:
           [[ $(wc -w <<<"$serve") -eq 1 ]]
           test "$(ps -o ppid= -p "$serve" | tr -d ' ')" = "$jobpid"
           echo "the daemon $serve is the child of the job's process $jobpid"
-          client/macos/scripts/session-proof.sh check /Applications/Mewla.app/Contents/Helpers/mewla "$RUNNER_TEMP/session" "across the job's move"
+          client/macos/scripts/session-proof.sh check /Applications/Mewla.app/Contents/Helpers/mewla "$HOME/mewla-session-proof" "across the job's move"
       - name: What the app and launchd said
         if: always()
         run: |

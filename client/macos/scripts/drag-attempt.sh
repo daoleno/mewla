@@ -30,9 +30,13 @@ sudo rm -rf "$app"
 ditto "$src" "$app"
 sudo sqlite3 "$db" "delete from access where client = 'com.daoleno.mewla' or client like '$app/%';"
 tcc_reload
-# The unlock prompt's answer: this runner's own password, set for this job (the machine is thrown away after it).
-password="drag-$(uuidgen | cut -c1-8)"
-sudo dscl . -passwd "/Users/$(id -un)" "$password"
+# The unlock prompt's answer: this runner's own password, if it is one of the image's known ones (macOS 26 will not
+# set a new one without the old).
+password=""
+for candidate in runner admin vagrant; do
+  if dscl . -authonly "$(id -un)" "$candidate" >/dev/null 2>&1; then password=$candidate; break; fi
+done
+say "the runner's password: $([[ -n "$password" ]] && echo known || echo unknown)"
 
 cat > "$work/drag.swift" <<'SWIFT'
 import CoreGraphics
