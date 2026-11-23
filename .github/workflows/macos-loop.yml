@@ -1,0 +1,189 @@
+name: Mewla for Mac warm loop
+
+# A warm Mac for one Worker's task, off release time: builds Mewla Dev once, then holds the runner so a computer can
+# reach it over ssh (rsync the change, rebuild incrementally, relaunch, screenshot, read the log, click and type).
+# client/macos/scripts/loop/mac-loop.sh starts it (`gh workflow run` with a per-run PUBLIC key; the private half never
+# leaves the computer that started it) and drives it; client/macos/scripts/loop/README.md has the commands and rules.
+#
+# The way in: an sshd of the job's own (not the system's), started by a step so its sessions share the job's GUI
+# session, key-only (no password, no PAM), on 127.0.0.1; a cloudflared quick tunnel (outbound from the runner) carries
+# it. The tunnel's hostname and the sshd's host key go up as an artifact (readable while the run is going), never into
+# the log. No repository secret is used.
+#
+# It yields, always: mac-loop.sh refuses to start beside a release or another loop (yield.py blockers), and the hold
+# ends the run as soon as any other macOS job in the repo has waited `yield_after` seconds for a runner (yield.py
+# waiters): the account's macOS runners are few, and the releases and proof lanes come first. It holds `minutes`
+# (default 45) at most; touch ~/mac-loop/stop over ssh to end it sooner.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pubkey:
+        description: "The run's ssh public key (ssh-ed25519 …); mac-loop.sh start makes it"
+        type: string
+        required: true
+      minutes:
+        description: "How long to hold the warm Mac at most (60 at most)"
+        type: number
+        default: 45
+      host:
+        description: "Build the host's loop profile in the background once warm (for Rust host changes)"
+        type: boolean
+        default: false
+      yield_after:
+        description: "Leave when another macOS job has been queued this many seconds"
+        type: number
+        default: 120
+
+permissions:
+  contents: read
+  actions: read
+
+# One loop at a time (mac-loop.sh start also refuses while one is queued or running).
+concurrency:
+  group: macos-loop
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    name: Warm Mewla Dev
+    runs-on: macos-26
+    # The build (about 10 min) plus the hold (`minutes`, at most 60) and the upload.
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+      - name: The run's key
+        env:
+          PUBKEY: ${{ inputs.pubkey }}
+        run: |
+          mkdir -p "$HOME/mac-loop/sshd"
+          [[ "$PUBKEY" =~ ^ssh-ed25519\ [A-Za-z0-9+/]+=*(\ [A-Za-z0-9._@-]+)?$ ]] || { echo "pubkey: not one ssh-ed25519 public key"; exit 1; }
+          printf '%s\n' "$PUBKEY" > "$HOME/mac-loop/sshd/authorized_keys"; chmod 600 "$HOME/mac-loop/sshd/authorized_keys"
+          ssh-keygen -l -f "$HOME/mac-loop/sshd/authorized_keys"
+      - name: Stamp
+        run: date -u +%s > "$RUNNER_TEMP/t0"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Zig, the terminal engine and the web VT from main's cache
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          lib: darwin_arm64
+          web: "true"
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            client/macos/target
+          key: macos-app-v1-${{ hashFiles('client/macos/Cargo.toml', 'client/macos/Cargo.lock') }}
+          restore-keys: macos-app-v1-
+      - name: Stub agent
+        run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
+      - name: Build the daemon
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
+          ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
+      - name: Package Mewla Dev
+        run: client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$HOME/mac-loop/app" --dev
+      - name: Built
+        run: echo "cold build $(( $(date -u +%s) - $(cat "$RUNNER_TEMP/t0") )) s"
+      - name: sshd and the tunnel
+        run: |
+          set -euo pipefail
+          L="$HOME/mac-loop"; mkdir -p "$L/sshd" "$L/out"
+          echo "$GITHUB_WORKSPACE" > "$L/workspace"
+          ssh-keygen -q -t ed25519 -N '' -f "$L/sshd/host_key"
+          cat > "$L/sshd/config" <<EOF
+          ListenAddress 127.0.0.1
+          Port 22022
+          HostKey $L/sshd/host_key
+          AuthorizedKeysFile $L/sshd/authorized_keys
+          PidFile $L/sshd/pid
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          UsePAM no
+          PermitRootLogin no
+          AllowUsers $USER
+          StrictModes no
+          AcceptEnv LANG
+          SetEnv MEWLA_LOOP=1
+          EOF
+          sed -i '' 's/^ *//' "$L/sshd/config"
+          /usr/sbin/sshd -t -f "$L/sshd/config"
+          curl -fsSL -o "$L/cf.tgz" https://github.com/cloudflare/cloudflared/releases/download/2026.10.0/cloudflared-darwin-arm64.tgz
+          tar -xzf "$L/cf.tgz" -C "$L"
+          "$L/cloudflared" --version
+          # A click at global points (CGEvent), for mac-loop.sh click.
+          printf '%s\n' 'import CoreGraphics; import Foundation' \
+            'let a = CommandLine.arguments; let p = CGPoint(x: Double(a[1])!, y: Double(a[2])!)' \
+            'for t in [CGEventType.mouseMoved, .leftMouseDown, .leftMouseUp] { CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)!.post(tap: .cghidEventTap); usleep(80000) }' > "$L/click.swift"
+          swiftc -O -o "$L/click" "$L/click.swift"
+      # Started in the background here, they outlive the step (a runner reaps orphans only at the job's end); their
+      # sessions stay in the job's GUI session.
+      - name: Open the way in
+        run: |
+          set -euo pipefail
+          L="$HOME/mac-loop"
+          nohup /usr/sbin/sshd -D -e -f "$L/sshd/config" > "$L/sshd/log" 2>&1 &
+          nohup "$L/cloudflared" tunnel --no-autoupdate --url ssh://127.0.0.1:22022 > "$L/cf.log" 2>&1 &
+          host=""
+          for i in $(seq 1 90); do host=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$L/cf.log" | head -1 | sed 's#https://##' || true); [ -n "$host" ] && break; sleep 1; done
+          [ -n "$host" ] || { echo "no tunnel"; tail -20 "$L/cf.log"; exit 1; }
+          # What an ssh session needs of this job's environment (setup-go's PATH and the rest).
+          printf 'export PATH=%q\nexport RUNNER_TEMP=%q\nexport GITHUB_WORKSPACE=%q\nexport GOCACHE=%q\n' "$PATH" "$RUNNER_TEMP" "$GITHUB_WORKSPACE" "$(go env GOCACHE)" > "$L/env.sh"
+          mkdir -p "$L/meet"; printf '%s\n' "$host" > "$L/meet/host"; cut -d' ' -f1,2 "$L/sshd/host_key.pub" > "$L/meet/host_key.pub"; echo "$USER" > "$L/meet/user"
+          echo "tunnel up at $(date -u +%T), $(( $(date -u +%s) - $(cat "$RUNNER_TEMP/t0") )) s after the start"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-loop-meet-${{ github.run_id }}
+          path: ~/mac-loop/meet
+          retention-days: 1
+      # The host's loop profile (client/macos/Cargo.toml [profile.loop]): from cold it is a full build of NSH, so it
+      # starts here, in the background, only when asked; remote.sh host waits for it.
+      - name: The host's loop profile, in the background
+        if: ${{ inputs.host }}
+        run: |
+          L="$HOME/mac-loop"
+          nohup bash -c 'start=$(date +%s); cargo build --profile loop --manifest-path client/macos/Cargo.toml > "$1/prewarm.log" 2>&1; echo "prewarm exit $? after $(( $(date +%s) - start )) s" >> "$1/prewarm.log"' _ "$L" > /dev/null 2>&1 &
+          echo $! > "$L/prewarm.pid"
+      - name: Hold (until ~/mac-loop/stop, another macOS job waits, or the time is up)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINUTES: ${{ inputs.minutes }}
+          YIELD_AFTER: ${{ inputs.yield_after }}
+        run: |
+          L="$HOME/mac-loop"; [ "$MINUTES" -le 60 ] || MINUTES=60; end=$(( $(date +%s) + MINUTES * 60 )); next=0
+          while :; do
+            [ -e "$L/stop" ] && { echo "stopped by its user at $(date -u +%T)"; break; }
+            [ "$(date +%s)" -ge "$end" ] && { echo "held $MINUTES min: time is up at $(date -u +%T)"; break; }
+            if [ "$(date +%s)" -ge "$next" ]; then
+              next=$(( $(date +%s) + 60 ))
+              # ~/mac-loop/yield_after (written over ssh) overrides the input: the yield's own test sets it to 0.
+              [ -s "$L/yield_after" ] && YIELD_AFTER=$(tr -cd 0-9 < "$L/yield_after")
+              waiting=$(python3 -I client/macos/scripts/loop/yield.py waiters "$YIELD_AFTER" "$GITHUB_RUN_ID" 2>&1) || { echo "yield check failed: $waiting"; waiting=""; }
+              if [ -n "$waiting" ]; then
+                echo "yielding at $(date -u +%T) to:"; echo "$waiting"
+                echo "$waiting" > "$L/yielded"
+                break
+              fi
+            fi
+            sleep 5
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-loop-captures-${{ github.run_id }}
+          path: ~/mac-loop/out
+          if-no-files-found: ignore
+          retention-days: 3
