@@ -78,11 +78,21 @@ jobs:
           APP="$RUNNER_TEMP/run-app/Mewla Dev.app"; FIX="$RUNNER_TEMP/run-fixture/Mewla Dev.app"
           # A mac-audit/calendar-* branch captures only Calendar, on its real-shaped scenes (ui/fixture/calendarScene.ts).
           only_calendar=$([[ "$GITHUB_REF_NAME" == mac-audit/calendar* ]] && echo 1 || true)
+          # A mac-audit/tray-* branch captures only the home tray's counts at the pane's least width (240), on the
+          # owner's counts and on every count at once (ui/fixture/traySqueeze.ts).
+          only_tray=$([[ "$GITHUB_REF_NAME" == mac-audit/tray* ]] && echo 1 || true)
           for theme in light dark; do
             dark=$([ "$theme" = dark ] && echo true || echo false)
             osascript -e "tell application \"System Events\" to tell appearance preferences to set dark mode to $dark"
             osascript -e "tell application \"System Events\" to tell every desktop to set picture to POSIX file \"$RUNNER_TEMP/desk-$theme.png\""
             sleep 2
+            if [[ -n "$only_tray" ]]; then
+              export FIDELITY_WINDOW=1280x800
+              "$F/capture.sh" "$FIX" "$OUT" $theme tray-owner '{"traySqueeze":"owner"}' fresh
+              "$F/capture.sh" "$FIX" "$OUT" $theme tray-busy '{"traySqueeze":"busy"}' fresh
+              unset FIDELITY_WINDOW
+              continue
+            fi
             if [[ -n "$only_calendar" ]]; then
               export FIDELITY_WINDOW=1280x800
               "$F/capture.sh" "$FIX" "$OUT" $theme cal-busy '{"open":"calendar","calendarScene":"busy"}' fresh
