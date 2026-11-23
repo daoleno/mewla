@@ -150,7 +150,7 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 		}
 		return nil, errorf(ErrCodeInternal, "terminal: %v", err)
 	}
-	proc, err := startProgram(path, params.Argv, env, params.Dir, params.Cols, params.Rows)
+	proc, err := startProgram(path, params.Argv, env, params.Dir, params.Cols, params.Rows, host.placement(params.ID, env))
 	if err != nil {
 		term.Close()
 		return nil, errorf(ErrCodeBadRequest, "start %s: %v", params.Argv[0], err)

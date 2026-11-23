@@ -1,0 +1,118 @@
+// Package userunit keeps a Session's processes in systemd units of the
+// person's user manager, so that ending the Session ends all of them: what
+// its agent started with setsid or env -i, a tmux pane (tmux puts its panes
+// in a scope of the caller's slice), a nested Mewla's host unit.
+//
+// A Session is a slice named after its resource unit
+// (mewla-worker-<owner>-<token>.slice). Each program the session host starts
+// for it runs in a scope of its own inside that slice; ending the Session
+// stops the slice and with it everything in it. A Mewla started inside a
+// Session (a nested daemon) finds that slice in its own cgroup and puts its
+// host unit and its own Sessions under it.
+//
+// Only Linux has this; elsewhere every call reports ErrUnsupported.
+package userunit
+
+import (
+	"errors"
+	"strings"
+)
+
+// ErrUnsupported: there is no systemd user manager to reach here.
+var ErrUnsupported = errors.New("no systemd user manager")
+
+const (
+	unitPrefix  = "mewla-worker-"
+	scopeSuffix = ".scope"
+	sliceSuffix = ".slice"
+	tokenLen    = 32
+)
+
+// Token is the 32 hex digits that name a Session in its resource unit
+// mewla-worker-<owner>-<token>.scope, "" when unit is not one.
+func Token(unit string) string {
+	if !strings.HasPrefix(unit, unitPrefix) || !strings.HasSuffix(unit, scopeSuffix) {
+		return ""
+	}
+	rest := strings.TrimSuffix(strings.TrimPrefix(unit, unitPrefix), scopeSuffix)
+	owner, token, ok := strings.Cut(rest, "-")
+	if !ok || owner == "" || !lowerAlnum(owner) || len(token) != tokenLen || !lowerHex(token) {
+		return ""
+	}
+	return token
+}
+
+// SessionSlice is the slice of the Session whose resource unit is unit:
+// mewla-worker-<owner>-<token>.slice, or <enclosing>-<token>.slice when this
+// Mewla runs inside another one's Session slice enclosing, so that ending
+// the outer Session ends this one's too. "" when unit is not a resource unit.
+func SessionSlice(unit, enclosing string) string {
+	token := Token(unit)
+	if token == "" {
+		return ""
+	}
+	if enclosing != "" {
+		return strings.TrimSuffix(enclosing, sliceSuffix) + "-" + token + sliceSuffix
+	}
+	return strings.TrimSuffix(unit, scopeSuffix) + sliceSuffix
+}
+
+// sessionSlicePattern matches the slice of the Session with token, whether
+// it sits at the top or inside another Session's slice.
+func sessionSlicePattern(token string) string {
+	return unitPrefix + "*" + token + sliceSuffix
+}
+
+// EnclosingSliceOf is the innermost Session slice in a /proc/<pid>/cgroup
+// text, "" when the process is in none.
+func EnclosingSliceOf(cgroup string) string {
+	for _, line := range strings.Split(cgroup, "\n") {
+		path, ok := strings.CutPrefix(line, "0::")
+		if !ok {
+			continue
+		}
+		parts := strings.Split(path, "/")
+		for i := len(parts) - 1; i >= 0; i-- {
+			if isSessionSlice(parts[i]) {
+				return parts[i]
+			}
+		}
+	}
+	return ""
+}
+
+func isSessionSlice(name string) bool {
+	if !strings.HasPrefix(name, unitPrefix) || !strings.HasSuffix(name, sliceSuffix) {
+		return false
+	}
+	// mewla-worker-<owner>-<token>[-<token>...].slice: at least one token
+	// after the owner; mewla-worker-<owner>.slice is the parent of them all.
+	parts := strings.Split(strings.TrimSuffix(strings.TrimPrefix(name, unitPrefix), sliceSuffix), "-")
+	if len(parts) < 2 || parts[0] == "" || !lowerAlnum(parts[0]) {
+		return false
+	}
+	for _, token := range parts[1:] {
+		if len(token) != tokenLen || !lowerHex(token) {
+			return false
+		}
+	}
+	return true
+}
+
+func lowerAlnum(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func lowerHex(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'f') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
