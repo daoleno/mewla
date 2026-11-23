@@ -21,7 +21,7 @@
         },
         {
           "id": "0.4.27-drag-pictures-from-browser",
-          "title": "Drag in a picture from anywhere",
+          "title": "Drag in browser pictures and screenshots",
           "line": "Drag an image from a browser or a screenshot thumbnail into a message on your Mac.",
           "media": {
             "scene": "mac-app"
@@ -37,7 +37,7 @@
         {
           "id": "0.4.27-pick-the-model",
           "title": "Pick each agent's model",
-          "line": "Tap the model beside Send in a Session to pick another one, whichever agent it is.",
+          "line": "Tap the model beside Send in a Session to pick another model.",
           "media": {
             "scene": "work-menu"
           },
