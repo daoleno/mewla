@@ -3,6 +3,7 @@
 #
 #   mac-loop.sh start            push a per-run public key to mac-loop/run, wait for the runner, write the ssh config
 #   mac-loop.sh ui|host|daemon   sync this checkout, rebuild that part on the runner, relaunch Mewla Dev, screenshot
+#                                (MAC_LOOP_FAST=1 host: release without LTO in a target of its own; cold, it is a full build)
 #   mac-loop.sh launch           relaunch Mewla Dev as it is, then a screenshot
 #   mac-loop.sh shot [name]      screenshot of the screen into $MAC_LOOP_DIR/shots/<name>.png
 #   mac-loop.sh log [n]          the last n lines of the app's and its daemon's logs
@@ -91,14 +92,14 @@ sync)
 ui|host|daemon|launch)
   t0=$(now)
   [[ "$cmd" == launch ]] || "$0" sync
-  sshc "bash \"\$(cat ~/mac-loop/workspace)/client/macos/scripts/loop/remote.sh\" $cmd"
+  sshc "MAC_LOOP_FAST=${MAC_LOOP_FAST:-} bash \"\$(cat ~/mac-loop/workspace)/client/macos/scripts/loop/remote.sh\" $cmd"
   "$0" shot "${1:-$cmd}"
   stamp "$cmd: edit to screenshot" "$t0"
   ;;
 shot)
   t=$(now); name="${1:-shot}"; mkdir -p "$dir/shots"
-  sshc "screencapture -x ~/mac-loop/out/$name.png"
-  scp -q -F "$dir/ssh_config" "mac:mac-loop/out/$name.png" "$dir/shots/$name.png"
+  # The job's sshd has no sftp subsystem: the file comes back on the session's stdout.
+  sshc "screencapture -x ~/mac-loop/out/$name.png && cat ~/mac-loop/out/$name.png" > "$dir/shots/$name.png"
   stamp "shot $dir/shots/$name.png" "$t"
   ;;
 log) sshc "tail -n ${1:-40} ~/mac-loop/run/data/logs/* ~/mac-loop/run/state/logs/app-daemon.log 2>/dev/null" ;;
