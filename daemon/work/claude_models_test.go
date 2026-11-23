@@ -99,3 +99,15 @@ func TestParseClaudePickerReadsOptionsSelectionAndEffort(t *testing.T) {
 		t.Fatal("a screen without the picker was read as one")
 	}
 }
+
+func TestClaudeModelsListRunsOnTheSessionsSignIn(t *testing.T) {
+	env := []string{"HOME=/home/p", "CLAUDE_CONFIG_DIR=/home/p/.claude"}
+	got := withLaunchEnv(env, "env CLAUDE_CONFIG_DIR='/home/p/.claude work' claude --model opus")
+	want := []string{"HOME=/home/p", "CLAUDE_CONFIG_DIR=/home/p/.claude work"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("env = %q, want %q", got, want)
+	}
+	if got := withLaunchEnv(env, "claude --settings a=b"); !reflect.DeepEqual(got, env) {
+		t.Fatalf("plain launch env = %q, want the daemon's", got)
+	}
+}

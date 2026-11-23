@@ -47,7 +47,7 @@ func ReadClaudeModels(ctx context.Context, command, cwd string, env []string) ([
 	cmd := procspawn.CommandContext(ctx, "claude models", program, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
 		"--no-session-persistence", "--setting-sources", "user", "--settings", `{"disableAllHooks":true}`, "--strict-mcp-config")
 	cmd.Dir = cwd
-	cmd.Env = env
+	cmd.Env = withLaunchEnv(env, command)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -80,6 +80,34 @@ func ReadClaudeModels(ctx context.Context, command, cwd string, env []string) ([
 		return nil, fmt.Errorf("Claude Code: %s", reason)
 	}
 	return nil, errors.New("Claude Code did not answer with its models")
+}
+
+// withLaunchEnv applies the leading assignments of a launch command
+// ("env CLAUDE_CONFIG_DIR=/dir claude", the way an executor with its own
+// sign-in starts) to env, so the list is that sign-in's.
+func withLaunchEnv(env []string, command string) []string {
+	fields, ok := shellquote.Fields(command)
+	if !ok {
+		fields = strings.Fields(command)
+	}
+	if len(fields) > 0 && fields[0] == "env" {
+		fields = fields[1:]
+	}
+	out := append([]string(nil), env...)
+	for _, field := range fields {
+		key, value, found := strings.Cut(field, "=")
+		if !found || key == "" || strings.HasPrefix(key, "-") || strings.ContainsAny(key, "/ ") {
+			break
+		}
+		kept := out[:0]
+		for _, entry := range out {
+			if !strings.HasPrefix(entry, key+"=") {
+				kept = append(kept, entry)
+			}
+		}
+		out = append(kept, key+"="+value)
+	}
+	return out
 }
 
 // ParseClaudeInitialize reads one stream-json line; ok is true when it is the
