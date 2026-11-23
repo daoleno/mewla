@@ -14,6 +14,14 @@ Mewla separates three things:
    once, with a pairing code that expires after 15 minutes and works once.
    Every later request is signed by the device and checked by the daemon.
 
+The daemon proves its identity by signing a challenge the app picked for that
+request: the pairing answer, the paired-device check and the first message on
+each connection. An answer recorded from an earlier request proves nothing.
+Once a computer has answered a challenge, the app requires one from it every
+time. A computer running an older Mewla, which signs no challenge, is
+accepted only with an answer signed within the last few minutes, until it
+updates.
+
 There is no long-lived shared secret for normal traffic, and no separate admin
 role: every paired phone or browser can list and revoke devices, including itself.
 

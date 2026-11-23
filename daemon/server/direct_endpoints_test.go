@@ -50,7 +50,7 @@ func TestHealthChallengeIsSignedOverTheCallersChallenge(t *testing.T) {
 		NonceHex:     payload["assertion_nonce"].(string),
 		SignatureHex: payload["assertion_signature"].(string),
 	}
-	if payload["assertion_purpose"] != auth.HealthChallengePurpose {
+	if payload["assertion_purpose"] != string(auth.HealthChallengePurpose) {
 		t.Fatalf("purpose = %v", payload["assertion_purpose"])
 	}
 	if !auth.VerifyChallengeAssertion(authManager.PublicKeyHex(), challenge, answer) {

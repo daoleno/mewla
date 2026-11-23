@@ -638,15 +638,35 @@ func (m *Manager) CreateServerAssertion(purpose string) (ServerAssertion, error)
 	}, nil
 }
 
-// HealthChallengePurpose is the fixed purpose of a challenged /health
-// response. The client picks only the 16-byte challenge, which takes the nonce
-// slot, so a phone cannot get the daemon to sign any other purpose and a
-// recorded response is useless against a fresh challenge.
-const HealthChallengePurpose = "mewla-health-challenge"
+// ChallengePurpose is one of the fixed purposes the daemon signs a
+// caller-chosen challenge under. A caller picks only the 16-byte challenge,
+// which takes the nonce slot, never the purpose: so a challenge answered for
+// one (the unauthenticated /health) never passes as another (/pair), and a
+// recorded answer is useless against a fresh challenge.
+type ChallengePurpose string
+
+const (
+	// HealthChallengePurpose answers /health?challenge=, for anyone.
+	HealthChallengePurpose ChallengePurpose = "mewla-health-challenge"
+	// PairChallengePurpose answers a /pair that sent a challenge: only a
+	// request with a good one-time code gets it.
+	PairChallengePurpose ChallengePurpose = "mewla-pair-challenge"
+	// ProbeChallengePurpose answers a paired device's /auth-check; the
+	// challenge is the nonce of the device's own signed request.
+	ProbeChallengePurpose ChallengePurpose = "mewla-probe-challenge"
+	// ConnectProofPurpose is the first frame on a paired device's socket; the
+	// challenge is the nonce of the device's own signed connect.
+	ConnectProofPurpose ChallengePurpose = "mewla-connect-proof"
+)
 
 // CreateChallengeAssertion proves this daemon is alive and holds its identity
-// key right now, for the caller that chose challengeHex.
+// key right now, for the caller that chose challengeHex (/health).
 func (m *Manager) CreateChallengeAssertion(challengeHex string) (ServerAssertion, error) {
+	return m.CreateChallengeAssertionFor(HealthChallengePurpose, challengeHex)
+}
+
+// CreateChallengeAssertionFor signs challengeHex under one fixed purpose.
+func (m *Manager) CreateChallengeAssertionFor(purpose ChallengePurpose, challengeHex string) (ServerAssertion, error) {
 	challengeHex = normalizeHex(challengeHex)
 	if _, err := decodeFixedHex(challengeHex, 16); err != nil {
 		return ServerAssertion{}, fmt.Errorf("challenge must be 16 bytes of hex")
@@ -654,7 +674,7 @@ func (m *Manager) CreateChallengeAssertion(challengeHex string) (ServerAssertion
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	signature := ed25519.Sign(
 		m.privateKey,
-		BuildServerAssertionPayload(HealthChallengePurpose, m.daemonID, timestamp, challengeHex),
+		BuildServerAssertionPayload(string(purpose), m.daemonID, timestamp, challengeHex),
 	)
 	return ServerAssertion{
 		Timestamp:    timestamp,
@@ -663,9 +683,15 @@ func (m *Manager) CreateChallengeAssertion(challengeHex string) (ServerAssertion
 	}, nil
 }
 
-// VerifyChallengeAssertion accepts a response only if it answers challengeHex
-// and is signed by the pinned daemon key.
+// VerifyChallengeAssertion accepts a /health response only if it answers
+// challengeHex and is signed by the pinned daemon key.
 func VerifyChallengeAssertion(publicKeyHex, challengeHex string, assertion ServerAssertion) bool {
+	return VerifyChallengeAssertionFor(publicKeyHex, HealthChallengePurpose, challengeHex, assertion)
+}
+
+// VerifyChallengeAssertionFor accepts an answer to challengeHex under purpose,
+// signed by the pinned daemon key.
+func VerifyChallengeAssertionFor(publicKeyHex string, purpose ChallengePurpose, challengeHex string, assertion ServerAssertion) bool {
 	challengeHex = normalizeHex(challengeHex)
 	if _, err := decodeFixedHex(challengeHex, 16); err != nil {
 		return false
@@ -673,7 +699,18 @@ func VerifyChallengeAssertion(publicKeyHex, challengeHex string, assertion Serve
 	if normalizeHex(assertion.NonceHex) != challengeHex {
 		return false
 	}
-	return VerifyServerAssertion(publicKeyHex, HealthChallengePurpose, assertion)
+	return VerifyServerAssertion(publicKeyHex, string(purpose), assertion)
+}
+
+// AuthorizationNonce is the nonce of a device authorization header, the
+// device's own challenge for the daemon's proof. Read it only from a header
+// VerifyAuthorization accepted.
+func AuthorizationNonce(headerValue string) string {
+	_, _, _, nonceHex, _, err := parseAuthorizationHeader(headerValue)
+	if err != nil {
+		return ""
+	}
+	return nonceHex
 }
 
 // CreateComputerInviteSignature signs a domain-separated computer invite with

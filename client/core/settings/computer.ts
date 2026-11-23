@@ -1,5 +1,5 @@
 import { getOrCreateLocalDeviceIdentity } from "../auth";
-import { verifyDaemonAssertion } from "../deviceAuthContract";
+import { answerIsTheComputers, newChallenge, PROBE_CHALLENGE_PURPOSE } from "../daemonProof";
 import { bodyPurpose, sha256Hex, signedFetch, signedJSON } from "../more/daemon";
 import type { StoredServer } from "../storedServerContract";
 import type { ComputerGrant } from "./macGrants";
@@ -120,17 +120,18 @@ export function restartComputerTerminals(server: StoredServer): Promise<DaemonUp
  */
 export async function checkComputer(server: StoredServer): Promise<ComputerCheck> {
   try {
-    const response = await signedFetch(server, "GET", "/auth-check", "mewla-probe", { timeoutMs: 8_000 });
+    const challengeHex = newChallenge();
+    const response = await signedFetch(server, "GET", "/auth-check", "mewla-probe", { timeoutMs: 8_000, nonceHex: challengeHex });
     if (response.status === 401) return { state: "unpaired" };
     if (!response.ok) return { state: "offline" };
-    const body = (await response.json()) as { name?: unknown; assertion_timestamp?: string; assertion_nonce?: string; assertion_signature?: string };
-    const genuine = await verifyDaemonAssertion({
-      purpose: "mewla-probe",
+    const body = (await response.json()) as { name?: unknown; proof?: unknown; assertion_timestamp?: string; assertion_nonce?: string; assertion_signature?: string };
+    const genuine = await answerIsTheComputers({
+      purpose: PROBE_CHALLENGE_PURPOSE,
+      oldPurpose: "mewla-probe",
+      challengeHex,
       daemonId: server.daemonId,
       daemonPublicKey: server.daemonPublicKey,
-      timestamp: body.assertion_timestamp,
-      nonceHex: body.assertion_nonce,
-      signatureHex: body.assertion_signature,
+      body,
     });
     if (!genuine) return { state: "offline" };
     const name = typeof body.name === "string" ? body.name.trim() : "";
