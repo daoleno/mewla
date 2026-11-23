@@ -169,6 +169,8 @@ jobs:
             [ "$(date +%s)" -ge "$end" ] && { echo "held $MINUTES min: time is up at $(date -u +%T)"; break; }
             if [ "$(date +%s)" -ge "$next" ]; then
               next=$(( $(date +%s) + 60 ))
+              # ~/mac-loop/yield_after (written over ssh) overrides the input: the yield's own test sets it to 0.
+              [ -s "$L/yield_after" ] && YIELD_AFTER=$(tr -cd 0-9 < "$L/yield_after")
               waiting=$(python3 -I client/macos/scripts/loop/yield.py waiters "$YIELD_AFTER" "$GITHUB_RUN_ID" 2>&1) || { echo "yield check failed: $waiting"; waiting=""; }
               if [ -n "$waiting" ]; then
                 echo "yielding at $(date -u +%T) to:"; echo "$waiting"
