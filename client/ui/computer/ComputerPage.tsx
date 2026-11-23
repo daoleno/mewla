@@ -24,7 +24,8 @@ import { tray } from "../tray/state";
 import { connection, current, resumeConnection, servers, shownConnection, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { wide } from "../shell/layout";
-import { isMacApp, isThisMac } from "../mac/local";
+import { isMacApp, isThisMac, joinLocalDaemon, localJoined, localProblem, thisMacChosen, thisMacName } from "../mac/local";
+import { thisMacRowWords } from "../../core/mac/thisMac";
 import { openMacSettings } from "../mac/MacSettings";
 import { openPairPhone } from "../mac/PairPhone";
 import { markComputerUpdateSeen } from "../update/hint";
@@ -282,8 +283,19 @@ export function ComputerPage(props: {
               </Button>
             }
           /></If>
+        {/* Mewla for Mac: This Mac is always a row, also before its entry exists, in its own words (owner 11-23). */}
+        <If when={isMacApp() && !isThisMac(current()) && !servers().some(isThisMac)}><Row
+            testID="computer-this-mac"
+            lead={tile("desktop")}
+            title={thisMacName()}
+            subtitle={thisMacRowWords({ problem: localProblem(), joined: false, word: "" })}
+            onPress={() => {
+              thisMacChosen.set(true);
+              void joinLocalDaemon();
+            }}
+          /></If>
         {others().map((server) => {
-          const state = () => otherState(server);
+          const state = () => (isThisMac(server) ? { ...otherState(server), word: thisMacRowWords({ problem: localProblem(), joined: localJoined(), word: otherState(server).word }) } : otherState(server));
           return (
             <View class={state().dim ? "opacity-[0.55]" : ""}>
               <Row
