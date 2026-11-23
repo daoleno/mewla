@@ -66,10 +66,23 @@ devices and the login item stay as they were.
 ## Permissions
 
 Agents that look at or drive your screen need **Screen & System Audio
-Recording** and **Accessibility** ([Screen](screen.md)). When a Worker needs one
-you have not given, Brain's thread shows a card with the reason and **Open System
-Settings**. macOS keeps these grants for the app's signature, so an update does
-not ask again. A Worker that needs your Chrome gets the same kind of card
+Recording** and **Accessibility** ([Screen](screen.md)). Both belong to Mewla
+itself: the daemon runs as the app's child, so there is one Mewla in each list,
+with its icon.
+
+**Settings → Privacy & access** shows each one as macOS holds it now: Allowed,
+**Allow…**, or **Restart Mewla** when macOS applies a grant only to a new
+process. **Allow…** opens the permission's list in System Settings with a small
+panel beside it holding Mewla's icon: drag it into the list, or turn Mewla on if
+it is already there. The same panel brings Mewla back after you removed it with
+−. Once you give the permission, the panel closes, Mewla comes back to the front
+and applies it by itself, restarting its daemon where macOS needs that (Sessions
+keep running).
+
+When a Worker needs one you have not given, Brain's thread shows a card with the
+reason and **Open System Settings**, which opens the same panel on this Mac.
+macOS keeps these grants for the app's signature, so an update does not ask
+again. A Worker that needs your Chrome gets the same kind of card
 ([Agents in your browser](your-browser.md)).
 
 ## Remove it

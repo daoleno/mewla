@@ -1,5 +1,6 @@
 import { host } from "nsh";
-import { changeAgentUse, type AgentUseStatus } from "../../core/settings/computer";
+import { changeAgentUse, getAgentUse, type AgentUseStatus } from "../../core/settings/computer";
+import { grantOf } from "../../core/settings/macGrants";
 import type { StoredServer } from "../../core/storedServerContract";
 import { isThisMac } from "./local";
 
@@ -8,10 +9,33 @@ import { isThisMac } from "./local";
  * (client/macos/src/permissions.rs). The same panel brings Mewla back after its row was removed. False where there is no
  * such panel (another computer, a phone, a permission that is not a Mac's).
  */
-export function showPermissionGuide(server: { daemonPublicKey: string } | null | undefined, permission: string): boolean {
-  if (!isThisMac(server) || (permission !== "screen_recording" && permission !== "accessibility")) return false;
+export function showPermissionGuide(server: StoredServer | null | undefined, permission: string): boolean {
+  if (!server || !isThisMac(server) || (permission !== "screen_recording" && permission !== "accessibility")) return false;
   void host.call("app.permissionGuide", { permission }).catch((error) => console.warn("permission panel:", error));
+  watchUntilGiven(server, permission);
   return true;
+}
+
+let watching: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Until the daemon reads the grant as given (a fresh process's answer, never a kept one), up to 15 minutes: then the
+ * panel closes and Mewla comes to the front, as the host also does on its own reading.
+ */
+function watchUntilGiven(server: StoredServer, permission: string): void {
+  if (watching) clearInterval(watching);
+  const until = Date.now() + 15 * 60_000;
+  const timer = setInterval(() => {
+    if (Date.now() > until) return void clearInterval(timer);
+    void getAgentUse(server).then((status) => {
+      const state = grantOf(status.computer?.permissions, permission)?.state;
+      if (watching !== timer || (state !== "granted" && state !== "restart")) return;
+      clearInterval(timer);
+      watching = null;
+      void host.call("app.permissionGuide", { given: permission }).catch(() => {});
+    }).catch(() => {});
+  }, 1_500);
+  watching = timer;
 }
 
 /**

@@ -274,6 +274,15 @@ func tccListed(service string) bool {
 // loggedStale notes each permission logged as not yet effective.
 var loggedStale sync.Map
 
+// liveMemo keeps the last fresh-process answer for a second: the app's rows,
+// a card and a followed grant all read at once, and each read would otherwise
+// start a process.
+var liveMemo struct {
+	sync.Mutex
+	at        time.Time
+	own, live map[string]bool
+}
+
 // livePermissions asks a fresh child process when this one sees a permission
 // as missing: macOS keeps answering from the state the process started with.
 func livePermissions(ctx context.Context) (own, live map[string]bool) {
@@ -281,6 +290,12 @@ func livePermissions(ctx context.Context) (own, live map[string]bool) {
 	if own[permScreenRecording] && own[permAccessibility] {
 		return own, own
 	}
+	liveMemo.Lock()
+	defer liveMemo.Unlock()
+	if time.Since(liveMemo.at) < time.Second && liveMemo.live != nil {
+		return own, liveMemo.live
+	}
+	defer func() { liveMemo.at, liveMemo.live = time.Now(), live }()
 	exe, err := os.Executable()
 	if err != nil {
 		return own, own
@@ -292,7 +307,7 @@ func livePermissions(ctx context.Context) (own, live map[string]bool) {
 		return own, own
 	}
 	for id, granted := range live {
-		if granted && !own[id] {
+		if granted && !own[id] && !strings.HasSuffix(id, listedSuffix) {
 			if _, logged := loggedStale.LoadOrStore(id, true); !logged {
 				log.Printf("screen: %s is granted but not yet effective in this process", id)
 			}

@@ -36,15 +36,19 @@ if (mode === "--across-takeover" || mode === "--rollback" || mode === "--reopen"
   const errFile = process.env.RUNNER_TEMP + "/trial-helper.stderr";
   writeFileSync(errFile, "", { mode: 0o600 });
   const helper = "/Applications/Mewla.app/Contents/Helpers/mewla";
+  // The job's program: the app's own executable, which runs the helper as its child (client/macos/src/host.rs).
+  const host = "/Applications/Mewla.app/Contents/MacOS/Mewla";
   const version = JSON.parse(execFileSync(helper, ["version", "--json"], { encoding: "utf8" })).version;
   const health = async () => fetch("http://127.0.0.1:9876/health", { signal: AbortSignal.timeout(1000) })
     .then(r => r.json()).catch(() => null);
   const serves = async () => {
     const s = installed();
     const pid = s.match(/^\tpid = (\d+)$/m)?.[1];
-    if (!pid || !s.includes("\n\tstate = running\n") || !s.includes("program = " + helper)) return false;
-    const listener = spawnSync("/usr/sbin/lsof", ["-nP", "-a", "-p", pid, "-iTCP:9876", "-sTCP:LISTEN", "-t"], { encoding: "utf8", timeout: 2500 });
-    if (!listener.stdout?.split(/\s+/).includes(pid)) return false;
+    if (!pid || !s.includes("\n\tstate = running\n") || !s.includes("program = " + host)) return false;
+    // The listener is the helper, the job's child.
+    const listeners = spawnSync("/usr/sbin/lsof", ["-nP", "-iTCP:9876", "-sTCP:LISTEN", "-t"], { encoding: "utf8", timeout: 2500 }).stdout?.split(/\s+/).filter(Boolean) ?? [];
+    const childOfJob = (listener: string) => spawnSync("/bin/ps", ["-o", "ppid=", "-p", listener], { encoding: "utf8", timeout: 2500 }).stdout?.trim() === pid;
+    if (listeners.length !== 1 || !childOfJob(listeners[0])) return false;
     const h = await health();
     return h?.status === "ok" && h.version === version && h.daemon_id === paired.daemonId && h.daemon_public_key === paired.daemonPublicKey;
   };
@@ -82,7 +86,7 @@ if (mode === "--across-takeover" || mode === "--rollback" || mode === "--reopen"
     const next = JSON.stringify({
       state: s.match(/^\tstate = (.+)$/m)?.[1] ?? "absent",
       lastExit: s.match(/^\tlast exit code = (.*)$/m)?.[1],
-      argv: argv?.map(a => a === helper ? "helper" : a === "serve" ? "serve" : "other"),
+      argv: argv?.map(a => a === helper ? "helper" : a === host ? "host" : a === "--daemon" ? "--daemon" : a === "serve" ? "serve" : "other"),
       version: h?.version, identity: h?.daemon_id === paired.daemonId,
     });
     if (next !== prior) { console.log("Trial observation", next); prior = next; }
@@ -94,7 +98,8 @@ if (mode === "--across-takeover" || mode === "--rollback" || mode === "--reopen"
     if (mode === "--reopen") {
       // Interrupt the trial coordinator on this disposable Mac, leaving both
       // launchd services alone. A normal Quit Apple event may request consent.
-      const app = "^/Applications/Mewla[.]app/Contents/MacOS/Mewla( |$)";
+      // The app itself, not its executable running the daemon (`Mewla --daemon serve`).
+      const app = "^/Applications/Mewla[.]app/Contents/MacOS/Mewla$";
       const pid = execFileSync("/usr/bin/pgrep", ["-f", app], { encoding: "utf8" }).trim();
       if (!/^\d+$/.test(pid)) throw new Error("cannot identify a single installed app process");
       process.kill(Number(pid), "SIGKILL");

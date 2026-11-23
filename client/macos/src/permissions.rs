@@ -392,6 +392,18 @@ pub fn open_for() -> Option<Permission> {
     GUIDE.with(|guide| guide.borrow().as_ref().map(|g| g.permission))
 }
 
+/// The grant counts (the daemon's reading, from a fresh process): the panel asking for it closes and Mewla comes to the
+/// front. This app's own reading (`tick`) can lag behind: TCC may answer a running process from what it cached.
+pub fn given(mtm: MainThreadMarker, permission: Permission) {
+    if open_for() != Some(permission) {
+        return;
+    }
+    log::warn!("permission panel: {permission:?} given; back to Mewla");
+    close();
+    #[allow(deprecated)]
+    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+}
+
 fn tick() {
     let Some(mtm) = MainThreadMarker::new() else { return };
     enum Next {
@@ -437,10 +449,9 @@ fn tick() {
         Next::Stay => {}
         Next::Close => close(),
         Next::Granted => {
-            log::warn!("permission panel: granted; back to Mewla");
-            close();
-            #[allow(deprecated)]
-            NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+            if let Some(permission) = open_for() {
+                given(mtm, permission);
+            }
         }
     }
 }
