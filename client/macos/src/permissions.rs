@@ -174,11 +174,13 @@ pub fn listed(permission: Permission) -> Listed {
     if granted { Listed::Granted } else { Listed::Missing }
 }
 
-/// Whether Allow clears this app's rows first: only when TCC itself says Mewla has no row that counts (a row of another
-/// signature of Mewla reads so, and the list shows it on while it grants nothing), and the daemon did not read it as
-/// switched off or given. A row switched off, or no exact answer, is left alone.
+/// Whether Allow clears this app's rows first: only when TCC itself says Mewla.app has no row that counts (a row of
+/// another signature of Mewla reads so, and the list shows it on while it grants nothing), and the daemon does not
+/// count the grant already. This app's own answer decides, not the daemon's "off": an older Mewla's daemon row (its
+/// path, switched off) makes the daemon read off while Mewla.app's row is the stale one. Mewla.app's row switched off
+/// reads off here and is left alone, as is everything when there is no exact answer.
 fn clears(exact: Option<Listed>, daemon: Option<&str>) -> bool {
-    exact == Some(Listed::Missing) && !matches!(daemon, Some("off" | "granted" | "restart"))
+    exact == Some(Listed::Missing) && !matches!(daemon, Some("granted" | "restart"))
 }
 
 /// Before asking: when Mewla has no row that counts, removes this app's own rows for the permission (`tccutil reset
@@ -544,7 +546,8 @@ mod tests {
         assert!(clears(Some(Listed::Missing), None));
         assert!(!clears(Some(Listed::Off), Some("missing")));
         assert!(!clears(Some(Listed::Granted), None));
-        assert!(!clears(Some(Listed::Missing), Some("off")));
+        // The daemon reads off from an older Mewla's path row while Mewla.app's own row does not count: cleared.
+        assert!(clears(Some(Listed::Missing), Some("off")));
         assert!(!clears(Some(Listed::Missing), Some("granted")));
         assert!(!clears(Some(Listed::Missing), Some("restart")));
         // No exact answer (no TCC preflight): a row switched off cannot be told from none, so nothing is cleared.
