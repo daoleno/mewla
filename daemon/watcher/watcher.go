@@ -1568,10 +1568,10 @@ var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe
 // boundary into an ambient user session.
 var ErrUnownedSession = errors.New("Session is not owned by Mewla")
 
-// ErrSessionReclaimed is input refused because Mewla closed the Session
-// after its Work was completed. Reopening the Work does not bring the Session
-// back; a new Worker carries the Work on.
-var ErrSessionReclaimed = errors.New("Mewla closed this Session after its Work was completed; reopening the Work does not reopen it, start a new Worker")
+// ErrSessionReclaimed is input refused because Mewla closed the Session once
+// nothing was owed by it (brain.CompletedOwnedTurns). Reopening the Work does
+// not bring the Session back; a new Worker carries the Work on.
+var ErrSessionReclaimed = errors.New("Mewla closed this Session once nothing was owed by it (its turn had ended and its Work closed, a newer Worker took the Work over, or the Work's wait ended); reopening the Work does not reopen it: start a new Worker with mewla worker spawn -work <work id> and give it the previous Worker's report")
 
 // ErrSessionEnded is input refused because the Session's program has ended.
 var ErrSessionEnded = errors.New("the program in this Session has ended")

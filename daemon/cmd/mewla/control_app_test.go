@@ -2382,7 +2382,8 @@ func TestPlainSendToAReclaimedSessionSaysMewlaClosedIt(t *testing.T) {
 	app := &controlApp{watcher: fw}
 	response := app.handleWorkerSend(control.Request{WorkerID: "mh-closed", Text: "continue", Submit: true})
 	if response.OK || response.Error == nil || response.Error.Code != "worker_session_reclaimed" ||
-		!strings.Contains(response.Error.Message, "Mewla closed this Session after its Work was completed") {
+		!strings.Contains(response.Error.Message, "Mewla closed this Session once nothing was owed by it") ||
+		!strings.Contains(response.Error.Message, "worker spawn -work") {
 		t.Fatalf("response = %+v", response)
 	}
 	if len(fw.sent) != 0 {
