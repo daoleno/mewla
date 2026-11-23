@@ -56,11 +56,21 @@ type LedgerSession struct {
 	HeldSince   time.Time `json:"held_since,omitempty"`
 }
 
-// SizeSample is one kind's count and bytes on a day.
+// SizeSample is one kind's count and bytes on a day, and when its oldest
+// item last changed.
 type SizeSample struct {
-	Day   string `json:"day"` // YYYY-MM-DD, local
-	Kind  string `json:"kind"`
-	Count int    `json:"count"`
+	Day    string    `json:"day"` // YYYY-MM-DD, local
+	Kind   string    `json:"kind"`
+	Count  int       `json:"count"`
+	Bytes  int64     `json:"bytes"`
+	Oldest time.Time `json:"oldest,omitempty"`
+}
+
+// OwnerSize is the bytes a Session's resource unit holds on a day: its
+// scratch, what it kept and its items in the trash.
+type OwnerSize struct {
+	Day   string `json:"day"`
+	Unit  string `json:"unit"`
 	Bytes int64  `json:"bytes"`
 }
 
@@ -88,11 +98,18 @@ var ledgerSteps = []string{
 	) WITHOUT ROWID;
 	CREATE INDEX session_id ON session(session_id);
 	CREATE TABLE size (
-		day   TEXT NOT NULL,
-		kind  TEXT NOT NULL,
-		count INTEGER NOT NULL,
-		bytes INTEGER NOT NULL,
+		day    TEXT NOT NULL,
+		kind   TEXT NOT NULL,
+		count  INTEGER NOT NULL,
+		bytes  INTEGER NOT NULL,
+		oldest TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (day, kind)
+	) WITHOUT ROWID;
+	CREATE TABLE owner_size (
+		day   TEXT NOT NULL,
+		unit  TEXT NOT NULL,
+		bytes INTEGER NOT NULL,
+		PRIMARY KEY (day, unit)
 	) WITHOUT ROWID;`,
 }
 
@@ -262,11 +279,17 @@ func RecordSizes(stateRoot string, now time.Time) (bool, error) {
 		if err := db.QueryRow(`SELECT count(*) FROM size WHERE day = ?`, day).Scan(&n); err != nil || n > 0 {
 			return err
 		}
-		samples := measureKinds(stateRoot, day)
+		samples, owners := measureKinds(stateRoot, day)
 		return sqlitedb.Tx(db, func(tx *sql.Tx) error {
 			for _, s := range samples {
-				if _, err := tx.Exec(`INSERT INTO size(day, kind, count, bytes) VALUES(?, ?, ?, ?) ON CONFLICT(day, kind) DO NOTHING`,
-					s.Day, s.Kind, s.Count, s.Bytes); err != nil {
+				if _, err := tx.Exec(`INSERT INTO size(day, kind, count, bytes, oldest) VALUES(?, ?, ?, ?, ?) ON CONFLICT(day, kind) DO NOTHING`,
+					s.Day, s.Kind, s.Count, s.Bytes, stamp(s.Oldest)); err != nil {
+					return err
+				}
+			}
+			for _, o := range owners {
+				if _, err := tx.Exec(`INSERT INTO owner_size(day, unit, bytes) VALUES(?, ?, ?) ON CONFLICT(day, unit) DO NOTHING`,
+					o.Day, o.Unit, o.Bytes); err != nil {
 					return err
 				}
 			}
@@ -282,21 +305,44 @@ func RecordSizes(stateRoot string, now time.Time) (bool, error) {
 func Sizes(stateRoot, since string) ([]SizeSample, error) {
 	var samples []SizeSample
 	err := readLedger(stateRoot, func(db *sql.DB) error {
-		rows, err := db.Query(`SELECT day, kind, count, bytes FROM size WHERE day >= ? ORDER BY day, kind`, since)
+		rows, err := db.Query(`SELECT day, kind, count, bytes, oldest FROM size WHERE day >= ? ORDER BY day, kind`, since)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var s SizeSample
-			if err := rows.Scan(&s.Day, &s.Kind, &s.Count, &s.Bytes); err != nil {
+			var oldest string
+			if err := rows.Scan(&s.Day, &s.Kind, &s.Count, &s.Bytes, &oldest); err != nil {
 				return err
 			}
+			s.Oldest = unstamp(oldest)
 			samples = append(samples, s)
 		}
 		return rows.Err()
 	})
 	return samples, err
+}
+
+// OwnerSizes lists the units holding the most bytes on day, most first.
+func OwnerSizes(stateRoot, day string, limit int) ([]OwnerSize, error) {
+	var owners []OwnerSize
+	err := readLedger(stateRoot, func(db *sql.DB) error {
+		rows, err := db.Query(`SELECT day, unit, bytes FROM owner_size WHERE day = ? ORDER BY bytes DESC, unit LIMIT ?`, day, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var o OwnerSize
+			if err := rows.Scan(&o.Day, &o.Unit, &o.Bytes); err != nil {
+				return err
+			}
+			owners = append(owners, o)
+		}
+		return rows.Err()
+	})
+	return owners, err
 }
 
 // Size kinds: what RecordSizes measures.
@@ -308,11 +354,19 @@ const (
 	SizeCache    = "cache"
 )
 
-func measureKinds(stateRoot, day string) []SizeSample {
-	sample := func(kind string, paths []string) SizeSample {
+func measureKinds(stateRoot, day string) ([]SizeSample, []OwnerSize) {
+	byOwner := map[string]int64{}
+	sample := func(kind string, paths []string, owners []string) SizeSample {
 		s := SizeSample{Day: day, Kind: kind, Count: len(paths)}
-		for _, p := range paths {
-			s.Bytes += Size(p)
+		for i, p := range paths {
+			bytes := Size(p)
+			s.Bytes += bytes
+			if owners != nil && owners[i] != "" {
+				byOwner[owners[i]] += bytes
+			}
+			if info, err := os.Lstat(p); err == nil && (s.Oldest.IsZero() || info.ModTime().Before(s.Oldest)) {
+				s.Oldest = info.ModTime()
+			}
 		}
 		return s
 	}
@@ -324,27 +378,40 @@ func measureKinds(stateRoot, day string) []SizeSample {
 		}
 		return paths
 	}
-	var scratch, unmarked []string
+	var scratch, scratchOwners, unmarked []string
 	for _, p := range children(filepath.Join(stateRoot, "t")) {
-		if _, ok := markerUnit(p); ok {
-			scratch = append(scratch, p)
+		if unit, ok := markerUnit(p); ok {
+			scratch, scratchOwners = append(scratch, p), append(scratchOwners, unit)
 		} else {
 			unmarked = append(unmarked, p)
 		}
 	}
-	var trash []string
-	for _, dayDir := range children(TrashRoot(stateRoot)) {
-		for _, p := range children(dayDir) {
-			if filepath.Ext(p) != ".json" {
-				trash = append(trash, p)
+	var trash, trashOwners []string
+	if items, err := List(stateRoot); err == nil {
+		for _, item := range items {
+			if item.Moved {
+				trash, trashOwners = append(trash, item.Path), append(trashOwners, item.Owner)
 			}
 		}
 	}
-	return []SizeSample{
-		sample(SizeScratch, scratch),
-		sample(SizeUnmarked, unmarked),
-		sample(SizeTrash, trash),
-		sample(SizeKept, children(filepath.Join(stateRoot, "gc", "kept"))),
-		sample(SizeCache, children(CacheDir(stateRoot))),
+	var kept, keptOwners []string
+	if keeps, err := ListKeeps(stateRoot); err == nil {
+		for _, k := range keeps {
+			if k.Moved != "" {
+				kept, keptOwners = append(kept, k.Moved), append(keptOwners, k.Owner)
+			}
+		}
 	}
+	samples := []SizeSample{
+		sample(SizeScratch, scratch, scratchOwners),
+		sample(SizeUnmarked, unmarked, nil),
+		sample(SizeTrash, trash, trashOwners),
+		sample(SizeKept, kept, keptOwners),
+		sample(SizeCache, children(CacheDir(stateRoot)), nil),
+	}
+	owners := make([]OwnerSize, 0, len(byOwner))
+	for unit, bytes := range byOwner {
+		owners = append(owners, OwnerSize{Day: day, Unit: unit, Bytes: bytes})
+	}
+	return samples, owners
 }
