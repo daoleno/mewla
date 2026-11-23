@@ -98,7 +98,11 @@ phone. With Cloudflare, the domain must be on your Cloudflare account.
 
 Any other HTTPS reverse proxy works the same way if it forwards the full origin,
 keeps the original `Host` header and passes WebSocket upgrades to
-`http://127.0.0.1:9876`. Mewla also serves the web app at every HTTPS address
+`http://127.0.0.1:9876`. Mewla does not read `X-Forwarded-Host`. A proxy that
+rewrites `Host` to its upstream address still works, but then the daemon
+cannot check which name the app signed for
+([Security and privacy](security-and-privacy.md)); nginx needs
+`proxy_set_header Host $host;` to keep it. Mewla also serves the web app at every HTTPS address
 in the list.
 
 The published hostname is reachable from the internet unless you add an access
