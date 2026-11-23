@@ -131,20 +131,46 @@ jobs:
           swiftc -O -o "$L/click" "$L/click.swift"
       # Started in the background here, they outlive the step (a runner reaps orphans only at the job's end); their
       # sessions stay in the job's GUI session.
+      # A loop that cannot open its way in has still done its part (it releases the runner at once): it ends green with
+      # a warning on the run's summary, not red. A run on main is someone's tool, not the product's CI; a build that
+      # fails above stays red.
       - name: Open the way in
+        id: way
         run: |
           set -euo pipefail
           L="$HOME/mac-loop"
           nohup /usr/sbin/sshd -D -e -f "$L/sshd/config" > "$L/sshd/log" 2>&1 &
-          nohup "$L/cloudflared" tunnel --no-autoupdate --url ssh://127.0.0.1:22022 > "$L/cf.log" 2>&1 &
+          # An account-less quick tunnel has no uptime guarantee and is rate limited (on 11-23 a runner got "status 429:
+          # Tunnelstore request failed"): a tunnel that exits without a hostname is asked for again, with a growing
+          # pause, for about five minutes.
           host=""
-          for i in $(seq 1 90); do host=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$L/cf.log" | head -1 | sed 's#https://##' || true); [ -n "$host" ] && break; sleep 1; done
-          [ -n "$host" ] || { echo "no tunnel"; tail -20 "$L/cf.log"; exit 1; }
+          for attempt in 1 2 3 4 5 6; do
+            nohup "$L/cloudflared" tunnel --no-autoupdate --url ssh://127.0.0.1:22022 > "$L/cf.log" 2>&1 &
+            cf=$!
+            for i in $(seq 1 60); do
+              host=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$L/cf.log" | head -1 | sed 's#https://##' || true)
+              [ -n "$host" ] && break 2
+              kill -0 "$cf" 2>/dev/null || break
+              sleep 1
+            done
+            echo "no tunnel on attempt $attempt: $(grep -iE 'fail|error' "$L/cf.log" | tail -1)"
+            kill "$cf" 2>/dev/null || true
+            sleep $(( attempt * 15 ))
+          done
+          if [ -z "$host" ]; then
+            reason=$(grep -iE 'fail|error' "$L/cf.log" | tail -1)
+            echo "::warning title=Mac loop: no way in::The tunnel was refused after 6 attempts; the runner is released. $reason"
+            { echo "### Mac loop: no way in"; echo; echo "The quick tunnel was refused after 6 attempts, so nobody could reach this runner and it was released at once. Nothing in Mewla failed. Start again later (client/macos/scripts/loop/mac-loop.sh start)."; echo; echo "Last tunnel error: \`$reason\`"; } >> "$GITHUB_STEP_SUMMARY"
+            echo "open=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "open=true" >> "$GITHUB_OUTPUT"
           # What an ssh session needs of this job's environment (setup-go's PATH and the rest).
           printf 'export PATH=%q\nexport RUNNER_TEMP=%q\nexport GITHUB_WORKSPACE=%q\nexport GOCACHE=%q\n' "$PATH" "$RUNNER_TEMP" "$GITHUB_WORKSPACE" "$(go env GOCACHE)" > "$L/env.sh"
           mkdir -p "$L/meet"; printf '%s\n' "$host" > "$L/meet/host"; cut -d' ' -f1,2 "$L/sshd/host_key.pub" > "$L/meet/host_key.pub"; echo "$USER" > "$L/meet/user"
           echo "tunnel up at $(date -u +%T), $(( $(date -u +%s) - $(cat "$RUNNER_TEMP/t0") )) s after the start"
       - uses: actions/upload-artifact@v4
+        if: ${{ steps.way.outputs.open == 'true' }}
         with:
           name: mac-loop-meet-${{ github.run_id }}
           path: ~/mac-loop/meet
@@ -152,12 +178,13 @@ jobs:
       # The host's loop profile (client/macos/Cargo.toml [profile.loop]): from cold it is a full build of NSH, so it
       # starts here, in the background, only when asked; remote.sh host waits for it.
       - name: The host's loop profile, in the background
-        if: ${{ inputs.host }}
+        if: ${{ inputs.host && steps.way.outputs.open == 'true' }}
         run: |
           L="$HOME/mac-loop"
           nohup bash -c 'start=$(date +%s); cargo build --profile loop --manifest-path client/macos/Cargo.toml > "$1/prewarm.log" 2>&1; echo "prewarm exit $? after $(( $(date +%s) - start )) s" >> "$1/prewarm.log"' _ "$L" > /dev/null 2>&1 &
           echo $! > "$L/prewarm.pid"
       - name: Hold (until ~/mac-loop/stop, another macOS job waits, or the time is up)
+        if: ${{ steps.way.outputs.open == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           MINUTES: ${{ inputs.minutes }}
@@ -175,6 +202,7 @@ jobs:
               if [ -n "$waiting" ]; then
                 echo "yielding at $(date -u +%T) to:"; echo "$waiting"
                 echo "$waiting" > "$L/yielded"
+                { echo "### Mac loop: yielded"; echo; echo "Another macOS job waited for a runner, so this loop let its runner go:"; echo; echo "$waiting" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
                 break
               fi
             fi

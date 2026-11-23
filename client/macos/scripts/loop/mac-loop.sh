@@ -60,7 +60,7 @@ start)
   while :; do
     st=$(gh_ api "repos/$repo/actions/runs/$run/jobs" --jq '.jobs[0] | "\(.status) \(.started_at // "")"')
     [[ "$st" == in_progress* && -z "$started" ]] && { started=1; stamp "runner picked up" "$t0"; }
-    [[ "$st" == completed* ]] && { echo "the run ended before the way in opened: $st"; exit 1; }
+    [[ "$st" == completed* ]] && { echo "the run ended before the way in opened ($st); its summary says why: gh run view $run --repo $repo"; exit 1; }
     art=$(gh_ api "repos/$repo/actions/runs/$run/artifacts" --jq ".artifacts[] | select(.name == \"mac-loop-meet-$run\") | .id")
     [[ -n "$art" ]] && break
     sleep 10
