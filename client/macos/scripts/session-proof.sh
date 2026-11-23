@@ -20,20 +20,20 @@ written() { last_tick < "$dir/ticks.txt"; }
 
 case "$mode" in
   start)
-    printf '#!/bin/sh\ni=0\nwhile :; do i=$((i+1)); echo "tick $i"; echo "tick $i" >> "%s"; sleep 1; done\n' "$dir/ticks.txt" > "$dir/tick.sh"
+    # Quiet at first: the spawn hands the Worker its brief once the terminal is still, as at an agent's prompt.
+    printf '#!/bin/sh\nsleep 20\ni=0\nwhile :; do i=$((i+1)); echo "tick $i"; echo "tick $i" >> "%s"; sleep 1; done\n' "$dir/ticks.txt" > "$dir/tick.sh"
     chmod 755 "$dir/tick.sh"
     : > "$dir/ticks.txt"
     before=" $(sessions) "
-    # The stand-in command is no agent, so the spawn reports its first input as not taken; the Session runs anyway.
-    "$cli" worker spawn -name "Session proof" -executor claude -command "$dir/tick.sh" -cwd "$dir" > "$dir/spawn.json" 2>&1 || true
+    "$cli" worker spawn -name "Session proof" -executor claude -command "$dir/tick.sh" -cwd "$dir" > "$dir/spawn.json"
     mine=""
-    for _ in $(seq 1 60); do
+    for _ in $(seq 1 90); do
       # The Worker named so (its id is its Session's), among the Sessions that were not there before.
       wid=$("$cli" worker list --json 2>/dev/null | python3 -I -c '
 import json, sys
 def walk(v):
     if isinstance(v, dict):
-        if v.get("name") == "Session proof" and str(v.get("id", "")).startswith("mh-"):
+        if str(v.get("name", "")).startswith("Session proof") and str(v.get("id", "")).startswith("mh-"):
             print(v["id"]); sys.exit(0)
         for x in v.values(): walk(x)
     elif isinstance(v, list):
