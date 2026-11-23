@@ -156,8 +156,9 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     });
 
     // `app.permissionGuide {permission, state?}`: System Settings on the permission's list and the panel beside it with
-    // Mewla's icon to drag in (permissions.rs), after clearing Mewla's own rows that do not count (`state`: the daemon's); `{given}`: the daemon reads that grant as given, so the panel asking for it
-    // closes and Mewla comes to the front; `{}` closes the panel.
+    // Mewla's icon to drag in (permissions.rs), after clearing Mewla's own rows that do not count (`state`: the
+    // daemon's); `{given}`: the daemon reads that grant as given, so the panel asking for it closes and Mewla comes to
+    // the front; `{}` closes the panel.
     host.handle("app.permissionGuide", |call| {
         if let Some(given) = call.data().get("given").and_then(Value::as_str).and_then(permissions::Permission::from_id) {
             dispatch2::DispatchQueue::main().exec_async(move || {
