@@ -39,7 +39,10 @@ func (s *Server) sendLinkRoute(conn *websocket.Conn) {
 	for _, candidate := range route.Candidates {
 		candidates = append(candidates, map[string]string{"name": candidate.Name, "url": candidate.StableURL})
 	}
-	payload := link.RouteBindingPayload(s.auth.DaemonID(), s.auth.PublicKeyHex(), route.RouteID, route.TransportPin, issued, route.Candidates)
+	payload, err := link.RouteBindingPayload(s.auth.DaemonID(), s.auth.PublicKeyHex(), route.RouteID, route.TransportPin, issued, route.Candidates)
+	if err != nil {
+		return
+	}
 	s.sendJSON(conn, map[string]any{
 		"type":          "link_route",
 		"version":       link.RouteVersion,
