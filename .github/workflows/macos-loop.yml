@@ -9,6 +9,9 @@ name: Mewla for Mac warm loop
 # GUI session, key-only (no password, no PAM), on 127.0.0.1; a cloudflared quick tunnel (outbound from the runner)
 # carries it. The tunnel's hostname and the sshd's host key go up as an artifact (readable while the run is going),
 # never into the log. Stop: touch ~/mac-loop/stop over ssh; the step ends and the run goes green.
+#
+# It holds one of the account's 5 concurrent macOS runners for as long as it is warm (up to timeout-minutes), the same
+# runners the release and the Mac proof lanes queue for: stop it as soon as the task is done.
 
 on:
   push:
