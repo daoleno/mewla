@@ -5,9 +5,15 @@ import { checkPickedCount, createAttachmentUploadOperation, MAX_COMPOSER_ATTACHM
 import type { StoredServer } from "../../../core/storedServerContract";
 import { connection, current } from "../../session";
 import { uploadFile as uploadThrough, type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
-import { keepAppFiles } from "./appFiles";
+import { keepAppFiles, releaseAppFiles } from "./appFiles";
 import { pickFiles, uploadHost } from "./host";
 import { markShared, releaseShared } from "./shareIn";
+
+/** Chips that went: what the host or the app kept of their files goes too. */
+function letGo(uris: readonly string[]): void {
+  releaseShared(uris);
+  releaseAppFiles(uris);
+}
 
 export { type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
 export { pickFiles } from "./host";
@@ -97,7 +103,7 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
       owner = target?.id ?? "";
       queue.dispose();
       queue = makeQueue(target);
-      releaseShared(items().map((item) => item.asset.uri));
+      letGo(items().map((item) => item.asset.uri));
       items.set([]);
     });
   });
@@ -141,18 +147,18 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
     remove(id) {
       const item = items().find((item) => item.id === id);
       queue.remove(id);
-      if (item) releaseShared([item.asset.uri]);
+      if (item) letGo([item.asset.uri]);
     },
     ready: () => items().flatMap((item) => (item.status === "ready" && item.result ? [item.result] : [])),
     clear() {
       const keep = new Set(items().filter((item) => item.status !== "ready").map((item) => item.id));
-      releaseShared(items().filter((item) => !keep.has(item.id)).map((item) => item.asset.uri));
+      letGo(items().filter((item) => !keep.has(item.id)).map((item) => item.asset.uri));
       queue.forgetCompleted(keep);
       items.set(items().filter((item) => keep.has(item.id)));
     },
     dispose() {
       queue.dispose();
-      releaseShared(items().map((item) => item.asset.uri));
+      letGo(items().map((item) => item.asset.uri));
       items.set([]);
     },
   };

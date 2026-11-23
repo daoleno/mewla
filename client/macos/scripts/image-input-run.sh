@@ -133,6 +133,49 @@ send; wait_chips '^chips 0$' 20 || failed "phase 2: Send did not take the chips"
 
 report "== 3. Desktop, Documents and Downloads"
 defaults write com.apple.finder FXPreferredViewStyle -string Nlsv; killall Finder; sleep 3
+report "SIP: $(csrutil status 2>&1)"
+report "this user's privacy grants for the three folders and all files: $(sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "select service || ' ' || client || ' ' || auth_value from access where service like 'kTCCServiceSystemPolicy%'" 2>&1 | tr '\n' ';')"
+# A window that came since owners-before.txt (taken before the step): logged with what it says; one that asks for a
+# folder is a privacy prompt, answered <answer>. Captured as <tag>.png.
+answer_prompt() { # <tag> <answer>
+  local tag="$1" answer="$2" prompt=""
+  screencapture -x "$C/$tag.png"
+  "$B/windows" | cut -d'|' -f1 | sort -u > "$D/owners-after.txt"
+  for owner in $(comm -13 "$D/owners-before.txt" "$D/owners-after.txt" | grep -vxE "Mewla Dev|Finder|mewla|Screenshot|Privacy Control" | tr ' ' '\037'); do
+    owner=$(tr '\037' ' ' <<<"$owner")
+    local said; said=$("$B/ax" texts "$owner" 2>/dev/null | tr '\n' ' ')
+    report "$tag: a window of '$owner' appeared: $said"
+    if grep -qiE "access|folder|allow" <<<"$said"; then prompt="$owner"; fi
+  done
+  if [ -n "$prompt" ]; then
+    "$B/ax" press "$prompt" "$answer" && report "$tag: pressed '$answer' on $prompt's prompt" || failed "$tag: no '$answer' button on $prompt's prompt"
+  else
+    report "$tag: macOS showed no prompt"
+  fi
+}
+# The control: an app of its own reading a file in Documents by itself. On a Mac that guards the folder, macOS asks.
+control="$D/Privacy Control.app"
+mkdir -p "$control/Contents/MacOS"
+swiftc -O -o "$control/Contents/MacOS/control" "$S/tcc-control.swift"
+cat > "$control/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.daoleno.mewla.privacy-control</string>
+<key>CFBundleExecutable</key><string>control</string>
+<key>CFBundleName</key><string>Privacy Control</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>
+PLIST
+codesign -s - --force "$control" > /dev/null 2>&1
+echo control > "$HOME/Documents/control.txt"
+"$B/windows" | cut -d'|' -f1 | sort -u > "$D/owners-before.txt"
+open -n -a "$control" --args Documents "$D/control.out"
+sleep 4
+answer_prompt control-documents Allow
+for _ in $(seq 1 20); do [ -s "$D/control.out" ] && break; sleep 1; done
+report "control (an app reading ~/Documents by itself): $(cat "$D/control.out" 2>/dev/null || echo "no answer")"
+front
 folder_case() { # <folder> <drag|paste> <Allow|Don't Allow>
   local folder="$1" how="$2" answer="$3" name="from $1.png"
   local tag; tag="$(tr 'A-Z' 'a-z' <<<"$folder")-$how"
@@ -154,20 +197,7 @@ folder_case() { # <folder> <drag|paste> <Allow|Don't Allow>
     front; cmd_v
   fi
   sleep 3
-  screencapture -x "$C/$tag.png"
-  "$B/windows" | cut -d'|' -f1 | sort -u > "$D/owners-after.txt"
-  local prompt=""
-  for owner in $(comm -13 "$D/owners-before.txt" "$D/owners-after.txt" | grep -vxE "Mewla Dev|Finder|mewla|Screenshot" | tr ' ' '\037'); do
-    owner=$(tr '\037' ' ' <<<"$owner")
-    local said; said=$("$B/ax" texts "$owner" 2>/dev/null | tr '\n' ' ')
-    report "$tag: a window of '$owner' appeared: $said"
-    if grep -qiE "access|folder|allow" <<<"$said"; then prompt="$owner"; fi
-  done
-  if [ -n "$prompt" ]; then
-    "$B/ax" press "$prompt" "$answer" && report "$tag: pressed '$answer' on $prompt's prompt" || failed "$tag: no '$answer' button on $prompt's prompt"
-  else
-    report "$tag: macOS showed no prompt"
-  fi
+  answer_prompt "$tag" "$answer"
   if wait_chips "\[(ready|failed) $name[]:]" 30; then
     report "$tag: after $(since "$t0") s, $(chips | grep -oE "\[[a-z]+ $name[^]]*\]")"
   else
@@ -181,6 +211,12 @@ for folder in Desktop Documents Downloads; do
   if [ "$folder" = Documents ]; then folder_case "$folder" drag "Don't Allow"; else folder_case "$folder" drag Allow; fi
   folder_case "$folder" paste Allow
 done
+# A file Mewla Dev may not read (no read permission): dropped, then copied as Finder copies it and pasted.
+cp "$D/picture.png" "$D/locked.png"; chmod 000 "$D/locked.png"
+drop_file 1 "$D/m0" "$D/locked.png"
+wait_chips '\[failed locked\.png: Mewla can.t read this file\.\]' 30 && report "unreadable file dropped: $(chips | grep -oE "\[failed locked[^]]*\]")" || failed "an unreadable dropped file has no chip that says why"
+"$B/pasteboard" file "$D/locked.png"; front; cmd_v
+wait_chips '(\[failed locked\.png: Mewla can.t read this file\.\].*){2}' 30 && report "unreadable file pasted: a second such chip" || failed "an unreadable pasted file has no chip that says why"
 report "phase 3 chips: $(chips)"
 shot phase3
 send; sleep 2; report "phase 3 after Send: $(chips)"

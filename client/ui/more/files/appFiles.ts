@@ -24,16 +24,33 @@ export function keepAppFiles(list: readonly File[], now: Date = new Date()): Upl
     sequence += 1;
     const uri = `${PREFIX}${sequence}`;
     files.set(uri, file);
-    while (files.size > KEPT) files.delete(files.keys().next().value!);
+    while (files.size > KEPT) releaseAppFiles([files.keys().next().value!]);
     return { uri, name: pastedFileName(file.name, file.type, now), mimeType: file.type || null, size: file.size };
   });
 }
+
+const urls = new Map<string, string>();
 
 /** A kept picture's own URL, for a chip or the viewer; null for a file that is not one or was dropped. */
 export function appFileImageUrl(uri: string): string | null {
   const file = files.get(uri);
   if (!file || !file.type.startsWith("image/")) return null;
-  return URL.createObjectURL(file);
+  let url = urls.get(uri);
+  if (!url) urls.set(uri, (url = URL.createObjectURL(file)));
+  return url;
+}
+
+/**
+ * The chips of `uris` went (sent, removed, the composer gone): their kept files go too, with their pictures' URLs,
+ * so a large dropped file is not held after it went (a drop or a paste can bring 512 MB).
+ */
+export function releaseAppFiles(uris: readonly string[]): void {
+  for (const uri of uris) {
+    files.delete(uri);
+    const url = urls.get(uri);
+    if (url) URL.revokeObjectURL(url);
+    urls.delete(uri);
+  }
 }
 
 const running = new Map<string, AbortController>();
