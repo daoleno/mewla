@@ -33,7 +33,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
