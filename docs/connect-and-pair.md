@@ -241,8 +241,11 @@ page, its remote access pairing link (the `mewla://settings?v=3…` code
 another computer is refused with that computer's address: open that address in
 the browser instead.
 
-Mewla for Mac pairs itself with this Mac's daemon. Signed with Developer ID, it
-keeps its device key in your login Keychain; an ad hoc signed build and Mewla
+Mewla for Mac always has this Mac as a computer. It reaches this Mac's daemon at
+its own loopback address, with no pairing step, no code and no question, and the
+entry cannot be removed (a removed or broken one comes back by itself). A link
+for this Mac from anywhere else never replaces it. Signed with Developer ID, the
+app keeps its device key in your login Keychain; an ad hoc signed build and Mewla
 Dev keep it in `secure.json` (readable only by you) in the app's data folder.
 It pairs other computers as the phone does: paste the link under **Pair a
 computer**, or open a `mewla://` link, which the release claims, whether the
