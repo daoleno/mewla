@@ -41,10 +41,15 @@ computer's screen, switch to it: tap the cat, then the computer under
 
 On macOS the permissions are **Screen Recording** (to see the screen) and
 **Accessibility** (to click and type), both under **System Settings → Privacy
-& Security**. When `mewla boot install` runs Mewla, both lists show **Mewla**
-with its icon. Without it they show `mewla` or the terminal app that started
-it. You grant them once: Mewla signs itself with an identity kept on this Mac,
-so they stay granted after updates. If `mewla boot status` reports an ad hoc
+& Security**. In Mewla for Mac ([Mewla for Mac](mac-app.md#permissions)) both
+belong to one **Mewla** with its icon: **Settings → Privacy & access** shows
+each as macOS holds it now, and **Allow** opens that list in System Settings
+with a small panel beside it. Drag Mewla from the panel into the list, or turn
+Mewla on if it is already there; it also brings Mewla back after you removed it
+with −. When the permission counts, the panel closes and Mewla applies it
+itself. With the CLI under `mewla boot install`, both lists show **Mewla** with
+its icon too, and the grant stays after updates because Mewla signs itself with
+an identity kept on this Mac. If `mewla boot status` reports an ad hoc
 signature, macOS asks again after each update; turn **Mewla** off and on in
 both lists.
 
