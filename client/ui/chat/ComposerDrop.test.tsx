@@ -76,6 +76,14 @@ describe("pasting files into the composer (Mewla for Mac)", () => {
   });
 });
 
+describe("pasting files into the composer in a browser", () => {
+  test("a file copied in a file manager, its bytes and its path both on the clipboard, is a chip", async () => {
+    const app = await open(COMPOSER, { ...computer(), platform: "web" });
+    await app.paste("id:composer", { text: "working.webp", files: ["assets/pets/p13/working.webp"], uris: [PICTURE] });
+    await app.waitFor("text:Ready");
+  });
+});
+
 describe("dropping files on a conversation in a browser", () => {
   /** The page host's side (web/host.js): the dropped file kept as a picked one, uploaded by the page. */
   const page = () => computer("connected", {
