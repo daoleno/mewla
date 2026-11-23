@@ -50,6 +50,13 @@ export interface AttachmentUploads {
    * picked ones are; throws what the person should read (not connected, too many).
    */
   add(files: readonly File[]): void;
+  /** Throws what the person should read when `count` more files cannot be attached now (not connected, too many). */
+  checkRoom(count: number): void;
+  /**
+   * Files that came another way than the picker, as chips (`incoming.ts`: dropped, or copied in Finder), the room
+   * checked as for picked ones; throws what the person should read.
+   */
+  addAssets(assets: readonly UploadDocumentAsset[]): void;
   /**
    * Files another app shared (shareIn.ts): chips that upload at once. Never throws: a computer that cannot be
    * reached shows the failed chip with Retry. The host's copy of each goes when its chip does.
@@ -95,7 +102,7 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
     });
   });
 
-  return {
+  const made: AttachmentUploads = {
     items: () => items(),
     picking: () => picking(),
     canAttach: () => !!server() && connection() === "connected" && !picking() && items().length < MAX_COMPOSER_ATTACHMENTS,
@@ -113,9 +120,16 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
     },
     add(files) {
       if (!files.length) return;
+      made.checkRoom(files.length);
+      made.addAssets(keepAppFiles(files));
+    },
+    checkRoom(count) {
       if (!server() || connection() !== "connected") throw new Error("Connect to a computer to attach files.");
-      const room = pickLimit(MAX_COMPOSER_ATTACHMENTS - items().length);
-      const assets = checkPickedCount(keepAppFiles(files), room);
+      checkPickedCount(Array.from({ length: count }, () => ({ uri: "", name: "" })), pickLimit(MAX_COMPOSER_ATTACHMENTS - items().length));
+    },
+    addAssets(assets) {
+      if (!assets.length) return;
+      made.checkRoom(assets.length);
       queue.enqueue(assets.map((asset) => ({ id: `upload-${(sequence += 1)}`, asset })));
     },
     addShared(assets) {
@@ -142,6 +156,7 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
       items.set([]);
     },
   };
+  return made;
 }
 
 /** What a chip says about a file. */

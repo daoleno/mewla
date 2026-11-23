@@ -1,4 +1,4 @@
-import { computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View, type JSX } from "nsh";
+import { cleanup, computed, effect, openUrl, platform, safeArea, untracked, signal, Text, View, type JSX } from "nsh";
 import { CAPSULE, capsuleInset, capsuleRailInset } from "../../core/shell/capsule";
 import { brainThreadReadingScope } from "../../core/timeline/readingPlace";
 import { Capsule, CapsulePage, createCapsule, type CapsuleReading } from "../shell/Capsule";
@@ -56,6 +56,8 @@ import { createMenuAnchor } from "../kit/Menu";
 import type { UpdateLineItem } from "../../core/timeline/updateLines";
 import { brainComposing, brainNeedsPerson, lines as updateLines } from "../whatsnew/state";
 import { density, headerSize } from "../kit/density";
+import { FileDrop } from "../chat/FileDrop";
+import { attachIncoming, type IncomingFiles } from "../more/files/incoming";
 
 const startingChat = signal(false);
 const notice = signal("");
@@ -386,6 +388,9 @@ function BrainCapsule(props: { capsule: ReturnType<typeof createCapsule> }) {
  * edges (the rows' own 16 and 8 more), at every width, one column or two; the header above runs the window's width.
  * Elsewhere the page's own column holds them.
  */
+/** The composer files dropped on Brain's thread go to (`FileDrop`). */
+type DropInto = ReturnType<typeof signal<{ attach: (incoming: IncomingFiles) => void } | null>>;
+
 function ThreadColumn(props: { on: boolean; children: JSX.Element }) {
   // Off the Mac the children are the page's own, untouched (no view, no branch around them).
   if (!props.on) return props.children;
@@ -461,9 +466,13 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
   );
 }
 
-function Composer(props: { text: ReturnType<typeof createComposerText>; editor: ReturnType<typeof createMessageEdit> }) {
+function Composer(props: { text: ReturnType<typeof createComposerText>; editor: ReturnType<typeof createMessageEdit>; dropInto: DropInto }) {
   const editor = props.editor;
   const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text), onSent: () => brainSends.set(untracked(brainSends) + 1) });
+  // Pasted into the field or dropped on the thread: chips, as picked ones.
+  const attach = (incoming: IncomingFiles) => void attachIncoming(tools.uploads, incoming).catch((error) => notice.set(error instanceof Error ? error.message : "Could not attach the file."));
+  props.dropInto.set({ attach });
+  cleanup(() => props.dropInto.set(null));
   const block = () => brainComposerBlock({ surface: surface(), snapshot: brain(), chat: chatState() });
   const pairAgain = () => tray().state.kind === "pair";
   // While Brain wakes on the Mac the composer says so (`m-waking`: "Connecting…").
@@ -475,13 +484,7 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
         onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : tools.send(value))}
         running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}
         active={() => homeShown() && !trayOpen()} pickerOpen={tools.pickerOpen}
-        onFiles={(files) => {
-          try {
-            tools.uploads.add(files);
-          } catch (error) {
-            notice.set(error instanceof Error ? error.message : "Could not attach the file.");
-          }
-        }}
+        onFiles={attach}
         leading={<ComposerPlusButton pinned={tools.pinned} connected={() => connection() === "connected"} onPress={() => tools.pinned.set(!untracked(tools.pinned))} />}
         onRecall={() => {
           const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
@@ -552,6 +555,8 @@ export function Home(props: { perch?: PerchHome } = {}) {
     if (shown && !wasShown) untracked(capsule.expand);
     wasShown = shown;
   });
+  // The composer under the thread, while there is one (a past thread has none): where dropped files go.
+  const dropInto: DropInto = signal(null);
   return (
     <NavPage title="Brain" column="reading" frame={macColumn ? false : undefined} headerVisible={false} header={<View />} rail={[
       { id: "stop", transient: true, icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping Brain" : "Stop Brain", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
@@ -560,11 +565,13 @@ export function Home(props: { perch?: PerchHome } = {}) {
       <CapsulePage>
         {/* With the side rail up (an open iPhone Duo on its side, beside the pane) nothing is left for the header. */}
         <If when={!capsuled() && !rail()}><If when={props.perch} else={<HomeHeader />}>{(perch) => perch().header()}</If></If>
-        <ThreadColumn on={macColumn}>
-          <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
-          <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
-          <If when={!routedBrainThread()}><Composer text={text} editor={editor} /></If>
-        </ThreadColumn>
+        <FileDrop testID="file-drop-brain" onFiles={() => dropInto()?.attach ?? null}>
+          <ThreadColumn on={macColumn}>
+            <If when={routedBrainThread()}><View style={{ paddingTop: capsuled() ? inset() : 0 }}><PastThread /></View></If>
+            <Body handlers={handlers} capsule={phone ? { top: () => (capsuled() && !routedBrainThread() ? inset() : 0), reading: capsule.reading } : undefined} />
+            <If when={!routedBrainThread()}><Composer text={text} editor={editor} dropInto={dropInto} /></If>
+          </ThreadColumn>
+        </FileDrop>
         <If when={capsuled()}><BrainCapsule capsule={capsule} /></If>
         <If when={!wide()}><Tray top={capsuled() ? inset : undefined} onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} onNewSession={() => newSessionOpen.set(true)} onShowCard={showRequestCard}
           onUseExecutor={(id) => {
