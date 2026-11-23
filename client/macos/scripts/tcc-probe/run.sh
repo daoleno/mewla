@@ -108,6 +108,10 @@ clear_rows; rows "$id.daemon" 0 2 "$helper_req"; tcc_reload; shapes helper-id ch
 clear_rows; rows "$id" 0 0 "$app_req"; tcc_reload; shapes bundle-denied check
 # A grant under an older signature (the ad hoc requirement of another build): the row is there, switched on.
 clear_rows; rows "$id" 0 2 "$helper_req"; tcc_reload; shapes bundle-stale-req check
+# The same stale row switched off, and Accessibility's stale row beside an older daemon's path row switched off (as
+# Mewla 0.4.25 leaves it): what the list shows for the bundle, against what the preflight says.
+clear_rows; rows "$id" 0 0 "$helper_req"; tcc_reload; shapes bundle-stale-req-off check
+clear_rows; rows "$id" 0 2 "$helper_req"; row kTCCServiceAccessibility "$app/Contents/Helpers/probe" 1 0 "$helper_req"; tcc_reload; shapes bundle-stale-req-path-off check
 
 # What asking does: no row (never asked, or removed with −), then a denied row.
 for shape in L A; do
@@ -124,6 +128,7 @@ for shape in L A; do
   killall universalAccessAuthWarn UserNotificationCenter 2>/dev/null || true
 done
 
+cp "$results.info" "$out/info.txt" 2>/dev/null || true
 log show --last 15m --style compact --predicate 'process == "tccd"' 2>/dev/null | grep -i tccprobe | tail -400 > "$out/tccd.log" || true
 clear_rows; tcc_reload
 sudo rm -rf "$app"
