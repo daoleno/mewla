@@ -227,9 +227,9 @@ page's local storage, which is weaker; pair only browser profiles you control.
 Mewla for Mac reads a file from your disk only when you drop it on a
 conversation or paste it after copying it in Finder, to send it like an
 attached one. Its app code is allowed to read, never write, under your home
-folder, `/Volumes`, `/Users/Shared` and the system's temporary folders
-(client/ui/nsh.json `fs.read`). This Mac's daemon can already read the same
-files.
+folder, mounted volumes, the Mac's shared user folder and the system's
+temporary folders (client/ui/nsh.json `fs.read`). This Mac's daemon can already
+read the same files.
 
 ## Outbound connections
 
