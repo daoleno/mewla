@@ -200,6 +200,8 @@ func run(args []string, stderr io.Writer) error {
 			return runVersionCommand(args[1:], stderr)
 		case "resources":
 			return runResources(args[1:], stderr)
+		case "gc":
+			return runGCCommand(args[1:], stderr)
 		case "worker":
 			return runWorkerCommand(args[1:], stderr)
 		case "agent-event":
@@ -3201,6 +3203,7 @@ Agents and tools
   service      List or register services Workers can see
   agents       Let Claude Code, Codex or another MCP agent hand work to Brain
   resources    Print this computer's resource pressure
+  gc           What a Session holds and what Mewla collected; restore from the trash
 
 Flags
   -lan                  listen on all networks (plain HTTP; trusted networks only)
