@@ -282,7 +282,8 @@ jobs:
           /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$L/Mewla.app"
           handler=$(swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(toOpen: URL(string: "mewla://settings")!)?.path ?? "none")')
           echo "mewla:// opens with: $handler"
-          [ "$handler" = "$L/Mewla.app" ] || failed=1
+          # The job unpacked the same app before ($RUNNER_TEMP/app): either copy is Mewla, by its bundle id.
+          [ "$handler" != none ] && [ "$(plutil -extract CFBundleIdentifier raw "$handler/Contents/Info.plist")" = "$(plutil -extract CFBundleIdentifier raw "$L/Mewla.app/Contents/Info.plist")" ] || failed=1
           # A pairing link to an address nothing answers at: the confirmation comes before anything is sent.
           link="mewla://settings?u=http%3A%2F%2F127.0.0.1%3A9&k=$(printf 'b%.0s' $(seq 64))&t=$(printf 'c%.0s' $(seq 64))&n=Lab"
           asked() {
