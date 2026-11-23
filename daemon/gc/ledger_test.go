@@ -82,7 +82,7 @@ func TestTheLedgerKnowsASessionAfterItEnds(t *testing.T) {
 }
 
 func TestSizesAreMeasuredOncePerDay(t *testing.T) {
-	root, _, scratch := whyFixture(t)
+	root, unit, scratch := whyFixture(t)
 	if err := os.WriteFile(filepath.Join(scratch, "build.out"), make([]byte, 4096), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -116,6 +116,13 @@ func TestSizesAreMeasuredOncePerDay(t *testing.T) {
 	}
 	if len(got) != 5 {
 		t.Fatalf("kinds %v", got)
+	}
+	if got[SizeScratch].Oldest.IsZero() || !got[SizeCache].Oldest.IsZero() {
+		t.Fatalf("oldest: scratch %v, empty cache %v", got[SizeScratch].Oldest, got[SizeCache].Oldest)
+	}
+	owners, err := OwnerSizes(root, now.Local().Format("2006-01-02"), 5)
+	if err != nil || len(owners) != 1 || owners[0].Unit != unit || owners[0].Bytes < 4096 {
+		t.Fatalf("owners %+v err %v", owners, err)
 	}
 }
 
