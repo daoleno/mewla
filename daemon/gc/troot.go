@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -39,8 +40,8 @@ func snapshotPath(stateRoot string) string {
 // SweepUnmarked moves to the trash every unmarked item of the t/ root that
 // was not there when the rule came (the first sweep lists those), that no
 // process uses (usage) and in which nothing changed for UnmarkedGrace. Only
-// directories and regular files are candidates; sockets, pipes and symlinks
-// stay.
+// directories and regular files are candidates; sockets, pipes, symlinks and
+// *.lock files stay.
 func SweepUnmarked(stateRoot string, usage Usage, now time.Time) ([]Item, error) {
 	root := filepath.Join(stateRoot, "t")
 	entries, err := os.ReadDir(root)
@@ -63,6 +64,11 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) ([]Item, error)
 		path := filepath.Join(root, name)
 		info, err := os.Lstat(path)
 		if err != nil || !(info.IsDir() || info.Mode().IsRegular()) {
+			continue
+		}
+		// A lock file is its inode: moving one a process is about to flock
+		// would give two holders (client/scripts/phone.sh keeps one here).
+		if info.Mode().IsRegular() && strings.HasSuffix(name, ".lock") {
 			continue
 		}
 		if info.IsDir() {

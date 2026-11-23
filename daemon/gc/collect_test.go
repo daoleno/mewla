@@ -58,6 +58,7 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 	}
 	aged := mk("aged", false)
 	agedFile := mk("aged.log", true)
+	lock := mk("0g-heavy.lock", true)
 	fresh := mk("fresh", false)
 	used := mk("used", false)
 	marked := mk("marked", false)
@@ -65,7 +66,7 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	deep := mk("deep", false)
-	for _, p := range []string{aged, agedFile, used, marked, deep} {
+	for _, p := range []string{aged, agedFile, lock, used, marked, deep} {
 		age(t, p, 49*time.Hour)
 	}
 	if err := os.WriteFile(filepath.Join(deep, "sub", "new"), []byte("n"), 0o600); err != nil {
@@ -94,7 +95,7 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 	if len(got) != 2 || !got["aged"] || !got["aged.log"] {
 		t.Fatalf("trashed %v, want aged and aged.log only", got)
 	}
-	for _, kept := range []string{old, fresh, used, marked, deep} {
+	for _, kept := range []string{old, lock, fresh, used, marked, deep} {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s was taken: %v", filepath.Base(kept), err)
 		}
