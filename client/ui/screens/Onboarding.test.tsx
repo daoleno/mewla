@@ -363,4 +363,22 @@ describe("a Mewla Relay code on Pair a computer, on a Mac and in a browser", () 
     expect(saved(app)).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "manual" });
     expect(app.host.calls().some((call) => call.name === "link.start")).toBe(false);
   }, 20_000);
+
+  // The real page host (web/host.js) tells the page's origin by `app.origin`; a browser on 11-23 got "couldn't reach"
+  // for another computer's code because the app read the page's address where the browser does not keep it.
+  test("a browser on another computer's page says so, and sends nothing", async () => {
+    const stable = testComputer("https://quiet-otter-3f9a.a.link.test", 9);
+    const app = await pairPageOn("web", { "app.origin": () => "https://other-cat-1a2b.a.link.test" }, { [stable.pairURL]: () => stable.answer() });
+    await app.waitFor("id:pair-issue", { timeout: 10_000 });
+    expect(app.texts().join(" ")).toContain("This page reaches only other-cat-1a2b.a.link.test, the computer it came from. Open https://quiet-otter-3f9a.a.link.test in the browser to use that computer.");
+    expect(saved(app)).toBeUndefined();
+  }, 20_000);
+
+  test("a browser on the computer's own page pairs at that page's address", async () => {
+    const stable = testComputer("https://quiet-otter-3f9a.a.link.test", 9);
+    const app = await pairPageOn("web", { "app.origin": () => "https://quiet-otter-3f9a.a.link.test" }, { [stable.pairURL]: () => stable.answer() });
+    await app.waitUntil(() => Boolean(saved(app)) || app.shows("id:pair-issue"), { timeout: 10_000 });
+    expect(app.shows("id:pair-issue") ? app.texts().join(" | ") : "").toBe("");
+    expect(saved(app)).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "manual" });
+  }, 20_000);
 });
