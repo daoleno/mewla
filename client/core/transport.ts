@@ -7,6 +7,7 @@ import {
   transportFailed,
   transportMoved,
   transportOpened,
+  adoptRelayConnection,
   transportPathInfo,
 } from "./link/pinnedTransport";
 import { platform, type SocketLike } from "./platform";
@@ -213,7 +214,7 @@ export class Transport {
   private openedByMove = false;
 
   constructor(
-    readonly server: StoredServer,
+    public server: StoredServer,
     private readonly resolveURL: URLResolver = resolveStoredServerURL,
     private readonly moves: PathMoves = linkMoves,
   ) {}
@@ -664,6 +665,19 @@ export class Transport {
     if (this.state !== "connected" || !this.socket) throw new Error("Daemon is not connected.");
     this.queue.push(JSON.stringify(frame));
     this.drain();
+  }
+
+  /**
+   * The computer's pairing became a Mewla Relay route under this connection (`linkRouteChange`): from now on it is
+   * reached as one, and the open socket counts as on the relay, so it moves onto a direct path as any Relay connection.
+   */
+  adopt(server: StoredServer): void {
+    if (server.id !== this.server.id || server.transportKind !== "link") return;
+    this.server = server;
+    if (this.state !== "connected" || !this.socket) return;
+    adoptRelayConnection(server);
+    this.openedPath = this.moves.current(server) ?? "relay";
+    this.scheduleMoveCheck();
   }
 
   /** Ends the current socket as lost (not intentional): what is waiting fails, and the retry follows. */
