@@ -2127,6 +2127,7 @@ version = "0.4.17"
 dependencies = [
  "core-foundation",
  "dispatch2",
+ "libc",
  "log",
  "nsh-base",
  "nsh-core",
@@ -2135,6 +2136,9 @@ dependencies = [
  "nsh-platform-macos",
  "objc2-foundation",
  "objc2-service-management",
+ "ring",
+ "rustls",
+ "rustls-webpki",
  "security-framework",
  "serde_json",
 ]

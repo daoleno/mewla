@@ -36,6 +36,7 @@ describe("Pairing links from the app's own builder", () => {
             url: "wss://quiet-otter-3f9a.a.link.test/ws",
           },
         ],
+        expiresAtMs: expect.any(Number),
       },
     });
 
@@ -89,6 +90,7 @@ describe("Pairing V3", () => {
             url: "wss://quiet-otter-3f9a.m.mewla.ai/ws",
           },
         ],
+        expiresAtMs: expect.any(Number),
       },
     });
     expect(

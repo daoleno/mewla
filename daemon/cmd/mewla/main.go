@@ -764,6 +764,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 	}
 	srv.SetAddressBook(book)
+	// The Mewla Relay route a paired app may take its pairing as (remote access,
+	// else a self-hosted relay.json): read on each connect, so a login or a
+	// relay change since the start is what it says.
+	srv.SetLinkRoute(func() (server.LinkRoute, bool) {
+		return currentLinkRoute(authManager, cfg.linkConfigPath)
+	})
 	srv.SetDirectEndpoints(func() []server.DirectEndpoint {
 		return directEndpoints(cfg.addr, detectPrivateNetworkAddresses())
 	})
@@ -3762,3 +3768,26 @@ func besideInstalledMewla() bool {
 
 // shellWord quotes s as one word for /bin/sh.
 func shellWord(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// currentLinkRoute is this computer's Mewla Relay route as a pairing link names
+// it: remote access's when it is on, else the self-hosted relay.json's.
+func currentLinkRoute(authManager *auth.Manager, linkConfigPath string) (server.LinkRoute, bool) {
+	stateDir := authManager.StorageDir()
+	var config link.ConnectorConfig
+	if remoteConfig, ok, err := remote.LoadRemote(stateDir); err == nil && ok {
+		connector, err := remote.ConnectorConfig(stateDir, remoteConfig, authManager)
+		if err != nil {
+			return server.LinkRoute{}, false
+		}
+		config = connector
+	} else if selfHosted, _, enabled, err := loadOptionalLinkConfig(stateDir, linkConfigPath); err == nil && enabled {
+		config = selfHosted
+	} else {
+		return server.LinkRoute{}, false
+	}
+	identity, err := link.LoadOrCreateTransportIdentity(stateDir, link.RelayDomains(config))
+	if err != nil {
+		return server.LinkRoute{}, false
+	}
+	return server.LinkRoute{RouteID: identity.RouteID, TransportPin: identity.SPKISHA256, Candidates: link.RouteCandidates(config, identity)}, true
+}

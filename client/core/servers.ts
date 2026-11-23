@@ -45,13 +45,27 @@ export function saveServer(input: StoredServerInput): Promise<StoredServer> {
   });
 }
 
-/** Renames a server or moves its address, keeping every other field. */
-export async function updateServer(
+/** Renames a server, moves its address or makes it a Mewla Relay route (`linkRouteChange`), keeping every other field. */
+export function updateServer(
   serverId: string,
-  change: { name?: string; url?: string; transportCandidates?: StoredTransportCandidate[] },
+  change: {
+    name?: string;
+    url?: string;
+    transportCandidates?: StoredTransportCandidate[];
+    transportKind?: "link";
+    transportPin?: string;
+    linkRouteId?: string;
+  },
 ): Promise<StoredServer | null> {
-  const existing = (await getServers()).find((server) => server.id === serverId);
-  return existing ? saveServer({ ...existing, ...change }) : null;
+  // Read and written in one turn of the queue: two changes in a row (a route, then its addresses) both land.
+  return serialized(async () => {
+    const servers = await getServers();
+    const existing = servers.find((server) => server.id === serverId);
+    if (!existing) return null;
+    const next = mergeStoredServer({ ...existing, ...change }, servers, createServerId);
+    await store().setItem(SERVER_KEYS.servers, JSON.stringify(next.servers));
+    return next.server;
+  });
 }
 
 export function removeServer(serverId: string): Promise<void> {

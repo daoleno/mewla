@@ -8,6 +8,11 @@ export function verifyLinkPairingSignature(input: {
   return verifyDomainSignature("mewla-link-pairing-v2\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
 }
 
+/** The daemon key's signature over its Mewla Relay route (daemon/link RouteBindingPayload, the `link_route` message). */
+export function verifyLinkRouteSignature(input: { daemonPublicKey: string; bindingPayload: Uint8Array; signatureHex: string }): boolean {
+  return verifyDomainSignature("mewla-link-route-v1\u0000", input.daemonPublicKey, input.bindingPayload, input.signatureHex);
+}
+
 function verifyDomainSignature(
   domainText: string,
   daemonPublicKey: string,

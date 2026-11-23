@@ -7,6 +7,7 @@ import { createOutbox } from "../core/conversation/outboxRuntime";
 import { forgetInterfaceConversationsOutsideServer, initialInterfaceChatThreadState, type InterfaceChatThreadState } from "../core/conversation/thread";
 import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, updateServer, type StoredServer } from "../core/servers";
 import { learnDirectAddresses, withDirectAddresses } from "../core/link/directAddresses";
+import { provenLinkRouteChange } from "../core/link/routeUpgrade";
 import { WorkerSessions } from "../core/sessions/store";
 import type { Worker } from "../core/sessions/workers";
 import { setFrameBatcher, Transport, type ConnectionState } from "../core/transport";
@@ -168,6 +169,15 @@ export function switchTo(server: StoredServer | null): void {
   void setCurrentServerId(server.id);
   const next = new Transport(server);
   next.setAway(away);
+  let heardAddresses: unknown;
+  const learnAddresses = () => {
+    const server = next.server;
+    if (server.transportKind !== "link" || heardAddresses === undefined) return;
+    const { addresses, changed } = learnDirectAddresses(server, heardAddresses);
+    if (!changed) return;
+    next.server = { ...server, transportCandidates: withDirectAddresses(server, addresses) };
+    void updateServer(server.id, { transportCandidates: next.server.transportCandidates }).catch(() => undefined);
+  };
   transport = next;
   for (const use of transportUsers) {
     const cleanup = use(next, server);
@@ -191,12 +201,28 @@ export function switchTo(server: StoredServer | null): void {
       const snapshot = frame.brain as BrainSnapshot | undefined;
       if (snapshot && typeof snapshot === "object") applyBrainSnapshot(server, next, snapshot);
     }),
+    // A computer paired by its hosted address tells its Mewla Relay route, signed with its key, before its addresses:
+    // the pairing becomes that route in place, with no step for the person (core/link/routeUpgrade.ts). The check
+    // through a pinned tunnel takes a moment; the addresses heard meanwhile are applied once it is a route.
+    next.on("link_route", async (frame) => {
+      const change = await provenLinkRouteChange(next.server, frame);
+      if (!change || transport !== next || next.server.transportKind === "link") return;
+      const upgraded: StoredServer = { ...next.server, ...change };
+      next.adopt(upgraded);
+      if (current()?.id === upgraded.id) current.set(upgraded);
+      const saved = updateServer(upgraded.id, change);
+      learnAddresses();
+      void saved
+        .then(async () => {
+          if (transport === next) servers.set(await getServers());
+        })
+        .catch(() => undefined);
+    }),
     // A computer on Mewla Relay names the LAN and Tailscale addresses it listens on: kept for this
     // run at once, and on the saved computer so a cold start can try them.
     next.on("direct_addresses", (frame) => {
-      if (server.transportKind !== "link") return;
-      const { addresses, changed } = learnDirectAddresses(server, frame.addresses);
-      if (changed) void updateServer(server.id, { transportCandidates: withDirectAddresses(server, addresses) }).catch(() => undefined);
+      heardAddresses = frame.addresses;
+      learnAddresses();
     }),
   ];
   next.connect();
