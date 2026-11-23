@@ -229,10 +229,10 @@ jobs:
           echo "attach: ${up:-0} proof files on the daemon"; test "${up:-0}" -ge 1
           # Its path went to the attached terminal (TerminalPane logs each path it types at the prompt).
           test "$(cat "$D"/data/logs/* | grep -c "terminal: typed an attachment's path")" -ge 1
-          # Cancel took the large one off while it uploaded, in each appearance when the upload was still going. On a fast or a
-          # busy runner the 1 GB one is up before the hold ends or the app is busy with it ("cancel missed", runs 44902429699 and
-          # 44905216175): at least one pass cancelled it, and Retry is reported (it is proven by call, and by the headless test).
+          # Cancel took the large one off while it uploaded, in every pass: it lands as the queue starts the 1 GB one, which takes
+          # seconds to go up. Retry is reported (it is proven by call, and by the headless test).
           test "$(cat "$D"/data/logs/* | grep -c "dev script: attach cancelled (gone)")" -ge 1
+          test "$(cat "$D"/data/logs/* | grep -cE "dev script: attach (cancel missed|cancelled \(still listed\))")" -eq 0
           echo "attach: $(cat "$D"/data/logs/* | grep -c "dev script: attach retried") retries, $(cat "$D"/data/logs/* | grep -c "dev script: attach cancel missed") cancels missed"
           cat "$D"/data/logs/*
           # What the daemon said about the terminals the app opened.
