@@ -174,13 +174,21 @@ pub fn listed(permission: Permission) -> Listed {
     if granted { Listed::Granted } else { Listed::Missing }
 }
 
-/// Whether Allow clears this app's rows first: only when TCC itself says Mewla.app has no row that counts (a row of
-/// another signature of Mewla reads so, and the list shows it on while it grants nothing), and the daemon does not
-/// count the grant already. This app's own answer decides, not the daemon's "off": an older Mewla's daemon row (its
-/// path, switched off) makes the daemon read off while Mewla.app's row is the stale one. Mewla.app's row switched off
-/// reads off here and is left alone, as is everything when there is no exact answer.
-fn clears(exact: Option<Listed>, daemon: Option<&str>) -> bool {
-    exact == Some(Listed::Missing) && !matches!(daemon, Some("granted" | "restart"))
+/// Whether Allow clears this app's rows first: when TCC itself says Mewla.app has no row that counts, and the daemon
+/// does not count the grant already. A row of another signature of Mewla counts for nothing while System Settings
+/// lists it, often switched on. For Screen Recording TCC's preflight tells such a row from a row switched off (2 against
+/// 1); for Accessibility it answers 1 for both (macos-permissions.yml probe: `bundle-denied`, `bundle-stale-req`,
+/// `bundle-stale-req-off`), and an app cannot read the list's switch (TCCAccessCopyInformationForBundle answers it
+/// nothing). So Accessibility's row that does not count is cleared either way, and the panel then says to drag Mewla in
+/// (a row only switched off costs a drag instead of a switch; both ask for the Mac's password). The daemon's own "off"
+/// does not decide: an older Mewla's daemon row (its path, switched off) makes it read off whatever Mewla.app's row is.
+/// Nothing is cleared without an exact answer.
+fn clears(permission: Permission, exact: Option<Listed>, daemon: Option<&str>) -> bool {
+    let counts_for_nothing = match permission {
+        Permission::ScreenRecording => exact == Some(Listed::Missing),
+        Permission::Accessibility => matches!(exact, Some(Listed::Missing | Listed::Off)),
+    };
+    counts_for_nothing && !matches!(daemon, Some("granted" | "restart"))
 }
 
 /// Before asking: when Mewla has no row that counts, removes this app's own rows for the permission (`tccutil reset
@@ -189,7 +197,7 @@ fn clears(exact: Option<Listed>, daemon: Option<&str>) -> bool {
 /// a path (an older Mewla's bare daemon, listed as "mewla") are not this bundle id's and stay as they are: nothing
 /// points at them. Any thread; returns whether it cleared.
 pub fn clear_stale(permission: Permission, daemon: Option<&str>) -> bool {
-    if !clears(exact(permission), daemon) {
+    if !clears(permission, exact(permission), daemon) {
         return false;
     }
     let Some(id) = NSBundle::mainBundle().bundleIdentifier().map(|id| id.to_string()) else { return false };
@@ -542,15 +550,21 @@ mod tests {
 
     #[test]
     fn only_a_row_that_does_not_count_is_cleared() {
-        assert!(clears(Some(Listed::Missing), Some("missing")));
-        assert!(clears(Some(Listed::Missing), None));
-        assert!(!clears(Some(Listed::Off), Some("missing")));
-        assert!(!clears(Some(Listed::Granted), None));
+        use Permission::{Accessibility as Ax, ScreenRecording as Sr};
+        // Screen Recording: no row that counts (none, or another signature's) is cleared; a row switched off is not.
+        assert!(clears(Sr, Some(Listed::Missing), Some("missing")));
+        assert!(clears(Sr, Some(Listed::Missing), None));
+        assert!(!clears(Sr, Some(Listed::Off), Some("off")));
         // The daemon reads off from an older Mewla's path row while Mewla.app's own row does not count: cleared.
-        assert!(clears(Some(Listed::Missing), Some("off")));
-        assert!(!clears(Some(Listed::Missing), Some("granted")));
-        assert!(!clears(Some(Listed::Missing), Some("restart")));
-        // No exact answer (no TCC preflight): a row switched off cannot be told from none, so nothing is cleared.
-        assert!(!clears(None, Some("missing")));
+        assert!(clears(Sr, Some(Listed::Missing), Some("off")));
+        // Accessibility: TCC answers off for a row switched off and for another signature's alike: cleared either way.
+        assert!(clears(Ax, Some(Listed::Off), Some("off")));
+        assert!(clears(Ax, Some(Listed::Missing), Some("missing")));
+        // Counted already, or given and waiting for the restart: never.
+        assert!(!clears(Ax, Some(Listed::Granted), None));
+        assert!(!clears(Sr, Some(Listed::Missing), Some("granted")));
+        assert!(!clears(Ax, Some(Listed::Off), Some("restart")));
+        // No exact answer (no TCC preflight): nothing is cleared.
+        assert!(!clears(Ax, None, Some("missing")));
     }
 }

@@ -154,7 +154,9 @@ for permission in accessibility screen_recording; do
   wait_grant "$permission" off 20 || true; note_grants
   open_and_wait "{\"settings\":\"access\",\"allow\":\"$permission\"}" "dev script: allow $permission"; sleep 5
   shot "$n-$permission-2-denied-panel"
-  say "$permission: after Allow on a row switched off, the row stays: $(rows | grep "$service" | tr '\n' ' ')"
+  # Screen Recording's row switched off stays (the panel says turn it on); Accessibility's is cleared (TCC answers the
+  # same for it and for another signature's row; the panel says drag Mewla in).
+  say "$permission: after Allow on a row switched off, Mewla.app's rows: $(rows | grep "$service" | grep -v "$cli" | tr '\n' ' ')"
 
   say "$permission: row removed (−)"
   quit_settings; drop_row "$service"; tcc_reload
