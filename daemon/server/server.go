@@ -4657,6 +4657,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
 		"version":           s.version,
+		// This daemon signs the app's challenges (/pair, /auth-check, the
+		// socket's first frame): an app holding it to proofs tells an older
+		// Mewla, which says nothing here, by name.
+		"connect_proof": true,
 	}
 	challenge, challenged := r.URL.Query()["challenge"]
 	if !challenged {

@@ -1,4 +1,5 @@
 import { deviceBinding, normalizePublicKeyHex, verifyDaemonAssertion } from "./deviceAuthContract";
+import { verifyHealthChallenge } from "./link/directAddresses";
 import { platform } from "./platform";
 import { bytesToHex } from "./protocolCrypto";
 
@@ -79,31 +80,39 @@ export function resetDaemonProofsForTests(): void {
  */
 export const UNCHALLENGED_MAX_SKEW_MS = 5 * 60_000;
 
+/** The line an app shows for a computer it holds to proofs that answers the old way: it runs a Mewla from before them. */
+export function olderMewlaLine(name: string): string {
+  const computer = name.trim() || "This computer";
+  return `${computer} runs an older Mewla. Update Mewla on ${name.trim() || "it"}.`;
+}
+
+type AnswerBody = { proof?: unknown; assertion_timestamp?: unknown; assertion_nonce?: unknown; assertion_signature?: unknown } | null | undefined;
+
 /**
- * Whether a daemon's answer is the computer's, now: its proof over this app's challenge (and the computer is held to
- * proofs from then on), or, from a computer that has never proved, its old assertion signed within minutes of now.
- * Older mewla answers the old way until it updates; the old way is accepted only for computers that never proved.
+ * What a daemon's answer is: "proved" (its proof over this app's challenge; the computer is held to proofs from then
+ * on), "old" (no proof, from a computer that never proved: its old assertion, signed within minutes of now), "older"
+ * (the same from a computer held to proofs: its own key, now, so it runs a Mewla from before proofs, a downgrade), or
+ * "refused" (anything else: a recorded answer, another key, a bad proof).
  */
-export async function answerIsTheComputers(input: {
+export async function daemonAnswer(input: {
   purpose: ChallengePurpose;
   /** The old assertion's purpose ("mewla-pair", "mewla-probe"). */
   oldPurpose: string;
   challengeHex: string;
   daemonId: string;
   daemonPublicKey: string;
-  body: { proof?: unknown; assertion_timestamp?: unknown; assertion_nonce?: unknown; assertion_signature?: unknown } | null | undefined;
-}): Promise<boolean> {
+  body: AnswerBody;
+}): Promise<"proved" | "old" | "older" | "refused"> {
   const body = input.body ?? {};
   if (body.proof !== undefined && body.proof !== null) {
-    if (!(await proofAnswers({ ...input, proof: body.proof }))) return false;
+    if (!(await proofAnswers({ ...input, proof: body.proof }))) return "refused";
     await noteDaemonProves(input.daemonPublicKey);
-    return true;
+    return "proved";
   }
-  if (await daemonProves(input.daemonPublicKey)) return false;
   const text = (value: unknown) => (typeof value === "string" ? value : "");
   const signedAt = Date.parse(text(body.assertion_timestamp));
-  if (!Number.isFinite(signedAt) || Math.abs(Date.now() - signedAt) > UNCHALLENGED_MAX_SKEW_MS) return false;
-  return verifyDaemonAssertion({
+  if (!Number.isFinite(signedAt) || Math.abs(Date.now() - signedAt) > UNCHALLENGED_MAX_SKEW_MS) return "refused";
+  const genuine = await verifyDaemonAssertion({
     purpose: input.oldPurpose,
     daemonId: input.daemonId,
     daemonPublicKey: input.daemonPublicKey,
@@ -111,6 +120,46 @@ export async function answerIsTheComputers(input: {
     nonceHex: text(body.assertion_nonce),
     signatureHex: text(body.assertion_signature),
   });
+  if (!genuine) return "refused";
+  return (await daemonProves(input.daemonPublicKey)) ? "older" : "old";
+}
+
+/**
+ * Whether a daemon's answer is the computer's, now ("proved" or "old", `daemonAnswer`). Older mewla answers the old
+ * way until it updates; the old way is accepted only for computers that never proved.
+ */
+export async function answerIsTheComputers(input: Parameters<typeof daemonAnswer>[0]): Promise<boolean> {
+  const answer = await daemonAnswer(input);
+  return answer === "proved" || answer === "old";
+}
+
+/**
+ * Whether the computer at `url` (the address a connect just failed at) is this computer running a Mewla from before
+ * proofs: its key answers this app's /health challenge (older Mewla does that too), and it does not say it proves
+ * itself (`connect_proof`). Unreachable, or another computer: false.
+ */
+export async function runsOlderMewla(server: { daemonId: string; daemonPublicKey: string }, url: string): Promise<boolean> {
+  let health: string;
+  try {
+    const address = new URL(url);
+    address.protocol = address.protocol === "wss:" ? "https:" : address.protocol === "ws:" ? "http:" : address.protocol;
+    address.pathname = "/health";
+    address.search = "";
+    address.hash = "";
+    health = address.toString();
+  } catch {
+    return false;
+  }
+  const challengeHex = newChallenge();
+  try {
+    const response = await platform().fetch(`${health}?challenge=${challengeHex}`, { method: "GET" });
+    if (!response.ok) return false;
+    const payload = (await response.json()) as Record<string, unknown>;
+    if (payload.connect_proof === true) return false;
+    return await verifyHealthChallenge({ challengeHex, daemonId: server.daemonId, daemonPublicKey: server.daemonPublicKey, payload });
+  } catch {
+    return false;
+  }
 }
 
 /**

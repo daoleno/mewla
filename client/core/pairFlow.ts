@@ -199,6 +199,7 @@ export async function pairWith(payload: ConnectionImportPayload, onProgress?: (m
     daemonPublicKey: payload.daemonPublicKey,
     enrollmentToken: payload.enrollmentToken,
     transport: "direct",
+    computerName: payload.name?.trim() || hostOf(payload.url),
   });
   return {
     name: payload.name || "",
@@ -236,6 +237,7 @@ async function pairAtStableAddress(
       daemonPublicKey: payload.daemonPublicKey,
       enrollmentToken: payload.enrollmentToken,
       transport: "link",
+      computerName: payload.name?.trim() || hostOf(payload.url),
     });
   } catch (error) {
     if (!(error instanceof PairingUnreachableError)) throw error;
@@ -328,6 +330,7 @@ async function pairOverLink(
       daemonPublicKey: payload.daemonPublicKey,
       enrollmentToken: payload.enrollmentToken,
       transport: "link",
+      computerName: payload.name?.trim() || hostOf(payload.url),
     });
   } catch (error) {
     if (!(error instanceof PairingUnreachableError) && !(error instanceof PairingCodeRejectedError)) throw error;

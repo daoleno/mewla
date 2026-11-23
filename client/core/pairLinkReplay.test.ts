@@ -158,6 +158,14 @@ describe("the computer's answer to /pair", () => {
     expect((await pairDesk(() => oldAnswer(new Date()))).url).toBe(DESK);
     // It updates and answers a challenge once: from then on an answer without a proof is not that computer.
     await pairDesk((challenge) => challengedAnswer(challenge));
-    await expect(pairDesk(() => oldAnswer(new Date()))).rejects.toThrow("identity proof");
+    await expect(pairDesk(() => oldAnswer(new Date(Date.now() - 10 * 60_000)))).rejects.toThrow("identity proof");
+  });
+
+  // Brain 11-23 (no silent failures): pairing again with that computer after it went back to an older Mewla says why.
+  test("from a computer that proved before and answers the old way now, names it and the fix", async () => {
+    await pairDesk((challenge) => challengedAnswer(challenge));
+    await expect(pairDesk(() => oldAnswer(new Date()))).rejects.toThrow("Desk runs an older Mewla. Update Mewla on Desk.");
+    // A recorded answer (signed long ago) is no sign of an older Mewla: it is refused as before.
+    await expect(pairDesk(() => recordedAnswer())).rejects.toThrow("Pairing target failed daemon identity proof.");
   });
 });

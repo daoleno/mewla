@@ -1,5 +1,5 @@
 import { buildAuthorizationHeader } from "./auth";
-import { bindingFor, CONNECT_PROOF_PURPOSE, daemonProves, newChallenge, noteDaemonProves, proofAnswers } from "./daemonProof";
+import { bindingFor, CONNECT_PROOF_PURPOSE, daemonProves, newChallenge, noteDaemonProves, olderMewlaLine, proofAnswers, runsOlderMewla } from "./daemonProof";
 import {
   checkDirectPath,
   invalidateStoredServerTransport,
@@ -219,6 +219,12 @@ export class Transport {
    * is sent to it and nothing it sends is heard (security review 11-23, PR B item 6).
    */
   private proof: { attempt: number; nonceHex: string; gate: Array<{ data: unknown }> | null; passed: boolean } | null = null;
+  /**
+   * Why a computer held to its proof is not connected, when the cause is known: it runs a Mewla from before proofs (a
+   * downgrade), which refuses this app's bound connect. Said in place of a bare "error" until a connect succeeds.
+   */
+  private olderMewla = "";
+  private checkingOlder = false;
 
   constructor(
     public server: StoredServer,
@@ -470,6 +476,7 @@ export class Transport {
 
   /** The socket is open and, where the computer is held to it, proved: the connection is up. */
   private opened(): void {
+    this.olderMewla = "";
     this.clearAttempt();
     this.retryMs = transportTiming.firstRetryMs;
     const lastProblem = this.problem;
@@ -561,6 +568,7 @@ export class Transport {
       if (this.socket === socket) this.socket = null;
       if (attempt !== this.attempt) return;
       const wasConnected = this.state === "connected";
+      if (!wasConnected) this.heldAttemptFailed(attempt);
       if (wasConnected) {
         const now = Date.now();
         const awayMs = this.away && this.awaySince ? now - this.awaySince : 0;
@@ -601,6 +609,29 @@ export class Transport {
     }
   }
 
+  /**
+   * A connect to a computer held to its proof failed before it was up: once per run of failures, the computer is asked
+   * (its /health, answered by its key) whether it runs a Mewla from before proofs, and if so that is what is said.
+   */
+  private heldAttemptFailed(attempt: number): void {
+    if (this.proof?.attempt !== attempt || !this.proof.gate || this.olderMewla || this.checkingOlder) return;
+    this.checkingOlder = true;
+    void (async () => {
+      try {
+        const url = await this.resolveURL(this.server);
+        if (!(await runsOlderMewla(this.server, url)) || this.state === "connected") return;
+        this.olderMewla = olderMewlaLine(this.server.name);
+        if (!this.wanted) return;
+        this.problem = this.olderMewla;
+        this.tellState();
+      } catch {
+        // Unreachable: the failure says what it says.
+      } finally {
+        this.checkingOlder = false;
+      }
+    })();
+  }
+
   /** The attempt in flight is past its time: its socket is closed as lost, or, with none yet, the attempt is dropped. */
   private giveUp(attempt: number): void {
     this.attemptTimer = null;
@@ -622,7 +653,7 @@ export class Transport {
 
   /** Sets the next state and arms the retry; the state listeners are told afterwards (`tellState`). */
   private armRetry(problem: string): void {
-    this.problem = problem;
+    this.problem = this.olderMewla || problem;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     if (!this.wanted) {
