@@ -17,6 +17,9 @@ import { catUpdateHint } from "../update/hint";
 import { appUpdateOwner } from "../update/update";
 import { appUpdateMenuItem } from "./appUpdateMenu";
 import { grantRequestAction } from "../../core/screen/grantRequest";
+import { getAgentUse } from "../../core/settings/computer";
+import { grantOf } from "../../core/settings/macGrants";
+import { allowGrant } from "./permissionGuide";
 import { isMacApp, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
 import { MENU_BAR_CLIPS, MENU_BAR_IMAGES } from "./menubarImages";
 import { startMacMenus } from "./menus";
@@ -36,7 +39,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; relay?: string } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; relay?: string; allow?: "screen_recording" | "accessibility" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -227,6 +230,8 @@ export function startMac(): void {
     if (script.imageInput) imageInputLog();
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
+    // The connection to the daemon, each time it changes: a daemon restart shows as waiting, then connected again.
+    effect(() => console.log(`dev script: connection ${connection()}`));
     effect(() => {
       if (!current() || connection() !== "connected") return;
       const chat = Boolean(brainChat());
@@ -258,6 +263,7 @@ export function startMac(): void {
           if (script.grant) void grantProof(script.grant);
           // A computer on Mewla Relay: relay, LAN and back as the run cuts the network (relayProof.ts).
           if (script.relay) void relayProof(script.relay);
+          if (script.allow) void allowProof(script.allow);
           if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }
         // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
@@ -303,6 +309,30 @@ function imageInputLog(): void {
     const items = newestBrainUploads()?.items() ?? [];
     console.log(`dev script: chips ${items.length}${items.map((item) => ` [${item.status} ${item.asset.name}${item.error ? `: ${item.error}` : ""}]`).join("")}`);
   });
+}
+
+/**
+ * The permission flow's proof (macos-permissions.yml): Privacy & access's Allow for one grant (the panel beside System
+ * Settings, the daemon following the grant), then every state the daemon reads for the grants, as it changes.
+ */
+async function allowProof(permission: "screen_recording" | "accessibility"): Promise<void> {
+  const server = untracked(current);
+  if (!server) return;
+  let last = "";
+  const read = async () => {
+    const status = await getAgentUse(server);
+    const line = (status.computer?.permissions ?? []).map((grant) => `${grant.id}=${grant.state}`).join(" ");
+    if (line !== last) console.log(`dev script: grants ${(last = line)}`);
+  };
+  const first = await getAgentUse(server).catch(() => null);
+  await read().catch(() => {});
+  try {
+    await allowGrant(server, permission, grantOf(first?.computer?.permissions, permission)?.state);
+    console.log(`dev script: allow ${permission}`);
+  } catch (error) {
+    console.log(`dev script: allow failed ${error instanceof Error ? error.message : String(error)}`);
+  }
+  setInterval(() => void read().catch(() => {}), 1_000);
 }
 
 /**

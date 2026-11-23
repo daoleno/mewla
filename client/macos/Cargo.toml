@@ -34,8 +34,11 @@ nsh-core = "=0.6.1"
 nsh-base = "=0.6.1"
 dispatch2 = "0.3.1"
 core-foundation = "0.10.1"
-objc2-foundation = { version = "0.3.2", features = ["NSString", "NSError"] }
+objc2-foundation = { version = "0.3.2", features = ["NSString", "NSError", "NSArray", "NSBundle", "NSDictionary", "NSValue", "NSURL", "NSGeometry", "NSObject", "NSEnumerator"] }
 objc2-service-management = { version = "0.3.2", features = ["SMAppService", "objc2-foundation"] }
+# The permission panel beside System Settings (permissions.rs); already in the lock through NSH.
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "libc", "objc2-core-foundation", "NSFontDescriptor", "NSApplication", "NSResponder", "NSView", "NSControl", "NSImageView", "NSImage", "NSPanel", "NSWindow", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSFont", "NSRunningApplication", "NSScreen", "NSText", "NSTextField", "NSWorkspace", "NSPasteboard", "NSGraphics", "NSAccessibility", "NSAccessibilityProtocols"] }
 # The release's secrets in the Keychain (secure.rs); already in the lock through NSH's networking.
 security-framework = "3.7.0"
 

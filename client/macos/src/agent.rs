@@ -1,6 +1,7 @@
 //! The release's daemon: a LaunchAgent the app registers with SMAppService (FACTS.md §2), from the plist the
 //! bundle carries (`Contents/Library/LaunchAgents/com.daoleno.mewla.daemon.plist`, `BundleProgram`
-//! `Contents/Helpers/mewla`). It runs with the app closed or quit and after a restart, and System Settings lists it
+//! `Contents/MacOS/Mewla --daemon serve`: this executable, which runs `Contents/Helpers/mewla serve` as its child so
+//! macOS charges the daemon's permissions to the app; host.rs). It runs with the app closed or quit and after a restart, and System Settings lists it
 //! under the app in Login Items. Only the real app (`com.daoleno.mewla`) does this; Mewla Dev never does.
 //!
 //! Before it registers, it takes over the install `mewla boot install` made (docs/install-daemon.md): that job is
@@ -29,6 +30,10 @@ unsafe extern "C" {
 
 const INSTALLED_LABEL: &str = "com.daoleno.mewla.installed-daemon";
 const INSTALLED_CLI: &str = "/Applications/Mewla.app/Contents/Helpers/mewla";
+/// What both jobs run: the app's own executable, the daemon's parent (host.rs), so its permissions are the app's.
+const INSTALLED_HOST: &str = "/Applications/Mewla.app/Contents/MacOS/Mewla";
+/// The bundle-relative program of the app's job; before 0.4.26 it was the bare `Contents/Helpers/mewla`.
+const APP_PROGRAM: &str = "Contents/MacOS/Mewla";
 
 fn domain() -> String {
     format!("gui/{}", unsafe { getuid() })
@@ -57,9 +62,12 @@ fn configure(home: &Path, cli: &Path, said: &mut Vec<String>) -> Result<(), Stri
         .and_then(|text| text.trim().parse().ok())
         .ok_or("could not identify the current daemon; kept its installation")?;
     if pid != 0 {
+        // The job's process is the daemon itself (before 0.4.26, and boot install's) or its parent, the app's host.
+        let parent = parent_pid(pid);
         let matches = |label: &str| {
-            launchd_listing(&format!("{}/{label}", domain()))
-                .is_some_and(|s| s.lines().any(|line| line.trim() == format!("pid = {pid}")))
+            launchd_listing(&format!("{}/{label}", domain())).is_some_and(|s| {
+                s.lines().any(|line| line.trim() == format!("pid = {pid}") || parent.is_some_and(|p| line.trim() == format!("pid = {p}")))
+            })
         };
         if !matches(LABEL) && !matches(INSTALLED_LABEL) {
             return Err("externally managed daemon retained".into());
@@ -209,9 +217,21 @@ fn launchctl(args: &[&str]) -> Result<(), String> {
     }
 }
 
+/// The parent of a process, from `ps`.
+fn parent_pid(pid: u32) -> Option<u32> {
+    let out = Command::new("/bin/ps").args(["-o", "ppid=", "-p", &pid.to_string()]).output().ok()?;
+    std::str::from_utf8(&out.stdout).ok()?.trim().parse().ok().filter(|p| *p > 1)
+}
+
 fn installed_running() -> bool {
     launchd_listing(&format!("{}/{INSTALLED_LABEL}", domain()))
-        .is_some_and(|s| s.lines().any(|l| l == "\tstate = running") && s.lines().any(|l| l.trim() == format!("program = {INSTALLED_CLI}")))
+        .is_some_and(|s| s.lines().any(|l| l == "\tstate = running") && s.lines().any(|l| l.trim() == format!("program = {INSTALLED_HOST}")))
+}
+
+/// The installed job's program, when launchd has it loaded.
+fn installed_program() -> Option<String> {
+    let listing = launchd_listing(&format!("{}/{INSTALLED_LABEL}", domain()))?;
+    listing.lines().find_map(|l| l.trim().strip_prefix("program = ").map(str::to_owned))
 }
 
 fn register_installed() -> Result<(), String> {
@@ -220,6 +240,15 @@ fn register_installed() -> Result<(), String> {
     }
     unsafe {
         let service = SMAppService::agentServiceWithPlistName(&NSString::from_str(&format!("{INSTALLED_LABEL}.plist")));
+        // Loaded from an older app's plist (the bare helper as its program): launchd keeps that until the job is
+        // registered again, so the daemon would go on being charged its own Accessibility. Unregistered first; the
+        // session host and its Sessions run on (AbandonProcessGroup).
+        if installed_program().is_some_and(|program| program != INSTALLED_HOST) {
+            service.unregisterAndReturnError().map_err(|e| e.localizedDescription().to_string())?;
+            if !wait(45, || launchd_listing(&format!("{}/{INSTALLED_LABEL}", domain())).is_none()) {
+                return Err("the older daemon job did not unload".into());
+            }
+        }
         service.registerAndReturnError().map_err(|e| e.localizedDescription().to_string())?;
     }
     Ok(())
@@ -335,7 +364,7 @@ fn app_job_running(listing: &str) -> bool {
     listing.lines().any(|line| line == "\tstate = running")
         && listing
             .lines()
-            .any(|line| line.trim().split(" (mode:").next() == Some("program identifier = Contents/Helpers/mewla"))
+            .any(|line| line.trim().split(" (mode:").next() == Some(&*format!("program identifier = {APP_PROGRAM}")))
 }
 
 /// Registers the bundle's LaunchAgent and waits for launchd to load it. `status()` alone is not enough: right after
@@ -344,7 +373,8 @@ fn app_job_running(listing: &str) -> bool {
 fn register(said: &mut Vec<String>) {
     // SAFETY: getuid has no preconditions.
     let target = format!("gui/{}/{LABEL}", unsafe { getuid() });
-    // The app's job runs the bundle's program (`program identifier = Contents/Helpers/mewla`); boot install's ran
+    // The app's job runs the bundle's program (`program identifier = Contents/MacOS/Mewla`; an older app's loaded job,
+    // `Contents/Helpers/mewla`, is not ours and is registered again below); boot install's ran
     // `~/Applications/Mewla.app/Contents/MacOS/mewla`.
     let ours = || launchd_listing(&target).is_some_and(|listing| app_job_running(&listing));
     // SAFETY: plain calls of SMAppService with a valid string.

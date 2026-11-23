@@ -1,9 +1,10 @@
-import { cleanup, effect, keymap, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, keymap, lifecycle, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { Window } from "nsh/desktop";
 import { getAgentUse, changeAgentUse, getWatch, setWatch, type AgentUseStatus, type WatchSwitch } from "../../core/settings/computer";
 import { chromeAccess, type ChromeAccess } from "../../core/settings/computerModel";
-import { screenRequest, type ScreenPermission } from "../../core/screen/screen";
+import { grantOf, grantRow, type GrantRow } from "../../core/settings/macGrants";
+import { allowGrant } from "./permissionGuide";
 import { BrainHostPanel } from "../brain/BrainHostSheet";
 import { Icon, type IconName } from "../kit/Icon";
 import { Row, RowButton, Section, SwitchRow } from "../kit/kit";
@@ -188,19 +189,18 @@ function Agents() {
 }
 
 /**
- * One of macOS's grants, mirrored (the same state the card in Brain's thread shows; no second toggle): Allowed, Allow…
- * opening its pane in System Settings, or, once given but not yet in effect in the running Mewla, Restart Mewla.
+ * One of macOS's grants as the daemon reads it afresh (the same state the card in Brain's thread follows; no second
+ * toggle): Allowed; Allow, which opens its list in System Settings with the panel to drag Mewla in (whether Mewla's row
+ * is off or gone); or, given but not yet in effect, Restart Mewla, which Mewla also does by itself once quiet.
  */
-function Grant(props: { title: string; granted: boolean | null; allowedWord?: string; onAllow?: () => void; restart?: boolean; onRestart?: () => void; testID: string }) {
+function Grant(props: { title: string; row: GrantRow | null; onAllow: () => void; onRestart: () => void; testID: string }) {
   return (
     <Row testID={props.testID} title={props.title}
-      trailing={<If when={props.granted !== null}>
-        <If when={props.restart && props.onRestart} else={<If when={props.granted} else={<If when={props.onAllow}><RowButton testID={`${props.testID}-allow`} label="Allow…" accessibilityLabel={`Allow ${props.title}`} onPress={() => props.onAllow!()} /></If>}>
-          <StateLine testID={`${props.testID}-state`} tone="ok" label={props.allowedWord ?? "Allowed"} />
-        </If>}>
-          <RowButton testID={`${props.testID}-restart`} label="Restart Mewla" accessibilityLabel={`Restart Mewla to apply ${props.title}`} onPress={() => props.onRestart!()} />
-        </If>
-      </If>} />
+      trailing={<>
+        <If when={props.row === "allowed"}><StateLine testID={`${props.testID}-state`} tone="ok" label="Allowed" /></If>
+        <If when={props.row === "allow"}><RowButton testID={`${props.testID}-allow`} label="Allow" accessibilityLabel={`Allow ${props.title}`} onPress={props.onAllow} /></If>
+        <If when={props.row === "restart"}><RowButton testID={`${props.testID}-restart`} label="Restart Mewla" accessibilityLabel={`Restart Mewla to apply ${props.title}`} onPress={props.onRestart} /></If>
+      </>} />
   );
 }
 
@@ -217,7 +217,6 @@ function ChromeRow(props: { access: ChromeAccess | null; fix: () => void }) {
 }
 
 function Access() {
-  const permissions = signal<ScreenPermission[] | null>(null);
   const agentUse = signal<AgentUseStatus | null>(null);
   // Watch's switch; null hides the group (a daemon without /watch, or no Watch on this Mac).
   const watch = signal<WatchSwitch | null>(null);
@@ -240,30 +239,28 @@ function Access() {
   const read = () => {
     const server = untracked(current);
     if (!server || !isThisMac(server)) return;
-    void screenRequest(server).then((status) => permissions.set(status.permissions ?? [])).catch(() => permissions.set(null));
     void getAgentUse(server).then((status) => agentUse.set(status)).catch(() => agentUse.set(null));
   };
-  // macOS gives no event for a grant: read again every 3 s while the page is open, so the row seals itself.
+  // macOS gives no event for a grant: read again every 3 s while the page is open, and as Mewla comes back to the front
+  // (from System Settings), so a row follows what macOS holds now, never a kept answer.
   effect(() => {
-    if (connection() !== "connected" || !isThisMac(current())) return;
+    if (connection() !== "connected" || !isThisMac(current()) || lifecycle() !== "active") return;
     untracked(read);
     const timer = setInterval(read, 3_000);
     cleanup(() => clearInterval(timer));
   });
-  const grant = (id: string) => {
-    const list = permissions();
-    if (!list) return null;
-    return list.find((p) => p.id === id)?.granted ?? null;
-  };
-  const open = (id: string) => {
+  const row = (id: string) => grantRow(grantOf(agentUse()?.computer?.permissions, id)?.state);
+  // System Settings on the grant's list with the panel beside it; the daemon follows the grant and applies it itself.
+  const allow = (id: string) => {
     const server = untracked(current);
-    if (server) void screenRequest(server, { action: "open_settings", permission: id }).then(read).catch((error) => console.warn("open settings:", error));
+    if (!server) return;
+    const state = grantOf(untracked(agentUse)?.computer?.permissions, id)?.state;
+    void allowGrant(server, id, state).then((next) => agentUse.set(next)).catch((error) => console.warn("follow:", error));
   };
-  const restartRequired = (id: string) => permissions()?.find((p) => p.id === id)?.restart_required === true;
   // Given in System Settings, in effect only after Mewla starts again: the daemon restarts, Sessions and Workers keep running.
   const restart = () => {
     const server = untracked(current);
-    if (server) void screenRequest(server, { action: "restart" }).then(read).catch((error) => console.warn("restart:", error));
+    if (server) void changeAgentUse(server, { restart: true }).then(read).catch((error) => console.warn("restart:", error));
   };
   const fixBrowser = () => {
     const server = untracked(current);
@@ -276,8 +273,8 @@ function Access() {
       <ThisMacOnly />
       <If when={isThisMac(current())}><>
       <Section title="What agents may use on this Mac">
-        <Grant testID="mac-access-screen" title="Screen recording" granted={grant("screen_recording")} onAllow={() => open("screen_recording")} restart={restartRequired("screen_recording")} onRestart={restart} />
-        <Grant testID="mac-access-accessibility" title="Accessibility (click and type)" granted={grant("accessibility")} onAllow={() => open("accessibility")} restart={restartRequired("accessibility")} onRestart={restart} />
+        <Grant testID="mac-access-screen" title="Screen recording" row={row("screen_recording")} onAllow={() => allow("screen_recording")} onRestart={restart} />
+        <Grant testID="mac-access-accessibility" title="Accessibility (click and type)" row={row("accessibility")} onAllow={() => allow("accessibility")} onRestart={restart} />
         <ChromeRow access={chromeAccess(agentUse())} fix={fixBrowser} />
       </Section>
       <Section title="New devices">
