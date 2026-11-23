@@ -48,16 +48,16 @@ security-framework = "3.7.0"
 # drop like files; a Finder copy pasted into a field that listens to pastes does not insert the files' names. Every
 # nsh crate comes from that commit (one nsh-core); the JS bundle is still built by the NSH 0.6.1 CLI.
 [patch.crates-io]
-nsh-base = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-core = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-engine = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-i18n = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-js = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-macros = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-package = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-platform-apple = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-platform-macos = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
-nsh-updater = { git = "https://github.com/daoleno/nsh", rev = "7d832aa4b9725d7d3850f3d79be78eaf1754a941" }
+nsh-base = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-core = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-engine = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-i18n = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-js = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-macros = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-package = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-platform-apple = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-platform-macos = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
+nsh-updater = { git = "https://github.com/daoleno/nsh", rev = "793eef0953ece30ce56ae1c5b29df5dcbc779990" }
 
 [profile.release]
 lto = "thin"

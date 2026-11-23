@@ -2269,7 +2269,7 @@ dependencies = [
 [[package]]
 name = "nsh-base"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "chrono",
  "html5ever",
@@ -2299,7 +2299,7 @@ dependencies = [
 [[package]]
 name = "nsh-core"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "cap-std",
  "chrono",
@@ -2339,7 +2339,7 @@ dependencies = [
 [[package]]
 name = "nsh-engine"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "block2",
  "crossbeam-channel",
@@ -2367,12 +2367,12 @@ dependencies = [
 [[package]]
 name = "nsh-i18n"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 
 [[package]]
 name = "nsh-js"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "futures-util",
  "getrandom 0.4.3",
@@ -2395,7 +2395,7 @@ dependencies = [
 [[package]]
 name = "nsh-macros"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "imagesize 0.15.0",
  "proc-macro2",
@@ -2408,7 +2408,7 @@ dependencies = [
 [[package]]
 name = "nsh-package"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek 2.2.0",
@@ -2423,7 +2423,7 @@ dependencies = [
 [[package]]
 name = "nsh-platform-apple"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "block2",
  "cc",
@@ -2445,7 +2445,7 @@ dependencies = [
 [[package]]
 name = "nsh-platform-macos"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "block2",
  "crossbeam-channel",
@@ -2473,7 +2473,7 @@ dependencies = [
 [[package]]
 name = "nsh-updater"
 version = "0.6.1"
-source = "git+https://github.com/daoleno/nsh?rev=7d832aa4b9725d7d3850f3d79be78eaf1754a941#7d832aa4b9725d7d3850f3d79be78eaf1754a941"
+source = "git+https://github.com/daoleno/nsh?rev=793eef0953ece30ce56ae1c5b29df5dcbc779990#793eef0953ece30ce56ae1c5b29df5dcbc779990"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek 2.2.0",
