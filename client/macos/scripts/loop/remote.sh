@@ -27,15 +27,14 @@ PY
 }
 build_host() {
   local t; t=$(now)
-  local target=client/macos/target
-  if [[ "${MAC_LOOP_FAST:-}" == 1 ]]; then
-    # The loop's own profile: release without LTO, many codegen units, incremental, in a target of its own (the
-    # release cache's stays as it is). The shipped app keeps thin LTO.
-    target="$L/target-fast"
-    export CARGO_TARGET_DIR="$target" CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=256 CARGO_PROFILE_RELEASE_INCREMENTAL=true
+  # The loop profile (client/macos/Cargo.toml [profile.loop]); the workflow may have started its cold build already.
+  if [[ -f "$L/prewarm.pid" ]] && kill -0 "$(cat "$L/prewarm.pid")" 2>/dev/null; then
+    echo "  waiting for the loop profile's first build (started by the workflow)"
+    while kill -0 "$(cat "$L/prewarm.pid")" 2>/dev/null; do sleep 2; done
+    stamp "waited for prewarm" "$t"
   fi
-  cargo build --release --manifest-path client/macos/Cargo.toml 2>&1 | tail -2
-  cp "$target/release/Mewla" "$app/Contents/MacOS/Mewla Dev"
+  cargo build --profile loop --manifest-path client/macos/Cargo.toml 2>&1 | tail -2
+  cp client/macos/target/loop/Mewla "$app/Contents/MacOS/Mewla Dev"
   stamp "cargo build" "$t"
 }
 build_daemon() {
