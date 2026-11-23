@@ -173,8 +173,13 @@ so. Nothing there needs closing.
 
 ### Copy and edit a message
 
-Tap one of your messages for **Copy**, **Select Text** and **Edit**. Code blocks
-have their own **Copy**. Copy gives the text as written, Markdown included.
+Hold a word in any message to select it, as in any app: drag the handles across
+a whole reply (paragraphs, lists, code and tables) and pick **Copy**, **Select
+all** or **Share** from the system's menu. **Copy message** in the same menu
+copies the whole message, as plain text: a reply without its Markdown marks,
+list numbers kept, code as written, table cells tab-separated, a link's address
+after its words. Code blocks keep their own **Copy**. Tap one of your messages
+to edit it; holding it selects, never edits.
 
 Messages are read as standard GitHub-flavored Markdown on every platform:
 headings, quotes, nested and numbered lists, task lists, tables,

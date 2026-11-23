@@ -10,6 +10,8 @@ import { rail } from "../shell/layout";
 import { elapsedShort } from "../../core/sessions/activity";
 import { elapsedNow } from "../kit/elapsedClock";
 import { Button, TextView } from "nsh/base";
+import type { MenuItem } from "nsh/desktop";
+import { messageCopyText } from "../../core/timeline/messageCopy";
 import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import type { ComputerMessageTimelineItem } from "../../core/timeline/computerMessageCardModel";
@@ -118,6 +120,17 @@ function BubbleFade() {
   );
 }
 
+/**
+ * The app's item of a message's selection menu, after the system's Copy, Select all and Share: the whole message
+ * on the clipboard as plain text (core/timeline/messageCopy), however little of it is selected or shown.
+ */
+function copyMessage(body: () => string, markdown: boolean): MenuItem[] {
+  return [{ label: "Copy message", onSelect: () => void Clipboard.writeText(messageCopyText(untracked(body), markdown)).catch(() => {}) }];
+}
+
+/** A long press is the text's (its selection), never a tap: on the bubble's edge it does nothing. */
+const holdIsNoTap = () => {};
+
 function UserMessage(props: { item: () => MessageTimelineItem; handlers: MessageHandlers; expansion: Expansion }) {
   const it = props.item;
   // A long message folds (`messageFolds`): its first lines, fading out, and a chevron that opens and closes
@@ -144,10 +157,10 @@ function UserMessage(props: { item: () => MessageTimelineItem; handlers: Message
             <ChatImage frame="sent" src={file.path} alt={file.name} load={props.handlers.loadImage} onOpen={() => props.handlers.openPicture?.(pictureKey(it().id, file.path))} />
           ))}
         </View></If>
-      <If when={it().body || files().length}><View testID="user-message" selectable onPress={tap}
+      <If when={it().body || files().length}><View testID="user-message" selectable selectionMenu={copyMessage(() => it().body ?? "", false)} onPress={tap} onLongPress={holdIsNoTap}
           class={`max-w-full bg-card ${type.bubble} ${failed() ? "opacity-55" : ""}`}>
           <If when={it().body}><View testID={folded() ? "user-message-folded" : "user-message-body"} class="overflow-hidden" style={{ maxHeight: folded() ? FOLDED_TEXT_HEIGHT : undefined }}>
-              <Text testID="user-message-text" onPress={tap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
+              <Text testID="user-message-text" onPress={tap} onLongPress={holdIsNoTap} onLayout={({ bounds }) => textHeight.set(bounds.size.height)}
                 class={`shrink-0 ${type.bubbleText} ${SELECTION}`}>{it().body}</Text>
               <If when={folded()}><BubbleFade /></If>
             </View></If>
@@ -268,8 +281,9 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem 
       <If when={kind() === "update-line"} else={<><If when={kind() === "divider"} else={<If when={kind() === "brief"} else={<If when={kind() === "user"} else={<If when={kind() === "reply"} else={<If when={kind() === "working"} else={<If when={kind() === "activity"} else={<If when={kind() === "plan"} else={<If when={kind() === "task-notification"} else={<If when={kind() === "computer-message"} else={<If when={kind() === "plugin-notice"} else={<If when={kind() === "grant-request"} else={<If when={kind() === "answered"} else={<If when={kind() === "brain-work-event"}><WorkCard item={work} handlers={props.handlers.work} /></If>}><AnsweredRow item={answered} /></If>}><GrantRequestCard item={grantRequest} /></If>}><PluginNoticeCard item={pluginNotice} /></If>}><ComputerMessageCard item={computerMessage} expansion={props.expansion} /></If>}><TaskNotificationCard item={task} expansion={props.expansion} /></If>}><PlanRow item={plan} /></If>}><ActivityRow item={activity} expansion={props.expansion} onFile={props.handlers.onFile}
           pictures={{ load: props.handlers.loadImage, open: (src) => props.handlers.openPicture?.(pictureKey(it().id, src)) }} /></If>}><WorkingRow since={() => props.handlers.workingSince?.()} /></If>}><View class="px-4">
           {/* A reply is its text alone (soft-final SPEC §11 Message): a long press selects it, code and table cells too,
-              with the system's handles and menu (Copy, Select all, Share). */}
-          <View testID="reply" onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
+              with the system's handles and menu (Copy, Select all, Share, then Copy message: all of it, as plain text).
+              One selection runs across the whole reply. */}
+          <View testID="reply" selectable selectionMenu={copyMessage(() => reply().body ?? "", true)} onLayout={({ bounds }) => textWidth.set(bounds.size.width)}>
             <TextView markdown={linked(reply().body ?? "", Boolean(reply().streaming))} options={{ streaming: Boolean(reply().streaming) }} selectable class={`${type.message} ${SELECTION}`}
               renderCodeBlock={replyCode}
               classes={TABLE}
