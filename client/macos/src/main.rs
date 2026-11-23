@@ -202,6 +202,13 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
         call.reply(Ok::<Value, String>(Value::Null));
     });
     host.handle("link.events", |call| call.reply(Ok::<Value, String>(json!([]))));
+    // `link.network {online}`: the Mac's network changed or it woke from sleep (link.rs `watch_network`).
+    {
+        let host = host.clone();
+        link::watch_network(move |online| {
+            let _ = host.send("link.network", json!({ "online": online }));
+        });
+    }
 
     host.handle("app.pairing", move |call| {
         let Some(reply) = call.into_reply() else { return };
