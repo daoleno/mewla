@@ -690,7 +690,15 @@ func assertDaemonWebSocketThroughLink(
 	}
 	defer conn.Close()
 	_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+	// The first frame proves the computer (daemon_proof over the connect's nonce), through the pinned tunnel too.
 	messageType, message, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read Link WebSocket: %v", err)
+	}
+	if messageType != websocket.TextMessage || !bytes.Contains(message, []byte(`"type":"daemon_proof"`)) {
+		t.Fatalf("first daemon WebSocket frame is not its proof: type=%d body=%q", messageType, message)
+	}
+	messageType, message, err = conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("read Link WebSocket: %v", err)
 	}
