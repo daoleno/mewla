@@ -273,7 +273,7 @@ func (s *Store) PrepareInputAdmission(candidate watcher.InputAdmission) (watcher
 		TranscriptProvider: candidate.TranscriptBinding.Provider, TranscriptFlag: candidate.TranscriptBinding.PiFlag,
 		TranscriptPath: candidate.TranscriptBinding.PiPath, Purpose: purpose, PurposeID: purposeID,
 	}
-	if st.Status.Terminal() && st.ClosedBy == lifecycle.ActorRuntime {
+	if st.Status.Terminal() && admissionReopens(st) {
 		// A follow-up to the Worker of a runtime-settled Work reopens it.
 		if _, err := s.ReopenSettledWork(string(st.ID), "A follow-up was sent to the Worker."); err != nil {
 			return watcher.InputAdmission{}, false, err
@@ -327,26 +327,60 @@ func validateInputAdmissionCandidate(candidate watcher.InputAdmission) error {
 }
 
 func (s *Store) fsmStateForAdmission(candidate watcher.InputAdmission) (*lifecycle.State, error) {
-	if candidate.WorkID != "" {
-		st, err := s.fsmState(candidate.WorkID)
+	st, found, err := s.fsmAdmissionTarget(candidate.WorkID, candidate.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("no active Brain Work owns delegated Session %s; input was not submitted", candidate.SessionID)
+	}
+	if candidate.WorkID != "" && candidate.ClaimToken != "" {
+		if candidate.Receipt != candidate.ProposedTurnID || st.Review == nil || st.Review.Handler == nil ||
+			st.Review.Handler.HandlerID != candidate.ClaimToken ||
+			st.Review.Handler.HandlerToken != lifecycle.TurnToken(candidate.ProposedTurnID) {
+			return nil, ErrEventClaim
+		}
+	}
+	return st, nil
+}
+
+// fsmAdmissionTarget is the Work a delegated input is admitted on: the named
+// Work, else the one whose Attempt runs on the Session.
+func (s *Store) fsmAdmissionTarget(workID, sessionID string) (*lifecycle.State, bool, error) {
+	if workID = strings.TrimSpace(workID); workID != "" {
+		st, err := s.fsmState(workID)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		if candidate.ClaimToken != "" {
-			if candidate.Receipt != candidate.ProposedTurnID || st.Review == nil || st.Review.Handler == nil ||
-				st.Review.Handler.HandlerID != candidate.ClaimToken ||
-				st.Review.Handler.HandlerToken != lifecycle.TurnToken(candidate.ProposedTurnID) {
-				return nil, ErrEventClaim
-			}
-		}
-		return st, nil
+		return st, true, nil
 	}
-	if st, found := s.fsm.Find(func(st *lifecycle.State) bool {
-		return st.Attempt != nil && st.Attempt.SessionID == candidate.SessionID
-	}); found {
-		return st, nil
+	st, found := s.fsmWorkByAttemptSession(sessionID)
+	return st, found, nil
+}
+
+// admissionReopens: a follow-up reopens a Work the runtime settled; a Work
+// that Brain or the person closed stays closed.
+func admissionReopens(st *lifecycle.State) bool {
+	return st.ClosedBy == lifecycle.ActorRuntime
+}
+
+// DelegatedInputTakes reports whether a delegated input to sessionID (on
+// workID, or on the Work whose Attempt runs on the Session when workID is
+// empty) could be admitted at all. False means admission refuses it for good:
+// no Work owns the Session, or its Work was closed and does not reopen. A
+// named Work that does not exist is ErrWorkNotFound.
+func (s *Store) DelegatedInputTakes(workID, sessionID string) (bool, error) {
+	if s == nil || s.fsm == nil {
+		return false, fmt.Errorf("brain store is not configured")
 	}
-	return nil, fmt.Errorf("no active Brain Work owns delegated Session %s; input was not submitted", candidate.SessionID)
+	st, found, err := s.fsmAdmissionTarget(workID, sessionID)
+	if errors.Is(err, lifecycle.ErrUnknownWork) {
+		return false, ErrWorkNotFound
+	}
+	if err != nil || !found {
+		return false, err
+	}
+	return !st.Status.Terminal() || admissionReopens(st), nil
 }
 
 // InputAdmission reads one exact ledger-owned submission transaction.

@@ -41,6 +41,10 @@ func (a *controlApp) computerOrigin(sessionID string) (computers.Origin, error) 
 	return origin, nil
 }
 
+// deliverComputerMessage lands a reply where a decision-maker sees it, once:
+// the asking Session when it can still take input, else its Work when that
+// Work is open, else Brain. Only a Session that can take the reply waits for
+// it (an open prompt, a transient refusal); one that never can is skipped.
 func (a *controlApp) deliverComputerMessage(d computers.Delivery) (string, error) {
 	if d.Origin.SessionID == "" {
 		return a.deliverComputerToBrain(d)
@@ -56,36 +60,22 @@ func (a *controlApp) deliverComputerMessage(d computers.Delivery) (string, error
 		return computers.DispositionNotSubmitted, fmt.Errorf("Worker presence is unknown")
 	}
 	if presence == watcher.SessionPresencePresent {
-		generation, err := a.watcher.ResolveOwnedGeneration(d.Origin.SessionID)
+		workID, takes, err := a.computerReplyTaker(d.Origin)
 		if err != nil {
 			return computers.DispositionNotSubmitted, err
 		}
-		if generation.PaneGeneration == d.Origin.PaneGeneration {
-			if a.openPrompt(d.Origin.SessionID, a.watcher.GetWorker(d.Origin.SessionID)) != nil {
-				return computers.DispositionNotSubmitted, fmt.Errorf("Worker has an open prompt; reply waits until it is answered")
-			}
-			hasWork, err := a.recordComputerEvent(d, false)
+		if takes {
+			generation, err := a.watcher.ResolveOwnedGeneration(d.Origin.SessionID)
 			if err != nil {
 				return computers.DispositionNotSubmitted, err
 			}
-			turnID := "turn:" + d.Receipt
-			payload := watcher.DelegatedLifecyclePayload(d.Body, turnID)
-			var result watcher.InputResult
-			if hasWork {
-				result, err = a.watcher.SubmitDelegatedWorkInput(d.Origin.SessionID, payload, d.Origin.WorkID, turnID, "", "", time.Now().UTC())
-			} else {
-				result, err = a.watcher.SubmitDelegatedInput(d.Origin.SessionID, payload, turnID, time.Now().UTC())
+			if generation.PaneGeneration == d.Origin.PaneGeneration {
+				return a.submitComputerReply(d, workID)
 			}
-			if result.Outcome == watcher.InputAccepted && err == nil {
-				_, _ = a.watcher.RebindDelegatedTurnProjection(d.Origin.SessionID)
-				return computers.DispositionAccepted, nil
-			}
-			if watcher.InputOutcomeFromError(err) == watcher.InputNotSubmitted || result.Outcome == watcher.InputNotSubmitted {
-				return computers.DispositionNotSubmitted, err
-			}
-			return computers.DispositionUncertain, err
+			// The original pane is gone; a recycled target is not the original asker.
 		}
-		// The original pane is gone; a recycled target is not the original asker.
+		// A Session no open Work owns cannot take Worker input; its reply
+		// falls through instead of being refused on every retry.
 	}
 	if d.Origin.WorkID != "" && a.brainStore != nil {
 		if _, _, err := a.brainStore.ReconcileAbsentWorkAttempt(d.Origin.WorkID, d.Origin.SessionID); err != nil && !errors.Is(err, brain.ErrWorkNotFound) {
@@ -100,16 +90,67 @@ func (a *controlApp) deliverComputerMessage(d computers.Delivery) (string, error
 	return a.deliverComputerToBrain(d)
 }
 
+// computerReplyTaker says whether the asking Session can be given the reply
+// as delegated input, by the same rule admission applies, and on which Work.
+// The origin Work is used while it exists; otherwise the Work whose Attempt
+// runs on the Session.
+func (a *controlApp) computerReplyTaker(origin computers.Origin) (string, bool, error) {
+	if a.brainStore == nil {
+		return "", true, nil
+	}
+	if origin.WorkID != "" {
+		takes, err := a.brainStore.DelegatedInputTakes(origin.WorkID, origin.SessionID)
+		if !errors.Is(err, brain.ErrWorkNotFound) {
+			return origin.WorkID, takes, err
+		}
+	}
+	takes, err := a.brainStore.DelegatedInputTakes("", origin.SessionID)
+	return "", takes, err
+}
+
+func (a *controlApp) submitComputerReply(d computers.Delivery, workID string) (string, error) {
+	if a.openPrompt(d.Origin.SessionID, a.watcher.GetWorker(d.Origin.SessionID)) != nil {
+		return computers.DispositionNotSubmitted, fmt.Errorf("Worker has an open prompt; reply waits until it is answered")
+	}
+	if workID != "" {
+		if _, err := a.recordComputerEvent(d, false); err != nil {
+			return computers.DispositionNotSubmitted, err
+		}
+	}
+	turnID := "turn:" + d.Receipt
+	payload := watcher.DelegatedLifecyclePayload(d.Body, turnID)
+	var result watcher.InputResult
+	var err error
+	if workID != "" {
+		result, err = a.watcher.SubmitDelegatedWorkInput(d.Origin.SessionID, payload, workID, turnID, "", "", time.Now().UTC())
+	} else {
+		result, err = a.watcher.SubmitDelegatedInput(d.Origin.SessionID, payload, turnID, time.Now().UTC())
+	}
+	if result.Outcome == watcher.InputAccepted && err == nil {
+		_, _ = a.watcher.RebindDelegatedTurnProjection(d.Origin.SessionID)
+		return computers.DispositionAccepted, nil
+	}
+	if watcher.InputOutcomeFromError(err) == watcher.InputNotSubmitted || result.Outcome == watcher.InputNotSubmitted {
+		return computers.DispositionNotSubmitted, err
+	}
+	return computers.DispositionUncertain, err
+}
+
 // An audit event lets Brain see a delivered Worker reply without consuming it
-// as chat input. Only loss of the original Session makes the event actionable.
+// as chat input. Only loss of the original Session makes the event actionable,
+// and only an open Work can act on it: a review on a closed Work never opens.
 func (a *controlApp) recordComputerEvent(d computers.Delivery, actionable bool) (bool, error) {
 	if d.Origin.WorkID == "" || a.brainStore == nil {
 		return false, nil
 	}
-	if _, err := a.brainStore.Work(d.Origin.WorkID); errors.Is(err, brain.ErrWorkNotFound) {
+	item, err := a.brainStore.Work(d.Origin.WorkID)
+	if errors.Is(err, brain.ErrWorkNotFound) {
 		return false, nil
 	} else if err != nil {
 		return false, err
+	}
+	if actionable && (item.Status == brain.WorkDone || item.Status == brain.WorkCancelled) {
+		return false, nil
 	}
 	kind := "computer_message"
 	if actionable {
