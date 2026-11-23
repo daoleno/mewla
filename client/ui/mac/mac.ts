@@ -293,20 +293,12 @@ export function startMac(): void {
 
 /**
  * The image input run's log (macos-image-input.yml): the chips of Brain's composer each time they change (how many,
- * each one's state and name), and each message the person sent, with the files it carried.
+ * each one's state and name). Send empties them; the run's capture shows the message they went with.
  */
 function imageInputLog(): void {
   effect(() => {
     const items = newestBrainUploads()?.items() ?? [];
     console.log(`dev script: chips ${items.length}${items.map((item) => ` [${item.status} ${item.asset.name}${item.error ? `: ${item.error}` : ""}]`).join("")}`);
-  });
-  const seen = new Set<string>();
-  effect(() => {
-    for (const event of brainChat()?.current.conversation?.events ?? []) {
-      if (event.kind !== "user_message" || seen.has(event.id)) continue;
-      seen.add(event.id);
-      console.log(`dev script: sent ${JSON.stringify(event.body ?? "")} with ${event.attachments?.length ?? 0} files`);
-    }
   });
 }
 
