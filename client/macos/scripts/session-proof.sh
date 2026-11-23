@@ -13,9 +13,9 @@ cli="${2:?mewla cli}"
 dir="${3:?dir}"
 mkdir -p "$dir"
 
-sessions() { "$cli" host status --json | python3 -I -c 'import json,sys; print(" ".join(sorted("%s:%s" % (s["id"], s["pid"]) for s in json.load(sys.stdin).get("sessions", []))))'; }
+sessions() { { "$cli" host status --json 2>/dev/null || true; } | python3 -I -c 'import json,sys; print(" ".join(sorted("%s:%s" % (s["id"], s["pid"]) for s in json.load(sys.stdin).get("sessions", []))))'; }
 last_tick() { grep -o 'tick [0-9]*' | tail -1 | grep -o '[0-9]*' || echo 0; }
-captured() { "$cli" worker capture -id "$(cat "$dir/worker-id")" --json 2>/dev/null | last_tick; }
+captured() { { "$cli" worker capture -id "$(cat "$dir/worker-id")" --json 2>/dev/null || true; } | last_tick; }
 written() { last_tick < "$dir/ticks.txt"; }
 
 case "$mode" in
@@ -66,6 +66,8 @@ walk(json.load(sys.stdin))' || true)
     mine=$(cat "$dir/session")
     for _ in $(seq 1 90); do [[ " $(sessions 2>/dev/null || true) " == *" $mine "* ]] && break; sleep 1; done
     now=$(sessions)
+    # The daemon that took over answers for the Worker once it has adopted the Session.
+    for _ in $(seq 1 60); do [[ $(captured) -gt 0 ]] && break; sleep 1; done
     [[ " $now " == *" $mine "* ]] || { echo "$label: Session $mine is gone (now: $now)"; exit 1; }
     pid_now=$(pgrep -f "$dir/tick.py" | sort | tr '\n' ' ')
     [[ "$pid_now" == "$(cat "$dir/tick-pid")" ]] || { echo "$label: the counter's process changed: $(cat "$dir/tick-pid")-> $pid_now"; exit 1; }
