@@ -424,11 +424,15 @@ describe("Mewla for Mac", () => {
     await app.waitFor("text:This Mac · Online", { timeout: 10_000 });
   }, 30_000);
 
-  test("this Mac's daemon not answering, its entry known from before: the pane says why, not just offline", async () => {
-    const host = phoneHost({}, { "app.pairing": () => { throw new Error("Mewla on this Mac did not start: the port 9876 is taken."); } });
+  test("this Mac's daemon killed under the app (its pairing still answers, as `mewla pair` does with no daemon): the pane says Mewla is not running, not just offline", async () => {
+    const local = `mewla://pair?u=${encodeURIComponent("ws://127.0.0.1:1/ws")}&n=Desk&d=${"a".repeat(64)}&k=${"b".repeat(64)}&t=${"7".repeat(64)}`;
+    const host = phoneHost({ brain }, { "app.pairing": () => ({ ...pairing, local_link: local }) });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host, storage: { ...paired, "mewla:v1:mac_local_daemon_key": "b".repeat(64) } });
-    await app.waitFor("text:This Mac · Mewla on this Mac did not start: the port 9876 is taken.", { timeout: 15_000 });
-  }, 30_000);
+    await app.waitFor("text:This Mac · Online", { timeout: 15_000 });
+    await app.host.send("app.daemonDown");
+    await app.waitFor("text:This Mac · Mewla is not running", { timeout: 30_000 });
+    expect(app.shows("text:This Mac · Offline · Server unreachable")).toBe(false);
+  }, 60_000);
 
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
