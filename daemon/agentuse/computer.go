@@ -33,6 +33,19 @@ type ComputerStatus struct {
 	// DisplayKept says the display is held on for agents, so the Mac does not
 	// dim and lock between their steps.
 	DisplayKept bool `json:"display_kept,omitempty"`
+	// Permissions are each operating-system grant the screen needs and where
+	// it stands, read afresh on every status (a Mac's Screen Recording and
+	// Accessibility).
+	Permissions []ComputerGrant `json:"permissions,omitempty"`
+}
+
+// ComputerGrant is one grant and its state: granted, off (in the list,
+// switched off), missing (not in the list) or restart (given, in effect once
+// Mewla starts again).
+type ComputerGrant struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	State string `json:"state"`
 }
 
 type ActiveAgent struct {
@@ -46,6 +59,11 @@ type ComputerHooks struct {
 	Status       func() ComputerStatus
 	OpenSettings func(permission string) error
 	Stop         func()
+	// Follow watches a grant the person is giving at this computer now (the
+	// Mac app's permission panel): once given, Mewla applies it by itself.
+	Follow func(permission string) error
+	// Restart starts Mewla again so a given grant takes effect.
+	Restart func() error
 }
 
 // SetComputer lets agents use the screen. Without it (the mewla command, a
@@ -93,6 +111,32 @@ func (s *Service) StopAgent() (Status, error) {
 	return s.Status(), nil
 }
 
+// FollowPermission is the app's "the person is giving this grant now".
+func (s *Service) FollowPermission(permission string) (Status, error) {
+	s.mu.Lock()
+	hooks := s.computer
+	s.mu.Unlock()
+	if hooks == nil || hooks.Follow == nil {
+		return Status{}, errors.New("this computer has no such permission to give")
+	}
+	if err := hooks.Follow(permission); err != nil {
+		return Status{}, err
+	}
+	return s.Status(), nil
+}
+
+// RestartForPermission starts Mewla again so a given grant takes effect.
+func (s *Service) RestartForPermission() (Status, error) {
+	s.mu.Lock()
+	hooks := s.computer
+	s.mu.Unlock()
+	if hooks == nil || hooks.Restart == nil {
+		return Status{}, errors.New("Mewla can't restart itself here")
+	}
+	status := s.Status()
+	return status, hooks.Restart()
+}
+
 // withLive adds the rows that are never cached: the computer's, the phone's and the iPhone's.
 func (s *Service) withLive(status Status) Status {
 	return s.withIPhone(s.withPhone(s.withComputer(status)))
@@ -109,7 +153,8 @@ func (s *Service) withComputer(status Status) Status {
 	}
 	computer := hooks.Status()
 	if !status.Enabled {
-		computer = ComputerStatus{State: ComputerOff, Summary: "Agents can't use this computer. Turn it on to let them."}
+		// The grants stand as they are with the switch off: the Mac app still shows them.
+		computer = ComputerStatus{State: ComputerOff, Summary: "Agents can't use this computer. Turn it on to let them.", Permissions: computer.Permissions}
 	}
 	status.Computer = &computer
 	return status

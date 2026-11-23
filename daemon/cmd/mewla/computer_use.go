@@ -43,9 +43,20 @@ func (a *controlApp) handleComputerControl(req control.Request) control.Response
 	return control.Response{OK: true, ComputerResult: &result}
 }
 
-// computerStatus turns the screen's state into the app's one line.
+// computerStatus turns the screen's state into the app's one line, with each
+// grant the screen needs and where it stands.
 func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerStatus {
 	capability, err := s.AgentReady(ctx)
+	status := computerLine(s, capability, err)
+	for _, p := range capability.Permissions {
+		if p.State != "" {
+			status.Permissions = append(status.Permissions, agentuse.ComputerGrant{ID: p.ID, Name: p.Name, State: p.State})
+		}
+	}
+	return status
+}
+
+func computerLine(s *screen.Service, capability screen.Capability, err error) agentuse.ComputerStatus {
 	status := agentuse.ComputerStatus{State: agentuse.ComputerReady, Summary: screen.ReadySummary}
 	switch {
 	case errors.Is(err, screen.ErrUnsupported):

@@ -8,9 +8,11 @@
 //!   with, silently: it is this computer);
 //! - `app.dock`: the Dock icon shown while the window is, hidden with only the menu bar cat;
 //! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered);
-//! - `link.start` / `link.stop` / `link.stopAll` / `link.events`: Mewla Relay's pinned tunnels (link.rs).
+//! - `link.start` / `link.stop` / `link.stopAll` / `link.events`: Mewla Relay's pinned tunnels (link.rs);
+//! - `app.permissionGuide`: System Settings on a permission's list with the panel to drag Mewla in (permissions.rs).
 //!
-//! The daemon: the app (`com.daoleno.mewla`) registers it as a LaunchAgent with SMAppService, after taking over
+//! The daemon: the app (`com.daoleno.mewla`) registers it as a LaunchAgent with SMAppService, run through this
+//! executable (`Mewla --daemon serve`, host.rs) so that macOS charges its permissions to the app, after taking over
 //! the install `mewla boot install` made (agent.rs), so it runs with the app closed and after a restart. Mewla Dev
 //! starts `mewla serve` as its child on its own state and stops it when the app quits.
 //!
@@ -28,12 +30,21 @@ mod link;
 #[cfg(target_os = "macos")]
 mod daemon;
 #[cfg(target_os = "macos")]
+mod host;
+#[cfg(target_os = "macos")]
+mod permissions;
+#[cfg(target_os = "macos")]
 mod secure;
 
 #[cfg(target_os = "macos")]
 fn main() -> std::process::ExitCode {
     use nsh_platform_macos::{AppSource, AssetBase, Bundle, run_app};
 
+    // launchd's job for the release's daemon (host.rs): this executable as the daemon's parent, never the app.
+    let mut args = std::env::args_os().skip(1);
+    if args.next().is_some_and(|first| first == host::FLAG) {
+        return host::run(args.collect());
+    }
     // Every part of `nsh/base` the app's code imports (the stock host serves only its core part to a Rust app).
     nsh_platform_macos::set_ui_sets(vec![nsh_base::registry()]);
     let (dir, mut options) = setup();
@@ -141,6 +152,25 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     host.handle("app.dock", move |call| {
         let shown = call.data().get("shown").and_then(Value::as_bool).unwrap_or(true);
         dispatch2::DispatchQueue::main().exec_async(move || set_dock_icon(shown));
+        call.reply(Ok::<Value, String>(Value::Null));
+    });
+
+    // `app.permissionGuide {permission}`: System Settings on the permission's list and the panel beside it with Mewla's
+    // icon to drag in (permissions.rs); `app.permissionGuide {}` closes the panel.
+    host.handle("app.permissionGuide", |call| {
+        let id = call.data().get("permission").and_then(Value::as_str).map(str::to_owned);
+        let permission = id.as_deref().map(permissions::Permission::from_id);
+        if let Some(None) = permission {
+            call.reply(Err::<Value, String>(format!("no such permission: {}", id.unwrap_or_default())));
+            return;
+        }
+        dispatch2::DispatchQueue::main().exec_async(move || {
+            let Some(mtm) = nsh_platform_macos::objc2::MainThreadMarker::new() else { return };
+            match permission.flatten() {
+                Some(permission) => permissions::show(mtm, permission),
+                None => permissions::close(),
+            }
+        });
         call.reply(Ok::<Value, String>(Value::Null));
     });
 

@@ -21,6 +21,22 @@ type agentUseAction struct {
 	Key     *string `json:"key,omitempty"`
 	// StopAgent ends the agent using the screen.
 	StopAgent bool `json:"stop_agent,omitempty"`
+	// Follow is a grant the person is giving at this computer now (the Mac
+	// app's permission panel): Mewla applies it once given.
+	Follow string `json:"follow,omitempty"`
+	// Restart starts Mewla again so a given grant takes effect.
+	Restart bool `json:"restart,omitempty"`
+}
+
+// fields counts the action's set fields: exactly one is allowed.
+func (a agentUseAction) fields() int {
+	n := 0
+	for _, set := range []bool{a.Enabled != nil, a.Fix != "", a.Key != nil, a.StopAgent, a.Follow != "", a.Restart} {
+		if set {
+			n++
+		}
+	}
+	return n
 }
 
 // handleAgentUse reports what agents can use on this computer and applies
@@ -54,17 +70,21 @@ func (s *Server) handleAgentUse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
-		case action.StopAgent && action.Enabled == nil && action.Fix == "" && action.Key == nil:
-			status, err = s.agentUse.StopAgent()
-		case action.Enabled != nil && action.Fix == "" && action.Key == nil && !action.StopAgent:
-			status, err = s.agentUse.SetEnabled(*action.Enabled)
-		case action.Fix != "" && action.Enabled == nil && action.Key == nil && !action.StopAgent:
-			status, err = s.agentUse.Fix(action.Fix)
-		case action.Key != nil && action.Enabled == nil && action.Fix == "" && !action.StopAgent:
-			status, err = s.agentUse.SetKey(*action.Key)
-		default:
-			http.Error(w, "send one of enabled, fix or key", http.StatusBadRequest)
+		case action.fields() != 1:
+			http.Error(w, "send one of enabled, fix, key, stop_agent, follow or restart", http.StatusBadRequest)
 			return
+		case action.StopAgent:
+			status, err = s.agentUse.StopAgent()
+		case action.Enabled != nil:
+			status, err = s.agentUse.SetEnabled(*action.Enabled)
+		case action.Fix != "":
+			status, err = s.agentUse.Fix(action.Fix)
+		case action.Key != nil:
+			status, err = s.agentUse.SetKey(*action.Key)
+		case action.Follow != "":
+			status, err = s.agentUse.FollowPermission(action.Follow)
+		default:
+			status, err = s.agentUse.RestartForPermission()
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

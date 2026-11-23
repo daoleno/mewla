@@ -26,6 +26,7 @@ import { serverForComputer, type ComputerMessageTimelineItem } from "../../core/
 import { grantPermissionName, grantRequestView, grantTitle, type GrantRequestTimelineItem } from "../../core/timeline/grantRequestModel";
 import type { PluginNoticeTimelineItem } from "../../core/timeline/pluginNoticeModel";
 import { grantRequestAction, type GrantRequestAction } from "../../core/screen/grantRequest";
+import { showPermissionGuide } from "../mac/permissionGuide";
 import { StateLine } from "../kit/RowTile";
 import { signInFromChat } from "../more/extensions/plugins";
 import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotificationCardModel";
@@ -288,6 +289,8 @@ export function GrantRequestCard(props: { item: () => GrantRequestTimelineItem }
     busy.set(true);
     failed.set("");
     try {
+      // On this Mac the card's Open System Settings also puts the panel to drag Mewla in beside it.
+      if (action === "open_settings") showPermissionGuide(server, it().permission);
       await grantRequestAction(server, it().id, action);
     } catch (error) {
       failed.set(error instanceof Error ? error.message : String(error));
