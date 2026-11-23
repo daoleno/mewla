@@ -14,7 +14,7 @@ import {
   PairingCodeRejectedError,
   PairingUnreachableError,
 } from "./pairing";
-import type { StoredServerInput } from "./storedServerContract";
+import { normalizeServerURL, type StoredServerInput } from "./storedServerContract";
 
 /** Whether an opened link is a pairing code, also one that expired: it goes to pairing, which says why. */
 export function isPairingLink(text: string): boolean {
@@ -27,26 +27,76 @@ export function readPairingLink(text: string): ConnectionImportPayload | null {
   return payload?.daemonPublicKey && payload.enrollmentToken ? payload : null;
 }
 
-/** What the confirmation asks: pairing grants this phone the computer's sessions, terminal, Brain, Workers and files. */
-export function pairingScopeCopy(device: "phone" | "browser" = "phone"): { title: string; message: string; confirm: string } {
+/** Where a pairing code takes this app: the address it keeps for the computer and dials, and the transport key it pins there. */
+export interface PairingTarget {
+  /** The stored address: the code's own, or for a Mewla Relay code its stable address. */
+  url: string;
+  /** The pinned transport key (a Mewla Relay code where the host carries pinned tunnels), else none: WebPKI or plain. */
+  transportPin?: string;
+  /** The candidates a Relay pairing keeps (dialed only through the pin). */
+  candidates: string[];
+  /** What the confirmation names: the code's name for the computer, one line, and the host it talks to. */
+  name: string;
+  host: string;
+}
+
+/** Where `pairWith` will pair this code, decided once for the confirmation and the pairing (a browser's page picks its candidate). */
+export async function pairingTarget(payload: ConnectionImportPayload): Promise<PairingTarget> {
+  const link = payload.link;
+  const pinned = Boolean(link && platform().linkTunnels);
+  const url = link ? (pinned ? stableURLOf(payload, link) : await pageCandidateOf(payload, link)) : payload.url;
+  return {
+    url,
+    transportPin: pinned ? link!.transportPin : undefined,
+    candidates: pinned ? link!.candidates.map((candidate) => candidate.url) : [],
+    name: displayName(payload.name),
+    host: hostOf(url) || url,
+  };
+}
+
+/** The code's name for the computer as the confirmation shows it: chosen by whoever made the link, so one short line. */
+function displayName(name: string | undefined): string {
+  const line = (name ?? "").replace(/\p{Cc}+/gu, " ").replace(/\s+/g, " ").trim();
+  return line.length > 40 ? `${line.slice(0, 39)}…` : line;
+}
+
+/**
+ * What the confirmation asks: pairing grants this phone the computer's sessions, terminal, Brain, Workers and files. It
+ * names the host this device will talk to first, then the name the code gives it (the code's maker chose that).
+ */
+export function pairingScopeCopy(device: "phone" | "browser" | "Mac" = "phone", target?: Pick<PairingTarget, "name" | "host">): { title: string; message: string; confirm: string } {
+  const to = target ? `${target.host}${target.name ? ` (${target.name})` : ""}` : "this Mewla server";
   return {
     title: `Pair this ${device}?`,
-    message: `Pairing gives this ${device} access to this Mewla server, including sessions, terminal, Brain, Workers, and files. Only pair a ${device} you trust.`,
+    message: `Pairing gives this ${device} access to ${to}, including sessions, terminal, Brain, Workers, and files. Only pair a ${device} you trust.`,
     confirm: "Pair and grant access",
   };
 }
 
 type DaemonIdentity = { daemonId?: string; daemonPublicKey: string };
+type HeldServer = DaemonIdentity & { url: string; transportPin?: string; transportCandidates?: readonly { kind: string; url: string }[] };
 
 /**
- * A code from a computer this phone already paired re-pairs the same device key: the daemon keeps
- * one device for it, so there is no new access to confirm.
+ * A code this app may pair with no confirmation: one from a computer already paired here, at an address this app
+ * already holds for it, through the same transport key. The daemon keeps one device for it, so there is no new access
+ * to confirm. A code is anyone's to make (the computer's id and key are on every QR code) and a recorded `/pair` answer
+ * passes its check, so a known computer at a new address, or behind another pin, is asked about, with that address
+ * (review 11-23, finding 1): a rename (`mewla login -name`) or a first Relay code for a computer paired by its hosted
+ * address still pairs, once the person has seen where.
  */
-export function alreadyPairedWith(servers: readonly DaemonIdentity[], target: DaemonIdentity | null): boolean {
-  const key = target?.daemonPublicKey.trim().toLowerCase();
-  if (!key) return false;
-  const id = target?.daemonId?.trim().toLowerCase() || "";
-  return servers.some((server) => server.daemonPublicKey.trim().toLowerCase() === key && (!id || server.daemonId?.trim().toLowerCase() === id));
+export function alreadyPairedWith(servers: readonly HeldServer[], code: DaemonIdentity, target: Pick<PairingTarget, "url" | "transportPin"> | null): boolean {
+  const key = code.daemonPublicKey.trim().toLowerCase();
+  const url = normalizeServerURL(target?.url ?? "");
+  if (!key || !url) return false;
+  const id = code.daemonId?.trim().toLowerCase() || "";
+  const pin = target?.transportPin?.trim().toLowerCase() || "";
+  return servers.some((server) => {
+    if (server.daemonPublicKey.trim().toLowerCase() !== key || (id && server.daemonId?.trim().toLowerCase() !== id)) return false;
+    if ((server.transportPin?.trim().toLowerCase() || "") !== pin) return false;
+    // The pairing's own address, and its other Relay addresses (signed with the route; never a heard LAN address).
+    const held = [server.url, ...(server.transportCandidates ?? []).filter((candidate) => candidate.kind !== "direct").map((candidate) => candidate.url)];
+    return held.some((address) => normalizeServerURL(address) === url);
+  });
 }
 
 /**
@@ -175,9 +225,7 @@ async function pairAtStableAddress(
   link: NonNullable<ConnectionImportPayload["link"]>,
   onProgress?: (message: string) => void,
 ): Promise<StoredServerInput> {
-  // On a computer's own page, the candidate at the page's address (a computer on more than one relay has one each).
-  const page = hostOf((await pageOrigin()) ?? "");
-  const stableURL = link.candidates.find((candidate) => page && hostOf(candidate.url) === page)?.url ?? stableURLOf(payload, link);
+  const stableURL = await pageCandidateOf(payload, link);
   await refuseAnotherPage(stableURL);
   onProgress?.(`Connecting to ${linkDisplayName(payload.name, stableURL)} through Mewla…`);
   let pairing: { daemonId: string; daemonPublicKey: string };
@@ -203,6 +251,12 @@ async function pairAtStableAddress(
     daemonPublicKey: pairing.daemonPublicKey,
     transportKind: "manual",
   };
+}
+
+/** On a computer's own page, the candidate at the page's address (a computer on more than one relay has one each). */
+async function pageCandidateOf(payload: ConnectionImportPayload, link: NonNullable<ConnectionImportPayload["link"]>): Promise<string> {
+  const page = hostOf((await pageOrigin()) ?? "");
+  return link.candidates.find((candidate) => page && hostOf(candidate.url) === page)?.url ?? stableURLOf(payload, link);
 }
 
 /** The page's origin in a browser (asked of the page host), else null. */

@@ -25,7 +25,7 @@ const hostedPairing = {
 function routeFrame() {
   const candidates = [{ name: "region-a", url: HOSTED }];
   const issuedAtMs = Date.now();
-  const binding = linkRouteBinding({ daemonId: DAEMON_ID, daemonPublicKey: PUBLIC_KEY, routeId: ROUTE, transportPin: PIN, issuedAtMs, candidates });
+  const binding = linkRouteBinding({ daemonId: DAEMON_ID, daemonPublicKey: PUBLIC_KEY, routeId: ROUTE, transportPin: PIN, issuedAtMs, candidates })!;
   const domain = new TextEncoder().encode("mewla-link-route-v1\u0000");
   const signed = new Uint8Array(domain.length + binding.length);
   signed.set(domain);
