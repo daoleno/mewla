@@ -262,7 +262,8 @@ export function startMac(): void {
           if (script.update) void updateProof();
           if (script.grant) void grantProof(script.grant);
           // A computer on Mewla Relay: relay, LAN and back as the run cuts the network (relayProof.ts).
-          if (script.relay) void relayProof(script.relay);
+          // Never in a release app: it pairs a code with no confirmation (security review 11-23, finding 6).
+          if (script.relay && !params.release) void relayProof(script.relay);
           if (script.allow) void allowProof(script.allow);
           if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }

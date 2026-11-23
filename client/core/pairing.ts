@@ -7,8 +7,8 @@ import {
   normalizeDaemonId,
   normalizePairingToken,
   normalizePublicKeyHex,
-  verifyDaemonAssertion,
 } from "./auth";
+import { answerIsTheComputers, daemonAnswer, newChallenge, olderMewlaLine, PAIR_CHALLENGE_PURPOSE, PROBE_CHALLENGE_PURPOSE } from "./daemonProof";
 
 export interface PairingInput {
   serverUrl: string;
@@ -18,6 +18,8 @@ export interface PairingInput {
   // "link" requests run through the app's own pinned Mewla Relay tunnel, so
   // their failures never describe loopback ports or cleartext HTTP.
   transport?: "link" | "direct";
+  /** What the person calls the computer, for a line that names it. */
+  computerName?: string;
 }
 
 // The pairing request never got an HTTP answer. Over Mewla Relay the daemon
@@ -41,6 +43,8 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   }
 
   const identity = await getOrCreateLocalDeviceIdentity();
+  // The computer signs this app's own challenge: an answer recorded from an earlier pairing proves nothing here.
+  const challengeHex = newChallenge();
   let response: Response;
   try {
     // No endless "Pairing…" (SPEC §16.4 Pair): no answer by `wait.fail` is the unreachable failure, with Try
@@ -57,6 +61,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
         device_id: identity.deviceId,
         device_name: identity.deviceName,
         device_public_key: identity.publicKeyHex,
+        challenge: challengeHex,
       }),
     }), input.transport === "link" ? 2 * motion.wait.fail : motion.wait.fail);
   } catch (error) {
@@ -79,6 +84,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   const payload = (await response.json()) as {
     daemon_id?: string;
     daemon_public_key?: string;
+    proof?: unknown;
     assertion_timestamp?: string;
     assertion_nonce?: string;
     assertion_signature?: string;
@@ -96,16 +102,17 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   ) {
     throw new Error("Pairing target identity did not match the scanned link.");
   }
-  if (
-    !(await verifyDaemonAssertion({
-      purpose: "mewla-pair",
-      daemonId: pairedDaemonId,
-      daemonPublicKey: pairedDaemonPublicKey,
-      timestamp: payload.assertion_timestamp,
-      nonceHex: payload.assertion_nonce,
-      signatureHex: payload.assertion_signature,
-    }))
-  ) {
+  const answer = await daemonAnswer({
+    purpose: PAIR_CHALLENGE_PURPOSE,
+    oldPurpose: "mewla-pair",
+    challengeHex,
+    daemonId: pairedDaemonId,
+    daemonPublicKey: pairedDaemonPublicKey,
+    body: payload,
+  });
+  // A computer that proved before answering the old way, now, with its own key: it runs an older Mewla.
+  if (answer === "older") throw new Error(olderMewlaLine(input.computerName ?? ""));
+  if (answer !== "proved" && answer !== "old") {
     throw new Error("Pairing target failed daemon identity proof.");
   }
   return {
@@ -156,6 +163,8 @@ export async function confirmPairedDevice(input: {
   }
 
   const identity = await getOrCreateLocalDeviceIdentity();
+  // The request's nonce is this app's challenge: the computer's answer signs it.
+  const challengeHex = newChallenge();
   let response: Response;
   try {
     response = await platform().fetch(authCheckURL, {
@@ -164,6 +173,7 @@ export async function confirmPairedDevice(input: {
         Authorization: await buildAuthorizationHeader({
           daemonId,
           purpose: "mewla-probe",
+          nonceHex: challengeHex,
         }),
       },
     });
@@ -180,6 +190,7 @@ export async function confirmPairedDevice(input: {
     device_id?: string;
     daemon_id?: string;
     daemon_public_key?: string;
+    proof?: unknown;
     assertion_timestamp?: string;
     assertion_nonce?: string;
     assertion_signature?: string;
@@ -189,13 +200,13 @@ export async function confirmPairedDevice(input: {
     payload.device_id !== identity.deviceId ||
     normalizeDaemonId(payload.daemon_id) !== daemonId ||
     normalizePublicKeyHex(payload.daemon_public_key) !== daemonPublicKey ||
-    !(await verifyDaemonAssertion({
-      purpose: "mewla-probe",
+    !(await answerIsTheComputers({
+      purpose: PROBE_CHALLENGE_PURPOSE,
+      oldPurpose: "mewla-probe",
+      challengeHex,
       daemonId,
       daemonPublicKey,
-      timestamp: payload.assertion_timestamp,
-      nonceHex: payload.assertion_nonce,
-      signatureHex: payload.assertion_signature,
+      body: payload,
     }))
   ) {
     throw new Error("Pairing target failed daemon identity proof.");

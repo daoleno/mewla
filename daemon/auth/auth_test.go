@@ -46,7 +46,7 @@ func TestManagerEnrollAndVerifyAuthorization(t *testing.T) {
 	}
 
 	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "mewla-probe")
-	verifiedDevice, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute)
+	verifiedDevice, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil)
 	if err != nil {
 		t.Fatalf("VerifyAuthorization returned error: %v", err)
 	}
@@ -83,11 +83,11 @@ func TestManagerVerifyAuthorizationRejectsReplay(t *testing.T) {
 	}
 
 	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "mewla-probe")
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); err != nil {
 		t.Fatalf("first VerifyAuthorization returned error: %v", err)
 	}
 
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); !errors.Is(err, ErrReplayDetected) {
 		t.Fatalf("expected ErrReplayDetected, got %v", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestManagerRevokeDevicePersistsAndImmediatelyRejectsAuthorization(t *testin
 		"device-revoke",
 		"mewla-probe",
 	)
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrUnknownDevice) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); !errors.Is(err, ErrUnknownDevice) {
 		t.Fatalf("revoked device authorization error=%v, want ErrUnknownDevice", err)
 	}
 	reloaded, err := NewManager(stateDir)
@@ -351,14 +351,14 @@ func TestManagerRevokeReEnrollRetainsConsumedNonce(t *testing.T) {
 		deviceID,
 		"mewla-probe",
 	)
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := manager.RevokeDevice(deviceID); err != nil {
 		t.Fatal(err)
 	}
 	enroll()
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); !errors.Is(err, ErrReplayDetected) {
 		t.Fatalf("reused authorization error=%v, want ErrReplayDetected", err)
 	}
 }
@@ -461,6 +461,29 @@ func TestChallengeAssertionBindsToTheCallersChallenge(t *testing.T) {
 	for _, bad := range []string{"", "zz", "00112233", challenge + "00"} {
 		if _, err := manager.CreateChallengeAssertion(bad); err == nil {
 			t.Fatalf("challenge %q must be refused", bad)
+		}
+	}
+}
+
+// Each challenged answer is for its own purpose: the /health answer, which
+// anyone can have for any challenge, never passes as the /pair, probe or
+// connect answer for the same challenge (security review 11-23, PR B).
+func TestChallengeAnswersAreForTheirOwnPurpose(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewManager returned error: %v", err)
+	}
+	challenge := "00112233445566778899aabbccddeeff"
+	purposes := []ChallengePurpose{HealthChallengePurpose, PairChallengePurpose, ProbeChallengePurpose, ConnectProofPurpose}
+	for _, signed := range purposes {
+		answer, err := manager.CreateChallengeAssertionFor(signed, challenge)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, checked := range purposes {
+			if got := VerifyChallengeAssertionFor(manager.PublicKeyHex(), checked, challenge, answer); got != (signed == checked) {
+				t.Fatalf("answer signed for %s verified as %s: %v", signed, checked, got)
+			}
 		}
 	}
 }

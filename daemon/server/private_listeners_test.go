@@ -121,7 +121,7 @@ func TestPrivateListenerServesTLSAndRefusesPlaintext(t *testing.T) {
 	response.Body.Close()
 	var payload map[string]any
 	_ = json.Unmarshal(body, &payload)
-	if response.StatusCode != 200 || payload["assertion_purpose"] != auth.HealthChallengePurpose {
+	if response.StatusCode != 200 || payload["assertion_purpose"] != string(auth.HealthChallengePurpose) {
 		t.Fatalf("TLS health: %d %s", response.StatusCode, body)
 	}
 

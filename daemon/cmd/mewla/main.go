@@ -1343,6 +1343,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("initialize transport identity: %w", identityErr)
 	}
 	srv.SetTLSConfig(transportIdentity.ServerTLSConfig())
+	srv.SetTransportPin(transportIdentity.SPKISHA256)
 	if linkEnabled {
 		linkConfig.StateObserver = func(state link.ConnectorState) {
 			switch {

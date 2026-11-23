@@ -46,7 +46,9 @@ func RouteBindingPayload(daemonID, daemonPublicKey, routeID, transportPin string
 		fields = append(fields, candidate.Name, candidate.StableURL)
 	}
 	for _, field := range fields {
-		if strings.IndexFunc(field, unicode.IsControl) >= 0 {
+		// U+FEFF too: Go's TrimSpace keeps it and the app's trim strips it, so
+		// the two would sign different bytes.
+		if strings.IndexFunc(field, func(r rune) bool { return unicode.IsControl(r) || r == '\uFEFF' }) >= 0 {
 			return nil, fmt.Errorf("route field %q holds a control character", field)
 		}
 	}
