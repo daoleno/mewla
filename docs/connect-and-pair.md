@@ -226,9 +226,19 @@ no QR scanning, push notifications or in-app browser, and it keeps its device
 key in the browser's local storage, which is weaker than the phone's keychain.
 Pair only browser profiles you control.
 
+A browser page reaches only the computer that serves it. On that computer's own
+page, its remote access pairing link (the `mewla://settings?v=3…` code
+`mewla pair` prints) pairs the browser at the page's HTTPS address. A link for
+another computer is refused with that computer's address: open that address in
+the browser instead.
+
 Mewla for Mac pairs itself with this Mac's daemon. Signed with Developer ID, it
 keeps its device key in your login Keychain; an ad hoc signed build and Mewla
 Dev keep it in `secure.json` (readable only by you) in the app's data folder.
+It pairs other computers as the phone does: paste the link under **Pair a
+computer**, or open a `mewla://` link, which the release claims, whether the
+app is running or not. Mewla Dev does not claim `mewla://`, so it never takes
+links from the release.
 
 ## Add another browser
 
@@ -355,9 +365,21 @@ starts). See the operator guide in `docs/internal/mewla-relay.md`.
 
 ### Direct when it can
 
-A phone paired through Mewla Relay goes straight to the computer when it can
-reach it on the same Wi-Fi/LAN or over Tailscale, and uses the relay otherwise.
-Screen's ⋯ › **Connection** says which: **LAN**, **Tailscale** or **Relay**.
+A phone or Mewla for Mac paired through Mewla Relay goes straight to the
+computer when it can reach it on the same Wi-Fi/LAN or over Tailscale, and uses
+the relay otherwise. The computer's page and its details show which: LAN,
+Tailscale or the relay.
+A browser stays on the computer's HTTPS address: it cannot pin the computer's
+key to a private address, so it never goes direct.
+
+A phone or Mac paired at a computer's remote access address (the HTTPS address,
+not its QR code) becomes a Mewla Relay pairing by itself once both have this
+version. Over the connection it already has, the computer tells the app its
+relay route and transport key, signed with the daemon key the app checked at
+pairing. The app takes it only after a connection pinned to that key reaches
+the computer at the address it paired by. There is no prompt and nothing to
+pair again; the path starts to show **LAN** when it applies. An app or computer
+from before keeps the pairing as it was.
 
 A computer that listens only on loopback, the default, also listens on its
 Wi-Fi/LAN and Tailscale addresses (private networks: 10/8, 172.16/12,
@@ -370,7 +392,7 @@ open plain HTTP, pairing and the web UI to your network. `mewla -loopback-only`
 keeps a computer to loopback alone: no listeners on its private addresses, so
 only this computer and the relay reach it.
 
-The phone tries them while it also measures the relay. It uses a direct address
+The app tries them while it also measures the relay. It uses a direct address
 only after two proofs: the TLS connection to it is pinned to the computer's key
 from pairing, and the computer has signed a fresh challenge from the phone with
 its daemon key. Until then nothing from the phone, including the device
