@@ -53,9 +53,15 @@ export function localFilePath(uri: string): string | null {
   }
 }
 
-/** The name of the local file or folder `uri` names (its path's last part); null when it names none. */
+/**
+ * The name of the local file or folder `uri` names (its path's last part); null when it names none. A file reference
+ * the Mac could not resolve (`file:///.file/id=…`: the file is gone, or macOS refused Mewla its folder) has no name to
+ * show: "File".
+ */
 export function localFileName(uri: string): string | null {
-  return localFilePath(uri)?.split("/").filter(Boolean).at(-1) ?? null;
+  const path = localFilePath(uri);
+  if (path?.startsWith("/.file/id=")) return "File";
+  return path?.split("/").filter(Boolean).at(-1) ?? null;
 }
 
 /**

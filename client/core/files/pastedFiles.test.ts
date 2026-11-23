@@ -84,6 +84,11 @@ describe("localFileContents", () => {
     expect(localFileContents(["shot.png"], ["file:///Users/me/Projects/", shot])).toEqual({ keep: [true], unread: [], folders: 1 });
     expect(localFileName("file:///Users/me/Projects/")).toBe("Projects");
   });
+
+  test("a file reference the Mac could not resolve came without contents, as a file named File", () => {
+    const reference = "file:///.file/id=6571367.8601";
+    expect(localFileContents([], [reference])).toEqual({ keep: [], unread: [{ uri: reference, name: "File" }], folders: 0 });
+  });
 });
 
 describe("withoutInserted", () => {

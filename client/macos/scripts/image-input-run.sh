@@ -214,9 +214,11 @@ done
 # A file Mewla Dev may not read (no read permission): dropped, then copied as Finder copies it and pasted.
 cp "$D/picture.png" "$D/locked.png"; chmod 000 "$D/locked.png"
 drop_file 1 "$D/m0" "$D/locked.png"
-wait_chips '\[failed locked\.png: Mewla can.t read this file\.\]' 30 && report "unreadable file dropped: $(chips | grep -oE "\[failed locked[^]]*\]")" || failed "an unreadable dropped file has no chip that says why"
+# Its name when macOS resolves the file's reference for Mewla Dev; "File" when it does not.
+unread='\[failed (locked\.png|File): Mewla can.t read this file\.\]'
+wait_chips "$unread" 30 && report "unreadable file dropped: $(chips | grep -oE "\[failed [^]]*\]")" || failed "an unreadable dropped file has no chip that says why"
 "$B/pasteboard" file "$D/locked.png"; front; cmd_v
-wait_chips '(\[failed locked\.png: Mewla can.t read this file\.\].*){2}' 30 && report "unreadable file pasted: a second such chip" || failed "an unreadable pasted file has no chip that says why"
+wait_chips "($unread.*){2}" 30 && report "unreadable file pasted: a second such chip; the field holds '$(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //')'" || failed "an unreadable pasted file has no chip that says why"
 report "phase 3 chips: $(chips)"
 shot phase3
 send; sleep 2; report "phase 3 after Send: $(chips)"
