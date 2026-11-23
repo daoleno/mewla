@@ -1,14 +1,14 @@
 package watcher
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/gc"
 )
 
 const (
@@ -119,14 +119,7 @@ func delegatedResourceUnit(owner, token string) string {
 	return "mewla-worker-" + owner + "-" + token + ".scope"
 }
 
-func shortDelegatedTempDigest(unit string) string {
-	sum := sha256.Sum256([]byte(unit))
-	encoded := base64.RawURLEncoding.EncodeToString(sum[:])
-	if len(encoded) < delegatedTempDigestLen {
-		return encoded
-	}
-	return encoded[:delegatedTempDigestLen]
-}
+func shortDelegatedTempDigest(unit string) string { return gc.ScratchName(unit) }
 
 func validDelegatedResourceUnit(owner, unit string) bool {
 	owner = normalizeResourceOwner(owner)

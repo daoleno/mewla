@@ -130,13 +130,7 @@ func (m *portableDelegatedResourceManager) releaseGone(windows []sessionPane, ho
 			m.releaseDue(due, host)
 		}
 		if finalize {
-			deleted, err := gc.Finalize(m.stateRoot(), m.clock())
-			if err != nil {
-				log.Printf("watcher: trash: %v", err)
-			}
-			for _, item := range deleted {
-				log.Printf("watcher: trash: deleted %s (%s, trashed %s)", item.ID, item.Original, item.TrashedAt.Format(time.RFC3339))
-			}
+			m.collect()
 		}
 	}()
 }
@@ -199,4 +193,44 @@ func livePaneOf(records map[int]workerproc.Process, lease workerproc.Lease, host
 		}
 	}
 	return 0, false
+}
+
+// collect is the hourly pass of the collector: keeps past their date end,
+// trash past its grace is deleted, and, where processes' use of paths can be
+// read (Linux), unmarked t/ items are swept and the cache is brought under
+// its budget.
+func (m *portableDelegatedResourceManager) collect() {
+	root, now := m.stateRoot(), m.clock()
+	ended, err := gc.ExpireKeeps(root, now)
+	if err != nil {
+		log.Printf("watcher: keeps: %v", err)
+	}
+	for _, k := range ended {
+		log.Printf("watcher: keep %s ended (%s, kept until %s)", k.ID, k.Path, k.Until.Format(time.RFC3339))
+	}
+	deleted, err := gc.Finalize(root, now)
+	if err != nil {
+		log.Printf("watcher: trash: %v", err)
+	}
+	for _, item := range deleted {
+		log.Printf("watcher: trash: deleted %s (%s, trashed %s)", item.ID, item.Original, item.TrashedAt.Format(time.RFC3339))
+	}
+	usage, ok := gc.ReadUsage()
+	if !ok {
+		return
+	}
+	swept, err := gc.SweepUnmarked(root, usage, now)
+	if err != nil {
+		log.Printf("watcher: t/ sweep: %v", err)
+	}
+	for _, item := range swept {
+		log.Printf("watcher: moved %s to the trash (%s): %s", item.Original, item.ID, item.Reason)
+	}
+	evicted, err := gc.EvictCache(root, gc.CacheBudget, usage)
+	if err != nil {
+		log.Printf("watcher: cache: %v", err)
+	}
+	for _, e := range evicted {
+		log.Printf("watcher: cache over its budget: deleted %s (%d MB, last changed %s)", e.Path, e.Bytes>>20, e.Changed.Format(time.RFC3339))
+	}
 }

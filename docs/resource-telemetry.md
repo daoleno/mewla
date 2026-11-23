@@ -158,7 +158,13 @@ slice and the processes, then moves the scratch to
 running from the scratch (its executable or working directory inside it) keeps
 the scratch and the lease until it is gone. The trash keeps it
 for three days: `mewla gc status` lists it and `mewla gc restore <id>` puts it
-back.
+back. What the Session kept (`mewla gc keep`) moves to `gc/kept/` first and
+goes to the trash when its keep ends. Hourly, on Linux, an unmarked item of
+the `t/` root that was not there when this rule came, that no process uses
+(executable, working directory or open file) and in which nothing changed for
+48 hours goes to the trash too, and `gc/cache` (`$MEWLA_CACHE_DIR`) over 64 GiB
+loses its least recently changed top-level entries, deleted, not trashed.
+What a Session can keep and how is in [Sessions](sessions.md#what-a-session-leaves-behind).
 No command-line arguments or environment variables are exposed by telemetry.
 Java is labelled `gradle` as a notable workload family, without claiming all Java
 processes are Gradle. Container identifiers come from cgroup paths; no Docker
