@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // RouteVersion is the version of the route a daemon tells a paired app
@@ -34,7 +35,21 @@ func RouteCandidates(config ConnectorConfig, identity *TransportIdentity) []Pair
 // computer's Mewla Relay route: an app paired by an address (the hosted https
 // one) trusts the route, and the transport key it pins, only on this
 // signature, never on the connection it came over.
-func RouteBindingPayload(daemonID, daemonPublicKey, routeID, transportPin string, issuedAtMS int64, candidates []PairingCandidate) []byte {
+//
+// Fields are joined by newlines, so a field holding a control character
+// (a newline above all) is refused rather than signed: the same bytes could
+// otherwise read as another candidate list. The app refuses the same
+// (client/core/link/routeUpgrade.ts linkRouteBinding).
+func RouteBindingPayload(daemonID, daemonPublicKey, routeID, transportPin string, issuedAtMS int64, candidates []PairingCandidate) ([]byte, error) {
+	fields := []string{daemonID, daemonPublicKey, routeID, transportPin}
+	for _, candidate := range candidates {
+		fields = append(fields, candidate.Name, candidate.StableURL)
+	}
+	for _, field := range fields {
+		if strings.IndexFunc(field, unicode.IsControl) >= 0 {
+			return nil, fmt.Errorf("route field %q holds a control character", field)
+		}
+	}
 	parts := []string{
 		fmt.Sprintf("%d", RouteVersion),
 		strings.ToLower(strings.TrimSpace(daemonID)),
@@ -46,5 +61,5 @@ func RouteBindingPayload(daemonID, daemonPublicKey, routeID, transportPin string
 	for _, candidate := range candidates {
 		parts = append(parts, strings.TrimSpace(candidate.Name), strings.TrimSpace(candidate.StableURL))
 	}
-	return []byte(strings.Join(parts, "\n"))
+	return []byte(strings.Join(parts, "\n")), nil
 }

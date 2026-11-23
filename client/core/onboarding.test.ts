@@ -195,10 +195,13 @@ describe("pairing", () => {
     expect(copy.title).toBe("Pair this phone?");
     expect(copy.message).toContain("sessions, terminal, Brain, Workers, and files");
     expect(copy.confirm).toBe("Pair and grant access");
-    const target = readPairingLink(directLink())!;
-    expect(alreadyPairedWith([{ daemonPublicKey: "B".repeat(64) }], target)).toBe(true);
-    expect(alreadyPairedWith([{ daemonPublicKey: "a".repeat(64) }], target)).toBe(false);
-    expect(alreadyPairedWith([{ daemonPublicKey: "b".repeat(64), daemonId: "x" }], { ...target, daemonId: "y" })).toBe(false);
+    const code = readPairingLink(directLink())!;
+    const at = { url: code.url };
+    expect(alreadyPairedWith([{ daemonPublicKey: "B".repeat(64), url: "ws://10.0.0.5:9876/ws" }], code, at)).toBe(true);
+    expect(alreadyPairedWith([{ daemonPublicKey: "a".repeat(64), url: "ws://10.0.0.5:9876/ws" }], code, at)).toBe(false);
+    expect(alreadyPairedWith([{ daemonPublicKey: "b".repeat(64), daemonId: "x", url: "ws://10.0.0.5:9876/ws" }], { ...code, daemonId: "y" }, at)).toBe(false);
+    // The same computer at another address is asked about (pairLinkReplay.test.ts).
+    expect(alreadyPairedWith([{ daemonPublicKey: "b".repeat(64), url: "ws://10.0.0.6:9876/ws" }], code, at)).toBe(false);
   });
 
   test("an unreachable computer says where and what to check", async () => {

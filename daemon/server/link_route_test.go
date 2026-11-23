@@ -52,21 +52,38 @@ func TestAppHearsTheSignedRouteBeforeTheDirectAddresses(t *testing.T) {
 		t.Fatal("no link_route message")
 	}
 	issued := int64(got["issued_at_ms"].(float64))
-	payload := link.RouteBindingPayload(authManager.DaemonID(), authManager.PublicKeyHex(), route.RouteID, route.TransportPin, issued, route.Candidates)
+	payload, err := link.RouteBindingPayload(authManager.DaemonID(), authManager.PublicKeyHex(), route.RouteID, route.TransportPin, issued, route.Candidates)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !auth.VerifyLinkRouteSignature(authManager.PublicKeyHex(), payload, got["signature"].(string)) {
 		t.Fatal("the route's signature does not verify with the daemon key")
 	}
 	// Another pin under the same signature is refused.
-	forged := link.RouteBindingPayload(authManager.DaemonID(), authManager.PublicKeyHex(), route.RouteID, strings.Repeat("5", 64), issued, route.Candidates)
+	forged, _ := link.RouteBindingPayload(authManager.DaemonID(), authManager.PublicKeyHex(), route.RouteID, strings.Repeat("5", 64), issued, route.Candidates)
 	if auth.VerifyLinkRouteSignature(authManager.PublicKeyHex(), forged, got["signature"].(string)) {
 		t.Fatal("a route with another transport pin verified")
 	}
 }
 
 func TestNoRouteWhileOnNoRelay(t *testing.T) {
+	expectNoRoute(t, LinkRoute{}, false)
+}
+
+// A relay name with a control character is not signed (security review 11-23, finding 4): no route is told.
+func TestNoRouteWithAControlCharacterInIt(t *testing.T) {
+	expectNoRoute(t, LinkRoute{
+		RouteID:      strings.Repeat("3", 32),
+		TransportPin: strings.Repeat("4", 64),
+		Candidates:   []link.PairingCandidate{{Name: "main\nwss://evil.test/ws", StableURL: "wss://quiet-otter-3f9a.m.mewla.ai/ws"}},
+	}, true)
+}
+
+func expectNoRoute(t *testing.T, route LinkRoute, on bool) {
+	t.Helper()
 	authManager, privateKey := enrolledTestDevice(t)
 	srv := New(authManager, watcher.New(time.Second), nil, nil, nil, nil, nil)
-	srv.SetLinkRoute(func() (LinkRoute, bool) { return LinkRoute{}, false })
+	srv.SetLinkRoute(func() (LinkRoute, bool) { return route, on })
 	srv.SetDirectEndpoints(func() []DirectEndpoint { return nil })
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	defer httpServer.Close()
@@ -79,7 +96,7 @@ func TestNoRouteWhileOnNoRelay(t *testing.T) {
 	defer conn.Close()
 	for message := range messageSink(t, conn) {
 		if message["type"] == "link_route" {
-			t.Fatal("a computer on no relay told a route")
+			t.Fatalf("told a route: %v", message)
 		}
 		if message["type"] == "direct_addresses" {
 			return
