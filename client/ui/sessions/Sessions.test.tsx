@@ -527,6 +527,29 @@ describe("a Session", () => {
     await app.waitFor("text:Ready", { state: "gone" });
   }, 20_000);
 
+  test("in a browser, a file dropped on a Session's chat is a chip and goes with the message", async () => {
+    const app = await open(APP, {
+      host: phoneHost({ brain: {}, worker_sessions: [session("w6", { name: "attach" })], conversations: { w6: [] } }, {
+        "files.upload": () => Promise.resolve().then(() => ({ status: 200, body: JSON.stringify({ path: "/state/uploads/shot.png", name: "shot.png" }) })),
+        "files.cancel": () => null,
+        "files.thumbnail": () => null,
+      }),
+      storage: paired,
+      platform: "web",
+    });
+    await app.host.send("links.open", { url: "mewla://sessions/w6" });
+    await app.waitFor("id:composer");
+    await app.host.send("files.dragOver", { target: "file-drop-session-w6" });
+    await app.waitFor("text:Drop to attach");
+    await app.host.send("files.dropped", { target: "file-drop-session-w6", files: [{ uri: "web-file:1", name: "shot.png", mimeType: "image/png", size: 2048 }] });
+    await app.waitFor("text:Ready");
+    await typeUntil(app, "id:composer", "Look", "id:send");
+    await pressWhenEnabled(app, "id:send");
+    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1 || framesOf(app.host.calls(), "send_input").length === 1);
+    const sent = [...framesOf(app.host.posts(), "send_input"), ...framesOf(app.host.calls(), "send_input")][0];
+    expect(sent).toMatchObject({ worker_id: "w6", text: "Look", attachments: [{ name: "shot.png", path: "/state/uploads/shot.png" }] });
+  }, 20_000);
+
   test("a reply's image on the computer is read through the Session and shown", async () => {
     const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Here is the chart:\n\n![chart](out/chart.png)" }];
     const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

@@ -233,9 +233,11 @@ export function Composer(props: {
           onPaste={props.onFiles ? ({ text, html, files, uris }) => {
             // Counts only (never what was pasted): the Mac's image input run reads them (macos-image-input.yml).
             console.log(`composer: pasted text ${text.length} html ${html.length} files ${files.length} uris ${uris.length}`);
-            const attaches = pasteAttaches({ text, html, files: files.length, uris });
+            // A browser cannot read a file manager's paths: there the copied file's own bytes (`files`) are what to attach.
+            const paths = platform.os === "web" ? [] : uris;
+            const attaches = pasteAttaches({ text, html, files: files.length, uris: paths });
             if (disabled() || (!attaches.files && !attaches.uris)) return;
-            props.onFiles?.({ files: attaches.files ? files : [], uris: attaches.uris ? uris : [] });
+            props.onFiles?.({ files: attaches.files ? files : [], uris: attaches.uris ? paths : [] });
             // A file copied in Finder carries its name as text, which the field inserts itself: it goes back out.
             if (attaches.uris && text) {
               if (!(Date.now() - lastChange.at < 500 && takeOut(lastChange.before, lastChange.after, text))) nameToTakeOut = { text, until: Date.now() + 1000 };
