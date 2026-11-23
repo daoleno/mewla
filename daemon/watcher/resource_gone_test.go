@@ -387,3 +387,18 @@ func TestReleaseStopsTheSessionSliceFirst(t *testing.T) {
 		t.Fatalf("scratch not moved: %v", err)
 	}
 }
+
+// A daemon knows its own Sessions by their leases, so it never nests its host
+// in one of them (userunit.NestingSlice).
+func TestTheManagerKnowsItsOwnSessionTokens(t *testing.T) {
+	m, _ := newGoneTestManager(t)
+	addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	if !m.ownsSessionToken("0123456789abcdef0123456789abcdef") {
+		t.Fatal("its own lease's token is not recognised")
+	}
+	for _, token := range []string{"fedcba9876543210fedcba9876543210", "", "../x"} {
+		if m.ownsSessionToken(token) {
+			t.Fatalf("token %q is taken for its own", token)
+		}
+	}
+}

@@ -46,7 +46,7 @@ func TestSessionSliceSitsInsideTheEnclosingSession(t *testing.T) {
 	}
 }
 
-func TestEnclosingSliceIsTheInnermostSessionSlice(t *testing.T) {
+func TestNestingSliceIsTheInnermostSessionSlice(t *testing.T) {
 	base := "0::/user.slice/user-1000.slice/user@1000.service/mewla.slice/mewla-worker.slice/mewla-worker-" + owner + ".slice/"
 	outer := "mewla-worker-" + owner + "-" + tokA + ".slice"
 	inner := "mewla-worker-" + owner + "-" + tokA + "-" + tokB + ".slice"
@@ -59,8 +59,30 @@ func TestEnclosingSliceIsTheInnermostSessionSlice(t *testing.T) {
 		"12:pids:/" + outer + "\n": "",
 	}
 	for text, want := range cases {
-		if got := EnclosingSliceOf(text); got != want {
-			t.Fatalf("EnclosingSliceOf(%q) = %q, want %q", text, got, want)
+		if got := NestingSlice(text, nil); got != want {
+			t.Fatalf("NestingSlice(%q) = %q, want %q", text, got, want)
 		}
+	}
+}
+
+// A daemon started from a shell in one of its own Sessions does not nest in
+// it: its own Sessions are skipped, outward, to the first one that is not.
+func TestNestingSliceSkipsTheMewlasOwnSessions(t *testing.T) {
+	base := "0::/user.slice/user-1000.slice/user@1000.service/mewla.slice/mewla-worker.slice/mewla-worker-" + owner + ".slice/"
+	outer := "mewla-worker-" + owner + "-" + tokA + ".slice"
+	inner := "mewla-worker-" + owner + "-" + tokA + "-" + tokB + ".slice"
+	ownsA := func(token string) bool { return token == tokA }
+	ownsB := func(token string) bool { return token == tokB }
+	if got := NestingSlice(base+outer+"/x-p1.scope\n", ownsA); got != "" {
+		t.Fatalf("in its own top-level Session: nests in %q", got)
+	}
+	if got := NestingSlice(base+outer+"/"+inner+"/y-p2.scope\n", ownsB); got != outer {
+		t.Fatalf("a nested daemon in its own Session: nests in %q, want the outer %q", got, outer)
+	}
+	if got := NestingSlice(base+outer+"/"+inner+"/y-p2.scope\n", ownsA); got != inner {
+		t.Fatalf("another daemon's Session: nests in %q, want %q", got, inner)
+	}
+	if got := sliceToken(inner); got != tokB {
+		t.Fatalf("sliceToken(%q) = %q", inner, got)
 	}
 }

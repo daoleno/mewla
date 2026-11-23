@@ -147,9 +147,11 @@ for it runs in a scope of its own inside that slice (`OOMPolicy=continue`, so
 an out-of-memory kill takes only its victim), and what the program starts stays
 in the slice whatever it does to its session or environment (`setsid`,
 `env -i`, a tmux pane, which tmux puts in a scope of the caller's slice). A
-Mewla started inside a Session finds that slice in its own cgroup and puts its
-session host unit and its own Sessions' slices in it, so ending the outer
-Session ends the nested one. A host started before this change keeps its
+Mewla started inside another Mewla's Session finds that slice in its own
+cgroup and puts its session host unit and its own Sessions' slices in it, so
+ending the outer Session ends the nested one. A daemon restarted from a shell
+in one of its own Sessions does not nest there: it skips its own Sessions'
+slices. A host started before this change keeps its
 programs where they were until it restarts. A release stops the Session's
 slice and the processes, then moves the scratch to
 `gc/trash/` under the state root, then removes the lease. A process still

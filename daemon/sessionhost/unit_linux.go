@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/daoleno/mewla/daemon/userunit"
 )
 
 // The host runs in a systemd unit of its own, not in the cgroup of whatever
@@ -99,7 +97,7 @@ func hostUnitCommand(opts StartOptions, args []string, log *os.File) (*exec.Cmd,
 		"-p", "Type=exec",
 		"-p", "OOMPolicy=continue",
 	}
-	if slice := userunit.EnclosingSlice(); slice != "" {
+	if slice := opts.EnclosingSlice; slice != "" {
 		// A Mewla started inside another one's Session: its host is part of
 		// that Session, and ends when the Session does (package userunit).
 		// The host's own orderly stop can take a minute; a Session's end

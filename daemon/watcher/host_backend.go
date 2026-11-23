@@ -17,6 +17,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/sessionhost"
+	"github.com/daoleno/mewla/daemon/userunit"
 )
 
 // SessionHostConfig is how the daemon reaches its session host (mewla host),
@@ -138,12 +139,13 @@ func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 		return client, nil
 	}
 	client, started, err := sessionhost.Connect(ctx, sessionhost.StartOptions{
-		SocketPath:    b.cfg.SocketPath,
-		Executable:    b.cfg.Executable,
-		Args:          []string{"--state-dir", b.cfg.StateDir},
-		Env:           os.Environ(),
-		LogPath:       b.cfg.LogPath,
-		ClientVersion: b.cfg.Version,
+		SocketPath:     b.cfg.SocketPath,
+		Executable:     b.cfg.Executable,
+		Args:           []string{"--state-dir", b.cfg.StateDir},
+		Env:            os.Environ(),
+		LogPath:        b.cfg.LogPath,
+		ClientVersion:  b.cfg.Version,
+		EnclosingSlice: b.enclosingSlice(),
 	})
 	if err != nil {
 		return nil, err
@@ -155,6 +157,19 @@ func (b *hostBackend) conn(start bool) (*sessionhost.Client, error) {
 	b.client = client
 	b.reached = true
 	return client, nil
+}
+
+// enclosingSlice is the Session slice of another Mewla this daemon runs in,
+// "" when none or when it is one of this daemon's own Sessions (a daemon
+// restarted from a shell in one of its Workers): see userunit.NestingSlice.
+func (b *hostBackend) enclosingSlice() string {
+	b.w.mu.Lock()
+	resources := b.w.resources
+	b.w.mu.Unlock()
+	owned, _ := resources.(sessionTokenOwner)
+	return userunit.NestingSliceOf(func(token string) bool {
+		return owned != nil && owned.ownsSessionToken(token)
+	})
 }
 
 // hostIdentity names the host of the current connection; zero without one.

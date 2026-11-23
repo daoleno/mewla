@@ -44,6 +44,12 @@ type goneReleaser interface {
 	releaseGone(windows []sessionPane, host sessionHostIdentity)
 }
 
+// sessionTokenOwner is a resource manager that can tell whether a Session
+// token is one of its own leases.
+type sessionTokenOwner interface {
+	ownsSessionToken(token string) bool
+}
+
 // sessionHostIdentity names the session host an inventory came from: its pid
 // and start time, from the welcome of the connection that read it.
 type sessionHostIdentity struct {
