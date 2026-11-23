@@ -4,10 +4,11 @@ import { Application, GlobalShortcut, Tray, Window } from "nsh/desktop";
 import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWords, type MenuBarItem, type MenuBarReaction } from "../../core/mac/menuBar";
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
-import { brain, brainChat, connection, current, ready } from "../session";
-import { nav, openBrainTerminal, openPage, openSession } from "../shell/nav";
+import { brain, brainChat, connection, current, ready, workers } from "../session";
+import { nav, openBrainTerminal, openPage, openSession, openWorkDetail } from "../shell/nav";
 import { focusComposer } from "../shell/desktop/keys";
-import { newestBrainUploads } from "../brain/composer";
+import { newestUploads } from "../more/files/newestUploads";
+import { workSurface } from "../work/state";
 import { dayKey } from "../../core/calendar/agenda";
 import { showCalendarDay } from "../calendar/CalendarPage";
 import { clock } from "../calendar/clock";
@@ -39,7 +40,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; relay?: string; allow?: "screen_recording" | "accessibility" } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; imageSession?: string; imageWork?: string; relay?: string; allow?: "screen_recording" | "accessibility" } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -238,6 +239,11 @@ export function startMac(): void {
       if (now !== top) console.log(`dev script: page ${(top = now)}`);
     });
     if (script.imageInput) imageInputLog();
+    // Image input in a Session's chat and a Work's reply box too: the run makes them on this daemon (a Session named
+    // so, which the daemon names "<name> (<id>)"; a Work of that id); each opens once it exists, its composer taking
+    // the keyboard.
+    if (script.imageSession) openOnceThere("session", () => untracked(workers).find((worker) => worker.name.startsWith(script.imageSession!))?.id, () => workers(), openSession);
+    if (script.imageWork) openOnceThere("work", () => untracked(workSurface).slips.find((slip) => slip.workId === script.imageWork)?.workId, () => workSurface(), openWorkDetail);
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
     // The connection to the daemon, each time it changes: a daemon restart shows as waiting, then connected again.
@@ -311,13 +317,30 @@ export function startMac(): void {
   }
 }
 
+/** Opens the page of what `find` names once it exists (`watch` changes as it may come), then focuses its composer. */
+function openOnceThere(what: string, find: () => string | undefined, watch: () => unknown, open: (id: string) => void): void {
+  let opened = false;
+  effect(() => {
+    watch();
+    const id = find();
+    if (opened || !id) return;
+    opened = true;
+    untracked(() => open(id));
+    setTimeout(() => {
+      focusComposer();
+      console.log(`dev script: ${what} ready ${id}`);
+    }, 1500);
+  });
+}
+
 /**
- * The image input run's log (macos-image-input.yml): the chips of Brain's composer each time they change (how many,
- * each one's state and name). Send empties them; the run's capture shows the message they went with.
+ * The image input run's log (macos-image-input.yml): the chips of the newest composer (Brain's, then a Session's or
+ * a Work's as the run opens them) each time they change (how many, each one's state and name). Send empties them; the
+ * run's capture shows the message they went with.
  */
 function imageInputLog(): void {
   effect(() => {
-    const items = newestBrainUploads()?.items() ?? [];
+    const items = newestUploads()?.items() ?? [];
     console.log(`dev script: chips ${items.length}${items.map((item) => ` [${item.status} ${item.asset.name}${item.error ? `: ${item.error}` : ""}]`).join("")}`);
   });
 }
@@ -402,15 +425,15 @@ async function updateProof(hold = 12): Promise<void> {
 
 /**
  * Mewla Dev's terminal attach proof (macos-app.yml, `attach`): through the terminal's own Attach, one file that goes up
- * (its path typed at the prompt), one that can't (a name over the 1024 bytes uploads allow: a failed chip), then a large one
- * still uploading when the run captures the window; then Cancel on the large one and Retry on the failed one, as their
- * buttons call them.
+ * (its path typed at the prompt), one that can't (a name over the 1024 bytes uploads allow: a failed chip), a large one
+ * cancelled while it uploads, another large one still uploading when the run captures the window; then Retry on the
+ * failed one. Cancel and Retry are called as their buttons call them.
  */
 async function attachProof(): Promise<void> {
-  const until = async (ok: () => boolean, ms = 60_000) => {
-    for (let waited = 0; !ok(); waited += 250) {
+  const until = async (ok: () => boolean, ms = 60_000, step = 250) => {
+    for (let waited = 0; !ok(); waited += step) {
       if (waited > ms) throw new Error("timed out");
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, step));
     }
   };
   try {
@@ -423,17 +446,22 @@ async function attachProof(): Promise<void> {
     uploads.add([new File(["refused"], `${"n".repeat(1100)}.txt`, { type: "text/plain" })]);
     await until(() => uploads.items().some((item) => item.status === "failed"));
     console.log(`dev script: attach failed ${uploads.items().find((item) => item.status === "failed")?.error ?? ""}`);
-    // 1 GB: still going when the run has captured the window (384 MB went up in 6 s on the runner).
-    uploads.add([new File([new Uint8Array(1 << 30)], "screen recording.mov", { type: "video/quicktime" })]);
-    await until(() => uploads.items().some((item) => item.status === "uploading"));
-    console.log("dev script: attach uploading");
-    // Long enough for the run to capture the chip, short enough that the 1 GB one is still going (a busy runner's timers lag).
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    const large = uploads.items().find((item) => item.status === "uploading");
+    // Cancel lands while the 1 GB one uploads: as soon as the queue starts it, seen within 10 ms, where 1 GB takes seconds
+    // even on a fast runner (a cancel after a fixed hold missed it once runners got faster, run 45193456865).
+    const bytes = new Uint8Array(1 << 30);
+    const uploading = () => uploads.items().find((item) => item.status === "uploading");
+    uploads.add([new File([bytes], "screen recording.mov", { type: "video/quicktime" })]);
+    await until(() => Boolean(uploading()), 60_000, 10);
+    const large = uploading();
     if (large) {
       uploads.remove(large.id);
       console.log(`dev script: attach cancelled (${uploads.items().some((item) => item.id === large.id) ? "still listed" : "gone"})`);
     } else console.log("dev script: attach cancel missed (the large one was up already)");
+    // Another large one, left uploading for the run's capture of the chip over the grid (not asserted).
+    uploads.add([new File([bytes], "screen recording 2.mov", { type: "video/quicktime" })]);
+    await until(() => Boolean(uploading()));
+    console.log("dev script: attach uploading");
+    await new Promise((resolve) => setTimeout(resolve, 3000));
     const failed = uploads.items().find((item) => item.status === "failed");
     if (failed) {
       uploads.retry(failed.id);
