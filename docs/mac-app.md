@@ -76,9 +76,7 @@ process. **Allow** opens the permission's list in System Settings with a small
 panel beside it holding Mewla's icon: drag it into the list, or turn Mewla on if
 it is already there. The same panel brings Mewla back after you removed it with
 −. A Mewla in the list that grants nothing (left by a differently signed Mewla)
-is cleared first, so the Mewla you drag in is the one that counts; for
-Accessibility, where macOS does not tell such a Mewla from one switched off,
-Mewla is always dragged in. Once you give
+is cleared first, so the Mewla you drag in is the one that counts. Once you give
 the permission, the panel closes, Mewla comes back to the front
 and applies it by itself, restarting its daemon where macOS needs that (Sessions
 keep running).
