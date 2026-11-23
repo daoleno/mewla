@@ -196,7 +196,10 @@ All paths are under the state directory, `~/.mewla` by default.
 | `work/` | Work files |
 | `calendar/` | Calendar items (`calendar.db`) |
 | `worktrees/`, `t/` | Worker scratch space and temporary files. A Worker's `t/` folder goes to `gc/trash/` when its Session ends |
-| `gc/trash/` | What Mewla collected from ended Sessions, deleted after three days; `mewla gc restore <id>` puts an item back |
+| `gc/trash/` | What Mewla collected from ended Sessions and the `t/` root, deleted after three days; `mewla gc restore <id>` puts an item back |
+| `gc/keep/`, `gc/kept/` | What a Session kept past its end (`mewla gc keep`): the record (path, date, reason) and the kept files, until the date |
+| `gc/cache/` | `$MEWLA_CACHE_DIR`, caches Sessions share; least recently changed entries are deleted over 64 GiB |
+| `gc/t-root-before.json` | The names in `t/` when the collector began; those items are left alone |
 | `session-host/` | The session host's switch and log (see [The session host](#the-session-host)) |
 
 Extension and Model Provider credentials are stored in private files in the state

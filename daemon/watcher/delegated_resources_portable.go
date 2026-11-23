@@ -211,6 +211,9 @@ func (m *portableDelegatedResourceManager) stopLease(unit, reason string) error 
 	default:
 		return err
 	}
+	if reason != "" {
+		m.moveKept(unit)
+	}
 	if err := m.releaseOwnedTempDir(unit, reason); err != nil {
 		return err
 	}
@@ -218,6 +221,26 @@ func (m *portableDelegatedResourceManager) stopLease(unit, reason string) error 
 		return err
 	}
 	return nil
+}
+
+// moveKept moves what the Session kept (mewla gc keep) out of its scratch
+// before the scratch goes.
+func (m *portableDelegatedResourceManager) moveKept(unit string) {
+	tempDir, err := m.resourceTempDir(unit)
+	if err != nil {
+		return
+	}
+	notes, err := gc.MoveKept(m.stateRoot(), unit, tempDir)
+	if err != nil {
+		log.Printf("watcher: move what %s kept: %v", unit, err)
+	}
+	for _, note := range notes {
+		if note.Gone {
+			log.Printf("watcher: keep %s dropped: %s was no longer there when its Session ended", note.Keep.ID, note.Keep.Path)
+			continue
+		}
+		log.Printf("watcher: kept %s as %s until %s", note.Keep.Path, note.Keep.Moved, note.Keep.Until.Format(time.RFC3339))
+	}
 }
 
 // ownsSessionToken reports whether token names one of this daemon's leases.

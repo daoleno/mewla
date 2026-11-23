@@ -3208,7 +3208,7 @@ Agents and tools
   service      List or register services Workers can see
   agents       Let Claude Code, Codex or another MCP agent hand work to Brain
   resources    Print this computer's resource pressure
-  gc           What a Session holds and what Mewla collected; restore from the trash
+  gc           What a Session holds and what Mewla collected; keep, release, restore
 
 Flags
   -lan                  listen on all networks (plain HTTP; trusted networks only)

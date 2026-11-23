@@ -174,6 +174,7 @@ func (s *Service) RunWaitEnds(ctx context.Context) {
 		if err := s.raiseOverdueWaits(); err != nil {
 			log.Printf("brain overdue waits: %v", err)
 		}
+		s.raiseNoteCompactionsDue()
 		select {
 		case <-ctx.Done():
 			return

@@ -415,6 +415,30 @@ CPU core:
 - After three quiet seconds the Session list is checked every two seconds
   instead of every half second; the first change brings the fast cadence back.
 
+## What a Session leaves behind
+
+When a Session ends, everything it started ends with it: its processes,
+including those started with `setsid` or `env -i` and tmux panes, which on
+Linux all stay in the Session's systemd slice. Its TMPDIR scratch goes to the
+trash for three days. `mewla gc status`, run inside the Session, lists what it
+holds.
+
+To keep something on purpose:
+
+| What | How |
+| --- | --- |
+| A file or directory in TMPDIR | `mewla gc keep PATH --until DATE --why REASON`: 30 days at most. When the Session ends it moves to `~/.mewla/gc/kept/<id>/`; `mewla gc status` shows where; `mewla gc release <id>` ends the keep. |
+| A cache later Sessions reuse | `$MEWLA_CACHE_DIR` (`~/.mewla/gc/cache`). It belongs to no Session. Over 64 GiB, the entries changed least recently are deleted. |
+| A process | A user `systemd` unit, registered: see [Keep a service after its Session ends](#keep-a-service-after-its-session-ends). |
+
+Do not make directories next to TMPDIR in `~/.mewla/t`. An unmarked item
+there goes to the trash once nothing uses it and nothing in it has changed for
+48 hours.
+
+On a daemon without `mewla gc keep`, write what must stay outside TMPDIR: in
+the project's worktree or the Brain worklog. Anything collected by mistake
+stays in the trash for three days: `mewla gc restore <id>`.
+
 ## Services
 
 Agents start dev servers, previews and APIs. **Services**, in the tray's **⋯**
