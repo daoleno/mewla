@@ -13,6 +13,7 @@ import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
 import { homeShown, openCalendarItem, openPage, openSession, openTrigger, openWorkDetail, trayOpen } from "../shell/nav";
 import { createMenuAnchor, showMenu } from "../kit/Menu";
+import { countsForm, countText, hasDot } from "../../core/tray/counts";
 import { requestPaneKey, rowKey } from "../../core/tray/pane";
 import { servicesOpen } from "../sessions/ServicesSheet";
 import { showDeviceRequest } from "../enrollment/state";
@@ -370,25 +371,33 @@ export function TrayBody(props: TrayBodyProps) {
 
 /**
  * The tray's title as its counts ("2 need you · 3 new · 17 running"): each count is a filter that keeps only its own
- * rows, and a second tap clears it. The same words the state control says, so header and tray still agree.
+ * rows, and a second tap clears it. The same words the state control says, so header and tray still agree. One line,
+ * never wrapped: when the words do not fit the room the line has (a narrow column, the phone's 320), needs you and
+ * then running give way to their dot and number (core/tray/counts.ts), and each count's label stays whole.
  */
 function TrayCounts(props: { pane?: boolean; mac?: boolean; filter: () => TrayFilter; onPick: (next: TrayFilter) => void }) {
   const m = () => tray();
+  const room = signal<number | null>(null);
   const parts = () => [
     { kind: "needs" as const, n: m().needs.length, words: m().needs.length === 1 ? "1 needs you" : `${m().needs.length} need you` },
     { kind: "fresh" as const, n: m().fresh.length, words: `${m().fresh.length} new` },
     { kind: "running" as const, n: m().runningCount, words: `${m().runningCount} running` },
   ].filter((part) => part.n > 0);
+  const size = props.mac ? 13 : props.pane ? 17 : 20;
+  const dot = props.mac ? 7 : 8;
+  const form = () => countsForm(parts(), room(), size, dot);
   return (
-    <View testID="tray-title" role="header" class="-ml-1.5 min-w-0 flex-1 flex-row flex-wrap items-center gap-x-1">
+    <View testID="tray-title" role="header" onLayout={({ bounds }) => room.set(bounds.size.width)} class="-ml-1.5 min-w-0 flex-1 flex-row items-center gap-x-1 overflow-hidden">
       <Each of={parts()} key={(part) => part.kind}>{(part) => {
         const on = () => props.filter().kind === part().kind;
         return (
           <Button testID={`tray-count-${part().kind}`} accessibilityLabel={part().words} selected={on()}
             onPress={() => props.onPick({ ...props.filter(), kind: on() ? undefined : part().kind })}
-            class={`flex-row items-center gap-1.5 rounded-full px-1.5 py-0.5 active:opacity-70 ${on() ? "bg-foreground" : ""}`}>
-            <If when={part().kind === "needs"}><View class={`${props.mac ? "size-[7px]" : "size-2"} rounded-full bg-seal`} /></If>
-            <Text class={`${props.mac ? "text-[13px] font-semibold" : props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"} ${on() ? "text-background" : ""}`}>{part().words}</Text>
+            class={`shrink-0 flex-row items-center gap-1.5 rounded-full px-1.5 py-0.5 active:opacity-70 ${on() ? "bg-foreground" : ""}`}>
+            <If when={hasDot(part().kind, form())}>
+              <View style={{ width: dot, height: dot }} class={`rounded-full ${part().kind === "needs" ? "bg-seal" : on() ? "bg-background" : "bg-foreground"}`} />
+            </If>
+            <Text class={`${props.mac ? "text-[13px] font-semibold" : props.pane ? "text-[17px] font-semibold" : "text-title font-bold tracking-title"} ${on() ? "text-background" : ""}`}>{countText(part(), form())}</Text>
           </Button>
         );
       }}</Each>
@@ -404,9 +413,9 @@ function ProjectChips(props: { filter: () => TrayFilter; onPick: (next: TrayFilt
     return (
       <Button testID={name ? "tray-project" : "tray-project-all"} accessibilityLabel={`${label}, ${count}`} selected={on()}
         onPress={() => props.onPick({ ...props.filter(), project: name })}
-        class={`h-8 flex-row items-center gap-1.5 rounded-full px-3 active:opacity-70 ${on() ? "bg-foreground" : "bg-sheet-surface"}`}>
-        <Text class={`text-sub font-semibold ${on() ? "text-background" : ""}`}>{label}</Text>
-        <Text class={`text-caption ${on() ? "text-background opacity-70" : "text-muted-foreground"}`}>{String(count)}</Text>
+        class={`h-8 max-w-[240px] shrink-0 flex-row items-center gap-1.5 rounded-full px-3 active:opacity-70 ${on() ? "bg-foreground" : "bg-sheet-surface"}`}>
+        <Text class={`shrink text-sub font-semibold line-clamp-1 ${on() ? "text-background" : ""}`}>{label}</Text>
+        <Text class={`shrink-0 text-caption ${on() ? "text-background opacity-70" : "text-muted-foreground"}`}>{String(count)}</Text>
       </Button>
     );
   };
