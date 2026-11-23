@@ -1,0 +1,28 @@
+name: Mewla for Mac permissions
+
+# Which process macOS charges for Screen Recording and Accessibility, and Mewla's permission flow walked through
+# its states, on a CI Mac where the system TCC.db stands in for System Settings (client/macos/scripts/tcc-probe).
+# A push to a mac-perm/ branch, or a dispatch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["mac-perm/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Which identity TCC charges
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe
+        run: client/macos/scripts/tcc-probe/run.sh "$RUNNER_TEMP/tcc-probe"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tcc-probe-${{ github.sha }}
+          path: ${{ runner.temp }}/tcc-probe
