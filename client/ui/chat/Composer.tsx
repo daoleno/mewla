@@ -211,7 +211,10 @@ export function Composer(props: {
           class={`min-w-0 flex-1 bg-transparent ${size.input} text-foreground placeholder:text-faint`}
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
-          onPaste={props.onFiles ? ({ files }) => void (files.length && !disabled() && props.onFiles?.(files)) : undefined}
+          onPaste={props.onFiles ? ({ text, html, files, uris }) => {
+            console.log(`composer: pasted text ${text.length} html ${html.length} files ${files.length} uris ${uris.length}`);
+            void (files.length && !disabled() && props.onFiles?.(files));
+          } : undefined}
           onChange={({ value }) => {
             typed = value;
             props.text.set(value);
