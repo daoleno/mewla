@@ -1,4 +1,5 @@
 import { computed, openUrl, signal, Text, untracked, View } from "nsh";
+import { SELECTION } from "./TimelineRows";
 import type { Signal, ViewRef } from "nsh";
 import { clock } from "../calendar/clock";
 import { sealedOfAnswered } from "../../core/timeline/answered";
@@ -270,7 +271,7 @@ function ActionBody(props: { card: Card; connected: () => boolean; onDone: (opti
       {/* The question at 17/600, the command in mono, what else the agent said in soft (SPEC §11 Request card). */}
       {/* A hook approval asks nothing but its command: then the command stands alone, not said twice. */}
       <If when={question()}><Text testID="request-question" class={`${type.question} font-semibold`}>{question()}</Text></If>
-      <If when={asked().command}><View selectable><Text testID="request-command" class={`font-mono ${type.mono}`}>{asked().command}</Text></View></If>
+      <If when={asked().command}><View selectable><Text testID="request-command" class={`font-mono ${type.mono} ${SELECTION}`}>{asked().command}</Text></View></If>
       <If when={asked().notes}><Text class={`${type.line} text-muted-foreground line-clamp-3`}>{asked().notes}</Text></If>
       <If when={yesNo} else={<View class="-mx-4">
           {prompt.options.map((option) => (
@@ -342,7 +343,7 @@ function SignInBody(props: { card: Card; connected: () => boolean; onDone: (verb
       <If when={body.code}>
         <View class="gap-1">
           <Text class="text-caption text-muted-foreground">One-time code</Text>
-          <View selectable><Text testID="signin-code" class="font-mono text-title font-semibold">{body.code}</Text></View>
+          <View selectable><Text testID="signin-code" class={`font-mono text-title font-semibold ${SELECTION}`}>{body.code}</Text></View>
         </View>
       </If>
       <If when={body.input}>
@@ -396,7 +397,7 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
       <If when={card.body.kind === "choice" ? card.body : undefined} else={<If when={card.body.kind === "action"} else={<If when={card.body.kind === "signin"} else={<View class="gap-3">
           {/* What it waits for, whole, then one quiet button: in Brain's thread "Open", the Session (its chat when it
               has one, owner 11-13 19:4x); in the Session's own chat, its terminal, the last resort. */}
-          <View selectable><Text testID="request-detail" class="text-body font-semibold">{(card.body as { detail: string }).detail}</Text></View>
+          <View selectable><Text testID="request-detail" class={`text-body font-semibold ${SELECTION}`}>{(card.body as { detail: string }).detail}</Text></View>
           <Button testID="request-open-terminal" onPress={() => props.onOpenTerminal((card.body as { workerId: string }).workerId)}
             class={`${S.button} items-center justify-center self-start bg-muted px-4 active:opacity-70`}>
             <Text class={`${S.label} font-semibold`}>{props.openLabel}</Text>

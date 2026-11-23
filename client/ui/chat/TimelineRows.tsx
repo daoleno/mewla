@@ -187,7 +187,7 @@ export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion
             </View>
           ))}</If>
           <If when={item().commandText}><Mono text={item().commandText ?? ""} /></If>
-          <If when={item().queryText}><TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText ?? "" }] }] }} selectable class="text-sm" /></If>
+          <If when={item().queryText}><TextView document={{ blocks: [{ type: "paragraph", content: [{ type: "text", text: item().queryText ?? "" }] }] }} selectable class={`text-sm ${SELECTION}`} /></If>
           <If when={item().statusLine}><Text class="text-xs text-muted-foreground">{item().statusLine}</Text></If>
           <If when={item().body}><If when={item().bodyKind === "terminal"} else={<TextView markdown={item().body ?? ""} selectable renderCodeBlock={renderCode} class={`text-sm ${SELECTION}`} />}><Mono text={item().body ?? ""} /></If></If>
           {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
@@ -643,7 +643,7 @@ export function WorkCard(props: { item: () => BrainWorkEventTimelineItem; handle
             <View testID="work-unread" class="size-2 rounded-full bg-foreground" />
             <KitIcon name="chevron-right" size={18} tone="faint" />
           </Button>
-          <If when={model().summary}><View selectable><Text class="text-sub">{model().summary}</Text></View></If>
+          <If when={model().summary}><View selectable><Text class={`text-sub ${SELECTION}`}>{model().summary}</Text></View></If>
           <If when={model().actions.length}><ResultActions actions={model().actions} disabled={!props.handlers} onPress={(action) => props.handlers?.onAction(model(), action)} /></If>
         </View></If>}><Button testID="work-line" accessibilityLabel={`${model().title}, ${model().state}`} disabled={!props.handlers} onPress={() => props.handlers?.onLine(model())}
           class="min-h-[44px] flex-row items-center gap-2.5 active:opacity-70">

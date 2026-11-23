@@ -1,4 +1,5 @@
 import { cleanup, signal, Text, untracked, View } from "nsh";
+import { SELECTION } from "./TimelineRows";
 import { Button, Input, TextView } from "nsh/base";
 import { GuardedSheet as Sheet } from "../shell/AppSheet";
 import { dshInteraction, watchDSHInteractions, type DSHAnswer, type DSHInteraction, type DSHInteractionSnapshot, type DSHSessionRun } from "../../core/session/dshInteractions";
@@ -105,7 +106,7 @@ export function DSHPanel(props: { transport: Transport; run: DSHSessionRun }) {
               </View>
             </View></If>}><View class="gap-2">
               <Text class="text-lg font-semibold">{first()!.payload.toolName || "Permission requested"}</Text>
-              <If when={first()!.payload.reason}><TextView markdown={first()!.payload.reason!} selectable class="text-base" /></If>
+              <If when={first()!.payload.reason}><TextView markdown={first()!.payload.reason!} selectable class={`text-base ${SELECTION}`} /></If>
               <If when={first()!.payload.callId}><Text class="text-xs text-muted-foreground">{first()!.payload.callId!}</Text></If>
               <View class="flex-row gap-3 pt-2">
                 <Button testID="dsh-reject" onPress={() => void respond({ outcome: "rejected" })} disabled={busy()} class="flex-1 items-center rounded-full border border-border py-2.5 active:bg-accent">
