@@ -219,6 +219,11 @@ func (m *portableDelegatedResourceManager) collect() {
 	for _, item := range deleted {
 		log.Printf("watcher: trash: deleted %s (%s, trashed %s)", item.ID, item.Original, item.TrashedAt.Format(time.RFC3339))
 	}
+	if measured, err := gc.RecordSizes(root, now); err != nil {
+		log.Printf("watcher: sizes: %v", err)
+	} else if measured {
+		log.Printf("watcher: measured today's sizes for the collector's ledger")
+	}
 	usage, ok := gc.ReadUsage()
 	if !ok {
 		return

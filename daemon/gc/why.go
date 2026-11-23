@@ -215,17 +215,37 @@ func (l WhyLookup) sessionChain(unit, by string) []WhyLink {
 		}
 	}
 	held := readLeases(l.Root).has(unit)
+	recorded, known, _ := SessionOfUnit(l.Root, unit)
+	ended := l.Session != nil || (known && !recorded.EndedAt.IsZero())
 	switch {
-	case l.Session == nil && held:
+	case !ended && held:
 		link.State = "lease held" // no daemon asked: alive or not is not known
-	case l.Session == nil:
+	case !ended:
 		link.State = "released"
 	case held:
 		link.State = "ended; lease not released yet"
 	default:
 		link.State = "ended"
 	}
-	return []WhyLink{link}
+	if !known {
+		return []WhyLink{link}
+	}
+	// The ledger names the Session the unit was, after it ended too.
+	link.ID = recorded.SessionID
+	if !recorded.EndedAt.IsZero() {
+		link.State = "ended " + recorded.EndedAt.Local().Format("2006-01-02 15:04")
+	}
+	if recorded.HeldBecause != "" {
+		link.State += "; held: " + recorded.HeldBecause
+	}
+	chain := []WhyLink{link}
+	if l.Work != nil {
+		if w, ok := l.Work(recorded.SessionID); ok {
+			w.Kind = "work"
+			chain = append(chain, w)
+		}
+	}
+	return chain
 }
 
 func unmarkedState(root, name string) string {

@@ -438,4 +438,38 @@ func TestReleaseMovesWhatTheSessionKept(t *testing.T) {
 	if keeps, _ := gc.ListKeeps(m.stateRoot()); len(keeps) != 0 {
 		t.Fatalf("keep outlived its date: %+v", keeps)
 	}
+	// The ledger has it all: the keep, its move, the scratch in the trash, the
+	// Session's end, the keep's end (its file to the trash), and 73 h on the
+	// scratch's deletion.
+	events, err := gc.Events(m.stateRoot(), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actions []string
+	for _, e := range events {
+		actions = append(actions, e.Action)
+	}
+	want := []string{gc.ActionKept, gc.ActionKeptMoved, gc.ActionTrashed, gc.ActionSessionEnded, gc.ActionKeepEnded, gc.ActionTrashed, gc.ActionDeleted}
+	if strings.Join(actions, ",") != strings.Join(want, ",") {
+		t.Fatalf("ledger actions %v, want %v", actions, want)
+	}
+}
+
+func TestBindAndReleaseTellTheLedgerWhichSessionAUnitWas(t *testing.T) {
+	m, clock := newGoneTestManager(t)
+	unit, _ := addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	m.Bind("mh-ledger", unit)
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-ledger" || !s.EndedAt.IsZero() {
+		t.Fatalf("after Bind: %+v found=%v err=%v", s, found, err)
+	}
+	previous := stopSessionSlice
+	stopSessionSlice = func(string) ([]string, error) { return nil, nil }
+	t.Cleanup(func() { stopSessionSlice = previous })
+	clock.advance(time.Minute)
+	if err := m.Release("mh-ledger", unit); err != nil {
+		t.Fatal(err)
+	}
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || !s.EndedAt.Equal(clock.now()) {
+		t.Fatalf("after Release: %+v found=%v err=%v", s, found, err)
+	}
 }
