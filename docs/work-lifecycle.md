@@ -602,8 +602,10 @@ the exact Turn once its teardown finished, so finished Sessions are not torn
 down again on every reconcile.
 
 A delegated Session exists only while it has something of its own to do. It
-is reclaimed when its Work is closed; when its Work is open but a newer
-Worker holds the Work's newest Turn; or when it is the Work's own Worker, the
+is reclaimed when its Work is closed; when its Work is open, a newer Worker
+holds the Work's newest Turn and its own last Turn is a day old (Brain does
+go back to an earlier Worker of the same Work, an author and a reviewer taking
+turns); or when it is the Work's own Worker, the
 Work waits and the wait has ended (the wait's `-until` or default end, a keep
 verdict's end, or for a question or a runtime event 24 h after the wait
 began). Until then the Work's own Worker keeps its conversation: a reviewer

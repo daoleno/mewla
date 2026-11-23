@@ -34,7 +34,9 @@ const (
 //   - its Work is closed (whether or not the Turn reported an end: a Worker
 //     that stopped without a report, was released as lost, ended on a
 //     provider error, or had its Work closed under it is in the set too);
-//   - its Work is open but another Session holds the Work's newest Turn;
+//   - its Work is open, another Session holds the Work's newest Turn, and its
+//     own last Turn is WaitDefaultEnd old (Brain does return to an earlier
+//     Worker of the same Work: an author and a reviewer taking turns);
 //   - it holds its open Work's newest Turn, the Work is waiting and the wait
 //     has ended (wakeEnd). Until then the Session is kept, so a reviewer
 //     waiting for the author's push or a Worker waiting on an answer keeps its
@@ -103,6 +105,12 @@ func (s *Store) CompletedOwnedTurns(workID string) ([]ReclaimableTurn, error) {
 		case st.Review != nil:
 			continue // Brain has yet to settle what this Worker delivered
 		case newest[turn.WorkID].SessionID != turn.SessionID:
+			// Brain does go back to an earlier Worker of the same Work (an
+			// author and a reviewer taking turns), so a Session another one
+			// took over is kept for a day after its own last turn.
+			if now.Before(lastTurnAt(turn).Add(WaitDefaultEnd)) {
+				continue
+			}
 			entry.Open, entry.Why = true, reclaimSuperseded
 		case st.Policy == lifecycle.PolicyUntilDone || st.Wake == nil:
 			continue
@@ -132,6 +140,14 @@ func wakeEnd(st *lifecycle.State, kept *WorkKept) time.Time {
 		end = *kept.Until
 	}
 	return end.UTC()
+}
+
+// lastTurnAt is when a Turn last moved: its end, else its acceptance.
+func lastTurnAt(turn TurnRecord) time.Time {
+	if turn.SettledAt != nil && turn.SettledAt.After(turn.AcceptedAt) {
+		return *turn.SettledAt
+	}
+	return turn.AcceptedAt
 }
 
 func newerTurn(turn, than TurnRecord) bool {
