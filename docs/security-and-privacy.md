@@ -224,6 +224,13 @@ The device's private key is kept in the platform's secure storage (Keychain on
 iOS, Keystore-backed storage on Android). A paired browser keeps its key in the
 page's local storage, which is weaker; pair only browser profiles you control.
 
+Mewla for Mac reads a file from your disk only when you drop it on a
+conversation or paste it after copying it in Finder, to send it like an
+attached one. Its app code is allowed to read, never write, under your home
+folder, `/Volumes`, `/Users/Shared` and the system's temporary folders
+(client/ui/nsh.json `fs.read`). This Mac's daemon can already read the same
+files.
+
 ## Outbound connections
 
 The daemon connects out only for features you use:

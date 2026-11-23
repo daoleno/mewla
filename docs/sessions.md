@@ -270,9 +270,19 @@ share sheet with that file. On the web the same buttons are Download and Copy.
 A picture in a Calendar run's result opens the same viewer. If saving fails, a
 line at the bottom says why.
 
-On the web, paste a screenshot or a copied picture into the composer and it
-becomes a chip above the field, the same as one you attached; pasted text goes
-in as typed. The phone's keyboard can paste a picture the same way.
+Paste a screenshot or a copied picture into the composer and it becomes a chip
+above the field, the same as one you attached; pasted text goes in as typed. On
+Mewla for Mac a file copied in Finder pastes as that file (not its name). A
+spreadsheet cell or a selection from a web page pastes as its text only, without
+the picture of itself those apps copy along. The phone's keyboard can paste a
+picture the same way.
+
+On Mewla for Mac and in a browser, drag files from Finder, the desktop or another
+app onto the conversation or the composer: "Drop to attach" shows while they are
+over it, and dropped they become chips, the same as attached ones (in Brain's
+chat, a Session's chat and a Work's reply). A folder is not attached. On the Mac a
+dropped or copied file is read from disk, up to 64 MB each; for a larger one use
+**+**. Text dragged into the field goes in as text, as before.
 
 In a terminal, **Attach** sends a file to the computer and types its path at the
 prompt, quoted for the shell. On the phone it is the first key of the key bar;
