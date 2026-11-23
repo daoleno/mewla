@@ -3,7 +3,9 @@
 package watcher
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,6 +34,8 @@ type portableDelegatedResourceManager struct {
 
 	// gone is the evidence that a lease's Session is gone (resource_gone.go).
 	gone goneLeases
+	// keptLogged is the last "kept scratch" line logged per unit.
+	keptLogged map[string]string
 }
 
 func newPortableDelegatedResourceManager(owner string) (*portableDelegatedResourceManager, error) {
@@ -137,7 +141,16 @@ func (m *portableDelegatedResourceManager) Release(target, unit string) error {
 	if unit == "" {
 		return nil
 	}
-	return m.releaseUnit(unit, releaseReasonClosed)
+	err := m.releaseUnit(unit, releaseReasonClosed)
+	var inUse *scratchInUseError
+	if errors.As(err, &inUse) {
+		// The Session is closed; its scratch and lease stay until the process
+		// using the scratch is gone, and the release of gone Sessions finishes.
+		m.noteScratchKept(unit, inUse)
+		m.forgetUnit(unit)
+		return nil
+	}
+	return err
 }
 
 // Why a unit's scratch went to the trash.
@@ -154,6 +167,9 @@ func (m *portableDelegatedResourceManager) releaseUnit(unit, reason string) erro
 		return err
 	}
 	m.forgetUnit(unit)
+	m.mu.Lock()
+	delete(m.keptLogged, unit)
+	m.mu.Unlock()
 	return nil
 }
 
@@ -248,10 +264,43 @@ func (m *portableDelegatedResourceManager) releaseOwnedTempDir(unit, reason stri
 		}
 		return nil
 	}
+	// A process still running from the scratch (its exe or its cwd inside)
+	// keeps it, and the lease with it: moving the directory would take the
+	// evidence of whose that process is (PR 2 stops such processes).
+	if user, ok := scratchUser(tempDir); ok {
+		return &scratchInUseError{dir: tempDir, user: user}
+	}
 	if _, err := gc.Trash(m.stateRoot(), gc.KindScratch, tempDir, unit, reason, m.clock()); err != nil {
 		return fmt.Errorf("move delegated temporary directory to the trash: %w", err)
 	}
 	return nil
+}
+
+// scratchInUseError says a unit's scratch was kept because a process still
+// uses it. The lease stays, so a later release tries again.
+type scratchInUseError struct {
+	dir  string
+	user scratchUsage
+}
+
+func (e *scratchInUseError) Error() string {
+	return fmt.Sprintf("kept scratch %s: process %d (%s) is still using it", e.dir, e.user.PID, e.user.Exe)
+}
+
+// noteScratchKept logs a kept scratch once per unit and user, not on every
+// retry.
+func (m *portableDelegatedResourceManager) noteScratchKept(unit string, err *scratchInUseError) {
+	line := err.Error()
+	m.mu.Lock()
+	if m.keptLogged == nil {
+		m.keptLogged = map[string]string{}
+	}
+	same := m.keptLogged[unit] == line
+	m.keptLogged[unit] = line
+	m.mu.Unlock()
+	if !same {
+		log.Printf("watcher: %s", line)
+	}
 }
 
 func (m *portableDelegatedResourceManager) clock() time.Time {
