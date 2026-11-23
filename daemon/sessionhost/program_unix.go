@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -21,7 +22,14 @@ type ptyProgram struct {
 	ptmx *os.File
 }
 
-func startProgram(path string, argv, env []string, dir string, cols, rows int) (program, error) {
+// startProgram starts the program on a new pty. With place, the child is
+// first this binary (ScopeExecArg), held on a pipe until place(pid) has put
+// it where it belongs, and only then becomes the program, same pid: nothing
+// the program starts can run before it is placed.
+func startProgram(path string, argv, env []string, dir string, cols, rows int, place func(pid int)) (program, error) {
+	if place != nil {
+		return startPlacedProgram(path, argv, env, dir, cols, rows, place)
+	}
 	cmd := exec.Command(path, argv[1:]...)
 	cmd.Args = append([]string(nil), argv...)
 	cmd.Env = env
@@ -31,6 +39,57 @@ func startProgram(path string, argv, env []string, dir string, cols, rows int) (
 		return nil, err
 	}
 	return &ptyProgram{cmd: cmd, ptmx: ptmx}, nil
+}
+
+func startPlacedProgram(path string, argv, env []string, dir string, cols, rows int, place func(pid int)) (program, error) {
+	self := "/proc/self/exe"
+	if runtime.GOOS != "linux" {
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		self = exe
+	}
+	gate, release, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(self)
+	cmd.Args = append([]string{argv[0], ScopeExecArg, path}, argv...)
+	cmd.Env = env
+	cmd.Dir = dir
+	cmd.ExtraFiles = []*os.File{gate}
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	_ = gate.Close()
+	if err != nil {
+		_ = release.Close()
+		return nil, err
+	}
+	place(cmd.Process.Pid)
+	_, _ = release.Write([]byte{1})
+	_ = release.Close()
+	return &ptyProgram{cmd: cmd, ptmx: ptmx}, nil
+}
+
+// ScopeExecArg is the first argument of a program the host holds until it is
+// placed (startPlacedProgram); RunScopeExec handles it.
+const ScopeExecArg = "__mewla-scope-exec"
+
+// RunScopeExec returns unless this process is such a held program: then it
+// waits for the host's word on fd 3 and becomes the program (same pid). Every
+// binary that runs a host with SessionScopes calls it first thing in main.
+func RunScopeExec() {
+	if len(os.Args) < 4 || os.Args[1] != ScopeExecArg {
+		return
+	}
+	gate := os.NewFile(3, "scope-gate")
+	var word [1]byte
+	_, _ = gate.Read(word[:]) // the word, or EOF if the host is gone: start either way
+	_ = gate.Close()
+	path, argv := os.Args[2], os.Args[3:]
+	err := syscall.Exec(path, argv, os.Environ())
+	fmt.Fprintf(os.Stderr, "start %s: %v\n", argv[0], err)
+	os.Exit(127)
 }
 
 func (p *ptyProgram) Read(b []byte) (int, error)  { return p.ptmx.Read(b) }

@@ -59,6 +59,7 @@ import (
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
+	"github.com/daoleno/mewla/daemon/sessionhost"
 	"github.com/daoleno/mewla/daemon/setup"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
@@ -109,6 +110,9 @@ func directClaudePID(sessionID string) (int, bool) {
 }
 
 func main() {
+	// A Session's program held by the session host until it is in its
+	// Session's slice (sessionhost.ScopeExecArg): it becomes that program.
+	sessionhost.RunScopeExec()
 	if os.Getenv(keeper.SpecEnv) != "" {
 		// A keeper the daemon started for the agent screen or the agent
 		// browser (package keeper): nothing else of mewla runs in it.

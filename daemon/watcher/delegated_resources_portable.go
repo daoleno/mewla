@@ -15,11 +15,23 @@ import (
 
 	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/statedir"
+	"github.com/daoleno/mewla/daemon/userunit"
 	"github.com/daoleno/mewla/daemon/workerproc"
 	"github.com/google/uuid"
 )
 
 const delegatedResourceReservationTTL = 2 * time.Minute
+
+// sessionSliceStopWait bounds the wait for a Session's slice to stop. A slow
+// stop is not waited out: what still uses the scratch keeps it and the lease,
+// and a later scan finishes the release.
+const sessionSliceStopWait = 3 * time.Second
+
+// stopSessionSlice stops the systemd slice of the Session with resource unit
+// unit, and everything in it (Linux; package userunit). Tests replace it.
+var stopSessionSlice = func(unit string) ([]string, error) {
+	return userunit.StopSession(unit, sessionSliceStopWait)
+}
 
 type portableDelegatedResourceManager struct {
 	owner    string
@@ -181,6 +193,13 @@ func (m *portableDelegatedResourceManager) stopLease(unit, reason string) error 
 	path, err := workerproc.LeasePath(m.leaseDir, unit)
 	if err != nil {
 		return err
+	}
+	// First the Session's slice: it holds what the owned-process match cannot
+	// find (setsid plus env -i, tmux panes, a nested Mewla's host).
+	if slices, err := stopSessionSlice(unit); err != nil && !errors.Is(err, userunit.ErrUnsupported) {
+		log.Printf("watcher: stop the slice of %s: %v", unit, err)
+	} else if len(slices) > 0 {
+		log.Printf("watcher: stopped %s", strings.Join(slices, ", "))
 	}
 	lease, err := workerproc.ReadLease(path)
 	switch {

@@ -62,7 +62,7 @@ func runHostCommand(args []string, stderr io.Writer) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer cancel()
-	server := sessionhost.NewServer(sessionhost.ServerOptions{SocketPath: path, HostVersion: hostVersion()})
+	server := sessionhost.NewServer(sessionhost.ServerOptions{SocketPath: path, HostVersion: hostVersion(), SessionScopes: true})
 	return server.Run(ctx)
 }
 

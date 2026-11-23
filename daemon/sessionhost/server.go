@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
+	"github.com/daoleno/mewla/daemon/userunit"
 )
 
 const (
@@ -31,6 +32,12 @@ type ServerOptions struct {
 	SocketPath  string
 	HostVersion string
 	Logf        func(format string, args ...any)
+	// SessionScopes: a program started for a Session that has a resource
+	// unit runs in a systemd scope inside the Session's slice (Linux, when
+	// the user manager answers; see package userunit), so that ending the
+	// Session ends every process it started. Only the real host sets it: the
+	// program is first this binary, which must handle ScopeExecArg.
+	SessionScopes bool
 
 	// Test seams.
 	newScreen   func(ghosttyvt.Options) (screen, error)
@@ -50,6 +57,9 @@ type Server struct {
 	engine    bool
 	allowPeer func(uid uint32) bool
 	startedAt time.Time
+	// enclosing is the Session slice this host itself runs in (a Mewla
+	// started inside another one's Session), "" when none.
+	enclosing string
 
 	mu          sync.Mutex
 	sessions    map[string]*session
@@ -74,6 +84,9 @@ func NewServer(opts ServerOptions) *Server {
 	}
 	if s.newScreen == nil {
 		s.newScreen = newEngineScreen
+	}
+	if opts.SessionScopes {
+		s.enclosing = userunit.EnclosingSlice()
 	}
 	if opts.engine != nil {
 		s.engine = *opts.engine
