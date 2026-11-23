@@ -4521,12 +4521,14 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 // computer, since it names that host.
 //   - "pin:<pin>": made inside TLS pinned to this computer's transport key; it
 //     must be this computer's pin, over TLS.
-//   - "host:<name>": the request's Host. Over TLS this daemon terminated, the
-//     SNI must name it too, so whoever forwards through the relay (which routes
-//     by SNI) cannot pick the Host. A reverse proxy on this computer that
-//     rewrites Host passes the original in X-Forwarded-Host, read only from
-//     loopback and plain HTTP. Plain HTTP from elsewhere proves no host: a
-//     plain address has no channel security to bind to.
+//   - "host:<name>" over TLS this daemon terminated (Mewla Relay, the hosted
+//     address): the SNI must name it, so whoever forwards through the relay,
+//     which routes by SNI, cannot reach this computer with it.
+//   - "host:<name>" over plain HTTP: the request's Host, or X-Forwarded-Host
+//     from a reverse proxy on this computer. A Host that is an address (a
+//     proxy's upstream, a LAN IP) says nothing of the name the app used and
+//     is accepted: plain HTTP has no channel to bind to, so a host in the
+//     middle could name anything there anyway.
 func (s *Server) requestBinding(r *http.Request) auth.BindingCheck {
 	return func(binding string) bool {
 		if pin, ok := strings.CutPrefix(binding, "pin:"); ok {
@@ -4536,14 +4538,17 @@ func (s *Server) requestBinding(r *http.Request) auth.BindingCheck {
 		if !ok {
 			return false
 		}
-		if r.TLS != nil && r.TLS.ServerName != "" && bindingHostname(r.TLS.ServerName) != host {
-			return false
+		if r.TLS != nil && r.TLS.ServerName != "" {
+			return bindingHostname(r.TLS.ServerName) == host
 		}
-		if bindingHostname(r.Host) == host {
+		seen := bindingHostname(r.Host)
+		if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); r.TLS == nil && forwarded != "" && remoteIsLoopback(r) {
+			seen = bindingHostname(forwarded)
+		}
+		if seen == host {
 			return true
 		}
-		forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
-		return r.TLS == nil && forwarded != "" && remoteIsLoopback(r) && bindingHostname(forwarded) == host
+		return r.TLS == nil && (seen == "localhost" || net.ParseIP(seen) != nil)
 	}
 }
 
