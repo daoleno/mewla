@@ -240,6 +240,19 @@ describe("pairing with a Mewla Relay code where no host carries the tunnel (a br
     expect(server.transportKind).toBe("manual");
   });
 
+  test("a browser on the page of a computer on two relays pairs at the page's own address", async () => {
+    const calls: string[] = [];
+    const answer = await signed("mewla-pair");
+    const twoRelays = buildLinkPairingTestLink({
+      secretKey: keys.secretKey, publicKey: keys.publicKey, enrollmentToken: "2".repeat(64), routeId: ROUTE, transportPin: PIN,
+      label: "quiet-otter-3f9a", domain: "a.link.test", name: "region-a", admissionAlias: ADMISSION, moreRelays: [{ name: "region-b", domain: "b.link.test" }],
+    });
+    installMemoryPlatform({ os: "web", pageOrigin: "https://quiet-otter-3f9a.b.link.test", fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
+    const server = await pairWith(readPairingLink(twoRelays)!);
+    expect(calls).toEqual(["POST https://quiet-otter-3f9a.b.link.test/pair"]);
+    expect(server.url).toBe("wss://quiet-otter-3f9a.b.link.test/ws");
+  });
+
   test("a browser on another computer's page says it can pair only with the computer it is on", async () => {
     const calls: string[] = [];
     installMemoryPlatform({ os: "web", pageOrigin: "https://other-cat-1a2b.a.link.test", fetch: async (url) => (calls.push(url), Response.json({})) });

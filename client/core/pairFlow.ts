@@ -175,7 +175,9 @@ async function pairAtStableAddress(
   link: NonNullable<ConnectionImportPayload["link"]>,
   onProgress?: (message: string) => void,
 ): Promise<StoredServerInput> {
-  const stableURL = stableURLOf(payload, link);
+  // On a computer's own page, the candidate at the page's address (a computer on more than one relay has one each).
+  const page = platform().os === "web" ? hostOf(platform().pageOrigin ?? "") : "";
+  const stableURL = link.candidates.find((candidate) => page && hostOf(candidate.url) === page)?.url ?? stableURLOf(payload, link);
   refuseAnotherPage(stableURL);
   onProgress?.(`Connecting to ${linkDisplayName(payload.name, stableURL)} through Mewla…`);
   let pairing: { daemonId: string; daemonPublicKey: string };
