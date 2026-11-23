@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.4.27",
+      "date": "2026-11-24",
+      "highlights": [],
+      "fixes": [
+        "The terminal opens on the Mac whichever computer the Session is on.",
+        "Mewla cleans up what ended Sessions leave behind.",
+        "A pairing code someone else got hold of can no longer stand in for your computer."
+      ]
+    },
+    {
       "version": "0.4.26",
       "date": "2026-11-23",
       "highlights": [],
