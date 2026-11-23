@@ -1,5 +1,6 @@
 import { describe, expect, open, test } from "nsh/test";
 import { framesOf, item, paired, phoneHost } from "../testing/fixtures";
+import { testComputer } from "../testing/pairing";
 
 // Mewla for Mac (platform macos): the app's computer is this Mac's daemon (`app.pairing`), the menu bar cat's
 // perch is the phone's Brain home in a popup, and Pair a phone shows the daemon's QR.
@@ -433,6 +434,48 @@ describe("Mewla for Mac", () => {
     await app.waitFor("text:This Mac · Mewla is not running", { timeout: 30_000 });
     expect(app.shows("text:This Mac · Offline · Server unreachable")).toBe(false);
   }, 60_000);
+
+  // Owner 11-23, his exact state: this Mac removed on 0.4.26, manjaro current, this Mac's Mewla not answering.
+  test("no entry for this Mac, another computer current, its Mewla not answering: This Mac is a row saying so; chosen, the reason with Try Again; joined, it is the computer", async () => {
+    // Down: nothing answers at its address (a request the test does not list fails, as a refused connection does).
+    const down = testComputer("http://127.0.0.1:19877", 13);
+    const mac = testComputer("http://127.0.0.1:19878", 13);
+    let up = false;
+    const host = phoneHost({ brain }, {
+      "app.pairing": () => ({ ...pairing, daemon_public_key: mac.publicKey, local_link: (up ? mac : down).link("MacBook Pro") }),
+    });
+    (host.params as Record<string, unknown>).computerName = "MacBook Pro";
+    const storage = {
+      ...paired,
+      "mewla:v3:servers": JSON.stringify([{ id: "s2", name: "manjaro", url: "ws://127.0.0.1:2/ws", daemonId: "c".repeat(64), daemonPublicKey: "d".repeat(64) }]),
+      "mewla:v1:current_server_id": "s2",
+    };
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, host, storage,
+      network: { [mac.pairURL]: () => mac.answer() } });
+    await app.waitFor("text:manjaro", { timeout: 15_000 });
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-this-mac", { timeout: 10_000 });
+    await app.waitFor("id:computer-this-mac >> text:Mewla is not running", { timeout: 15_000 });
+    expect(app.shows("id:computer-this-mac >> text:MacBook Pro")).toBe(true);
+
+    await app.press("id:computer-this-mac");
+    await app.waitFor("id:mac-starting", { timeout: 10_000 });
+    await app.waitFor("id:mac-starting >> text:Mewla is not running", { timeout: 15_000 });
+    expect(app.shows("text:Try Again")).toBe(true);
+    await app.press("id:mac-starting-back");
+    await app.waitUntil(() => !app.shows("id:mac-starting"), { timeout: 10_000 });
+    expect(app.storage()["mewla:v1:current_server_id"]).toBe("s2");
+
+    // Chosen again while it is still down; its Mewla starts, and Try Again makes it the computer, manjaro kept.
+    await app.press("id:computer-this-mac");
+    await app.waitFor("id:mac-starting >> text:Try Again", { timeout: 15_000 });
+    up = true;
+    await app.press("text:Try Again");
+    await app.waitUntil(() => !app.shows("id:mac-starting"), { timeout: 15_000 });
+    await app.waitFor("text:This Mac · Online", { timeout: 15_000 });
+    const stored = JSON.parse(app.storage()["mewla:v3:servers"] ?? "[]") as Array<{ id: string; name: string; url: string }>;
+    expect(stored.map((server) => `${server.name} ${server.url}`).sort()).toEqual(["MacBook Pro ws://127.0.0.1:19878/ws", "manjaro ws://127.0.0.1:2/ws"]);
+  }, 90_000);
 
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });

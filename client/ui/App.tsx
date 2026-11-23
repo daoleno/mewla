@@ -15,6 +15,7 @@ import { goHome } from "./shell/nav";
 import { tray } from "./tray/state";
 import { startAppUpdate } from "./update/update";
 import { startMac } from "./mac/mac";
+import { thisMacChosen } from "./mac/local";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
 
@@ -131,7 +132,7 @@ mount(() => (
         held (after the notification prompt, after a Settings pairing), most likely the app's native views. */}
     <If when={ready()}><If when={current() && !justPaired()}><Shell /></If></If>
     {/* First run, and on a phone the connected step after any pairing. */}
-    <If when={ready() && (!current() || justPaired())}><View class="absolute inset-0 bg-background"><FirstRun /></View></If>
+    <If when={ready() && (!current() || justPaired() || thisMacChosen())}><View class="absolute inset-0 bg-background"><FirstRun /></View></If>
     <If when={ready() && current() && !justPaired()}><LinkPairingNote /></If>
     <CrashReportSheet />
   </View>
