@@ -140,3 +140,49 @@ describe("thread runtime picker model", () => {
     expect(rows[0]?.label).toBe("GPT 5.6 Preview");
   });
 });
+
+describe("an agent's own models", () => {
+  const claudeProvider: ThreadRuntimeSelection = { ...selection, client: "claude", model_id: "claude-sonnet-5-5" };
+  const claudeSnapshot: ProvidersSnapshot = {
+    ...snapshot,
+    connections: [{ id: "a", name: "Alpha", clients: ["claude"], credential_ready: true, advanced: false }],
+    models: { a: [{ id: "claude-sonnet-5-5", available: true, source: "bundled", reasoning_efforts: ["low", "high"] }] },
+  };
+
+  test("any agent's runtime that carries its models lists them with each model's own efforts", () => {
+    const own: ThreadRuntimeSelection = {
+      ...claudeProvider,
+      connection_id: "claude",
+      connection_name: "Claude Code",
+      model_id: "sonnet",
+      reasoning_effort: "high",
+      native_models: [
+        { id: "default", display_name: "Default (recommended)", available: true, source: "claude_native", reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { id: "sonnet", display_name: "Sonnet", available: true, source: "claude_native", reasoning_efforts: ["low", "medium", "high"] },
+      ],
+    };
+    const ownSnapshot: ProvidersSnapshot = {
+      revision: 0, presets: [], defaults: {},
+      connections: [{ id: "claude", name: "Claude Code", clients: ["claude"], credential_ready: true, advanced: false }],
+      models: { claude: own.native_models ?? [] },
+    };
+    const rows = threadRuntimeRows({ snapshot: ownSnapshot, selection: own });
+    expect(rows.map((row) => row.label)).toEqual(["Default (recommended)", "Sonnet"]);
+    const current = rows.find((row) => row.current);
+    expect(current?.modelId).toBe("sonnet");
+    expect(current?.effects).toEqual(["", "low", "medium", "high"]);
+    expect(current?.currentEffect).toBe("high");
+    expect(resolveComposerModelControl({
+      capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true },
+      connectionConnected: true,
+      selection: own,
+      refreshRequired: false,
+    })?.label).toBe("Sonnet");
+  });
+
+  test("a Claude Session on a Provider connection still shows no efforts", () => {
+    const rows = threadRuntimeRows({ snapshot: claudeSnapshot, selection: claudeProvider });
+    expect(rows[0]?.current).toBe(true);
+    expect(rows[0]?.effects).toEqual([]);
+  });
+});

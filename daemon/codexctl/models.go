@@ -37,6 +37,16 @@ func ReadModelList(ctx context.Context, binary string, env []string) ([]Model, e
 		return nil, err
 	}
 	defer stop()
+	return listModels(ctx, rpc.call)
+}
+
+// ListModels reads `model/list` from this app-server: the models the
+// Session's own Codex offers with the person's sign-in.
+func (c *Client) ListModels(ctx context.Context) ([]Model, error) {
+	return listModels(ctx, c.call)
+}
+
+func listModels(ctx context.Context, call func(context.Context, string, any) (json.RawMessage, error)) ([]Model, error) {
 	var models []Model
 	cursor := ""
 	for page := 0; page < maxModelListPages; page++ {
@@ -44,50 +54,66 @@ func ReadModelList(ctx context.Context, binary string, env []string) ([]Model, e
 		if cursor != "" {
 			params["cursor"] = cursor
 		}
-		raw, err := rpc.call(ctx, "model/list", params)
+		raw, err := call(ctx, "model/list", params)
 		if err != nil {
 			return nil, err
 		}
-		var response struct {
-			Data []struct {
-				ID                     string `json:"id"`
-				Model                  string `json:"model"`
-				DisplayName            string `json:"displayName"`
-				Hidden                 bool   `json:"hidden"`
-				DefaultReasoningEffort string `json:"defaultReasoningEffort"`
-				SupportedEfforts       []struct {
-					Effort string `json:"reasoningEffort"`
-				} `json:"supportedReasoningEfforts"`
-				InputModalities []string `json:"inputModalities"`
-			} `json:"data"`
-			NextCursor *string `json:"nextCursor"`
+		pageModels, next, err := parseModelListPage(raw)
+		if err != nil {
+			return nil, err
 		}
-		if err := json.Unmarshal(raw, &response); err != nil {
-			return nil, fmt.Errorf("%w: model/list: %v", ErrProtocol, err)
-		}
-		for _, entry := range response.Data {
-			id := strings.TrimSpace(entry.Model)
-			if id == "" {
-				id = strings.TrimSpace(entry.ID)
-			}
-			if id == "" || entry.Hidden {
-				continue
-			}
-			model := Model{ID: id, DisplayName: strings.TrimSpace(entry.DisplayName), DefaultEffort: strings.TrimSpace(entry.DefaultReasoningEffort),
-				Modalities: entry.InputModalities}
-			for _, effort := range entry.SupportedEfforts {
-				if effort.Effort = strings.TrimSpace(effort.Effort); effort.Effort != "" {
-					model.Efforts = append(model.Efforts, effort.Effort)
-				}
-			}
-			models = append(models, model)
-		}
-		if response.NextCursor == nil || *response.NextCursor == "" {
+		models = append(models, pageModels...)
+		if next == "" {
 			return models, nil
 		}
-		cursor = *response.NextCursor
+		cursor = next
 	}
 	return nil, fmt.Errorf("%w: model/list does not end after %d pages", ErrProtocol, maxModelListPages)
+}
+
+// parseModelListPage reads one `model/list` answer: its visible models and
+// the cursor of the next page ("" at the end).
+func parseModelListPage(raw json.RawMessage) ([]Model, string, error) {
+	var response struct {
+		Data []struct {
+			ID                     string `json:"id"`
+			Model                  string `json:"model"`
+			DisplayName            string `json:"displayName"`
+			Hidden                 bool   `json:"hidden"`
+			DefaultReasoningEffort string `json:"defaultReasoningEffort"`
+			SupportedEfforts       []struct {
+				Effort string `json:"reasoningEffort"`
+			} `json:"supportedReasoningEfforts"`
+			InputModalities []string `json:"inputModalities"`
+		} `json:"data"`
+		NextCursor *string `json:"nextCursor"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, "", fmt.Errorf("%w: model/list: %v", ErrProtocol, err)
+	}
+	var models []Model
+	for _, entry := range response.Data {
+		id := strings.TrimSpace(entry.Model)
+		if id == "" {
+			id = strings.TrimSpace(entry.ID)
+		}
+		if id == "" || entry.Hidden {
+			continue
+		}
+		model := Model{ID: id, DisplayName: strings.TrimSpace(entry.DisplayName), DefaultEffort: strings.TrimSpace(entry.DefaultReasoningEffort),
+			Modalities: entry.InputModalities}
+		for _, effort := range entry.SupportedEfforts {
+			if effort.Effort = strings.TrimSpace(effort.Effort); effort.Effort != "" {
+				model.Efforts = append(model.Efforts, effort.Effort)
+			}
+		}
+		models = append(models, model)
+	}
+	next := ""
+	if response.NextCursor != nil {
+		next = *response.NextCursor
+	}
+	return models, next, nil
 }
 
 // startStdioAppServer starts a short-lived `codex app-server` on stdio and

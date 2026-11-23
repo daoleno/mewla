@@ -301,9 +301,20 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       .catch(() => slashUnavailable.set(true)));
   });
   const switchable = computed(() => canSwitchModel(worker()?.capabilities) && connected());
+  // An agent links up a moment after its Session starts (Pi's extension, Codex's
+  // app-server), so a first miss is asked again a few times.
   effect(() => {
     if (!switchable()) return;
-    untracked(() => void getThreadRuntime(transport, props.workerId).then((selection) => runtime.set(selection)).catch(() => {}));
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const load = (attempt: number): void => void getThreadRuntime(transport, props.workerId)
+      .then((selection) => { if (!stopped) runtime.set(selection); })
+      .catch(() => { if (!stopped && attempt < 4) retry = setTimeout(() => load(attempt + 1), 1500 * 2 ** attempt); });
+    untracked(() => load(0));
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+    };
   });
   // A DSH Session's web UI, when the computer runs it.
   const dshWeb = signal<string | null>(null);
@@ -759,15 +770,19 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
                 onFiles={attachDropped}
-                leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
+                leading={() => <ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}
+                beside={{
+                  shown: () => Boolean(modelChip()),
+                  // The Session's model beside Send while the composer is open: one line, cut short, never pushing Send.
+                  render: () => <If when={modelChip()}><Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
+                      class="h-9 max-w-full min-w-0 flex-row items-center gap-0.5 rounded-full px-2.5 active:bg-accent">
+                      <Text testID="model-chip-label" class="min-w-0 shrink text-sm text-muted-foreground line-clamp-1">{modelChip()!.label}</Text>
+                      <Icon name="chevron-down" size={14} color="muted-foreground" />
+                    </Button></If>,
+                }}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
                 <If when={uploads.items().length > 0}><AttachmentTray uploads={uploads} /></If>
-                <If when={modelChip()}><Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
-                    class="mb-2 flex-row items-center gap-1 self-start rounded-full border border-border px-2.5 py-1 active:bg-accent">
-                    <Text class="text-xs">{modelChip()!.label}</Text>
-                    <Icon name="chevron-down" size={14} />
-                  </Button></If>
                 <If when={editor.edit()}><EditChip editor={editor} /></If>
                 <Each of={dshRun() ? [dshRun()] : []} key={(run) => run}>{(run) => <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(run().split("|")[0]), startedAt: Number(run().split("|")[1]) }} />}</Each>
                 <If when={notice()}><Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>

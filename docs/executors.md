@@ -35,8 +35,27 @@ In the app, Brain's menu (**⋯** at the right of Brain's header) has:
   **High**).
 
 A Session's own **⋯ › Model & Effort** opens the same sheet for that Session
-only. Brain picks each Worker's agent and model itself; see
+only. So does the model beside **Send**, which shows while you write in the
+Session's composer. Brain picks each Worker's agent and model itself; see
 [Worker routing](brain-and-work.md#worker-routing).
+
+### A Session's models
+
+A Session on a [Model Provider](#model-providers) lists that connection's
+models. Any other Session lists what its agent offers with your sign-in, read
+from the agent itself, and switches the agent's own way:
+
+| Agent | The list | A switch |
+| --- | --- | --- |
+| Claude Code | Its model picker (the `initialize` answer of `claude -p`), with each model's effort levels | Made in Claude's own picker with its "use this session only" key: the conversation goes on, and your default for new sessions stays as it is. After a turn Claude asks whether to switch (the next answer re-reads the conversation); that question shows in the Session for you |
+| Codex | `model/list` of the Session's own app-server, with each model's efforts | Applied to the running thread. Before the first message Codex has no thread yet: the sheet shows the configured model, and you switch after the first message |
+| OpenCode | The service's models of the providers you signed in to, with their variants as efforts | `session.switchModel`: the next turn uses it. OpenCode makes the session with its first message, so you switch after it |
+| Pi | The models Pi can use with your keys (your scoped ones when you scoped some), with Pi's thinking levels | `pi.setModel` and `pi.setThinkingLevel` through Mewla's extension: the conversation goes on, your default stays |
+| Cursor Agent, Grok | `cursor-agent models`, `grok models` | Their own `/model <id>`, typed into the Session |
+| DSH, Antigravity | The agent's own models | Applied at once |
+
+When the agent cannot list (not signed in) or refuses a switch, the sheet shows
+the agent's own words.
 
 Listing an installed agent does not start its command or check its sign-in.
 The menu says "Sign-in not checked" until Mewla has used that agent. A verified

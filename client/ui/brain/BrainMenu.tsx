@@ -12,7 +12,7 @@ import { ModelPanel } from "../session/ModelSheet";
 import { agentKindFromProvider } from "../../core/sessions/workerPresentation";
 import { newBrainChat } from "../../core/brain";
 import { brainMenuRows, type BrainMenuRowId } from "../../core/brainMenu";
-import { reasoningEffortLabel } from "../../core/session/sessionModelHelpers";
+import { reasoningEffortLabel, runtimeModelLabel } from "../../core/session/sessionModelHelpers";
 import { canSwitchModel, getThreadRuntime } from "../../core/session/sessionRequests";
 import type { ThreadRuntimeSelection } from "../../core/providers/types";
 import { BrainHostPanel } from "./BrainHostSheet";
@@ -34,9 +34,10 @@ type Page = "menu" | "host" | "model";
 
 /** "Opus · High": the model Brain runs and its effort. */
 function modelValue(runtime: ThreadRuntimeSelection | null): string {
-  if (!runtime?.model_id) return "";
-  const effort = runtime.reasoning_effort || runtime.reasoning_effort_default;
-  return effort ? `${runtime.model_id} · ${reasoningEffortLabel(effort)}` : runtime.model_id;
+  const model = runtime ? runtimeModelLabel(runtime) : "";
+  if (!model) return "";
+  const effort = runtime?.reasoning_effort || runtime?.reasoning_effort_default;
+  return effort ? `${model} · ${reasoningEffortLabel(effort)}` : model;
 }
 
 /**

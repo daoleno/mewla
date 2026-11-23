@@ -21,7 +21,7 @@ import {
 import { assertThreadRuntimeMatches, parseThreadRuntimeSelection } from "../providers/parse";
 import { requireAppliedPersistence } from "../providers/persistence";
 import { listProviders } from "../providers/requests";
-import { isNativeModelClient } from "../providers/types";
+import { isAgentModelRuntime } from "../providers/types";
 import type {
   ProvidersSnapshot,
   ThreadRuntimeChoice,
@@ -85,11 +85,11 @@ export async function getThreadRuntime(daemon: Daemon, workerId: string): Promis
 }
 
 /**
- * The catalog the Model sheet lists for a Session: a dsh Session's own models
- * (its runtime carries them), otherwise the computer's Providers.
+ * The catalog the Model sheet lists for a Session: the agent's own models when
+ * its runtime carries them, otherwise the computer's Providers.
  */
 export async function threadRuntimeCatalog(daemon: Daemon, selection: ThreadRuntimeSelection): Promise<ProvidersSnapshot> {
-  if (isNativeModelClient(selection.client)) {
+  if (isAgentModelRuntime(selection)) {
     return {
       revision: 0,
       presets: [],

@@ -727,6 +727,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetAgentActivity(hubActivity(eventHub))
 	srv.SetAgentApprovals(appApprovals{service: agentEvents})
 	srv.SetAntigravitySessions(agyFollow)
+	// Each agent's own model menu for its Sessions (server.SessionModels).
+	if codexFollow != nil {
+		srv.SetSessionModels(work.WorkerProviderCodex, codexFollow)
+	}
+	srv.SetSessionModels(work.WorkerProviderOpenCode, opencodeFollow)
+	srv.SetSessionModels(work.WorkerProviderPi, piFollow)
+	srv.SetSessionModels(work.WorkerProviderClaude, newClaudeModels(w, eventHub))
+	srv.SetSessionModels(work.WorkerProviderCursor, newTypedModels(work.WorkerProviderCursor, w))
+	srv.SetSessionModels(work.WorkerProviderGrok, newTypedModels(work.WorkerProviderGrok, w))
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
 		return fmt.Errorf("open answered requests: %w", err)
