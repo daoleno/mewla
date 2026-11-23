@@ -55,7 +55,7 @@ codesign -dvvv "$app" > "$out/codesign-app.txt" 2>&1; codesign -d -r- "$app" >> 
 codesign -dvvv "$app/Contents/Helpers/probe" > "$out/codesign-helper.txt" 2>&1; codesign -d -r- "$app/Contents/Helpers/probe" >> "$out/codesign-helper.txt" 2>&1
 
 csreq_hex() {
-  codesign -d -r- "$1" 2>/dev/null | sed -n 's/^designated => //p' > "$work/req.txt"
+  codesign -d -r- "$1" 2>/dev/null | sed -n 's/^#* *designated => //p' > "$work/req.txt"
   csreq -r "$work/req.txt" -b "$work/req.bin"
   xxd -p "$work/req.bin" | tr -d '\n'
 }
