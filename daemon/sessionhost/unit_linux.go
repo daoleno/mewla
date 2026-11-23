@@ -97,6 +97,13 @@ func hostUnitCommand(opts StartOptions, args []string, log *os.File) (*exec.Cmd,
 		"-p", "Type=exec",
 		"-p", "OOMPolicy=continue",
 	}
+	if slice := opts.EnclosingSlice; slice != "" {
+		// A Mewla started inside another one's Session: its host is part of
+		// that Session, and ends when the Session does (package userunit).
+		// The host's own orderly stop can take a minute; a Session's end
+		// does not wait for it.
+		flags = append(flags, "--slice="+slice, "-p", "TimeoutStopSec=10s")
+	}
 	if opts.LogPath != "" {
 		flags = append(flags, "-p", "StandardOutput=append:"+opts.LogPath, "-p", "StandardError=append:"+opts.LogPath)
 	}

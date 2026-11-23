@@ -344,3 +344,61 @@ func TestReleaseKeepsScratchAProcessStillUses(t *testing.T) {
 		t.Fatalf("trash = %+v, %v", items, err)
 	}
 }
+
+// The Session's slice is stopped first: what it held (here a process with no
+// unit in its environment, which the owned-process match cannot find) is gone
+// before the scratch is checked, so the scratch goes to the trash at once.
+func TestReleaseStopsTheSessionSliceFirst(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("scratch users are read from /proc")
+	}
+	m, _ := newGoneTestManager(t)
+	unit, tempDir := addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	escaped := exec.Command("sleep", "60")
+	escaped.Dir = tempDir
+	escaped.Env = []string{"PATH=" + os.Getenv("PATH")}
+	if err := escaped.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan struct{})
+	go func() { _ = escaped.Wait(); close(exited) }()
+	t.Cleanup(func() { _ = escaped.Process.Kill(); <-exited })
+
+	var stopped []string
+	previous := stopSessionSlice
+	stopSessionSlice = func(u string) ([]string, error) {
+		stopped = append(stopped, u)
+		_ = escaped.Process.Kill() // what stopping the slice does to it
+		<-exited
+		return []string{"slice-of-" + u}, nil
+	}
+	t.Cleanup(func() { stopSessionSlice = previous })
+
+	if err := m.Release("", unit); err != nil {
+		t.Fatal(err)
+	}
+	if len(stopped) != 1 || stopped[0] != unit {
+		t.Fatalf("slices stopped for %v, want [%s]", stopped, unit)
+	}
+	if leaseExists(t, m, unit) {
+		t.Fatal("lease kept although the slice stop ended the scratch's user")
+	}
+	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
+		t.Fatalf("scratch not moved: %v", err)
+	}
+}
+
+// A daemon knows its own Sessions by their leases, so it never nests its host
+// in one of them (userunit.NestingSlice).
+func TestTheManagerKnowsItsOwnSessionTokens(t *testing.T) {
+	m, _ := newGoneTestManager(t)
+	addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	if !m.ownsSessionToken("0123456789abcdef0123456789abcdef") {
+		t.Fatal("its own lease's token is not recognised")
+	}
+	for _, token := range []string{"fedcba9876543210fedcba9876543210", "", "../x"} {
+		if m.ownsSessionToken(token) {
+			t.Fatalf("token %q is taken for its own", token)
+		}
+	}
+}
