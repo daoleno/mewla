@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bu
 import nacl from "../vendor/nacl";
 import { bytesToHex } from "../protocolCrypto";
 import { buildServerAssertionPayload } from "../deviceAuthContract";
-import { pairingProblem, pairWith, readPairingLink } from "../pairFlow";
+import { CODE_EXPIRED, NOT_A_CODE, pairingLinkProblem, pairingProblem, pairWith, readPairingLink } from "../pairFlow";
 import type { LinkTunnels } from "../platform";
 import type { StoredServer } from "../storedServerContract";
 import { buildLinkPairingTestLink } from "../testing/linkPairingTestLink";
@@ -10,7 +10,6 @@ import { installMemoryPlatform } from "../testing/memoryPlatform";
 import { learnDirectAddresses, parseDirectAddresses, withDirectAddresses } from "./directAddresses";
 import {
   checkDirectPath,
-  LINK_NEEDS_BUILD_MESSAGE,
   LINK_OFFLINE_MESSAGE,
   moveAbandoned,
   resetLinkTransportForTests,
@@ -167,10 +166,108 @@ describe("pairing with a Mewla Relay code", () => {
     expect(problem.detail).toContain("Run mewla pair");
   });
 
-  test("where no host carries the tunnel, it says the app needs updating", async () => {
-    installMemoryPlatform({ fetch: () => Promise.reject(new Error("unused")) });
-    const error = await pairWith(readPairingLink(linkCode())!).catch((e) => e);
-    expect(error.message).toBe(LINK_NEEDS_BUILD_MESSAGE);
+  test("a desktop host with the tunnels (Mewla for Mac) pairs through them, as a phone does", async () => {
+    const host = fakeTunnels();
+    const calls: string[] = [];
+    const answer = await signed("mewla-pair");
+    installMemoryPlatform({ os: "desktop", linkTunnels: host.tunnels, fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
+    const server = await pairWith(readPairingLink(linkCode())!);
+    expect(host.started).toEqual([`pair:${ROUTE} ${ADMISSION}.a.link.test:443 on-demand`]);
+    expect(calls).toEqual(["POST http://127.0.0.1:4100/pair"]);
+    expect(server.transportKind).toBe("link");
+  });
+
+  test("an expired code says it expired, not that it is no code", () => {
+    const code = linkCode();
+    setSystemTime(new Date(Date.now() + 120_000));
+    expect(readPairingLink(code)).toBeNull();
+    expect(pairingLinkProblem(code)).toEqual(CODE_EXPIRED);
+    expect(pairingLinkProblem("mewla://settings?p=AAAA&v=3")).toEqual(NOT_A_CODE);
+  });
+});
+
+// Owner issue 11-23 ("mewla: 协议的 computer 无法连接"): a Mac and a browser have no pinned tunnel, so every Mewla
+// Relay code (what `mewla pair` shows once remote access is on) stopped at "needs a current Android or iOS build".
+// With remote access the stable address carries a WebPKI certificate for the same transport key, so they pair there.
+describe("pairing with a Mewla Relay code where no host carries the tunnel (a browser)", () => {
+  const STABLE = "quiet-otter-3f9a.a.link.test";
+
+  test("an app without the tunnel pairs at the code's stable address and keeps it as the computer's address", async () => {
+    const calls: string[] = [];
+    const answer = await signed("mewla-pair");
+    installMemoryPlatform({
+      os: "desktop",
+      fetch: async (url, init) => {
+        calls.push(`${init?.method} ${url}`);
+        return Response.json(answer);
+      },
+    });
+    const progress: string[] = [];
+    const server = await pairWith(readPairingLink(linkCode())!, (message) => progress.push(message));
+    expect(calls).toEqual([`POST https://${STABLE}/pair`]);
+    expect(progress).toEqual(["Connecting to quiet-otter-3f9a through Mewla…"]);
+    expect(server).toEqual({
+      name: "",
+      url: `wss://${STABLE}/ws`,
+      daemonId: await daemonId(),
+      daemonPublicKey: PUBLIC_KEY,
+      transportKind: "manual",
+    });
+  });
+
+  test("a browser that can't reach the stable address says why in one line", async () => {
+    installMemoryPlatform({ os: "web", pageOrigin: `https://${STABLE}`, fetch: () => Promise.reject(new Error("certificate not trusted")) });
+    const problem = pairingProblem(await pairWith(readPairingLink(linkCode())!).catch((e) => e));
+    expect(problem.title).toBe("Can't reach your computer");
+    expect(problem.detail).toBe(`This browser couldn't reach ${STABLE}. A browser reaches a computer on Mewla Relay only when remote access is on there (mewla login) and mewla is running.`);
+    expect(problem.detail).not.toContain("Android");
+  });
+
+  test("a browser on that computer's own page pairs there", async () => {
+    const calls: string[] = [];
+    const answer = await signed("mewla-pair");
+    installMemoryPlatform({
+      os: "web",
+      pageOrigin: `https://${STABLE}`,
+      fetch: async (url, init) => {
+        calls.push(`${init?.method} ${url}`);
+        return Response.json(answer);
+      },
+    });
+    const server = await pairWith(readPairingLink(linkCode())!);
+    expect(calls).toEqual([`POST https://${STABLE}/pair`]);
+    expect(server.url).toBe(`wss://${STABLE}/ws`);
+    expect(server.transportKind).toBe("manual");
+  });
+
+  test("a browser on another computer's page says it can pair only with the computer it is on", async () => {
+    const calls: string[] = [];
+    installMemoryPlatform({ os: "web", pageOrigin: "https://other-cat-1a2b.a.link.test", fetch: async (url) => (calls.push(url), Response.json({})) });
+    const problem = pairingProblem(await pairWith(readPairingLink(linkCode())!).catch((e) => e));
+    expect(calls).toEqual([]);
+    expect(problem.title).toBe("Can't reach your computer");
+    expect(problem.detail).toBe(`This page reaches only other-cat-1a2b.a.link.test, the computer it came from. Open https://${STABLE} in the browser to use that computer.`);
+  });
+});
+
+describe("a browser pairs only with the computer whose page it is on", () => {
+  const code = (url: string) => `mewla://settings?u=${encodeURIComponent(url)}&k=${PUBLIC_KEY}&t=${"2".repeat(64)}`;
+
+  test("a code for another computer's address says so before anything is sent", async () => {
+    const calls: string[] = [];
+    installMemoryPlatform({ os: "web", pageOrigin: "http://127.0.0.1:9876", fetch: async (url) => (calls.push(url), Response.json({})) });
+    const problem = pairingProblem(await pairWith(readPairingLink(code("ws://192.168.1.20:9876/ws"))!).catch((e) => e));
+    expect(calls).toEqual([]);
+    expect(problem.detail).toBe("This page reaches only 127.0.0.1:9876, the computer it came from.");
+  });
+
+  test("a code for the page's own computer pairs as before", async () => {
+    const calls: string[] = [];
+    const answer = await signed("mewla-pair");
+    installMemoryPlatform({ os: "web", pageOrigin: "http://localhost:9876", fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
+    const server = await pairWith(readPairingLink(code("ws://127.0.0.1:9876/ws"))!);
+    expect(calls).toEqual(["POST http://127.0.0.1:9876/pair"]);
+    expect(server.url).toBe("ws://127.0.0.1:9876/ws");
   });
 });
 
@@ -232,11 +329,15 @@ describe("reaching a computer on Mewla Relay", () => {
   });
 });
 
-describe("a connection open on a path", () => {
+// The phones' hosts and Mewla for Mac (a desktop host, client/macos/src/link.rs) carry the same tunnels, and the
+// connection takes the same paths on each: the owner asked 11-23 whether the desktop app found the LAN on Mewla Relay.
+for (const os of ["android", "desktop"] as const)
+describe(`a connection open on a path (${os} host)`, () => {
   /** A computer whose LAN address answers its health challenge while `answering` says so. */
   async function lanComputer(answering: { now: boolean }) {
     const host = fakeTunnels();
     installMemoryPlatform({
+      os,
       linkTunnels: host.tunnels,
       fetch: async (url) => {
         if (!answering.now) throw new Error("connection reset");
@@ -244,7 +345,7 @@ describe("a connection open on a path", () => {
         return Response.json(await signed("mewla-health-challenge", challenge));
       },
     });
-    return { host, server: linkServer({ daemonId: await daemonId() }) };
+    return { host, server: linkServer({ id: `srv-${os}`, daemonId: await daemonId() }) };
   }
 
   test("keeps it for every caller: a failed re-check never closes the tunnel the connection runs on", async () => {
@@ -252,27 +353,27 @@ describe("a connection open on a path", () => {
     const { host, server } = await lanComputer(answering);
     learnDirectAddresses(server, [{ host: "192.168.1.20", port: 9443 }]);
     const url = await resolveStoredServerURL(server);
-    expect(transportPathInfo("srv")?.path).toBe("lan");
+    expect(transportPathInfo(server.id)?.path).toBe("lan");
     transportOpened(server);
     // Long past the selection's freshness, a screen's request comes while the health check would fail.
     setSystemTime(new Date(Date.now() + 5 * 60_000));
     answering.now = false;
     expect(await resolveStoredServerURL(server)).toBe(url);
-    expect(host.stopped).not.toContain("server:srv:direct:192.168.1.20:9443");
+    expect(host.stopped).not.toContain(`server:${server.id}:direct:192.168.1.20:9443`);
     // Once the connection on it fails, the next one measures afresh.
     await transportFailed(server);
-    expect(host.stopped).toContain("server:srv:direct:192.168.1.20:9443");
+    expect(host.stopped).toContain(`server:${server.id}:direct:192.168.1.20:9443`);
     await resolveStoredServerURL(server);
-    expect(transportPathInfo("srv")?.path).toBe("relay");
+    expect(transportPathInfo(server.id)?.path).toBe("relay");
   });
 
   test("on the relay, a direct path that became reachable is checked beside it and becomes current only when the connection moves", async () => {
     const answering = { now: true };
     const { host, server: base } = await lanComputer(answering);
     // A computer of its own: what was learned for another stays learned for this run.
-    const server = { ...base, id: "srv-relay" };
+    const server = { ...base, id: `srv-relay-${os}` };
     const relay = await resolveStoredServerURL(server);
-    expect(transportPathInfo("srv-relay")?.path).toBe("relay");
+    expect(transportPathInfo(server.id)?.path).toBe("relay");
     // Nothing to move onto before the connection is open, nor while the computer names no direct address.
     expect(await checkDirectPath(server)).toBeNull();
     transportOpened(server);
@@ -285,34 +386,34 @@ describe("a connection open on a path", () => {
     expect(found?.url).toStartWith("ws://127.0.0.1:");
     // The check left the connection's path as it was: every other caller still gets the relay.
     expect(await resolveStoredServerURL(server)).toBe(relay);
-    expect(transportPathInfo("srv-relay")?.path).toBe("relay");
+    expect(transportPathInfo(server.id)?.path).toBe("relay");
     // The connection moved: the direct path is current, the relay's tunnel stays open for the old socket and as the fallback.
     transportMoved(server);
-    expect(transportPathInfo("srv-relay")?.path).toBe("lan");
+    expect(transportPathInfo(server.id)?.path).toBe("lan");
     expect(await resolveStoredServerURL(server)).toBe(found!.url);
-    expect(host.stopped.some((key) => key.startsWith("server:srv-relay:0"))).toBe(false);
+    expect(host.stopped.some((key) => key.startsWith(`server:${server.id}:0`))).toBe(false);
   });
 
   test("a direct path that stops answering, or a move given up, closes only the tunnel found for it", async () => {
     const answering = { now: true };
     const { host, server: base } = await lanComputer(answering);
-    const server = { ...base, id: "srv-abandon" };
+    const server = { ...base, id: `srv-abandon-${os}` };
     const relay = await resolveStoredServerURL(server);
     transportOpened(server);
     learnDirectAddresses(server, [{ host: "192.168.1.30", port: 9443 }]);
     expect(await checkDirectPath(server)).not.toBeNull();
     answering.now = false;
     expect(await checkDirectPath(server)).toBeNull();
-    expect(host.stopped).toContain("server:srv-abandon:direct:192.168.1.30:9443");
+    expect(host.stopped).toContain(`server:${server.id}:direct:192.168.1.30:9443`);
     answering.now = true;
     expect(await checkDirectPath(server)).not.toBeNull();
-    expect(host.open.has("server:srv-abandon:direct:192.168.1.30:9443")).toBe(true);
+    expect(host.open.has(`server:${server.id}:direct:192.168.1.30:9443`)).toBe(true);
     moveAbandoned(server);
     await Promise.resolve();
-    expect(host.open.has("server:srv-abandon:direct:192.168.1.30:9443")).toBe(false);
-    expect(host.stopped.some((key) => key.startsWith("server:srv-abandon:0"))).toBe(false);
+    expect(host.open.has(`server:${server.id}:direct:192.168.1.30:9443`)).toBe(false);
+    expect(host.stopped.some((key) => key.startsWith(`server:${server.id}:0`))).toBe(false);
     expect(await resolveStoredServerURL(server)).toBe(relay);
-    expect(transportPathInfo("srv-abandon")?.path).toBe("relay");
+    expect(transportPathInfo(server.id)?.path).toBe("relay");
   });
 });
 

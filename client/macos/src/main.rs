@@ -7,7 +7,8 @@
 //! - `app.pairing`: `mewla pair -json` of this computer's daemon (the phone QR, and the link the app pairs itself
 //!   with, silently: it is this computer);
 //! - `app.dock`: the Dock icon shown while the window is, hidden with only the menu bar cat;
-//! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered).
+//! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered);
+//! - `link.start` / `link.stop` / `link.stopAll` / `link.events`: Mewla Relay's pinned tunnels (link.rs).
 //!
 //! The daemon: the app (`com.daoleno.mewla`) registers it as a LaunchAgent with SMAppService, after taking over
 //! the install `mewla boot install` made (agent.rs), so it runs with the app closed and after a restart. Mewla Dev
@@ -23,6 +24,7 @@
 
 #[cfg(target_os = "macos")]
 mod agent;
+mod link;
 #[cfg(target_os = "macos")]
 mod daemon;
 #[cfg(target_os = "macos")]
@@ -169,6 +171,38 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
             });
         });
     }
+    // Mewla Relay's pinned tunnels (link.rs), as the phone hosts carry them: a computer paired through Mewla Relay,
+    // and the LAN or Tailscale address it announces, is reached only through one.
+    let tunnels = std::sync::Arc::new(link::Tunnels::new(link::dial_by_name()));
+    {
+        let tunnels = tunnels.clone();
+        host.handle("link.start", move |call| {
+            let data = call.data();
+            let text = |name: &str| data.get(name).and_then(Value::as_str).unwrap_or_default().to_owned();
+            let (key, host_, pin, mode) = (text("key"), text("host"), text("pin"), text("mode"));
+            let port = data.get("port").and_then(Value::as_u64).and_then(|p| u16::try_from(p).ok()).unwrap_or(0);
+            let Some(reply) = call.into_reply() else { return };
+            let tunnels = tunnels.clone();
+            // It dials and handshakes: never on the engine's thread.
+            std::thread::spawn(move || {
+                reply.reply(tunnels.start(&key, &host_, port, &pin, &mode).map(|(port, rtt)| json!({ "port": port, "rttMs": rtt })));
+            });
+        });
+    }
+    {
+        let tunnels = tunnels.clone();
+        host.handle("link.stop", move |call| {
+            let key = call.data().get("key").and_then(Value::as_str).unwrap_or_default().to_owned();
+            tunnels.stop(&key);
+            call.reply(Ok::<Value, String>(Value::Null));
+        });
+    }
+    host.handle("link.stopAll", move |call| {
+        tunnels.stop_all();
+        call.reply(Ok::<Value, String>(Value::Null));
+    });
+    host.handle("link.events", |call| call.reply(Ok::<Value, String>(json!([]))));
+
     host.handle("app.pairing", move |call| {
         let Some(reply) = call.into_reply() else { return };
         let config = config.clone();

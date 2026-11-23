@@ -1,4 +1,4 @@
-import { appInfo, host, platform as device, Storage } from "nsh";
+import { appInfo, host, platform as device, Storage, UrlScheme } from "nsh";
 import { inflateRawSync } from "zlib";
 import type { KeyValueStore, LinkTunnels, Platform, SocketLike } from "../core/platform";
 
@@ -43,6 +43,18 @@ export function nshPlatform(): Platform {
     // A browser negotiates permessage-deflate itself; the apps inflate the daemon's compressed messages.
     inflateRaw: os === "web" ? undefined : (data) => inflateRawSync(data),
     fetch: (input, init) => fetch(input, init),
-    linkTunnels: host.available() && (os === "ios" || os === "android") ? linkTunnels : undefined,
+    // The phone hosts and Mewla for Mac carry Mewla Relay's pinned tunnels (client/macos/src/link.rs); a browser can't.
+    linkTunnels: host.available() && (device.os === "ios" || device.os === "android" || device.os === "macos") ? linkTunnels : undefined,
+    pageOrigin: os === "web" ? pageOrigin() : undefined,
   };
+}
+
+/** The page's origin on the web (its address, as NSH keeps it). */
+function pageOrigin(): string | undefined {
+  try {
+    const origin = new URL(UrlScheme.url() ?? "").origin;
+    return origin && origin !== "null" ? origin : undefined;
+  } catch {
+    return undefined;
+  }
 }

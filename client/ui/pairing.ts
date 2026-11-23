@@ -1,6 +1,6 @@
 import { Clipboard, host, platform, signal } from "nsh";
 import { PairLatch } from "../core/onboarding";
-import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOT_A_CODE, NOTHING_TO_PASTE, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
+import { LINK_REQUIRED, NO_CODE_IN_PICTURE, NOTHING_TO_PASTE, pairingLinkProblem, alreadyPairedWith, pairWith, pairingProblem, pairingScopeCopy, pasteRefused, clipboardRead, readPairingLink, supersededAtAddress, type PairingProblem } from "../core/pairFlow";
 import { getServers, removeServer, setServerAutoConnect, type StoredServer } from "../core/servers";
 import { addPairedServer, current, servers } from "./session";
 import { haptic } from "./shell/haptics";
@@ -37,7 +37,9 @@ export async function pairFromText(raw: string, source: PairSource = "link"): Pr
   pairingIssue.set(null);
   const payload = readPairingLink(value);
   if (!payload) {
-    pairingIssue.set(NOT_A_CODE);
+    const problem = pairingLinkProblem(value);
+    pairingIssue.set(problem);
+    if (source === "link") linkPairing.set({ problem });
     return latch.release(value);
   }
   // A pairing code found in the finder: one of the app's two light ticks (SPEC §16.3 Haptics).

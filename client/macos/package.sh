@@ -166,6 +166,12 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 
+# `mewla://` links (pairing links, notifications' links) open the release; Mewla Dev claims none, so it never takes
+# them from the installed app. NSH hands them to the app's UrlScheme (client/ui/nsh.json `schemes`).
+url_types=""
+if [[ $dev != 1 ]]; then
+  url_types="<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>$id</string><key>CFBundleURLSchemes</key><array><string>mewla</string></array></dict></array>"
+fi
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -186,6 +192,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  $url_types
 </dict>
 </plist>
 PLIST
