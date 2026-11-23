@@ -28,7 +28,8 @@ the v0.4.26 release's signing job in the queue. So:
 - `start` refuses while a release run (release-artifacts, macos-release including the Mac release gate, ios-release,
   release-next-beta) or another loop is queued or running (`yield.py blockers`);
 - the hold ends the run once any other macOS job in the repo has waited 2 minutes (`yield_after`) for a runner. It
-  checks every minute (`yield.py waiters`), and the run's log names the job it yielded to;
+  checks every minute (`yield.py waiters`), and the run's log names the job it yielded to. A number written to
+  `~/mac-loop/yield_after` on the runner overrides the 2 minutes (the yield's own test writes 0);
 - it holds 45 minutes at most (`--minutes`), one loop at a time (a concurrency group).
 
 When a session to the runner fails mid-task, look at the run: it has most likely yielded. Start again once the queue
