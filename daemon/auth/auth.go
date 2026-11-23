@@ -4,10 +4,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -515,10 +517,22 @@ func ClaimedDeviceID(headerValue string) string {
 	return deviceID
 }
 
-func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.Duration) (*TrustedDevice, error) {
-	deviceID, daemonID, timestamp, nonceHex, signatureHex, err := parseAuthorizationHeader(headerValue)
+// BindingCheck says whether a v2 header's binding names the way the request
+// reached this daemon (the server's request host and TLS). Nil accepts no v2
+// header: a signature that is not a request's (a Screen answer) is v1.
+type BindingCheck func(binding string) bool
+
+// VerifyAuthorization checks a device authorization. A v1 header (older apps)
+// binds no host; a v2 header is accepted only where bound says its binding is
+// this request's, so a host in the middle cannot hand it on to this daemon.
+func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.Duration, bound BindingCheck) (*TrustedDevice, error) {
+	header, err := parseDeviceHeader(headerValue)
 	if err != nil {
 		return nil, refuse(ErrUnauthorized, "malformed-header", "")
+	}
+	deviceID, daemonID, timestamp, nonceHex, signatureHex := header.deviceID, header.daemonID, header.timestamp, header.nonceHex, header.signatureHex
+	if header.bound && (bound == nil || !bound(header.binding)) {
+		return nil, refuse(ErrUnauthorized, "wrong-host", header.binding)
 	}
 	if daemonID != m.daemonID {
 		return nil, refuse(ErrWrongDaemon, "wrong-daemon", "")
@@ -572,6 +586,9 @@ func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.D
 	}
 
 	payload := BuildSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex)
+	if header.bound {
+		payload = BuildBoundSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex, header.binding)
+	}
 	if !ed25519.Verify(ed25519.PublicKey(publicKeyBytes), payload, signature) {
 		return nil, refuse(ErrUnauthorized, "bad-signature", "")
 	}
@@ -1057,15 +1074,83 @@ func (m *Manager) pruneExpiredLocked() {
 }
 
 func parseAuthorizationHeader(value string) (deviceID, daemonID, timestamp, nonceHex, signatureHex string, err error) {
+	header, err := parseDeviceHeader(value)
+	return header.deviceID, header.daemonID, header.timestamp, header.nonceHex, header.signatureHex, err
+}
+
+// deviceHeader is a parsed device authorization: v1 signs purpose, daemon,
+// device, time and nonce; v2 signs the same and the binding, the host (or the
+// pinned transport key) the app made it for (BuildBoundSignaturePayload).
+type deviceHeader struct {
+	deviceID, daemonID, timestamp, nonceHex, signatureHex string
+	binding                                               string
+	bound                                                 bool
+}
+
+func parseDeviceHeader(value string) (deviceHeader, error) {
 	token := strings.TrimSpace(value)
 	if !strings.HasPrefix(token, AuthorizationHeaderPrefix) {
-		return "", "", "", "", "", ErrUnauthorized
+		return deviceHeader{}, ErrUnauthorized
 	}
 	parts := strings.Split(strings.TrimSpace(strings.TrimPrefix(token, AuthorizationHeaderPrefix)), ":")
-	if len(parts) != 6 || parts[0] != "v1" {
-		return "", "", "", "", "", ErrUnauthorized
+	switch {
+	case len(parts) == 6 && parts[0] == "v1":
+		return deviceHeader{deviceID: strings.TrimSpace(parts[1]), daemonID: normalizeHex(parts[2]), timestamp: strings.TrimSpace(parts[3]), nonceHex: normalizeHex(parts[4]), signatureHex: normalizeHex(parts[5])}, nil
+	case len(parts) == 7 && parts[0] == "v2":
+		decoded, err := base64.RawURLEncoding.DecodeString(parts[5])
+		if err != nil || !ValidBinding(string(decoded)) {
+			return deviceHeader{}, ErrUnauthorized
+		}
+		return deviceHeader{deviceID: strings.TrimSpace(parts[1]), daemonID: normalizeHex(parts[2]), timestamp: strings.TrimSpace(parts[3]), nonceHex: normalizeHex(parts[4]), signatureHex: normalizeHex(parts[6]), binding: string(decoded), bound: true}, nil
 	}
-	return strings.TrimSpace(parts[1]), normalizeHex(parts[2]), strings.TrimSpace(parts[3]), normalizeHex(parts[4]), normalizeHex(parts[5]), nil
+	return deviceHeader{}, ErrUnauthorized
+}
+
+// ValidBinding is the binding grammar both sides keep to (client/core
+// deviceAuthContract.ts deviceBinding): "pin:" and the 64-hex transport pin,
+// or "host:" and a lowercase hostname or IP (no port, no brackets). Nothing
+// else, so no control character or separator can reshape the signed lines.
+func ValidBinding(binding string) bool {
+	if pin, ok := strings.CutPrefix(binding, "pin:"); ok {
+		if len(pin) != 64 {
+			return false
+		}
+		for _, char := range pin {
+			if !(char >= 'a' && char <= 'f' || char >= '0' && char <= '9') {
+				return false
+			}
+		}
+		return true
+	}
+	host, ok := strings.CutPrefix(binding, "host:")
+	if !ok || host == "" || len(host) > 253 {
+		return false
+	}
+	for _, char := range host {
+		if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '.' || char == '-' || char == ':') {
+			return false
+		}
+	}
+	// A colon only in an IPv6 address: never a port.
+	if strings.Contains(host, ":") {
+		ip := net.ParseIP(host)
+		return ip != nil && ip.To4() == nil
+	}
+	return true
+}
+
+// BuildBoundSignaturePayload is what a v2 device header signs. Its first line
+// is no purpose, so a v1 signature never reads as a v2 one or back.
+func BuildBoundSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex, binding string) []byte {
+	return []byte(strings.Join([]string{
+		"mewla-device-v2",
+		strings.TrimSpace(purpose),
+		normalizeHex(daemonID),
+		strings.TrimSpace(deviceID),
+		strings.TrimSpace(timestamp),
+		normalizeHex(nonceHex),
+		binding,
+	}, "\n"))
 }
 
 func fingerprintHex(value []byte) string {

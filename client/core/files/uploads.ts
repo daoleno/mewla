@@ -91,9 +91,9 @@ export function buildUploadUrl(serverUrl: string): string | null {
   }
 }
 
-export async function buildUploadHeaders(server: StoredServer, asset: UploadDocumentAsset): Promise<Record<string, string>> {
+export async function buildUploadHeaders(server: StoredServer, asset: UploadDocumentAsset, url?: string): Promise<Record<string, string>> {
   return {
-    Authorization: await deviceAuthorization(server, "mewla-upload"),
+    Authorization: await deviceAuthorization(server, "mewla-upload", { url }),
     "Content-Type": asset.mimeType || "application/octet-stream",
     [UPLOAD_NAME_HEADER]: encodeUploadName(asset.name || "upload"),
   };
@@ -125,7 +125,7 @@ export function createAttachmentUploadOperation(
 
   const result = (async (): Promise<UploadedAttachment> => {
     try {
-      const headers = await buildUploadHeaders(server, asset);
+      const headers = await buildUploadHeaders(server, asset, uploadUrl);
       if (cancelRequested) throw cancelFailure ?? new AttachmentUploadCancelledError();
       stopProgress = host.onProgress(uploadId, (progress) => {
         if (cancelRequested || settled) return;

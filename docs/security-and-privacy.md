@@ -20,7 +20,12 @@ each connection. An answer recorded from an earlier request proves nothing.
 Once a computer has answered a challenge, the app requires one from it every
 time. A computer running an older Mewla, which signs no challenge, is
 accepted only with an answer signed within the last few minutes, until it
-updates.
+updates. To such a computer, each device signature also names where it was
+made for: the host the request goes to, or, through Mewla Relay, the
+computer's transport key. A host the app was made to talk to cannot pass the
+signature on to your computer. Over TLS the daemon checks the name against
+the TLS server name too. A plain `http://` address has no channel to bind
+to, so it carries no such proof.
 
 There is no long-lived shared secret for normal traffic, and no separate admin
 role: every paired phone or browser can list and revoke devices, including itself.

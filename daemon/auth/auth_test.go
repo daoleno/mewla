@@ -46,7 +46,7 @@ func TestManagerEnrollAndVerifyAuthorization(t *testing.T) {
 	}
 
 	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "mewla-probe")
-	verifiedDevice, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute)
+	verifiedDevice, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil)
 	if err != nil {
 		t.Fatalf("VerifyAuthorization returned error: %v", err)
 	}
@@ -83,11 +83,11 @@ func TestManagerVerifyAuthorizationRejectsReplay(t *testing.T) {
 	}
 
 	header := buildTestAuthorizationHeader(t, privateKey, manager.DaemonID(), "device-1", "mewla-probe")
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); err != nil {
 		t.Fatalf("first VerifyAuthorization returned error: %v", err)
 	}
 
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); !errors.Is(err, ErrReplayDetected) {
 		t.Fatalf("expected ErrReplayDetected, got %v", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestManagerRevokeDevicePersistsAndImmediatelyRejectsAuthorization(t *testin
 		"device-revoke",
 		"mewla-probe",
 	)
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrUnknownDevice) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); !errors.Is(err, ErrUnknownDevice) {
 		t.Fatalf("revoked device authorization error=%v, want ErrUnknownDevice", err)
 	}
 	reloaded, err := NewManager(stateDir)
@@ -351,14 +351,14 @@ func TestManagerRevokeReEnrollRetainsConsumedNonce(t *testing.T) {
 		deviceID,
 		"mewla-probe",
 	)
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := manager.RevokeDevice(deviceID); err != nil {
 		t.Fatal(err)
 	}
 	enroll()
-	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); !errors.Is(err, ErrReplayDetected) {
+	if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); !errors.Is(err, ErrReplayDetected) {
 		t.Fatalf("reused authorization error=%v, want ErrReplayDetected", err)
 	}
 }

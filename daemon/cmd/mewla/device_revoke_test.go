@@ -593,6 +593,7 @@ func TestDaemonAuthOwnerLoadsOnlyAfterOfflineRevokeReleasesLock(t *testing.T) {
 		header,
 		"mewla-probe",
 		time.Minute,
+		nil,
 	); !errors.Is(err, auth.ErrUnknownDevice) {
 		t.Fatalf("post-offline-revoke runtime authorization error=%v", err)
 	}
