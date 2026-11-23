@@ -325,6 +325,38 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+  # Mewla for Mac on a computer reached through Mewla Relay (owner 11-23: did the desktop app ever find the LAN?): a
+  # relay, an account service and a computer of the run's own, Mewla Dev pairing its Relay code; relay, then the LAN,
+  # pf cuts the LAN, relay, then the LAN again, each path as the app shows it, a reminder on each reaching the
+  # computer once (scripts/tests/relay-lan/mac.sh).
+  relay-lan:
+    name: Mewla for Mac moves between Mewla Relay and the LAN
+    needs: app
+    if: ${{ !cancelled() && needs.app.result == 'success' }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-dev-macos-${{ github.sha }}
+          path: ${{ runner.temp }}/app
+      - name: Relay, LAN, relay and LAN again, with a reminder on each path
+        run: scripts/tests/relay-lan/mac.sh "$(ls "$RUNNER_TEMP"/app/Mewla-Dev-*-macos-aarch64.zip)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-macos-relay-lan-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/relay-lan/captures
+            ${{ runner.temp }}/relay-lan/reminders.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Taking over today's install on a clean Mac (FACTS.md §3): the released daemon with install.sh and
   # mewla boot install, a paired device, then Mewla installed and opened. One daemon, the app's LaunchAgent, with
   # the same identity and the same device; the old job, plist and bundle gone; mewla on PATH is the app's; the
