@@ -322,8 +322,10 @@ export class Transport {
     this.clearTimers();
     const socket = this.socket;
     this.socket = null;
-    // Its attempt is over: its end changes nothing.
+    // Its attempt is over: its end changes nothing, so what waited to go out on it is dropped here, as an end would
+    // (round 2 F8): none of it goes out on the next socket.
     this.attempt++;
+    this.queue = [];
     socket?.close(4000, "restart");
     void this.open();
   }
@@ -467,8 +469,9 @@ export class Transport {
     this.attemptTimer = setTimeout(() => this.giveUp(attempt), transportTiming.connectLimitMs);
     socket.onopen = () => {
       if (attempt !== this.attempt) return socket.close();
-      // Held to its proof: connected only once the first frame proves it (`passGate`), within the attempt's time.
-      if (this.proof?.attempt === attempt && this.proof.gate) return;
+      // Held to its proof: connected only once the first frame proves it (`passGate`), within the attempt's time; once
+      // only, should the proof have come first.
+      if ((this.proof?.attempt === attempt && this.proof.gate) || (this.socket === socket && this.state === "connected")) return;
       this.opened();
     };
     this.listen(socket, attempt);
@@ -857,9 +860,14 @@ export class Transport {
     const epoch = this.moveEpoch;
     const from = this.socket;
     let socket: SocketLike;
+    // A computer held to its proof proves the move's socket too, over the move's own nonce, before the Transport moves
+    // onto it: nothing goes out on it and nothing it sends is heard until then (security review 11-23, round 2 F3).
+    const nonceHex = newChallenge();
+    let held = false;
     this.moveChecking = true;
     try {
-      const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect", binding: await bindingFor(this.server, found.url) });
+      held = await daemonProves(this.server.daemonPublicKey);
+      const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect", nonceHex, binding: await bindingFor(this.server, found.url) });
       if (epoch !== this.moveEpoch || attempt !== this.attempt || this.socket !== from || this.state !== "connected" || this.away) {
         return this.moves.abandoned(this.server);
       }
@@ -872,11 +880,42 @@ export class Transport {
     }
     const timer = setTimeout(() => this.failMove(), transportTiming.moveOpenLimitMs);
     this.moving = { socket, timer, path: found.path };
-    socket.onmessage = () => undefined;
-    socket.onopen = () => {
-      if (this.moving?.socket !== socket) return socket.close(1000, "moved");
+    // Open and proved, in whichever order NSH tells them: then the Transport moves onto it, and what came behind the
+    // proof is heard after the move, in order.
+    let open = false;
+    let proved = !held;
+    const gate: Array<{ data: unknown }> = [];
+    const ready = () => {
+      if (!open || !proved || this.moving?.socket !== socket) return;
       if (attempt !== this.attempt || this.socket !== from || this.state !== "connected") return this.failMove();
       this.swap(socket, attempt);
+      for (const event of gate.slice(1)) socket.onmessage?.(event);
+    };
+    socket.onmessage = (event) => {
+      if (!held || this.moving?.socket !== socket) return;
+      gate.push(event);
+      if (gate.length > 1) return;
+      void (async () => {
+        let frame: Frame | null = null;
+        try {
+          const text = frameText(event.data);
+          frame = text === null ? null : JSON.parse(text);
+        } catch {
+          frame = null;
+        }
+        const ok =
+          frame?.type === "daemon_proof" &&
+          (await proofAnswers({ purpose: CONNECT_PROOF_PURPOSE, challengeHex: nonceHex, daemonId: this.server.daemonId, daemonPublicKey: this.server.daemonPublicKey, proof: frame }));
+        if (this.moving?.socket !== socket) return;
+        if (!ok) return this.failMove();
+        proved = true;
+        ready();
+      })();
+    };
+    socket.onopen = () => {
+      if (this.moving?.socket !== socket) return socket.close(1000, "moved");
+      open = true;
+      ready();
     };
     socket.onerror = () => this.moving?.socket === socket && this.failMove();
     socket.onclose = () => this.moving?.socket === socket && this.failMove();
