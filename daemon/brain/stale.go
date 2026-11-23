@@ -139,6 +139,10 @@ func (s *Store) currentTurnWork(sessionID string) string {
 	return turn.WorkID
 }
 
+// runWaitKey prefixes the reclaim waits of finished scheduled-action runs,
+// which the Work cleanup pass does not own.
+const runWaitKey = "run:"
+
 // ReclaimFinishedRunSession tears down the Worker Session of a finished
 // scheduled-action run once it sits idle at its prompt, through Brain's
 // teardown so its model route and Codex resources are released too. A
@@ -153,7 +157,14 @@ func (s *Service) ReclaimFinishedRunSession(sessionID string) (bool, error) {
 		return false, nil
 	}
 	err := s.teardownSessionWith(sessionID, reclaimer.ReclaimIdleSession)
-	if errors.Is(err, watcher.ErrSessionNotIdle) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) {
+	if errors.Is(err, watcher.ErrSessionNotIdle) {
+		s.noteReclaimWait(runWaitKey+sessionID, "its scheduled-action run has finished", err)
+		return false, nil
+	}
+	s.reclaimMu.Lock()
+	delete(s.reclaimWaits, runWaitKey+sessionID)
+	s.reclaimMu.Unlock()
+	if errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) {
 		return false, nil
 	}
 	return err == nil, err

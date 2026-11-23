@@ -27,6 +27,14 @@ func (w *refusingCleanupWatcher) KillCompletedSession(sessionID, turnID string) 
 	return w.fakeWatcher.KillCompletedSession(sessionID, turnID)
 }
 
+func (w *refusingCleanupWatcher) KillRestingSession(sessionID, turnID string) error {
+	w.calls[sessionID]++
+	if err := w.refuse[sessionID]; err != nil {
+		return err
+	}
+	return w.fakeWatcher.KillRestingSession(sessionID, turnID)
+}
+
 func completeWorkOn(t *testing.T, store *Store, service *Service, fw *refusingCleanupWatcher, sessionID string) {
 	t.Helper()
 	item, err := store.CreateWork(Work{Title: sessionID, Objective: "cleanup refusal"})
