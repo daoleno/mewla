@@ -33,6 +33,17 @@ func age(t *testing.T, path string, ago time.Duration) {
 }
 
 func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
+	for _, reads := range []bool{true, false} {
+		t.Run(map[bool]string{true: "reads recorded", false: "mounted noatime"}[reads], func(t *testing.T) {
+			saved := readsRecorded
+			readsRecorded = func(string) bool { return reads }
+			t.Cleanup(func() { readsRecorded = saved })
+			sweepUnmarked(t, reads)
+		})
+	}
+}
+
+func sweepUnmarked(t *testing.T, reads bool) {
 	root := t.TempDir()
 	tdir := filepath.Join(root, "t")
 	mk := func(name string, file bool) string {
@@ -53,7 +64,7 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 	age(t, old, 100*time.Hour)
 	now := time.Now()
 	// The first sweep lists what is there and takes nothing.
-	if moved, err := SweepUnmarked(root, Usage{}, now); err != nil || len(moved) != 0 {
+	if moved, _, err := SweepUnmarked(root, Usage{}, now); err != nil || len(moved) != 0 {
 		t.Fatalf("first sweep = %v, %v", moved, err)
 	}
 	aged := mk("aged", false)
@@ -66,9 +77,29 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 		t.Fatal(err)
 	}
 	deep := mk("deep", false)
-	for _, p := range []string{aged, agedFile, lock, used, marked, deep} {
+	// Read but never modified: a helper a Trigger runs, a binary. Listing a
+	// directory moves only the directory's access time, which does not count.
+	helper := mk("helper", false)
+	if err := os.WriteFile(filepath.Join(helper, "sub", "run.sh"), []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tool := mk("tool", true)
+	listed := mk("listed", false)
+	for _, p := range []string{aged, agedFile, lock, used, marked, deep, helper, tool, listed} {
 		age(t, p, 49*time.Hour)
 	}
+	readAgo := func(path string, ago time.Duration) {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, time.Now().Add(-ago), info.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	readAgo(filepath.Join(helper, "sub", "run.sh"), time.Hour)
+	readAgo(tool, time.Hour)
+	readAgo(listed, time.Hour)
 	if err := os.WriteFile(filepath.Join(deep, "sub", "new"), []byte("n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +112,7 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 		}
 	}
 	usage := newUsage(map[string]int{filepath.Join(used, "sub"): 42})
-	moved, err := SweepUnmarked(root, usage, now)
+	moved, unread, err := SweepUnmarked(root, usage, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,10 +123,33 @@ func TestSweepUnmarkedTakesOnlyNewUnusedUnchangedItems(t *testing.T) {
 			t.Fatalf("trashed %+v", item)
 		}
 	}
-	if len(got) != 2 || !got["aged"] || !got["aged.log"] {
-		t.Fatalf("trashed %v, want aged and aged.log only", got)
+	want := []string{"aged", "aged.log", "listed"}
+	keep := []string{old, lock, fresh, used, marked, deep, helper, tool}
+	var wantUnread []string
+	switch {
+	case !reads:
+		// No read leaves a trace: what holds a file stays; empty trees go.
+		want, wantUnread = []string{"aged", "listed"}, []string{"aged.log", "helper", "tool"}
+		keep = append(keep, agedFile)
+	case runtime.GOOS != "linux":
+		want, keep = append(want, "helper", "tool"), keep[:len(keep)-2] // access times are read on Linux only
 	}
-	for _, kept := range []string{old, lock, fresh, used, marked, deep} {
+	var gotUnread []string
+	for _, path := range unread {
+		gotUnread = append(gotUnread, filepath.Base(path))
+	}
+	if strings.Join(gotUnread, ",") != strings.Join(wantUnread, ",") {
+		t.Fatalf("unread = %v, want %v", gotUnread, wantUnread)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("trashed %v, want %v", got, want)
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Fatalf("trashed %v, want %v", got, want)
+		}
+	}
+	for _, kept := range keep {
 		if _, err := os.Stat(kept); err != nil {
 			t.Fatalf("%s was taken: %v", filepath.Base(kept), err)
 		}

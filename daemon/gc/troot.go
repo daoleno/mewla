@@ -16,7 +16,7 @@ import (
 // The t/ root is the runtime's: each Session's scratch is a marked t/<digest>
 // there. Anything else that appears in it (an agent's mkdir next to its
 // TMPDIR) belongs to no one, so once nothing uses it and nothing in it has
-// changed for UnmarkedGrace it goes to the trash. What was there before this
+// been changed or read for UnmarkedGrace it goes to the trash. What was there before this
 // rule came is listed once and left alone.
 const (
 	KindUnmarked  = "unmarked"
@@ -26,7 +26,7 @@ const (
 )
 
 // ReasonUnmarked is the trash reason of an unmarked t/ item.
-const ReasonUnmarked = "unmarked in t/; unused and unchanged for 48 h"
+const ReasonUnmarked = "unmarked in t/; unused, unread and unchanged for 48 h"
 
 type rootSnapshot struct {
 	Since time.Time `json:"since"`
@@ -37,25 +37,32 @@ func snapshotPath(stateRoot string) string {
 	return filepath.Join(stateRoot, "gc", "t-root-before.json")
 }
 
+// readsRecorded reports whether the file system at path records reads in
+// access times (not mounted noatime). A variable so tests can take either
+// side whatever the test machine mounts.
+var readsRecorded = recordsReads
+
 // SweepUnmarked moves to the trash every unmarked item of the t/ root that
 // was not there when the rule came (the first sweep lists those), that no
-// process uses (usage) and in which nothing changed for UnmarkedGrace. Only
-// directories and regular files are candidates; sockets, pipes, symlinks and
-// *.lock files stay.
-func SweepUnmarked(stateRoot string, usage Usage, now time.Time) ([]Item, error) {
+// process uses (usage) and in which nothing was changed or read for
+// UnmarkedGrace. Only directories and regular files are candidates; sockets,
+// pipes, symlinks and *.lock files stay. On a file system that does not record
+// reads, an item holding a file is not proven unread: it stays, and is
+// returned in unread.
+func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, unread []string, err error) {
 	root := filepath.Join(stateRoot, "t")
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	before, err := readSnapshot(stateRoot, entries, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var moved []Item
+	reads := readsRecorded(root)
 	for _, entry := range entries {
 		name := entry.Name()
 		if before[name] {
@@ -79,16 +86,20 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) ([]Item, error)
 		if _, used := usage.Uses(path); used {
 			continue
 		}
-		if changedSince(path, now.Add(-UnmarkedGrace)) {
+		switch touchedSince(path, now.Add(-UnmarkedGrace), reads) {
+		case touched:
+			continue
+		case unproven:
+			unread = append(unread, path)
 			continue
 		}
 		item, err := Trash(stateRoot, KindUnmarked, path, "", ReasonUnmarked, now)
 		if err != nil {
-			return moved, err
+			return moved, unread, err
 		}
 		moved = append(moved, item)
 	}
-	return moved, nil
+	return moved, unread, nil
 }
 
 // readSnapshot returns the names the t/ root held when the rule came,
@@ -128,23 +139,41 @@ func readSnapshot(stateRoot string, entries []os.DirEntry, now time.Time) (map[s
 	return names, nil
 }
 
-// changedSince reports anything in the tree at path (itself included)
-// modified after cutoff. It stops at the first one.
-func changedSince(path string, cutoff time.Time) bool {
-	found := false
+type touch int
+
+const (
+	untouched touch = iota
+	touched         // changed or read after the cutoff, or unreadable
+	unproven        // holds a file whose reads the file system does not record
+)
+
+// touchedSince looks for anything in the tree at path (itself included)
+// modified after cutoff, or a file in it read after cutoff: a helper script a
+// Trigger runs every few minutes, or a binary, is used between two /proc reads
+// and never modified. With relatime (the Linux default) a read file's access
+// time moves at least once a day, well inside UnmarkedGrace; mounted noatime
+// (reads false) it never does, so any file leaves the tree unproven. A
+// directory's access time is not counted: listing it, as this walk does,
+// moves it.
+func touchedSince(path string, cutoff time.Time, reads bool) touch {
+	result := untouched
 	_ = filepath.WalkDir(path, func(_ string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			found = true // unreadable: not proven unchanged
+			result = touched // unreadable: not proven unchanged
 			return fs.SkipAll
 		}
 		info, err := entry.Info()
-		if err != nil || info.ModTime().After(cutoff) {
-			found = true
+		if err != nil || info.ModTime().After(cutoff) ||
+			(reads && info.Mode().IsRegular() && accessTime(info).After(cutoff)) {
+			result = touched
 			return fs.SkipAll
+		}
+		if !reads && info.Mode().IsRegular() {
+			result = unproven // keep looking: a change still says touched
 		}
 		return nil
 	})
-	return found
+	return result
 }
 
 func writeFileAtomic(path string, data []byte) error {
