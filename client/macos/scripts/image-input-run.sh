@@ -222,14 +222,20 @@ key 'keystroke "a" using command down'; key 'key code 51'
 # A file that reaches Mewla Dev but cannot be read when it reads it (it went in between): a chip that says so.
 unread='\[failed (gone\.png|File): Mewla can.t read this file\.\]'
 cp "$D/picture.png" "$D/gone.png"
-"$B/drag" "$mid_x" "$mid_y" 2 "$D/m0" "$D/gone.png" > "$D/drag.out" 2>&1 &
+# Its own marker: the deletion waits until the drag is over the window (a marker left by an earlier drag deleted the
+# file before this drag began, and macOS refuses a drag of a file that is not there, as the mode-000 one).
+rm -f "$D/m-gone"
+"$B/drag" "$mid_x" "$mid_y" 2 "$D/m-gone" "$D/gone.png" > "$D/drag.out" 2>&1 &
 dragging=$!
-for _ in $(seq 1 30); do [ -e "$D/m0" ] && break; sleep 0.3; done
+for _ in $(seq 1 30); do [ -e "$D/m-gone" ] && break; sleep 0.3; done
 rm -f "$D/gone.png"; wait "$dragging"; report "file gone before the drop: $(grep "drag ended" "$D/drag.out")"
-wait_chips "$unread" 30 && report "file gone before the drop: $(chips | grep -oE "\[failed [^]]*\]")" || report "KNOWN GAP (reported, not failed; PR #31): a file deleted between the drag entering and the drop ends with no chip"
+wait_chips "$unread" 30 && report "file gone before the drop: $(chips | grep -oE "\[failed [^]]*\]")" || failed "a dropped file that could not be read has no chip that says why"
 unread_before=$(chips | grep -oE "$unread" | wc -l | tr -d ' ')
 cp "$D/picture.png" "$D/gone.png"; "$B/pasteboard" file "$D/gone.png"; rm -f "$D/gone.png"; front; cmd_v
 wait_chips "($unread.*){$((unread_before + 1))}" 30 && report "file gone before the paste: its own such chip" || failed "a pasted file that could not be read has no chip that says why"
+# The same as Finder copies it (a file reference, which names nothing once the file is gone): a chip, not its name.
+cp "$D/picture.png" "$D/copied.png"; "$B/pasteboard" reference "$D/copied.png"; rm -f "$D/copied.png"; front; cmd_v
+wait_chips "($unread.*){$((unread_before + 2))}" 30 && report "Finder copy gone before the paste: $(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //'), its own such chip" || failed "a Finder copy gone before the paste has no chip that says why"
 report "phase 3 chips: $(chips)"
 shot phase3
 send; sleep 2; report "phase 3 after Send: $(chips)"
