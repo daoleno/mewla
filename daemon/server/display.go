@@ -329,7 +329,7 @@ func (s *Server) screenBinding(deviceID string) (func([]string) (any, error), fu
 		if len(fingerprints) == 0 {
 			return errors.New("the viewer's answer names no DTLS certificate")
 		}
-		device, err := s.auth.VerifyAuthorization(authorization, auth.ScreenDTLSPurpose(fingerprints), 5*time.Minute)
+		device, err := s.auth.VerifyAuthorization(authorization, auth.ScreenDTLSPurpose(fingerprints), 5*time.Minute, nil)
 		if err != nil {
 			return fmt.Errorf("the viewer's answer is not signed by a paired device: %w", err)
 		}

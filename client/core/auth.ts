@@ -102,6 +102,10 @@ async function mintLocalDeviceIdentity(): Promise<LocalDeviceIdentity> {
 export async function buildAuthorizationHeader(input: {
   daemonId: string;
   purpose: AuthPurpose;
+  /** The request's nonce when the answer must sign it (an app challenge, core/daemonProof.ts); else a random one. */
+  nonceHex?: string;
+  /** What the header is bound to (core/daemonProof.ts `bindingFor`); none for an unbound one. */
+  binding?: string | null;
 }): Promise<string> {
   const daemonId = normalizeDaemonId(input.daemonId);
   if (!daemonId) {
@@ -110,7 +114,7 @@ export async function buildAuthorizationHeader(input: {
 
   const identity = await getOrCreateLocalDeviceIdentity();
   const timestamp = Date.now().toString();
-  const nonceHex = bytesToHex(platform().randomBytes(16));
+  const nonceHex = input.nonceHex ?? bytesToHex(platform().randomBytes(16));
   return signDeviceAuthorization({
     purpose: input.purpose,
     daemonId,
@@ -118,6 +122,7 @@ export async function buildAuthorizationHeader(input: {
     seedHex: identity.seedHex,
     timestamp,
     nonceHex,
+    binding: input.binding,
   });
 }
 

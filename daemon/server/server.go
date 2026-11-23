@@ -198,6 +198,7 @@ type Server struct {
 	runtimeClosing             bool
 	terminalCleanup            terminalCleanupOwner
 	tlsConfig                  *tls.Config
+	transportPin               string
 	addresses                  *addressbook.Store
 	directEndpoints            func() []DirectEndpoint
 	linkRoute                  func() (LinkRoute, bool)
@@ -265,6 +266,12 @@ type Server struct {
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
 func (s *Server) SetTLSConfig(config *tls.Config) {
 	s.tlsConfig = config
+}
+
+// SetTransportPin is the SPKI SHA-256 of this computer's transport key: a
+// device header bound to it ("pin:") was made inside TLS pinned to this key.
+func (s *Server) SetTransportPin(pin string) {
+	s.transportPin = strings.ToLower(strings.TrimSpace(pin))
 }
 
 func (s *Server) SetCalendar(store *calendar.Store, scheduler *calendar.Scheduler) {
@@ -658,11 +665,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		if _, ok := s.authenticateRequest(w, r, "mewla-probe"); !ok {
 			return
 		}
-		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", map[string]any{
+		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", s.probeAnswer(r, map[string]any{
 			"ok":                true,
 			"daemon_id":         s.auth.DaemonID(),
 			"daemon_public_key": s.auth.PublicKeyHex(),
-		})
+		}))
 		return
 	}
 	device, ok := s.authenticateRequest(w, r, "mewla-connect")
@@ -680,6 +687,18 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	keepBacklogInOutbox(conn.UnderlyingConn())
+	// The first frame proves this is the computer the app paired: the daemon
+	// key signs the nonce of the app's own connect, before anything else can
+	// be queued for the socket. Older apps ignore it.
+	if proof, err := s.challengeProof(auth.ConnectProofPurpose, auth.AuthorizationNonce(authorizationFromRequest(r))); err == nil {
+		proof["type"] = "daemon_proof"
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := conn.WriteJSON(proof); err != nil {
+			_ = conn.Close()
+			return
+		}
+		_ = conn.SetWriteDeadline(time.Time{})
+	}
 	owner := &authenticatedClient{
 		deviceID: device.ID,
 		mewlaApp: app.AppPlatform != "",
@@ -969,12 +988,25 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		DeviceID          string `json:"device_id"`
 		DeviceName        string `json:"device_name"`
 		DevicePublicKey   string `json:"device_public_key"`
+		// Challenge is the app's own 16 bytes (hex): the answer signs it, so a
+		// recorded answer proves nothing to the next app. Older apps send none.
+		Challenge string `json:"challenge"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 	decoder := json.NewDecoder(r.Body)
 	if decoder.Decode(&raw) != nil || decoder.Decode(new(any)) != io.EOF {
 		http.Error(w, "invalid json body", http.StatusBadRequest)
 		return
+	}
+	// A bad challenge is refused before the one-time code is spent on it.
+	var proof map[string]any
+	if raw.Challenge != "" {
+		signed, err := s.challengeProof(auth.PairChallengePurpose, raw.Challenge)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		proof = signed
 	}
 
 	device, err := s.auth.EnrollDevice(
@@ -990,13 +1022,42 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-pair", map[string]any{
+	answer := map[string]any{
 		"ok":                true,
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
 		"device_id":         device.ID,
 		"device_name":       device.Name,
-	})
+	}
+	if proof != nil {
+		answer["proof"] = proof
+	}
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-pair", answer)
+}
+
+// challengeProof is the daemon's answer to a caller-chosen challenge, beside
+// the response's own assertion (which older apps check): purpose, time,
+// challenge and signature.
+func (s *Server) challengeProof(purpose auth.ChallengePurpose, challengeHex string) (map[string]any, error) {
+	assertion, err := s.auth.CreateChallengeAssertionFor(purpose, challengeHex)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"purpose":   string(purpose),
+		"timestamp": assertion.Timestamp,
+		"nonce":     assertion.NonceHex,
+		"signature": assertion.SignatureHex,
+	}, nil
+}
+
+// probeAnswer is a paired device's /auth-check answer: the daemon's old
+// assertion, and a proof over the nonce of the device's own signed request.
+func (s *Server) probeAnswer(r *http.Request, payload map[string]any) map[string]any {
+	if proof, err := s.challengeProof(auth.ProbeChallengePurpose, auth.AuthorizationNonce(authorizationFromRequest(r))); err == nil {
+		payload["proof"] = proof
+	}
+	return payload
 }
 
 func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
@@ -1004,13 +1065,13 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", map[string]any{
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", s.probeAnswer(r, map[string]any{
 		"ok":                true,
 		"device_id":         device.ID,
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
 		"name":              s.computerName,
-	})
+	}))
 }
 
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -4444,7 +4505,7 @@ func formatUploadBytes(size int64) string {
 }
 
 func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, purpose string) (*auth.TrustedDevice, bool) {
-	device, err := s.auth.VerifyAuthorization(authorizationFromRequest(r), purpose, 5*time.Minute)
+	device, err := s.auth.VerifyAuthorization(authorizationFromRequest(r), purpose, 5*time.Minute, s.requestBinding(r))
 	if err != nil {
 		s.logRefusedRequest(r, purpose, err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -4452,6 +4513,59 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 	}
 	auth.NotifyAuthenticated(r.Context())
 	return device, true
+}
+
+// requestBinding says whether a v2 device header's binding is the way this
+// request came (security review 11-23, PR B item 6): a host in the middle that
+// the app was made to talk to cannot hand the app's signature on to this
+// computer, since it names that host.
+//   - "pin:<pin>": made inside TLS pinned to this computer's transport key; it
+//     must be this computer's pin, over TLS.
+//   - "host:<name>" over TLS this daemon terminated (Mewla Relay, the hosted
+//     address): the SNI must name it, so whoever forwards through the relay,
+//     which routes by SNI, cannot reach this computer with it.
+//   - "host:<name>" over plain HTTP: the request's Host, and nothing else.
+//     X-Forwarded-Host is a client's word even through a proxy on this
+//     computer (Cloudflare Tunnel and tailscale serve pass one a client sent),
+//     so trusting it from loopback let any host relay through them (security
+//     review 11-23, round 2 F1). A tunnel that keeps the public Host routes by
+//     it, so a host in the middle cannot reach this computer through it with
+//     its own name. A Host that is an address (a proxy's upstream, a LAN IP,
+//     localhost) says nothing of the name the app used and is accepted from
+//     any peer: whoever reaches a plain listener sets its Host anyway, so
+//     refusing would stop no relay, only the proxies that rewrite Host.
+//     Binding holds only where every path to this daemon is TLS it terminates,
+//     or a tunnel that keeps the public Host.
+func (s *Server) requestBinding(r *http.Request) auth.BindingCheck {
+	return func(binding string) bool {
+		if pin, ok := strings.CutPrefix(binding, "pin:"); ok {
+			return r.TLS != nil && s.transportPin != "" && pin == s.transportPin
+		}
+		host, ok := strings.CutPrefix(binding, "host:")
+		if !ok {
+			return false
+		}
+		if r.TLS != nil && r.TLS.ServerName != "" {
+			return bindingHostname(r.TLS.ServerName) == host
+		}
+		seen := bindingHostname(r.Host)
+		if seen == host {
+			return true
+		}
+		return r.TLS == nil && (seen == "localhost" || net.ParseIP(seen) != nil)
+	}
+}
+
+// bindingHostname is a Host (or SNI) as a binding names it: lowercase, no
+// port, no IPv6 brackets, no trailing dot (client/core deviceAuthContract.ts
+// bindingHost, line for line).
+func bindingHostname(hostport string) string {
+	host := strings.ToLower(strings.TrimSpace(hostport))
+	if split, _, err := net.SplitHostPort(host); err == nil {
+		host = split
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	return strings.TrimSuffix(host, ".")
 }
 
 // authSubprotocolPrefix starts the one WebSocket subprotocol a browser offers
@@ -4538,6 +4652,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
 		"version":           s.version,
+		// This daemon signs the app's challenges (/pair, /auth-check, the
+		// socket's first frame): an app holding it to proofs tells an older
+		// Mewla, which says nothing here, by name.
+		"connect_proof": true,
 	}
 	challenge, challenged := r.URL.Query()["challenge"]
 	if !challenged {
@@ -4553,7 +4671,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeSignedJSON(w, http.StatusOK, auth.HealthChallengePurpose, assertion, payload)
+	writeSignedJSON(w, http.StatusOK, string(auth.HealthChallengePurpose), assertion, payload)
 }
 
 func (s *Server) writeJSONWithAssertion(w http.ResponseWriter, status int, purpose string, payload map[string]any) {

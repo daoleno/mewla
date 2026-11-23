@@ -1,5 +1,6 @@
 import { resolveStoredServerURL, serverURLNow } from "../link/pinnedTransport";
 import { getOrCreateLocalDeviceIdentity } from "../auth";
+import { bindingFor, daemonAnswer, daemonProves, newChallenge, noteProvedAt, olderMewlaLine, PROBE_CHALLENGE_PURPOSE, provedAtKey, provedAtRecently } from "../daemonProof";
 import { signDeviceAuthorization } from "../deviceAuthContract";
 import { buildHTTPURL } from "../pairing";
 import { platform } from "../platform";
@@ -35,6 +36,10 @@ export interface SignedOptions {
   body?: unknown;
   query?: Record<string, string | undefined>;
   timeoutMs?: number;
+  /** The request's nonce, when the answer must sign it (a challenge of this app's, `newChallenge`). */
+  nonceHex?: string;
+  /** The caller checks the computer's proof in the answer itself (`/auth-check`), so none is asked for first. */
+  answerProves?: boolean;
 }
 
 /** `prefix:sha256=<hex of the body>`, the purpose of a signed POST. */
@@ -59,8 +64,22 @@ function daemonURLAt(base: string, server: StoredServer, pathname: string, query
   return params.length ? `${url}?${params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&")}` : url;
 }
 
-/** The `Authorization` header this phone's device key signs for one purpose on this computer. */
-export async function deviceAuthorization(server: StoredServer, purpose: string): Promise<string> {
+/**
+ * The `Authorization` header this phone's device key signs for one purpose on this computer. With the `url` the request
+ * goes to, it is bound there (core/daemonProof.ts `bindingFor`), so a host in the middle cannot hand it on; a signature
+ * that is no request's (a Screen answer) passes none.
+ *
+ * A computer held to proofs is asked for one at that origin first, unless it proved itself there a moment ago (its
+ * socket, an earlier probe): a pairing at a host that is not the computer gets no signed request, upload or Screen
+ * viewer from this app, and no answer from it is taken (security review 11-23, round 2 F4). `answerProves` is for a
+ * caller that checks the proof in the answer itself.
+ */
+export async function deviceAuthorization(server: StoredServer, purpose: string, options: { nonceHex?: string; url?: string; answerProves?: boolean } = {}): Promise<string> {
+  if (options.url && !options.answerProves) await heldToProof(server, options.url);
+  return signedHeader(server, purpose, options);
+}
+
+async function signedHeader(server: StoredServer, purpose: string, options: { nonceHex?: string; url?: string }): Promise<string> {
   const identity = await getOrCreateLocalDeviceIdentity();
   return signDeviceAuthorization({
     purpose,
@@ -68,8 +87,56 @@ export async function deviceAuthorization(server: StoredServer, purpose: string)
     deviceId: identity.deviceId,
     seedHex: identity.seedHex,
     timestamp: Date.now().toString(),
-    nonceHex: bytesToHex(platform().randomBytes(16)),
+    nonceHex: options.nonceHex ?? bytesToHex(platform().randomBytes(16)),
+    binding: options.url ? await bindingFor(server, options.url) : null,
   });
+}
+
+const probing = new Map<string, Promise<void>>();
+const PROBE_TIMEOUT_MS = 8_000;
+
+/** Resolves once the computer, if it is held to proofs, has proved itself at `url`'s origin; rejects otherwise. */
+async function heldToProof(server: StoredServer, url: string): Promise<void> {
+  if (!(await daemonProves(server.daemonPublicKey)) || provedAtRecently(server.daemonPublicKey, url)) return;
+  const key = provedAtKey(server.daemonPublicKey, url);
+  if (!key) throw new Error(`${server.name || "The computer"} has no address`);
+  let flight = probing.get(key);
+  if (!flight) {
+    flight = probeAt(server, url).finally(() => probing.delete(key));
+    probing.set(key, flight);
+  }
+  await flight;
+}
+
+/** The computer's signed `/auth-check` at `url`'s origin, over this app's challenge (core/settings/computer.ts checkComputer). */
+async function probeAt(server: StoredServer, url: string): Promise<void> {
+  const name = server.name || "The computer";
+  const at = new URL(url);
+  at.protocol = at.protocol === "wss:" ? "https:" : at.protocol === "ws:" ? "http:" : at.protocol;
+  at.pathname = "/auth-check";
+  at.search = "";
+  at.hash = "";
+  const challengeHex = newChallenge();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await platform().fetch(at.toString(), {
+      method: "GET",
+      signal: controller.signal,
+      headers: { Authorization: await signedHeader(server, "mewla-probe", { nonceHex: challengeHex, url: at.toString() }) },
+    });
+  } catch (error) {
+    throw controller.signal.aborted ? new Error(`${name} did not answer`) : error;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) throw await answerError(server, response);
+  const body = (await response.json().catch(() => null)) as Parameters<typeof daemonAnswer>[0]["body"];
+  const answer = await daemonAnswer({ purpose: PROBE_CHALLENGE_PURPOSE, oldPurpose: "mewla-probe", challengeHex, daemonId: server.daemonId, daemonPublicKey: server.daemonPublicKey, body });
+  if (answer === "older") throw new Error(olderMewlaLine(server.name));
+  if (answer !== "proved") throw new Error(`${name} did not prove it is the computer this app paired`);
+  noteProvedAt(server.daemonPublicKey, url);
 }
 
 /** A request signed by the device key; settles within 30 s. */
@@ -92,7 +159,7 @@ export async function signedFetch(
       signal: controller.signal,
       headers: {
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
-        Authorization: await deviceAuthorization(server, signed),
+        Authorization: await deviceAuthorization(server, signed, { nonceHex: options.nonceHex, url, answerProves: options.answerProves }),
       },
       body: text,
     });

@@ -54,7 +54,7 @@ func TestVerifyAuthorizationNamesWhyARequestWasRefused(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := manager.VerifyAuthorization(tc.header, tc.purpose, 5*time.Minute)
+			_, err := manager.VerifyAuthorization(tc.header, tc.purpose, 5*time.Minute, nil)
 			if !errors.Is(err, tc.is) {
 				t.Fatalf("error = %v, want %v", err, tc.is)
 			}
@@ -74,11 +74,11 @@ func TestVerifyAuthorizationNamesWhyARequestWasRefused(t *testing.T) {
 
 	t.Run("replay says how soon after the first", func(t *testing.T) {
 		header := sign(privateKey, "device-1", daemonID, "mewla-probe", time.Now())
-		if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute); err != nil {
+		if _, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil); err != nil {
 			t.Fatal(err)
 		}
 		time.Sleep(30 * time.Millisecond)
-		_, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute)
+		_, err := manager.VerifyAuthorization(header, "mewla-probe", time.Minute, nil)
 		if !errors.Is(err, ErrReplayDetected) {
 			t.Fatalf("error = %v, want replay", err)
 		}

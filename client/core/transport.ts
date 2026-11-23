@@ -1,4 +1,5 @@
 import { buildAuthorizationHeader } from "./auth";
+import { bindingFor, CONNECT_PROOF_PURPOSE, daemonProves, newChallenge, noteDaemonProves, noteProvedAt, olderMewlaLine, proofAnswers, runsOlderMewla } from "./daemonProof";
 import {
   checkDirectPath,
   invalidateStoredServerTransport,
@@ -212,6 +213,18 @@ export class Transport {
   private retiring: { socket: SocketLike; owed: Set<string>; timer: ReturnType<typeof setTimeout> } | null = null;
   /** The live socket came by a move (not a connect): one that dies soon after counts against moving. */
   private openedByMove = false;
+  /**
+   * The connect's own nonce, which the computer's first frame signs (`daemon_proof`, daemon/server handleWS). A computer
+   * that has proved before is held to it (`gate`): until its proof verifies the socket is not connected, so nothing
+   * is sent to it and nothing it sends is heard (security review 11-23, PR B item 6).
+   */
+  private proof: { attempt: number; nonceHex: string; url: string; gate: Array<{ data: unknown }> | null; passed: boolean } | null = null;
+  /**
+   * Why a computer held to its proof is not connected, when the cause is known: it runs a Mewla from before proofs (a
+   * downgrade), which refuses this app's bound connect. Said in place of a bare "error" until a connect succeeds.
+   */
+  private olderMewla = "";
+  private checkingOlder = false;
 
   constructor(
     public server: StoredServer,
@@ -309,8 +322,10 @@ export class Transport {
     this.clearTimers();
     const socket = this.socket;
     this.socket = null;
-    // Its attempt is over: its end changes nothing.
+    // Its attempt is over: its end changes nothing, so what waited to go out on it is dropped here, as an end would
+    // (round 2 F8): none of it goes out on the next socket.
     this.attempt++;
+    this.queue = [];
     socket?.close(4000, "restart");
     void this.open();
   }
@@ -423,20 +438,25 @@ export class Transport {
     // A host call or socket event that never lands (the app was frozen under it) must not hold "connecting" for good.
     this.attemptTimer = setTimeout(() => this.giveUp(attempt), transportTiming.connectLimitMs);
     this.state = "connecting";
-    let ready: Promise<[string, string]>;
+    const nonceHex = newChallenge();
+    let ready: Promise<[string, string, boolean]>;
     try {
-      ready = Promise.all([
-        buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect" }),
-        this.resolveURL(this.server),
-      ]);
+      ready = (async () => {
+        const [url, proves] = await Promise.all([this.resolveURL(this.server), daemonProves(this.server.daemonPublicKey)]);
+        // Bound to where it goes once the computer signs challenges (older mewla refuses a bound header).
+        const binding = proves ? await bindingFor(this.server, url) : null;
+        const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect", nonceHex, binding });
+        return [authorization, url, proves];
+      })();
     } catch (error) {
       ready = Promise.reject(error);
     }
     this.tellState();
     let socket: SocketLike;
     try {
-      const [authorization, url] = await ready;
+      const [authorization, url, proves] = await ready;
       if (attempt !== this.attempt) return;
+      this.proof = { attempt, nonceHex, url, gate: proves ? [] : null, passed: false };
       socket = platform().openSocket(url, [authSubprotocol(authorization), ...frameSubprotocols()]);
     } catch (error) {
       if (attempt === this.attempt) this.failed(error instanceof Error ? error.message : String(error), true);
@@ -449,27 +469,63 @@ export class Transport {
     this.attemptTimer = setTimeout(() => this.giveUp(attempt), transportTiming.connectLimitMs);
     socket.onopen = () => {
       if (attempt !== this.attempt) return socket.close();
-      this.clearAttempt();
-      this.retryMs = transportTiming.firstRetryMs;
-      const lastProblem = this.problem;
-      this.problem = "";
-      this.lastFrameAt = Date.now();
-      this.openedAt = this.lastFrameAt;
-      this.openedByMove = false;
-      // The path this socket is carried on stays its own: no other caller re-measures it while it is open.
-      transportOpened(this.server);
-      this.openedPath = this.moves.current(this.server) ?? (this.server.transportKind === "link" ? "link" : "address");
-      this.startWatchdog();
-      this.state = "connected";
-      this.healthyChecks = 0;
-      this.moveWaitMs = transportTiming.moveCheckMs;
-      this.scheduleMoveCheck();
-      this.reportLost(lastProblem);
-      this.tellState();
-      // Behind whatever of the last socket is still being handed over, in a call of its own.
-      this.receive({ type: "connected" }, BIG_FRAME_BYTES);
+      // Held to its proof: connected only once the first frame proves it (`passGate`), within the attempt's time; once
+      // only, should the proof have come first.
+      if ((this.proof?.attempt === attempt && this.proof.gate) || (this.socket === socket && this.state === "connected")) return;
+      this.opened();
     };
     this.listen(socket, attempt);
+  }
+
+  /** The socket is open and, where the computer is held to it, proved: the connection is up. */
+  private opened(): void {
+    this.olderMewla = "";
+    this.clearAttempt();
+    this.retryMs = transportTiming.firstRetryMs;
+    const lastProblem = this.problem;
+    this.problem = "";
+    this.lastFrameAt = Date.now();
+    this.openedAt = this.lastFrameAt;
+    this.openedByMove = false;
+    // The path this socket is carried on stays its own: no other caller re-measures it while it is open.
+    transportOpened(this.server);
+    this.openedPath = this.moves.current(this.server) ?? (this.server.transportKind === "link" ? "link" : "address");
+    this.startWatchdog();
+    this.state = "connected";
+    this.healthyChecks = 0;
+    this.moveWaitMs = transportTiming.moveCheckMs;
+    this.scheduleMoveCheck();
+    this.reportLost(lastProblem);
+    this.tellState();
+    // Behind whatever of the last socket is still being handed over, in a call of its own.
+    this.receive({ type: "connected" }, BIG_FRAME_BYTES);
+  }
+
+  /**
+   * The first frame of a socket held to its proof: the computer's signature over this connect's nonce, or the socket is
+   * not this computer's (whoever answered at the address could not sign it) and is given up. What came behind the
+   * proof meanwhile is heard once it passed, in order.
+   */
+  private async passGate(socket: SocketLike, attempt: number, gate: Array<{ data: unknown }>): Promise<void> {
+    const proof = this.proof;
+    let frame: Frame | null = null;
+    try {
+      const text = frameText(gate[0].data);
+      frame = text === null ? null : JSON.parse(text);
+    } catch {
+      frame = null;
+    }
+    const proved =
+      frame?.type === "daemon_proof" &&
+      !!proof &&
+      (await proofAnswers({ purpose: CONNECT_PROOF_PURPOSE, challengeHex: proof.nonceHex, daemonId: this.server.daemonId, daemonPublicKey: this.server.daemonPublicKey, proof: frame }));
+    if (attempt !== this.attempt || this.socket !== socket || this.proof !== proof || !proof) return;
+    if (!proved) return this.kill(`${this.server.name || "The computer"} did not prove it is the computer this app paired`);
+    noteProvedAt(this.server.daemonPublicKey, proof.url);
+    proof.passed = true;
+    proof.gate = null;
+    this.opened();
+    for (const event of gate.slice(1)) socket.onmessage?.(event);
   }
 
   /** The live socket's frames and end. */
@@ -477,6 +533,12 @@ export class Transport {
     let ended = false;
     socket.onmessage = (event) => {
       if (attempt !== this.attempt) return;
+      const gate = this.proof?.attempt === attempt ? this.proof.gate : null;
+      if (gate) {
+        gate.push(event);
+        if (gate.length === 1) void this.passGate(socket, attempt, gate);
+        return;
+      }
       this.lastFrameAt = Date.now();
       let frame: Frame;
       let bytes = 0;
@@ -496,6 +558,7 @@ export class Transport {
         return;
       }
       if (!frame || typeof frame.type !== "string") return;
+      if (frame.type === "daemon_proof") return void this.noteProof(frame, attempt);
       if (frame.type === "frame_coming") {
         this.comingUntil = Date.now() + transportTiming.silentLimitMs + comingMs(frame.bytes);
         return;
@@ -509,6 +572,7 @@ export class Transport {
       if (this.socket === socket) this.socket = null;
       if (attempt !== this.attempt) return;
       const wasConnected = this.state === "connected";
+      if (!wasConnected) this.heldAttemptFailed(attempt);
       if (wasConnected) {
         const now = Date.now();
         const awayMs = this.away && this.awaySince ? now - this.awaySince : 0;
@@ -539,6 +603,39 @@ export class Transport {
     socket.onclose = (event) => end(event.reason || `closed (${event.code})`);
   }
 
+  /** A proof from a computer not yet held to one: it proves now, so it is from then on. */
+  private async noteProof(frame: Frame, attempt: number): Promise<void> {
+    const proof = this.proof;
+    if (!proof || proof.attempt !== attempt || proof.passed) return;
+    proof.passed = true;
+    if (await proofAnswers({ purpose: CONNECT_PROOF_PURPOSE, challengeHex: proof.nonceHex, daemonId: this.server.daemonId, daemonPublicKey: this.server.daemonPublicKey, proof: frame })) {
+      await noteDaemonProves(this.server.daemonPublicKey);
+    }
+  }
+
+  /**
+   * A connect to a computer held to its proof failed before it was up: once per run of failures, the computer is asked
+   * (its /health, answered by its key) whether it runs a Mewla from before proofs, and if so that is what is said.
+   */
+  private heldAttemptFailed(attempt: number): void {
+    if (this.proof?.attempt !== attempt || !this.proof.gate || this.olderMewla || this.checkingOlder) return;
+    this.checkingOlder = true;
+    void (async () => {
+      try {
+        const url = await this.resolveURL(this.server);
+        if (!(await runsOlderMewla(this.server, url)) || this.state === "connected") return;
+        this.olderMewla = olderMewlaLine(this.server.name);
+        if (!this.wanted) return;
+        this.problem = this.olderMewla;
+        this.tellState();
+      } catch {
+        // Unreachable: the failure says what it says.
+      } finally {
+        this.checkingOlder = false;
+      }
+    })();
+  }
+
   /** The attempt in flight is past its time: its socket is closed as lost, or, with none yet, the attempt is dropped. */
   private giveUp(attempt: number): void {
     this.attemptTimer = null;
@@ -560,7 +657,7 @@ export class Transport {
 
   /** Sets the next state and arms the retry; the state listeners are told afterwards (`tellState`). */
   private armRetry(problem: string): void {
-    this.problem = problem;
+    this.problem = this.olderMewla || problem;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
     if (!this.wanted) {
@@ -683,8 +780,9 @@ export class Transport {
   /** Ends the current socket as lost (not intentional): what is waiting fails, and the retry follows. */
   private kill(reason: string): void {
     const socket = this.socket;
-    socket?.close(4000, reason);
+    // The reason is told first: a platform whose close event comes at once (Bun's) would tell its own instead.
     socket?.onclose?.({ code: 4000, reason });
+    socket?.close(4000, reason);
   }
 
   private clearAttempt(): void {
@@ -763,9 +861,14 @@ export class Transport {
     const epoch = this.moveEpoch;
     const from = this.socket;
     let socket: SocketLike;
+    // A computer held to its proof proves the move's socket too, over the move's own nonce, before the Transport moves
+    // onto it: nothing goes out on it and nothing it sends is heard until then (security review 11-23, round 2 F3).
+    const nonceHex = newChallenge();
+    let held = false;
     this.moveChecking = true;
     try {
-      const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect" });
+      held = await daemonProves(this.server.daemonPublicKey);
+      const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-connect", nonceHex, binding: await bindingFor(this.server, found.url) });
       if (epoch !== this.moveEpoch || attempt !== this.attempt || this.socket !== from || this.state !== "connected" || this.away) {
         return this.moves.abandoned(this.server);
       }
@@ -778,11 +881,43 @@ export class Transport {
     }
     const timer = setTimeout(() => this.failMove(), transportTiming.moveOpenLimitMs);
     this.moving = { socket, timer, path: found.path };
-    socket.onmessage = () => undefined;
-    socket.onopen = () => {
-      if (this.moving?.socket !== socket) return socket.close(1000, "moved");
+    // Open and proved, in whichever order NSH tells them: then the Transport moves onto it, and what came behind the
+    // proof is heard after the move, in order.
+    let open = false;
+    let proved = !held;
+    const gate: Array<{ data: unknown }> = [];
+    const ready = () => {
+      if (!open || !proved || this.moving?.socket !== socket) return;
       if (attempt !== this.attempt || this.socket !== from || this.state !== "connected") return this.failMove();
       this.swap(socket, attempt);
+      for (const event of gate.slice(1)) socket.onmessage?.(event);
+    };
+    socket.onmessage = (event) => {
+      if (!held || this.moving?.socket !== socket) return;
+      gate.push(event);
+      if (gate.length > 1) return;
+      void (async () => {
+        let frame: Frame | null = null;
+        try {
+          const text = frameText(event.data);
+          frame = text === null ? null : JSON.parse(text);
+        } catch {
+          frame = null;
+        }
+        const ok =
+          frame?.type === "daemon_proof" &&
+          (await proofAnswers({ purpose: CONNECT_PROOF_PURPOSE, challengeHex: nonceHex, daemonId: this.server.daemonId, daemonPublicKey: this.server.daemonPublicKey, proof: frame }));
+        if (this.moving?.socket !== socket) return;
+        if (!ok) return this.failMove();
+        noteProvedAt(this.server.daemonPublicKey, found.url);
+        proved = true;
+        ready();
+      })();
+    };
+    socket.onopen = () => {
+      if (this.moving?.socket !== socket) return socket.close(1000, "moved");
+      open = true;
+      ready();
     };
     socket.onerror = () => this.moving?.socket === socket && this.failMove();
     socket.onclose = () => this.moving?.socket === socket && this.failMove();
