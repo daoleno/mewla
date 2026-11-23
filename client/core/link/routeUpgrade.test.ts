@@ -110,8 +110,8 @@ describe("the computer's route, told over the connection a pairing by address al
       "1\naa\nbb\ncc\ndd\n1700000000000\nregion-a\nwss://quiet-otter.a.link.test/ws\nregion-b\nwss://quiet-otter.b.link.test:8443/ws",
     );
     // A control character in a name or URL has no binding (review 11-23, finding 4; the daemon refuses the same).
-    // U+0085 is one Go's TrimSpace would strip and JavaScript's trim keeps.
-    for (const bad of ["\n", "\r", "\u0000", "\t", "\u007f", "\u0085"]) {
+    // U+0085 is one Go's TrimSpace would strip and JavaScript's trim keeps; U+FEFF the other way round (round 2 P1-3).
+    for (const bad of ["\n", "\r", "\u0000", "\t", "\u007f", "\u0085", "\ufeff"]) {
       for (const candidate of [
         { name: `region-a${bad}wss://evil.test/ws`, url: "wss://quiet-otter.a.link.test/ws" },
         { name: "region-a", url: `wss://quiet-otter.a.link.test/ws${bad}` },

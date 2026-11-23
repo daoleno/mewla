@@ -117,6 +117,9 @@ describe("a link to a computer this app has, at another address (review 11-23, f
     expect(pairingScopeCopy("phone", target).message).toContain("access to evil.example (Desk at desk.example),");
     const long = await pairingTarget(readPairingLink(named("D".repeat(80)))!);
     expect(long.name).toBe(`${"D".repeat(39)}…`);
+    // Format characters are dropped: a right-to-left override cannot turn the line around (round 2 P1-2).
+    const turned = await pairingTarget(readPairingLink(named("Desk\u202e\u200belpmaxe.live"))!);
+    expect(turned.name).toBe("Deskelpmaxe.live");
   });
 });
 

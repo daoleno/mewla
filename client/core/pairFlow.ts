@@ -56,7 +56,8 @@ export async function pairingTarget(payload: ConnectionImportPayload): Promise<P
 
 /** The code's name for the computer as the confirmation shows it: chosen by whoever made the link, so one short line. */
 function displayName(name: string | undefined): string {
-  const line = (name ?? "").replace(/\p{Cc}+/gu, " ").replace(/\s+/g, " ").trim();
+  // Format characters (bidi overrides, zero-width) go too: one could turn the line around (round 2 P1-2).
+  const line = (name ?? "").replace(/\p{Cf}+/gu, "").replace(/\p{Cc}+/gu, " ").replace(/\s+/g, " ").trim();
   return line.length > 40 ? `${line.slice(0, 39)}…` : line;
 }
 

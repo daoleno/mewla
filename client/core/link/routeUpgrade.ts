@@ -34,7 +34,8 @@ export function linkRouteBinding(input: {
   candidates: { name: string; url: string }[];
 }): Uint8Array | null {
   const fields = [input.daemonId, input.daemonPublicKey, input.routeId, input.transportPin, ...input.candidates.flatMap((candidate) => [candidate.name, candidate.url])];
-  if (fields.some((field) => /\p{Cc}/u.test(field))) return null;
+  // U+FEFF too: JS trim strips it and Go's TrimSpace keeps it, so the two would sign different bytes (round 2 P1-3).
+  if (fields.some((field) => /[\p{Cc}\uFEFF]/u.test(field))) return null;
   const lines = [
     "1",
     input.daemonId.trim().toLowerCase(),
