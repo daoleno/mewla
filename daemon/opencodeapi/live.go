@@ -332,3 +332,89 @@ func (l *Live) Stream(ctx context.Context, handle func(raw []byte)) error {
 	}
 	return io.EOF
 }
+
+// ModelRef names a model as a session carries it: the provider, the model
+// and its variant (OpenCode's reasoning level), "" for the model's default.
+type ModelRef struct {
+	ID         string `json:"id"`
+	ProviderID string `json:"providerID"`
+	Variant    string `json:"variant,omitempty"`
+}
+
+// ModelInfo is one model of the service's catalog (Model.Info).
+type ModelInfo struct {
+	ID         string `json:"id"`
+	ModelID    string `json:"modelID"`
+	ProviderID string `json:"providerID"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Enabled    *bool  `json:"enabled"`
+	Variants   []struct {
+		ID string `json:"id"`
+	} `json:"variants"`
+}
+
+// Models lists the models the service can use now (`model.list`): those of
+// the providers the person signed in to, ordered by release date.
+func (l *Live) Models(ctx context.Context) ([]ModelInfo, error) {
+	out, err := l.call(ctx, http.MethodGet, "/api/model", nil)
+	if err != nil {
+		return nil, err
+	}
+	return ParseModels(out)
+}
+
+// ParseModels reads a `model.list` answer.
+func ParseModels(raw []byte) ([]ModelInfo, error) {
+	var answer struct {
+		Data []ModelInfo `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		return nil, fmt.Errorf("opencode service: model list: %w", err)
+	}
+	return answer.Data, nil
+}
+
+// DefaultModel is the model a new session starts on (`model.default`).
+func (l *Live) DefaultModel(ctx context.Context) (ModelRef, error) {
+	out, err := l.call(ctx, http.MethodGet, "/api/model/default", nil)
+	if err != nil {
+		return ModelRef{}, err
+	}
+	var answer struct {
+		Data ModelRef `json:"data"`
+	}
+	if err := json.Unmarshal(out, &answer); err != nil {
+		return ModelRef{}, fmt.Errorf("opencode service: default model: %w", err)
+	}
+	return answer.Data, nil
+}
+
+// SessionModel is the model the session runs on (`session.get`); found is
+// false before the session's first prompt, when the service has no session yet.
+func (l *Live) SessionModel(ctx context.Context, sessionID string) (ref ModelRef, found bool, err error) {
+	out, err := l.call(ctx, http.MethodGet, "/api/session/"+url.PathEscape(sessionID), nil)
+	var status *StatusError
+	if errors.As(err, &status) && status.Code == http.StatusNotFound {
+		return ModelRef{}, false, nil
+	}
+	if err != nil {
+		return ModelRef{}, false, err
+	}
+	var answer struct {
+		Data struct {
+			Model ModelRef `json:"model"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(out, &answer); err != nil {
+		return ModelRef{}, false, fmt.Errorf("opencode service: session: %w", err)
+	}
+	return answer.Data.Model, true, nil
+}
+
+// SwitchModel changes the model of the session's next turns
+// (`session.switchModel`); the conversation goes on.
+func (l *Live) SwitchModel(ctx context.Context, sessionID string, ref ModelRef) error {
+	_, err := l.call(ctx, http.MethodPost, "/api/session/"+url.PathEscape(sessionID)+"/model", map[string]any{"model": ref})
+	return err
+}
