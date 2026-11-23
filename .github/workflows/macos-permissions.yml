@@ -27,8 +27,8 @@ jobs:
           name: tcc-probe-${{ github.sha }}
           path: ${{ runner.temp }}/tcc-probe
 
-  walk:
-    name: The permission flow, state by state
+  build:
+    name: Build Mewla (the release's layout, signed ad hoc)
     runs-on: macos-26
     timeout-minutes: 75
     steps:
@@ -66,10 +66,102 @@ jobs:
         run: client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app"
       - name: The host's tests (the panel's placement, its line)
         run: cargo test --release --manifest-path client/macos/Cargo.toml -- --nocapture
+      - name: Keep the app for the walk and the upgrade
+        run: ditto -c -k --keepParent "$RUNNER_TEMP/app/Mewla.app" "$RUNNER_TEMP/Mewla.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mewla-perm-app-${{ github.sha }}
+          path: ${{ runner.temp }}/Mewla.zip
+
+  walk:
+    name: The permission flow, state by state
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-perm-app-${{ github.sha }}
+          path: ${{ runner.temp }}/new
       - name: Walk the flow
-        run: client/macos/scripts/permissions-walk.sh "$RUNNER_TEMP/app/Mewla.app" "$RUNNER_TEMP/walk"
+        run: |
+          ditto -x -k "$RUNNER_TEMP/new/Mewla.zip" "$RUNNER_TEMP/new"
+          client/macos/scripts/permissions-walk.sh "$RUNNER_TEMP/new/Mewla.app" "$RUNNER_TEMP/walk"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: permissions-walk-${{ github.sha }}
           path: ${{ runner.temp }}/walk
+
+  # The owner's own path (11-23): `mewla boot install`, then Mewla for Mac 0.4.25 (the public disk image) taking that
+  # daemon over as its installed-daemon job, whose program was the bare helper (Accessibility charged to it, not to
+  # Mewla.app); then this build over it, as the app's update puts it. Its job must run the app's executable, with
+  # the same daemon, identity and one `mewla serve`.
+  upgrade:
+    name: An older Mewla's daemon job moves onto the app's executable
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      MEWLA_VERSION: v0.4.22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-perm-app-${{ github.sha }}
+          path: ${{ runner.temp }}/new
+      - name: boot install, then Mewla 0.4.25 from its release takes the daemon over
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MEWLA_INSTALL_DIR="$HOME/.local/bin" MEWLA_NO_PATH_UPDATE=1 sh install.sh
+          export PATH="$HOME/.local/bin:$PATH"
+          mewla boot install
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS http://127.0.0.1:9876/health > "$RUNNER_TEMP/health-before.json"
+          gh release download v0.4.25 --repo daoleno/mewla --pattern Mewla-macos-arm64.dmg --dir "$RUNNER_TEMP"
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/image" "$RUNNER_TEMP/Mewla-macos-arm64.dmg"
+          ditto "$RUNNER_TEMP/image/Mewla.app" /Applications/Mewla.app
+          hdiutil detach "$RUNNER_TEMP/image"
+          open -g /Applications/Mewla.app
+          job="gui/$(id -u)/com.daoleno.mewla.installed-daemon"
+          for i in $(seq 1 240); do
+            launchctl print "$job" 2>/dev/null | grep -q "program = /Applications/Mewla.app/Contents/Helpers/mewla" \
+              && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && test -e "$HOME/.mewla/mac-app-takeover.complete" && break
+            sleep 1
+          done
+          launchctl print "$job" | grep -E "program|state =|pid ="
+          launchctl print "$job" | grep -q "program = /Applications/Mewla.app/Contents/Helpers/mewla"
+          test -e "$HOME/.mewla/mac-app-takeover.complete"
+          ps -axo pid,ppid,command | grep -E "Mewla.app/Contents/(MacOS|Helpers)" | grep -v grep
+      - name: This build over it moves the job onto the app's executable
+        run: |
+          set -euo pipefail
+          osascript -e 'tell application id "com.daoleno.mewla" to quit' || true
+          for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla$" >/dev/null || break; sleep 1; done
+          sudo rm -rf /Applications/Mewla.app
+          ditto -x -k "$RUNNER_TEMP/new/Mewla.zip" /Applications
+          open -g /Applications/Mewla.app
+          job="gui/$(id -u)/com.daoleno.mewla.installed-daemon"
+          for i in $(seq 1 240); do
+            launchctl print "$job" 2>/dev/null | grep -q "program = /Applications/Mewla.app/Contents/MacOS/Mewla" \
+              && launchctl print "$job" | grep -q "state = running" && curl -fsS http://127.0.0.1:9876/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          launchctl print "$job" | grep -E "program|arguments|state =|pid =" -A3 | head -20
+          launchctl print "$job" | grep -q "program = /Applications/Mewla.app/Contents/MacOS/Mewla"
+          curl -fsS http://127.0.0.1:9876/health > "$RUNNER_TEMP/health-after.json"
+          python3 -I -c 'import json,sys; a,b=(json.load(open(p)) for p in sys.argv[1:3]); assert a["daemon_id"]==b["daemon_id"], (a,b); print("same daemon_id", a["daemon_id"])' "$RUNNER_TEMP/health-before.json" "$RUNNER_TEMP/health-after.json"
+          ps -axo pid,ppid,command | grep -E "Mewla.app/Contents/(MacOS|Helpers)" | grep -v grep
+          jobpid=$(launchctl print "$job" | awk '/^\tpid = / {print $3}')
+          serve=$(pgrep -f "/Applications/Mewla.app/Contents/Helpers/mewla serve")
+          [[ $(wc -w <<<"$serve") -eq 1 ]]
+          test "$(ps -o ppid= -p "$serve" | tr -d ' ')" = "$jobpid"
+          echo "the daemon $serve is the child of the job's process $jobpid"
+      - name: What the app and launchd said
+        if: always()
+        run: |
+          find "$HOME/Library" -path '*com.daoleno.mewla*' -name '*.log*' 2>/dev/null | while read -r f; do echo "== $f"; grep -E "takeover|WARN" "$f" | tail -40; done
+          tail -40 "$HOME/.mewla/logs/launchd.log" 2>/dev/null || true

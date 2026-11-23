@@ -38,16 +38,18 @@ drop_row() { sudo sqlite3 "$db" "delete from access where service = '$1' and cli
 rows() { sudo sqlite3 "$db" "select service, client, client_type, auth_value from access where client = 'com.daoleno.mewla' or client like '$app/%';"; }
 
 # The daemon's own view (through its control socket: never this shell's, which the runner pre-grants).
-grants() {
-  "$cli" agent-use status --json 2>/dev/null | python3 -I -c '
+cat > "$work/grants.py" <<'PY'
 import json, sys
 try:
     status = json.load(sys.stdin)
 except Exception:
-    print("(no answer)"); sys.exit(0)
-print(" ".join(f"{p[\"id\"]}={p[\"state\"]}" for p in (status.get("computer") or {}).get("permissions") or []) or "(none)")'
-}
-note_grants() { say "daemon: $(grants)"; }
+    print("(no answer)")
+    sys.exit(0)
+grants = (status.get("computer") or {}).get("permissions") or []
+print(" ".join(g["id"] + "=" + g["state"] for g in grants) or "(none)")
+PY
+grants() { "$cli" agent-use status --json 2>/dev/null | python3 -I "$work/grants.py"; }
+note_grants() { say "daemon: $(grants) | rows: $(rows | tr '\n' ' ')"; }
 wait_grant() { # id state seconds
   for _ in $(seq 1 $(( $3 * 2 ))); do grants | grep -q "$1=$2" && return 0; sleep 0.5; done
   return 1
@@ -84,6 +86,34 @@ ps -axo pid,ppid,command | grep -E "Mewla.app/Contents/(MacOS|Helpers)" | grep -
 launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -E "program|state =|pid =" | tee -a "$walk" || true
 note_grants
 
+# Item 3 on the real binaries: Mewla.app's row only (what + Mewla.app writes), the bare helper as its own job (0.4.24)
+# against the app's executable as the job with the helper its child (this change).
+say "one row each for Mewla.app (what + Mewla.app writes); the old job shape against the new"
+quit_gui
+clear_rows; row kTCCServiceAccessibility 2; row kTCCServiceScreenCapture 2; tcc_reload
+say "rows: $(rows | tr '\n' ' ')"
+shape() { # label program args...
+  local label=$1; shift
+  local plist="$work/$label.plist"
+  python3 -I - "$plist" "$label" "$out/shape-$label.json" "$@" <<'PY'
+import plistlib, sys
+path, label, out, *argv = sys.argv[1:]
+plistlib.dump({"Label": "com.daoleno.mewla.walk." + label, "ProgramArguments": argv, "StandardOutPath": out,
+               "RunAtLoad": True, "LimitLoadToSessionType": "Aqua", "ProcessType": "Interactive"}, open(path, "wb"))
+PY
+  rm -f "$out/shape-$label.json"
+  launchctl bootstrap "gui/$(id -u)" "$plist"
+  for _ in $(seq 1 30); do [[ -s "$out/shape-$label.json" ]] && break; sleep 0.5; done
+  launchctl bootout "gui/$(id -u)/com.daoleno.mewla.walk.$label" 2>/dev/null || true
+  say "$label: $(cat "$out/shape-$label.json" 2>/dev/null || echo '(no answer)')"
+}
+shape old-bare-helper "$cli" screen preflight
+shape new-app-host "$app/Contents/MacOS/Mewla" --daemon screen preflight
+
+shape old-bare-helper-again "$cli" screen preflight
+shape new-app-host-again "$app/Contents/MacOS/Mewla" --daemon screen preflight
+clear_rows; tcc_reload
+
 for permission in accessibility screen_recording; do
   service=kTCCServiceAccessibility; [[ $permission == screen_recording ]] && service=kTCCServiceScreenCapture
   n=$([[ $permission == accessibility ]] && echo 1 || echo 5)
@@ -119,28 +149,6 @@ done
 say "rows now:"; rows | tee -a "$walk"
 say "the daemon's log (grants, restarts):"
 grep -h -E "grants:|screen:|restart" "$HOME/.mewla/logs/"*.log 2>/dev/null | tail -40 | tee -a "$walk" || true
-
-# Item 3 on the real binaries: Mewla.app's row only (what + Mewla.app writes), the bare helper as its own job (0.4.24)
-# against the app's executable as the job with the helper its child (this change).
-say "one row each for Mewla.app; the old job shape against the new"
-clear_rows; row kTCCServiceAccessibility 2; row kTCCServiceScreenCapture 2; tcc_reload
-shape() { # label program args...
-  local label=$1; shift
-  local plist="$work/$label.plist"
-  python3 -I - "$plist" "$label" "$out/shape-$label.json" "$@" <<'PY'
-import plistlib, sys
-path, label, out, *argv = sys.argv[1:]
-plistlib.dump({"Label": "com.daoleno.mewla.walk." + label, "ProgramArguments": argv, "StandardOutPath": out,
-               "RunAtLoad": True, "LimitLoadToSessionType": "Aqua", "ProcessType": "Interactive"}, open(path, "wb"))
-PY
-  rm -f "$out/shape-$label.json"
-  launchctl bootstrap "gui/$(id -u)" "$plist"
-  for _ in $(seq 1 30); do [[ -s "$out/shape-$label.json" ]] && break; sleep 0.5; done
-  launchctl bootout "gui/$(id -u)/com.daoleno.mewla.walk.$label" 2>/dev/null || true
-  say "$label: $(cat "$out/shape-$label.json" 2>/dev/null || echo '(no answer)')"
-}
-shape old-bare-helper "$cli" screen preflight
-shape new-app-host "$app/Contents/MacOS/Mewla" --daemon screen preflight
 
 log show --last 40m --style compact --predicate 'process == "tccd" AND eventMessage CONTAINS[c] "mewla"' 2>/dev/null | tail -600 > "$out/tccd.log" || true
 cp "$data"/logs/* "$out/" 2>/dev/null || true

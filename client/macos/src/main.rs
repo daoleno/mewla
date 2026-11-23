@@ -156,8 +156,18 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     });
 
     // `app.permissionGuide {permission}`: System Settings on the permission's list and the panel beside it with Mewla's
-    // icon to drag in (permissions.rs); `app.permissionGuide {}` closes the panel.
+    // icon to drag in (permissions.rs); `{given}`: the daemon reads that grant as given, so the panel asking for it
+    // closes and Mewla comes to the front; `{}` closes the panel.
     host.handle("app.permissionGuide", |call| {
+        if let Some(given) = call.data().get("given").and_then(Value::as_str).and_then(permissions::Permission::from_id) {
+            dispatch2::DispatchQueue::main().exec_async(move || {
+                if let Some(mtm) = nsh_platform_macos::objc2::MainThreadMarker::new() {
+                    permissions::given(mtm, given);
+                }
+            });
+            call.reply(Ok::<Value, String>(Value::Null));
+            return;
+        }
         let id = call.data().get("permission").and_then(Value::as_str).map(str::to_owned);
         let permission = id.as_deref().map(permissions::Permission::from_id);
         if let Some(None) = permission {
