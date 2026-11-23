@@ -52,6 +52,10 @@ type deliveryRecord struct {
 	Pending     *Delivery `json:"pending,omitempty"`
 	Disposition string    `json:"disposition"`
 	Error       string    `json:"error,omitempty"`
+	// What was taken and when, for status on this computer.
+	Kind    string    `json:"kind,omitempty"`
+	ReplyTo string    `json:"reply_to,omitempty"`
+	At      time.Time `json:"at,omitempty"`
 }
 
 type persisted struct {
@@ -93,7 +97,40 @@ func loadState(dir string) (persisted, error) {
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return persisted{}, fmt.Errorf("decode %s: %w", stateFile, err)
 	}
+	state.Outbox = dedupeOutbox(state.Outbox)
 	return state, nil
+}
+
+// dedupeOutbox keeps one item per message. Before pruneOutbox stopped
+// compacting the live slice in place, every save could leave stale copies
+// behind; the copy that got furthest wins, so a finished message is never
+// sent again because a stale "sent" copy of it was requeued.
+func dedupeOutbox(items []outboxItem) []outboxItem {
+	kept := make([]outboxItem, 0, len(items))
+	at := map[string]int{}
+	for _, item := range items {
+		index, seen := at[item.Message.ID]
+		if !seen {
+			at[item.Message.ID] = len(kept)
+			kept = append(kept, item)
+			continue
+		}
+		if outboxProgress(item) > outboxProgress(kept[index]) {
+			kept[index] = item
+		}
+	}
+	return kept
+}
+
+// outboxProgress orders copies of one message: a finished delivery beats a
+// later attempt, which beats an earlier one.
+func outboxProgress(item outboxItem) int {
+	progress := item.Message.Attempt
+	switch item.State {
+	case StateDelivered, StateUncertain, StateFailed:
+		progress += 1 << 20
+	}
+	return progress
 }
 
 // saveState writes the peers (with their client keys) and the outbox. The
@@ -128,8 +165,10 @@ func syncHandoffs(state *persisted) {
 	}
 }
 
+// pruneOutbox works on a fresh slice: state is a copy of the Manager's, and
+// compacting in place would shift items inside the live outbox.
 func pruneOutbox(state *persisted, now time.Time) {
-	kept := state.Outbox[:0]
+	kept := make([]outboxItem, 0, len(state.Outbox))
 	for _, item := range state.Outbox {
 		finished := item.State == StateDelivered || item.State == StateUncertain || item.State == StateFailed
 		if finished && now.Sub(item.UpdatedAt) > keepFinished {

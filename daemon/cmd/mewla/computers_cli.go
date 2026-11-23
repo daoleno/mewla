@@ -146,7 +146,11 @@ func printComputersResult(w io.Writer, action string, result computers.Result) {
 			messages = append(messages, *result.Message)
 		}
 		for _, message := range messages {
-			line := fmt.Sprintf("%s\t%s\t%s\t%s", message.ID, message.Computer, message.Kind, message.State)
+			computer := message.Computer
+			if message.Direction == computers.DirectionIn {
+				computer = "from " + computer
+			}
+			line := fmt.Sprintf("%s\t%s\t%s\t%s", message.ID, computer, message.Kind, message.State)
 			if message.Error != "" {
 				line += "\t" + message.Error
 			}

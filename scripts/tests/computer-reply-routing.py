@@ -6,6 +6,9 @@ Build cmd/mewla into MEWLA_BUILD_TMPDIR, then run from the repository:
 Requires Linux and cc. All state, sockets and input captures are temporary.
 The fixture completes each synthetic turn before the next input: this tests
 idle Session wake-up without pretending to provide live provider activity.
+A late reply to a Worker whose Work Brain closed (closing it ends the Session),
+and a reply to a Calendar run's agent (an open Session no Work owns), must each
+reach Brain once, with no refused attempts.
 """
 
 import json
@@ -69,7 +72,9 @@ class Daemon:
         self.env.update(
             MEWLA_STATE_ROOT=str(self.state), MEWLA_STATE_DIR=str(self.state),
             MEWLA_BRAIN_HOST_EXECUTOR="grok",
-            PATH="/usr/bin:/bin", ZDOTDIR=str(root), ROUTING_FIXTURE_DIR=str(self.state),
+            # A failing systemd-run keeps the session host a plain child
+            # process this script stops, not a user unit.
+            PATH=str(root / "bin") + ":/usr/bin:/bin", ZDOTDIR=str(root), ROUTING_FIXTURE_DIR=str(self.state),
         )
         (self.state / "executors.toml").write_text(
             '[[executors]]\nname="grok"\nkind="grok"\ncommand='
@@ -174,12 +179,40 @@ class Daemon:
                 process.wait()
         for log in self.logs:
             log.close()
+        # The session host and its fixtures outlive serve; stop only the
+        # processes that name this daemon's own scratch state.
+        mine = str(self.state).encode()
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit() or int(entry.name) == os.getpid():
+                continue
+            try:
+                cmdline = (entry / "cmdline").read_bytes()
+                environ = (entry / "environ").read_bytes()
+            except OSError:
+                continue
+            if mine in cmdline or b"ROUTING_FIXTURE_DIR=" + mine + b"\0" in environ:
+                try:
+                    os.kill(int(entry.name), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def log_text(self):
+        return "".join(Path(log.name).read_text() for log in self.logs)
+
+    def brain_inputs(self, marker, workers):
+        return sum(
+            path.read_text().count(marker)
+            for path in self.state.glob("*.input") if path.stem not in workers
+        )
 
 
 def exercise(root, binary):
     (root / ".zshrc").write_text("")
     (root / "fixture.c").write_text(FIXTURE)
     subprocess.run(["cc", "-o", str(root / "grok"), str(root / "fixture.c")], check=True)
+    (root / "bin").mkdir()
+    (root / "bin" / "systemd-run").write_text("#!/bin/sh\nexit 1\n")
+    (root / "bin" / "systemd-run").chmod(0o755)
     a, b = Daemon(root, "A", binary), Daemon(root, "B", binary)
     try:
         a.start()
@@ -241,17 +274,85 @@ def exercise(root, binary):
         for marker in ("E2E_QUESTION", "E2E_FINAL_REPLY"):
             copies = [event for event in events if marker in event.get("summary", "")]
             assert len(copies) == 1 and not copies[0]["actionable"], copies
+
+        # A Worker asks and Brain closes its Work, which ends the Session. The
+        # reply goes to A's Brain, not to a review a closed Work never opens.
+        lid, late_work = a.spawn("late-asker")
+        late = a.send("B", "E2E_LATE_JOB", lid)
+        a.progress(lid, "done")
+        wait("B Brain late request", lambda: any("E2E_LATE_JOB" in p.read_text() for p in b.state.glob("*.input")))
+        def late_work_item():
+            listed = a.control({"type": "brain_work_list", "work_id": late_work})
+            return listed.get("brain_work") or listed["brain_work_items"][0]
+        a.cli("brain", "work", "close", "-id", late_work, "-status", "done", "-actor", "brain",
+              "-revision", str(late_work_item()["revision"]), "-reason", "e2e: closed before the reply")
+        closed = late_work_item()
+        assert closed["status"] == "done", closed
+        live = lambda: [w["id"] for w in a.cli("worker", "list", "--json").get("workers") or []]
+        wait("late asker Session closed with its Work", lambda: lid not in live())
+        late_reply = b.send(peer, "E2E_LATE_REPLY", None, late, "reply")
+
+        # A Calendar run's agent asks: a delegated Session no Work owns, which
+        # stays open. This is the 2026-11-23 case that was refused forever.
+        thread = json.loads((a.state / "brain" / "state" / "chat_state.json").read_text())["thread_id"]
+        repository = str(Path(__file__).resolve().parents[2])
+        item = a.cli("calendar", "create", "-kind", "scheduled_action", "-title", "E2E weekly review",
+                     "-summary", "Asks B for numbers", "-instruction", "Ask B for the numbers.",
+                     "-executor", "grok", "-cwd", repository, "-source-thread", thread,
+                     "-date", time.strftime("%Y-%m-%d", time.gmtime(time.time() + 86400)), "-time", "09:00", "-timezone", "UTC")
+        item_id = (item.get("calendar_item") or item.get("item") or item)["id"]
+        a.cli("calendar", "run", "-id", item_id)
+
+        def calendar_agent():
+            got = a.cli("calendar", "get", "-id", item_id)
+            runs = (got.get("calendar_item") or got.get("item") or got).get("runs") or []
+            return next((r["worker_session"] for r in runs if r.get("worker_session")), None)
+        cid = wait("Calendar agent Session", calendar_agent)
+        wait("Calendar agent prompt", lambda: a.text(cid))
+        assert cid in live(), "Calendar agent Session is gone"
+        calendar_request = a.send("B", "E2E_CALENDAR_JOB", cid)
+        wait("B Brain calendar request", lambda: any("E2E_CALENDAR_JOB" in p.read_text() for p in b.state.glob("*.input")))
+        calendar_reply = b.send(peer, "E2E_CALENDAR_REPLY", None, calendar_request, "reply")
+
+        item_of = lambda message: next(x for x in b.outbox()["outbox"] if x["message"]["id"] == message)
+        for message, marker in ((late_reply, "E2E_LATE_REPLY"), (calendar_reply, "E2E_CALENDAR_REPLY")):
+            wait(marker + " delivered", lambda: item_of(message)["state"] == "delivered")
+            wait("A Brain " + marker, lambda: a.brain_inputs(marker, (aid, lid, cid)) >= 1)
+        # Two retry periods later nothing more arrived and nothing was refused.
+        time.sleep(65)
+        assert cid in live(), "Calendar agent Session closed; the case is no longer an open Session"
+        received = {}
+        for message, marker, asker in ((late_reply, "E2E_LATE_REPLY", lid), (calendar_reply, "E2E_CALENDAR_REPLY", cid)):
+            assert a.brain_inputs(marker, (aid, lid, cid)) == 1, marker
+            assert marker not in a.text(asker), marker
+            assert item_of(message)["message"]["attempt"] == 1 and item_of(message)["disposition"] == "accepted", item_of(message)
+            assert message not in a.log_text(), "A logged a refusal of " + message
+            received[marker] = a.cli("computers", "status", "-id", message, "--json")["computers"]["message"]
+            assert received[marker]["direction"] == "in" and received[marker]["state"] == "delivered", received
         print(json.dumps({
             "ok": True, "request": request, "question": question, "answer": answer,
             "reply": reply, "a_worker": aid, "b_worker": bid, "work": work_id,
             "a_question_inputs": 1, "a_reply_inputs": 1, "b_answer_inputs": 1,
             "a_brain_reply_inputs": 0, "work_events": 2,
             "restart_with_state_sent": True, "attempt_2_replay": True,
-        }), flush=True)
+            "late_request": late, "late_reply": late_reply, "late_worker": lid, "late_work": late_work,
+            "late_work_status": closed["status"], "late_session": "closed with its Work",
+            "calendar_item": item_id, "calendar_agent": cid, "calendar_request": calendar_request,
+            "calendar_reply": calendar_reply, "calendar_session": "open, no Work owns it",
+            "brain_inputs_each": 1, "asker_inputs_each": 0, "attempts_each": 1, "refusals_logged": 0,
+            "status_here": received,
+        }, ensure_ascii=False), flush=True)
     except Exception:
         for daemon in (a, b):
             for log in daemon.logs:
                 print(Path(log.name).read_text()[-3000:], file=sys.stderr)
+            for path in daemon.state.glob("*.input"):
+                print(daemon.name, "input", path.stem, "late replies:", path.read_text().count("E2E_LATE_REPLY"), file=sys.stderr)
+            try:
+                for item in daemon.outbox()["outbox"][-3:]:
+                    print(daemon.name, "outbox", json.dumps(item, ensure_ascii=False)[:600], file=sys.stderr)
+            except (OSError, ValueError):
+                pass
         raise
     finally:
         a.close()
