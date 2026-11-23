@@ -405,6 +405,35 @@ describe("Mewla for Mac", () => {
     expect(app.shows("id:home-header")).toBe(true);
   }, 30_000);
 
+  // Owner 11-23: a Mac app always has its own computer, at its own loopback address, and nothing loses it.
+  test("an old pairing of this Mac by its hosted name is moved to loopback in place (same id), and another computer stays", async () => {
+    const local = `mewla://pair?u=${encodeURIComponent("ws://127.0.0.1:1/ws")}&n=Desk&d=${"a".repeat(64)}&k=${"b".repeat(64)}&t=${"7".repeat(64)}`;
+    const storage = {
+      ...paired,
+      "mewla:v3:servers": JSON.stringify([
+        { id: "s1", name: "MacBook Pro", url: "wss://quiet-otter.m.mewla.ai/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) },
+        { id: "s2", name: "manjaro", url: "ws://127.0.0.1:2/ws", daemonId: "c".repeat(64), daemonPublicKey: "d".repeat(64) },
+      ]),
+      "mewla:v1:current_server_id": "s2",
+    };
+    const host = phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => ({ ...pairing, local_link: local }) });
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage, host });
+    const stored = () => JSON.parse(app.storage()["mewla:v3:servers"] ?? "[]") as Array<{ id: string; name: string; url: string }>;
+    await app.waitUntil(() => stored().find((server) => server.id === "s1")?.url === "ws://127.0.0.1:1/ws", { timeout: 15_000 });
+    expect(stored().map((server) => `${server.id} ${server.name} ${server.url}`)).toEqual(["s1 MacBook Pro ws://127.0.0.1:1/ws", "s2 manjaro ws://127.0.0.1:2/ws"]);
+    await app.waitFor("text:This Mac · Online", { timeout: 10_000 });
+  }, 30_000);
+
+  test("this Mac's daemon killed under the app (its pairing still answers, as `mewla pair` does with no daemon): the pane says Mewla is not running, not just offline", async () => {
+    const local = `mewla://pair?u=${encodeURIComponent("ws://127.0.0.1:1/ws")}&n=Desk&d=${"a".repeat(64)}&k=${"b".repeat(64)}&t=${"7".repeat(64)}`;
+    const host = phoneHost({ brain }, { "app.pairing": () => ({ ...pairing, local_link: local }) });
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, host, storage: { ...paired, "mewla:v1:mac_local_daemon_key": "b".repeat(64) } });
+    await app.waitFor("text:This Mac · Online", { timeout: 15_000 });
+    await app.host.send("app.daemonDown");
+    await app.waitFor("text:This Mac · Mewla is not running", { timeout: 30_000 });
+    expect(app.shows("text:This Mac · Offline · Server unreachable")).toBe(false);
+  }, 60_000);
+
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host });

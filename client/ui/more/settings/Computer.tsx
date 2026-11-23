@@ -1,3 +1,4 @@
+import { isThisMac } from "../../mac/local";
 import { Clipboard, cleanup, effect, signal, Text, untracked, View } from "nsh";
 import { bounded, NoAnswer } from "../../../core/motion/wait";
 import { failureText } from "../../../core/more/daemon";
@@ -204,7 +205,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
 
   async function remove(): Promise<void> {
     const s = server();
-    if (!s || busy()) return;
+    if (!s || busy() || isThisMac(s)) return;
     const yes = await confirmDestructive(`Remove ${s.name || "this computer"}?`, "This phone and your other computers forget it. Its Sessions stay there. Pair again to bring it back.", "Remove");
     if (!yes) return;
     busy.set("remove");
@@ -297,7 +298,8 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
                 }}
               />
             </Section></If>
-          <Section>
+          {/* This Mac is Mewla for Mac's own computer: never removed (owner 11-23). */}
+          <If when={!isThisMac(server())}><Section>
             <Row
               testID="computer-remove"
               destructive
@@ -307,7 +309,7 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
               trailing={<If when={busy() === "remove"}><Spinner size={16} /></If>}
               onPress={() => void remove()}
             />
-          </Section>
+          </Section></If>
         </View>}><EmptyState title="This computer is no longer paired" /></If>
     </Page>
   );
