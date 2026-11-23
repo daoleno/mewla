@@ -58,7 +58,7 @@ export interface Platform {
    * The page's origin, on the web: its policy lets it reach only the computer that serves it (the daemon's
    * `connect-src`), so a browser pairs only with that one.
    */
-  pageOrigin?: string;
+  pageOrigin?: () => Promise<string | null>;
 }
 
 let current: Platform | null = null;

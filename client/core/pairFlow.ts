@@ -142,7 +142,7 @@ export async function pairWith(payload: ConnectionImportPayload, onProgress?: (m
   if (payload.link) {
     return platform().linkTunnels ? pairThroughLink(payload, payload.link, onProgress) : pairAtStableAddress(payload, payload.link, onProgress);
   }
-  refuseAnotherPage(payload.url);
+  await refuseAnotherPage(payload.url);
   const pairing = await enrollWithDaemon({
     serverUrl: payload.url,
     daemonId: payload.daemonId,
@@ -176,9 +176,9 @@ async function pairAtStableAddress(
   onProgress?: (message: string) => void,
 ): Promise<StoredServerInput> {
   // On a computer's own page, the candidate at the page's address (a computer on more than one relay has one each).
-  const page = platform().os === "web" ? hostOf(platform().pageOrigin ?? "") : "";
+  const page = hostOf((await pageOrigin()) ?? "");
   const stableURL = link.candidates.find((candidate) => page && hostOf(candidate.url) === page)?.url ?? stableURLOf(payload, link);
-  refuseAnotherPage(stableURL);
+  await refuseAnotherPage(stableURL);
   onProgress?.(`Connecting to ${linkDisplayName(payload.name, stableURL)} through Mewla…`);
   let pairing: { daemonId: string; daemonPublicKey: string };
   try {
@@ -205,6 +205,11 @@ async function pairAtStableAddress(
   };
 }
 
+/** The page's origin in a browser (asked of the page host), else null. */
+async function pageOrigin(): Promise<string | null> {
+  return platform().os === "web" ? ((await platform().pageOrigin?.().catch(() => null)) ?? null) : null;
+}
+
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 function hostOf(url: string): string {
@@ -219,8 +224,8 @@ function hostOf(url: string): string {
  * A browser's page reaches only the computer that serves it (the daemon's `connect-src`): a code for another
  * computer is refused with that reason before anything is sent, not left to fail as "couldn't reach".
  */
-function refuseAnotherPage(target: string): void {
-  const page = platform().os === "web" ? platform().pageOrigin : undefined;
+async function refuseAnotherPage(target: string): Promise<void> {
+  const page = await pageOrigin();
   if (!page) return;
   const pageHost = hostOf(page);
   const targetHost = hostOf(target);

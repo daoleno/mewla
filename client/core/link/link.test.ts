@@ -216,7 +216,7 @@ describe("pairing with a Mewla Relay code where no host carries the tunnel (a br
   });
 
   test("a browser that can't reach the stable address says why in one line", async () => {
-    installMemoryPlatform({ os: "web", pageOrigin: `https://${STABLE}`, fetch: () => Promise.reject(new Error("certificate not trusted")) });
+    installMemoryPlatform({ os: "web", pageOrigin: async () => `https://${STABLE}`, fetch: () => Promise.reject(new Error("certificate not trusted")) });
     const problem = pairingProblem(await pairWith(readPairingLink(linkCode())!).catch((e) => e));
     expect(problem.title).toBe("Can't reach your computer");
     expect(problem.detail).toBe(`This browser couldn't reach ${STABLE}. A browser reaches a computer on Mewla Relay only when remote access is on there (mewla login) and mewla is running.`);
@@ -228,7 +228,7 @@ describe("pairing with a Mewla Relay code where no host carries the tunnel (a br
     const answer = await signed("mewla-pair");
     installMemoryPlatform({
       os: "web",
-      pageOrigin: `https://${STABLE}`,
+      pageOrigin: async () => `https://${STABLE}`,
       fetch: async (url, init) => {
         calls.push(`${init?.method} ${url}`);
         return Response.json(answer);
@@ -247,7 +247,7 @@ describe("pairing with a Mewla Relay code where no host carries the tunnel (a br
       secretKey: keys.secretKey, publicKey: keys.publicKey, enrollmentToken: "2".repeat(64), routeId: ROUTE, transportPin: PIN,
       label: "quiet-otter-3f9a", domain: "a.link.test", name: "region-a", admissionAlias: ADMISSION, moreRelays: [{ name: "region-b", domain: "b.link.test" }],
     });
-    installMemoryPlatform({ os: "web", pageOrigin: "https://quiet-otter-3f9a.b.link.test", fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
+    installMemoryPlatform({ os: "web", pageOrigin: async () => "https://quiet-otter-3f9a.b.link.test", fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
     const server = await pairWith(readPairingLink(twoRelays)!);
     expect(calls).toEqual(["POST https://quiet-otter-3f9a.b.link.test/pair"]);
     expect(server.url).toBe("wss://quiet-otter-3f9a.b.link.test/ws");
@@ -255,7 +255,7 @@ describe("pairing with a Mewla Relay code where no host carries the tunnel (a br
 
   test("a browser on another computer's page says it can pair only with the computer it is on", async () => {
     const calls: string[] = [];
-    installMemoryPlatform({ os: "web", pageOrigin: "https://other-cat-1a2b.a.link.test", fetch: async (url) => (calls.push(url), Response.json({})) });
+    installMemoryPlatform({ os: "web", pageOrigin: async () => "https://other-cat-1a2b.a.link.test", fetch: async (url) => (calls.push(url), Response.json({})) });
     const problem = pairingProblem(await pairWith(readPairingLink(linkCode())!).catch((e) => e));
     expect(calls).toEqual([]);
     expect(problem.title).toBe("Can't reach your computer");
@@ -268,7 +268,7 @@ describe("a browser pairs only with the computer whose page it is on", () => {
 
   test("a code for another computer's address says so before anything is sent", async () => {
     const calls: string[] = [];
-    installMemoryPlatform({ os: "web", pageOrigin: "http://127.0.0.1:9876", fetch: async (url) => (calls.push(url), Response.json({})) });
+    installMemoryPlatform({ os: "web", pageOrigin: async () => "http://127.0.0.1:9876", fetch: async (url) => (calls.push(url), Response.json({})) });
     const problem = pairingProblem(await pairWith(readPairingLink(code("ws://192.168.1.20:9876/ws"))!).catch((e) => e));
     expect(calls).toEqual([]);
     expect(problem.detail).toBe("This page reaches only 127.0.0.1:9876, the computer it came from.");
@@ -277,7 +277,7 @@ describe("a browser pairs only with the computer whose page it is on", () => {
   test("a code for the page's own computer pairs as before", async () => {
     const calls: string[] = [];
     const answer = await signed("mewla-pair");
-    installMemoryPlatform({ os: "web", pageOrigin: "http://localhost:9876", fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
+    installMemoryPlatform({ os: "web", pageOrigin: async () => "http://localhost:9876", fetch: async (url, init) => (calls.push(`${init?.method} ${url}`), Response.json(answer)) });
     const server = await pairWith(readPairingLink(code("ws://127.0.0.1:9876/ws"))!);
     expect(calls).toEqual(["POST http://127.0.0.1:9876/pair"]);
     expect(server.url).toBe("ws://127.0.0.1:9876/ws");
