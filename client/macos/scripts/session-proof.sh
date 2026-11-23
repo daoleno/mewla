@@ -3,7 +3,7 @@
 # executable; the daemon restarting itself in place after a grant). A Worker runs a counter in its terminal, one line
 # a second, also appended to a file; `check` proves the same Session id, the same process, and output still coming
 # through the daemon (the Worker's capture) and from the process itself (the file).
-#   session-proof.sh start <mewla cli> <dir>
+#   session-proof.sh start <mewla cli> <dir>   (dir on durable storage: the daemon refuses a Worker in a temp dir)
 #   session-proof.sh check <mewla cli> <dir> <label>
 set -euo pipefail
 GITHUB_ACTIONS="${GITHUB_ACTIONS:-}"
@@ -23,16 +23,28 @@ case "$mode" in
     printf '#!/bin/sh\ni=0\nwhile :; do i=$((i+1)); echo "tick $i"; echo "tick $i" >> "%s"; sleep 1; done\n' "$dir/ticks.txt" > "$dir/tick.sh"
     chmod 755 "$dir/tick.sh"
     : > "$dir/ticks.txt"
-    "$cli" worker spawn -name "Session proof" -executor claude -command "$dir/tick.sh" -cwd "$dir" > "$dir/spawn.json"
-    grep -o '"id": "mh-[0-9a-f]*"' "$dir/spawn.json" | head -1 | grep -o 'mh-[0-9a-f]*' > "$dir/worker-id"
-    wid=$(cat "$dir/worker-id")
-    test -n "$wid"
+    before=" $(sessions) "
+    # The stand-in command is no agent, so the spawn reports its first input as not taken; the Session runs anyway.
+    "$cli" worker spawn -name "Session proof" -executor claude -command "$dir/tick.sh" -cwd "$dir" > "$dir/spawn.json" 2>&1 || true
     mine=""
     for _ in $(seq 1 60); do
-      for one in $(sessions); do [[ "$one" == "$wid":* ]] && mine="$one"; done
+      # The Worker named so (its id is its Session's), among the Sessions that were not there before.
+      wid=$("$cli" worker list --json 2>/dev/null | python3 -I -c '
+import json, sys
+def walk(v):
+    if isinstance(v, dict):
+        if v.get("name") == "Session proof" and str(v.get("id", "")).startswith("mh-"):
+            print(v["id"]); sys.exit(0)
+        for x in v.values(): walk(x)
+    elif isinstance(v, list):
+        for x in v: walk(x)
+walk(json.load(sys.stdin))' || true)
+      for one in $(sessions); do [[ -n "$wid" && "$one" == "$wid":* && "$before" != *" $one "* ]] && mine="$one"; done
       [[ -n "$mine" ]] && [[ $(written) -ge 2 ]] && break
       sleep 1
     done
+    cat "$dir/spawn.json"
+    echo "${mine%%:*}" > "$dir/worker-id"
     test -n "$mine"
     echo "$mine" > "$dir/session"
     pgrep -f "$dir/tick.sh" | sort | tr '\n' ' ' > "$dir/tick-pid"

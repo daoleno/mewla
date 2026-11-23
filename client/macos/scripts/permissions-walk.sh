@@ -104,7 +104,8 @@ launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -E "p
 note_grants
 
 # A Session with a live process, kept through the daemon restarting itself in place after a grant (below).
-"$(dirname "$0")/session-proof.sh" start "$cli" "$work/session" | tee -a "$walk"
+session="$HOME/mewla-session-proof"
+"$(dirname "$0")/session-proof.sh" start "$cli" "$session" | tee -a "$walk"
 daemon_pid() { pgrep -f "^$app/Contents/Helpers/mewla serve" | head -1; }
 daemon_before=$(daemon_pid)
 
@@ -170,7 +171,7 @@ for permission in accessibility screen_recording; do
 done
 
 say "the daemon's process $daemon_before -> $(daemon_pid) (restarted in place after a grant when it changed)"
-"$(dirname "$0")/session-proof.sh" check "$cli" "$work/session" "after the restart in place" | tee -a "$walk"
+"$(dirname "$0")/session-proof.sh" check "$cli" "$session" "after the restart in place" | tee -a "$walk"
 say "the app's connection to the daemon, as it changed:"
 app_log | grep -E "dev script: connection" | tee -a "$walk"
 
