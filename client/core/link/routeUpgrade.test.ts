@@ -160,8 +160,34 @@ describe("the computer's route, told over the connection a pairing by address al
     expect(linkRouteChange(hostedPairing({ url: "ws://quiet-otter.a.link.test/ws" }), routeFrame({ candidates: [{ name: "a", url: "ws://quiet-otter.a.link.test/ws" }] }))).toBeNull();
     // Another version of the message.
     expect(linkRouteChange(hostedPairing(), { ...routeFrame(), version: 2 })).toBeNull();
-    // A pairing that already is a route.
-    expect(linkRouteChange(hostedPairing({ transportKind: "link", transportPin: PIN, linkRouteId: ROUTE }), routeFrame())).toBeNull();
+    // A pairing that already is this route.
+    const route = [{ name: "region-a", kind: "link" as const, url: HOSTED }, { name: "region-b", kind: "link" as const, url: "wss://quiet-otter.b.link.test/ws" }];
+    expect(linkRouteChange(hostedPairing({ transportKind: "link", transportPin: PIN, linkRouteId: ROUTE, transportCandidates: route }), routeFrame())).toBeNull();
+  });
+
+  // Review 11-23, finding 5: a Relay pairing took no newer route, so a rename could only be fixed by pairing again.
+  test("a Relay pairing takes the computer's newer route under the same pin: a rename moves its address", () => {
+    installMemoryPlatform({ os: "android", linkTunnels: fakeTunnels().tunnels });
+    const lan = { name: "LAN 192.168.1.20", kind: "direct" as const, url: "wss://192.168.1.20:9443/ws" };
+    const old = hostedPairing({
+      transportKind: "link", transportPin: PIN, linkRouteId: ROUTE, url: "wss://old-name.a.link.test/ws",
+      transportCandidates: [{ name: "region-a", kind: "link", url: "wss://old-name.a.link.test/ws" }, lan],
+    });
+    expect(linkRouteChange(old, routeFrame())).toEqual({
+      transportKind: "link",
+      transportPin: PIN,
+      linkRouteId: ROUTE,
+      transportCandidates: [
+        { name: "region-a", kind: "link", url: HOSTED },
+        { name: "region-b", kind: "link", url: "wss://quiet-otter.b.link.test/ws" },
+        lan,
+      ],
+      url: HOSTED,
+    });
+    // Under another pin: not taken (only pairing again moves a pin).
+    expect(linkRouteChange(old, routeFrame({ pin: "6".repeat(64) }))).toBeNull();
+    // Not the computer's own signature: not taken.
+    expect(linkRouteChange(old, routeFrame({ signer: nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(99)) }))).toBeNull();
   });
 
   test("changes nothing in a browser, which carries no pinned tunnel", () => {
