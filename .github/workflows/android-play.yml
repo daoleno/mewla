@@ -107,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           jar="$RUNNER_TEMP/bundletool-all-$BUNDLETOOL_VERSION.jar"
-          curl -fsSL -o "$jar" \
+          curl -fsSL --retry 5 --retry-all-errors -o "$jar" \
             "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
           echo "$BUNDLETOOL_SHA256  $jar" | sha256sum -c -
           echo "BUNDLETOOL_JAR=$jar" >> "$GITHUB_ENV"

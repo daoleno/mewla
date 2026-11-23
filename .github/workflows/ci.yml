@@ -102,7 +102,10 @@ jobs:
       # A Session's plain `tmux` must reach the daemon's private server, never the person's own.
       - name: Install tmux
         timeout-minutes: 5
-        run: sudo apt-get update && sudo apt-get install -y tmux
+        run: |
+          apt_net="-o Acquire::Retries=3 -o Acquire::http::Timeout=20"
+          sudo apt-get $apt_net update
+          sudo apt-get $apt_net install -y tmux
       - name: Session host terminal engine libraries
         uses: ./.github/actions/ghostty-desktop
       - name: Session host terminal engine (libghostty-vt linked)

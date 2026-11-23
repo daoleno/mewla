@@ -71,6 +71,16 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
         run: ./scripts/android-release-apk.sh
+      # The release build above skips lint, so the lint tool (:app/:phone androidLintTool, lint-gradle and its
+      # groovy) and the unit-test classpaths were never resolved into the saved Gradle home; client.yml's
+      # preview build and tests then fetched them from Maven Central (429, 11-24). Run those tasks here.
+      - name: Resolve what client.yml's Android job resolves
+        working-directory: client/android
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.1.12297006
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+        run: ./gradlew --no-daemon --console=plain --build-cache assemblePreviewRelease testPreviewDebugUnitTest -Pmewla.abis=arm64-v8a
       - name: ccache statistics
         if: always()
         run: ccache --show-stats
