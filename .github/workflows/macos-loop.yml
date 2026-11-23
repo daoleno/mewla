@@ -23,7 +23,7 @@ on:
         type: string
         required: true
       minutes:
-        description: "How long to hold the warm Mac at most"
+        description: "How long to hold the warm Mac at most (60 at most)"
         type: number
         default: 45
       host:
@@ -48,7 +48,8 @@ jobs:
   warm:
     name: Warm Mewla Dev
     runs-on: macos-26
-    timeout-minutes: ${{ fromJSON(inputs.minutes) + 30 }}
+    # The build (about 10 min) plus the hold (`minutes`, at most 60) and the upload.
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v4
       - name: The run's key
@@ -162,7 +163,7 @@ jobs:
           MINUTES: ${{ inputs.minutes }}
           YIELD_AFTER: ${{ inputs.yield_after }}
         run: |
-          L="$HOME/mac-loop"; end=$(( $(date +%s) + MINUTES * 60 )); next=0
+          L="$HOME/mac-loop"; [ "$MINUTES" -le 60 ] || MINUTES=60; end=$(( $(date +%s) + MINUTES * 60 )); next=0
           while :; do
             [ -e "$L/stop" ] && { echo "stopped by its user at $(date -u +%T)"; break; }
             [ "$(date +%s)" -ge "$end" ] && { echo "held $MINUTES min: time is up at $(date -u +%T)"; break; }
