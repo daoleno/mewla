@@ -53,6 +53,8 @@ export function composerSize() {
       circle: "size-9",
       arrow: 20,
       plus: { box: "h-[52px] w-11", icon: 22 },
+      /** The field's height while the composer is open (a control beside Send). */
+      openInput: 64,
     },
     window: {
       dock: "px-3 pt-2",
@@ -62,6 +64,7 @@ export function composerSize() {
       circle: "size-[30px]",
       arrow: 16,
       plus: { box: "h-[42px] w-[30px]", icon: 18 },
+      openInput: 52,
     },
     perch: {
       dock: "px-2.5 pt-2",
@@ -71,6 +74,7 @@ export function composerSize() {
       circle: "size-7",
       arrow: 16,
       plus: { box: "h-[38px] w-7", icon: 17 },
+      openInput: 48,
     },
   });
 }

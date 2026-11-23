@@ -120,8 +120,13 @@ export function Composer(props: {
   onStop: () => void;
   /** Whether the page is on screen: only then does it lift for the keyboard. */
   active?: () => boolean;
-  /** Left of the field (a Session's "+"). */
+  /** Left of the field (a Session's "+"); in the tools row while the composer is open. */
   leading?: unknown;
+  /**
+   * A control beside Send (a Session's model): it shows only while the composer is open (the field focused,
+   * or text or chips in it), when the composer is taller, the field on top and [+] … control, Send below.
+   */
+  beside?: { shown: () => boolean; render: () => unknown };
   /** A slash-command list is open over the field: Return waits for a pick instead of sending. */
   pickerOpen?: () => boolean;
   /** ↑ in the empty field: put the last message in it to edit. */
@@ -211,6 +216,30 @@ export function Composer(props: {
   // While a turn runs, an empty composer's button is Stop (SPEC §1.4); with text or chips it sends.
   const stops = () => props.running() && !value().trim() && !props.attached?.();
   const size = composerSize();
+  // Open from focus until shortly after blur: a tap on the control beside Send blurs the field first, and
+  // the control must still be there for the tap to land.
+  const opened = signal(false);
+  let closing: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    if (focused()) {
+      if (closing) clearTimeout(closing);
+      closing = undefined;
+      opened.set(true);
+    } else if (untracked(opened)) {
+      closing = setTimeout(() => opened.set(false), 250);
+    }
+  });
+  cleanup(() => closing && clearTimeout(closing));
+  const expanded = () => Boolean(props.beside?.shown()) && (opened() || Boolean(value()) || Boolean(props.attached?.()));
+  // A function leading is made anew where it shows (the field's row, or the tools row while open).
+  const leading = () => (typeof props.leading === "function" ? (props.leading as () => unknown)() : props.leading);
+  const sendOrStop = () => (
+    <If when={stops()} else={<SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
+        <Icon name="arrow-up" size={size.arrow} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
+      </SendButton>}><SendButton testID="stop" label={props.stopping() ? "Stopping…" : "Stop"} onPress={props.onStop} disabled={props.stopping() || !props.canStop()} ready={false}>
+        <View class="size-3 rounded-[3.5px] bg-foreground" />
+      </SendButton></If>
+  );
   const placeholder = () => (disabled() && props.disabledReason ? props.disabledReason() : typeof props.placeholder === "function" ? props.placeholder() : props.placeholder);
   return (
     // The dock (soft-final SPEC §11 Composer): on the canvas, 8 above and 12 at the sides, no rule above it.
@@ -221,13 +250,17 @@ export function Composer(props: {
         paddingBottom: 10 + (keyboardFrame().height > 0 ? 0 : bottomBarInset()),
       }}>
       {props.children as never}
-      {/* One surface pill, 52 high and growing to 128: attach inside at the left, Send inside at the right. */}
-      <View testID="composer-field" class={`flex-row items-end bg-card ${size.field} ${disabled() ? "opacity-40" : ""}`}>
-        {props.leading as never}
-        <Input testID="composer" multiline value={value()} autoFocus={props.autoFocus} ref={(ref) => (input = ref)}
+      {/* One surface pill, 52 high and growing to 128: attach inside at the left, Send inside at the right. Open with a
+          control beside Send: the field across the top, a tools row below ([+] … control, Send). The field stays
+          where it is in the tree, so it keeps the focus as the composer opens. */}
+      <View testID="composer-field" class={`bg-card ${size.field} ${disabled() ? "opacity-40" : ""}`}>
+        <View class="flex-row items-end">
+          <If when={!expanded()}>{leading() as never}</If>
+          <Input testID="composer" multiline value={value()} autoFocus={props.autoFocus} ref={(ref) => (input = ref)}
           placeholder={placeholder()}
           disabled={disabled()}
           class={`min-w-0 flex-1 bg-transparent ${size.input} text-foreground placeholder:text-faint`}
+          style={expanded() ? { paddingLeft: 12, minHeight: size.openInput } : undefined}
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
           onPaste={props.onFiles ? ({ text, html, files, uris }) => {
@@ -252,11 +285,13 @@ export function Composer(props: {
             props.text.set(next);
             if (name) takeOut(before, next, name);
           }} />
-        <If when={stops()} else={<SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
-            <Icon name="arrow-up" size={size.arrow} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
-          </SendButton>}><SendButton testID="stop" label={props.stopping() ? "Stopping…" : "Stop"} onPress={props.onStop} disabled={props.stopping() || !props.canStop()} ready={false}>
-            <View class="size-3 rounded-[3.5px] bg-foreground" />
-          </SendButton></If>
+          <If when={!expanded()}>{sendOrStop()}</If>
+        </View>
+        <If when={expanded()}><View testID="composer-tools" class="flex-row items-center">
+            {leading() as never}
+            <View class="min-w-0 flex-1 flex-row justify-end pl-2">{props.beside?.render() as never}</View>
+            {sendOrStop()}
+          </View></If>
       </View>
     </View>
   );
