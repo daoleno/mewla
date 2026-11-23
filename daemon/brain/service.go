@@ -70,6 +70,10 @@ type Watcher interface {
 
 type Service struct {
 	store *Store
+	// noteCheckedAt is when the note budgets were last looked at
+	// (note_budget.go).
+	noteCheckMu   sync.Mutex
+	noteCheckedAt time.Time
 	// grantAnswersMu serializes the permission answers' list (grant_answers.go);
 	// grantWake tells its runner an answer was written.
 	grantAnswersMu sync.Mutex
@@ -1099,11 +1103,6 @@ func (s *Service) Housekeeping() (HousekeepingReport, error) {
 	steps := []string{}
 	if current, err := os.ReadFile(s.store.currentPath()); err == nil && string(current) == defaultCurrentContext {
 		steps = append(steps, "Record the active objective, decisions and next step in current.md.")
-	}
-	for _, note := range context.Notes {
-		if note.OverBudget {
-			steps = append(steps, fmt.Sprintf("Compact %s to under %d KiB (now %d KiB): delete finished, stale or superseded entries; Work/Event state and worklog keep history.", note.Path, note.BudgetBytes>>10, note.Bytes>>10))
-		}
 	}
 	if len(unmanaged) > 0 {
 		steps = append(steps, "Delete or relocate unmanaged workspace entries; put scratch in TMPDIR and reports in worklog/.")
