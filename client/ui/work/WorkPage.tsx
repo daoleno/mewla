@@ -28,6 +28,8 @@ import { AttachmentTray } from "../more/files/Attachments";
 import { showAlert } from "../shell/alert";
 import { bottomBarInset } from "../shell/below";
 import { createMenuAnchor, showMenu, type MenuItem } from "../kit/Menu";
+import { FileDrop } from "../chat/FileDrop";
+import { attachIncoming, type IncomingFiles } from "../more/files/incoming";
 import { AppSheet } from "../shell/AppSheet";
 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
@@ -440,6 +442,11 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
       attachFailure.set(error instanceof Error ? error.message : "Could not attach that file.");
     }
   };
+  // Pasted into the field or dropped on the page while it has the composer: chips, as picked ones.
+  const attachDropped = (incoming: IncomingFiles) => {
+    attachFailure.set("");
+    void attachIncoming(files, incoming).catch((error) => attachFailure.set(error instanceof Error ? error.message : "Could not attach that file."));
+  };
   const uploading = () => files.items().some((item) => item.status !== "ready");
 
   const actions = () => brainWorkActions(slip()!);
@@ -471,7 +478,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
       headerRight={<If when={slip()}><Button ref={menuAnchor.ref} testID="work-menu" accessibilityLabel="Work menu" onPress={() => void menu()} class="size-[44px] items-center justify-center rounded-full active:bg-accent">
           <Icon name="more-horizontal" size={22} tone="ink" />
         </Button></If>}>
-      <View class="flex-1 bg-background">
+      <FileDrop testID={`file-drop-work-${props.workId}`} class="flex-1 bg-background" onFiles={() => (docked() ? attachDropped : null)}>
         <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pt-2" contentStyle={{ paddingTop: capsuleScrollTop() ? capsuleScrollTop() + 8 : undefined, paddingBottom: 32 + (docked() ? 0 : bottomBarInset()) }}
           onScroll={(e) => titleAway.set(e.offset.y > DISPLAY_TITLE_AWAY)} scrollEventThrottle={64}>
           <If when={!slip() && closed()} else={<If when={!slip()} else={<View>
@@ -527,6 +534,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
         </Scroll>
         <If when={docked()}><Composer text={text} placeholder={slip()?.question ? "Reply about this Work" : "Tell Brain about this Work"} active={shown}
             canSend={() => !busy() && !uploading()} attached={() => files.ready().length > 0}
+            onFiles={attachDropped}
             disabled={() => connection() !== "connected"} disabledReason={() => "Offline"}
             running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
             onSend={() => {
@@ -542,7 +550,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
             <If when={files.items().length}><AttachmentTray uploads={files} /></If>
             <If when={attachFailure()}><View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View></If>
           </Composer></If>
-      </View>
+      </FileDrop>
       <AppSheet open={editing() !== null} onOpenChange={({ open }) => { if (!open) editing.set(null); }} popupClass="rounded-t-2xl bg-background py-4 gap-3" sidePadding={16} backdropClass="bg-black/40">
         <If when={editing()}>{(field) => <View class="gap-3 pb-6">
             <Text class="text-lg font-semibold">{EDIT_COPY[field()].heading}</Text>

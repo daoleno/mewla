@@ -6,6 +6,8 @@ import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready } from "../session";
 import { nav, openBrainTerminal, openPage, openSession } from "../shell/nav";
+import { focusComposer } from "../shell/desktop/keys";
+import { newestBrainUploads } from "../brain/composer";
 import { dayKey } from "../../core/calendar/agenda";
 import { showCalendarDay } from "../calendar/CalendarPage";
 import { clock } from "../calendar/clock";
@@ -33,7 +35,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now" } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -213,6 +215,7 @@ export function startMac(): void {
     let connected = false;
     let sent = false;
     let terminal = false;
+    let imaged = false;
     // The page on top of the window's stack, each time it changes: what a capture of the window should show.
     let top = "";
     effect(() => {
@@ -220,6 +223,7 @@ export function startMac(): void {
       const now = route ? `${route.name}${route.workerId ? ` ${route.workerId}` : ""}` : "";
       if (now !== top) console.log(`dev script: page ${(top = now)}`);
     });
+    if (script.imageInput) imageInputLog();
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
     effect(() => {
@@ -268,6 +272,15 @@ export function startMac(): void {
             }, script.raise * 1000);
           }
         }
+        // Image input (macos-image-input.yml): Brain's composer takes the keyboard once its chat is open; the run then
+        // pastes and drags into the window as a person does.
+        if (!imaged && script.imageInput && chat) {
+          imaged = true;
+          setTimeout(() => {
+            focusComposer();
+            console.log("dev script: image ready");
+          }, 1500);
+        }
         if (!sent && script.quickSend && chat) {
           sent = true;
           togglePerch();
@@ -276,6 +289,17 @@ export function startMac(): void {
       });
     });
   }
+}
+
+/**
+ * The image input run's log (macos-image-input.yml): the chips of Brain's composer each time they change (how many,
+ * each one's state and name). Send empties them; the run's capture shows the message they went with.
+ */
+function imageInputLog(): void {
+  effect(() => {
+    const items = newestBrainUploads()?.items() ?? [];
+    console.log(`dev script: chips ${items.length}${items.map((item) => ` [${item.status} ${item.asset.name}${item.error ? `: ${item.error}` : ""}]`).join("")}`);
+  });
 }
 
 /**

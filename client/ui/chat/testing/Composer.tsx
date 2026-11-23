@@ -6,10 +6,12 @@ import { AttachmentTray } from "../../more/files/Pages";
 import { createAttachmentUploads } from "../../more/files/upload";
 import { testServer } from "../../more/testing/fakeDaemon";
 import { Composer, createComposerText } from "../Composer";
+import { FileDrop } from "../FileDrop";
+import { attachIncoming, type IncomingFiles } from "../../more/files/incoming";
 
 /**
- * A chat composer with its attachments, as home and a Session wire it (`onFiles` → `uploads.add`,
- * a failure as the page's note), for `nsh test`. `network` plays the computer for pasted files
+ * A chat composer with its attachments, as home and a Session wire it (`onFiles` and a `FileDrop` around it →
+ * `attachIncoming`, a failure as the page's note), for `nsh test`. `network` plays the computer for pasted files
  * (the app uploads those itself). What Send sends shows in `sent`.
  */
 installPlatform(nshPlatform());
@@ -23,21 +25,16 @@ mount(() => {
   const uploads = createAttachmentUploads();
   const notice = signal("");
   const sent = signal("");
+  const attach = (incoming: IncomingFiles) => void attachIncoming(uploads, incoming).catch((error) => notice.set(error instanceof Error ? error.message : "Could not attach the file."));
   return (
-    <View class="flex-1 justify-end bg-background">
+    <FileDrop testID="file-drop-chat" class="flex-1 justify-end bg-background" onFiles={() => attach}>
       <Text testID="sent">{sent()}</Text>
       <Composer text={text} placeholder="Tell Brain" canSend={() => true} attached={() => uploads.ready().length > 0} running={() => false} stopping={() => false} canStop={() => false} onStop={() => {}}
         onSend={(value) => sent.set(`${value} ${uploads.ready().map((file) => file.path).join(",")}`)}
-        onFiles={(files) => {
-          try {
-            uploads.add(files);
-          } catch (error) {
-            notice.set(error instanceof Error ? error.message : "Could not attach the file.");
-          }
-        }}>
+        onFiles={attach}>
         {uploads.items().length > 0 ? <AttachmentTray uploads={uploads} /> : null}
         {notice() ? <Text testID="notice">{notice()}</Text> : null}
       </Composer>
-    </View>
+    </FileDrop>
   );
 });

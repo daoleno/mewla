@@ -8,6 +8,8 @@ import { registerComposer } from "../shell/desktop/keys";
 import { belowSections, bottomBarInset } from "../shell/below";
 import { keyboardLift } from "../../core/shell/belowStack";
 import { composerSize } from "../kit/density";
+import { pasteAttaches, withoutInserted } from "../../core/files/pastedFiles";
+import type { IncomingFiles } from "../more/files/incoming";
 
 /** The composers that show a chat's draft now, by its cache key: text written from elsewhere goes into them. */
 const writers = new Map<string, Set<(text: string) => void>>();
@@ -95,7 +97,8 @@ export const composerEdits = new WeakMap<ComposerText, { open: () => boolean; ca
  * field. ↑ in the empty field edits the last message (`onRecall`) and Escape
  * leaves that edit, on every platform with a hardware keyboard.
  *
- * A picture or file pasted into the field becomes a chip (`onFiles`).
+ * A picture or file pasted into the field becomes a chip (`onFiles`); files dropped on the conversation do too
+ * (`FileDrop` around it and the composer).
  *
  * Text put in from outside (a picked `@agent` or skill, a recalled message) leaves
  * the caret at its end. `disabled` (soft-final/SPEC.md §11): the field and Send at
@@ -128,11 +131,11 @@ export function Composer(props: {
   /** The placeholder while disabled: why. */
   disabledReason?: () => string;
   /**
-   * Pictures and files pasted into the field (a screenshot, an image copied from a page; the web, and
-   * a phone keyboard's image): they become chips as picked ones do (`AttachmentUploads.add`). Pasted
-   * text goes in as typed.
+   * Pictures and files pasted into the field (a screenshot, an image copied from a page, a phone keyboard's
+   * image, a file copied in Finder): they become chips as picked ones do (`attachIncoming`). Pasted text goes in
+   * as typed; what of a paste is attached is `pasteAttaches`'s.
    */
-  onFiles?: (files: File[]) => void;
+  onFiles?: (incoming: IncomingFiles) => void;
   children?: unknown;
 }) {
   const value = () => props.text.text();
@@ -149,6 +152,22 @@ export function Composer(props: {
   };
   let input: InputRef | undefined;
   const focused = signal(false);
+  // A Finder copy's name, inserted by the field as its file becomes a chip (`onPaste`), and the field's last change:
+  // the paste and the insertion arrive in either order (the Mac reports the paste first, a browser after).
+  let nameToTakeOut: { text: string; until: number } | null = null;
+  let lastChange = { before: "", after: "", at: 0 };
+  const takeOut = (before: string, after: string, name: string) => {
+    const back = withoutInserted(before, after, name);
+    if (!back) return false;
+    // Once the field holds what it inserted (its value set to that first, else it would keep showing the name).
+    setTimeout(() => {
+      if (untracked(value) !== after) return;
+      typed = back.value;
+      props.text.set(back.value);
+      setTimeout(() => input?.setSelection(back.caret), 0);
+    }, 0);
+    return true;
+  };
   // What the field last reported typing: any other value was put in from outside, and the caret goes to its end
   // (it stayed where it was, so a key after a picked "@agent " landed inside it).
   let typed = "";
@@ -211,10 +230,25 @@ export function Composer(props: {
           class={`min-w-0 flex-1 bg-transparent ${size.input} text-foreground placeholder:text-faint`}
           submitBehavior={desktop ? "submit" : undefined} onSubmit={returned}
           onFocus={() => focused.set(true)} onBlur={() => focused.set(false)}
-          onPaste={props.onFiles ? ({ files }) => void (files.length && !disabled() && props.onFiles?.(files)) : undefined}
-          onChange={({ value }) => {
-            typed = value;
-            props.text.set(value);
+          onPaste={props.onFiles ? ({ text, html, files, uris }) => {
+            // Counts only (never what was pasted): the Mac's image input run reads them (macos-image-input.yml).
+            console.log(`composer: pasted text ${text.length} html ${html.length} files ${files.length} uris ${uris.length}`);
+            const attaches = pasteAttaches({ text, html, files: files.length, uris });
+            if (disabled() || (!attaches.files && !attaches.uris)) return;
+            props.onFiles?.({ files: attaches.files ? files : [], uris: attaches.uris ? uris : [] });
+            // A file copied in Finder carries its name as text, which the field inserts itself: it goes back out.
+            if (attaches.uris && text) {
+              if (!(Date.now() - lastChange.at < 500 && takeOut(lastChange.before, lastChange.after, text))) nameToTakeOut = { text, until: Date.now() + 1000 };
+            }
+          } : undefined}
+          onChange={({ value: next }) => {
+            const before = untracked(value);
+            const name = nameToTakeOut && Date.now() < nameToTakeOut.until ? nameToTakeOut.text : "";
+            nameToTakeOut = null;
+            lastChange = { before, after: next, at: Date.now() };
+            typed = next;
+            props.text.set(next);
+            if (name) takeOut(before, next, name);
           }} />
         <If when={stops()} else={<SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
             <Icon name="arrow-up" size={size.arrow} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />

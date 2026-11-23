@@ -14,7 +14,8 @@
 //   (client/ui/shell/webLocation.ts; core/web/history.ts decides what each step does).
 // - files.*: M4's Files contract (client/ui/more/files/host.ts) the browser's way: an
 //   `<input type=file>` picker, an XHR upload with progress and abort, and a download into memory
-//   handed to the browser's own download (`<a download>`), and a picked picture's thumbnail.
+//   handed to the browser's own download (`<a download>`), and a picked picture's thumbnail. Files
+//   dragged onto a conversation are kept as picked ones (`files.dragOver`, `files.dropped`: listenForDrops).
 // - links.pluginReturn: how a Plugins sign-in ended, as the computer's callback sent this tab back
 //   (`/plugins?connected=<account>` or `?plugin_error=<step>`, with `service=`): read once and taken
 //   out of the address bar, so a reload or Back doesn't replay it.
@@ -368,11 +369,68 @@ function unlockKeyboardOnExit() {
   });
 }
 
+/** A drop place's testID starts so (client/ui/chat/FileDrop.tsx: Brain's thread, a Session's chat, a Work). */
+const DROP_PLACE = '[data-testid^="file-drop-"]';
+
+/**
+ * Files dragged into the page from the system (NSH 0.6.1's web build has no drops; FileDrop.tsx): over a drop place
+ * the page says which (`files.dragOver {target}`, `target` null once they leave it) and takes the drop
+ * (`files.dropped {target, files}`, each file kept as a picked one is, so it uploads and shows as one); anywhere
+ * else the drop is refused, so a drop that misses never opens the file in place of the app. Folders are left out.
+ * Text and links dragged in are the page's own, as before.
+ */
+function listenForDrops(player) {
+  let over = null;
+  let said = 0;
+  let leaving = 0;
+  const hasFiles = (event) => Array.from(event.dataTransfer?.types || []).includes("Files");
+  const placeAt = (event) => {
+    const element = event.target instanceof Element ? event.target : null;
+    return element?.closest(DROP_PLACE)?.getAttribute("data-testid") ?? null;
+  };
+  // Said again every half second while it lasts: a place made again during the drag (the page it is on came
+  // back) hears where the files are too.
+  const say = (target) => {
+    if (target === over && (target === null || Date.now() - said < 500)) return;
+    over = target;
+    said = Date.now();
+    player.hostEvent("files.dragOver", { target });
+  };
+  const moving = (event) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    clearTimeout(leaving);
+    const target = placeAt(event);
+    event.dataTransfer.dropEffect = target ? "copy" : "none";
+    say(target);
+  };
+  window.addEventListener("dragenter", moving, true);
+  window.addEventListener("dragover", moving, true);
+  // A leave is followed by the next element's enter; only one with none after it left the page.
+  window.addEventListener("dragleave", (event) => {
+    if (!hasFiles(event)) return;
+    clearTimeout(leaving);
+    leaving = setTimeout(() => say(null), 80);
+  }, true);
+  window.addEventListener("drop", (event) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    clearTimeout(leaving);
+    const target = placeAt(event);
+    say(null);
+    if (!target) return;
+    const items = Array.from(event.dataTransfer.items || []);
+    const files = Array.from(event.dataTransfer.files || []).filter((file, index) => !items[index]?.webkitGetAsEntry?.()?.isDirectory);
+    if (files.length) player.hostEvent("files.dropped", { target, files: files.map(remember) });
+  }, true);
+}
+
 export function createHost(player) {
   // `nsh test` loads this module outside a browser: the page's objects are only touched in one.
   if (typeof window !== "undefined") {
     takeHistory(player);
     if (player) listenForSteps(player);
+    if (player) listenForDrops(player);
     unlockKeyboardOnExit();
   }
   const handlers = {
