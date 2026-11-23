@@ -12,7 +12,7 @@ export interface ComputerGrant {
   state: GrantState;
 }
 
-/** What a grant's row offers: Allowed; Allow… (System Settings and the panel to drag Mewla in); Restart Mewla. */
+/** What a grant's row offers: Allowed; Allow (System Settings and the panel to drag Mewla in); Restart Mewla. */
 export type GrantRow = "allowed" | "allow" | "restart";
 
 export function grantRow(state: GrantState | undefined): GrantRow | null {

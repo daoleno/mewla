@@ -174,7 +174,7 @@ export function SearchField(props: { value: string; placeholder: string; onChang
   );
 }
 
-/** A small ghost button on a row (Connect, Set up, Fix, Sign in, Allow…): 36 high, radius 12, on the canvas, 15/600 (SPEC §10.4); 30 on the Mac's well. */
+/** A small ghost button on a row (Connect, Set up, Fix, Sign in, Allow): 36 high, radius 12, on the canvas, 15/600 (SPEC §10.4); 30 on the Mac's well. */
 export function RowButton(props: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; accessibilityLabel?: string; testID?: string }) {
   // `busy`: the label fades for the 16 pt ring from `wait.quiet` (SPEC §16.2 pattern 5), the button keeps its size.
   const ring = delayed(() => Boolean(props.busy));

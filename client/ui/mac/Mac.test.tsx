@@ -165,9 +165,9 @@ describe("Mewla for Mac", () => {
   }, 30_000);
 
   // Owner-found 11-23: Mewla removed from Accessibility with −, then nothing in Mewla brought it back, and the guide's
-  // "Allow…" did nothing. Each row reads what the daemon reads afresh on /agent-use (no Screen approval of the app
-  // involved); Allow… opens the list with the panel to drag Mewla in and asks the daemon to follow the grant.
-  test("Settings › Privacy & access: each grant's real state, and Allow… brings a removed Mewla back through the panel", async () => {
+  // "Allow" did nothing. Each row reads what the daemon reads afresh on /agent-use (no Screen approval of the app
+  // involved); Allow opens the list with the panel to drag Mewla in and asks the daemon to follow the grant.
+  test("Settings › Privacy & access: each grant's real state, and Allow brings a removed Mewla back through the panel", async () => {
     const guides: unknown[] = [];
     const posts: string[] = [];
     let accessibility = "missing";
@@ -191,15 +191,19 @@ describe("Mewla for Mac", () => {
     await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
     await app.waitFor("id:mac-access-screen >> id:mac-access-screen-state", { timeout: 10_000 });
     expect(app.shows("id:mac-access-screen >> text:Allowed")).toBe(true);
-    // Removed from the list: Allow…, which opens the panel for Accessibility and has the daemon follow it.
+    // Removed from the list: Allow, which opens the panel for Accessibility and has the daemon follow it.
     await app.waitFor("id:mac-access-accessibility >> id:mac-access-accessibility-allow", { timeout: 10_000 });
     await app.press("id:mac-access-accessibility >> id:mac-access-accessibility-allow");
     await app.waitUntil(() => guides.length === 1 && posts.some((body) => body.includes('"follow":"accessibility"')), { timeout: 5_000 });
-    expect(guides[0]).toEqual({ permission: "accessibility" });
-    // Switched off in the list: the same Allow….
+    // With the daemon's reading, so the host clears Mewla's own rows that do not count first.
+    expect(guides[0]).toEqual({ permission: "accessibility", state: "missing" });
+    // Switched off in the list: the same Allow.
     accessibility = "off";
     await app.wait(3_500);
     expect(app.shows("id:mac-access-accessibility >> id:mac-access-accessibility-allow")).toBe(true);
+    await app.press("id:mac-access-accessibility >> id:mac-access-accessibility-allow");
+    await app.waitUntil(() => guides.length === 2, { timeout: 5_000 });
+    expect(guides[1]).toEqual({ permission: "accessibility", state: "off" });
     // Given, in effect once Mewla starts again: one button, which restarts it.
     accessibility = "restart";
     await app.waitFor("id:mac-access-accessibility >> id:mac-access-accessibility-restart", { timeout: 6_000 });

@@ -76,11 +76,12 @@ func TestAgentUseSwitchIsSignedOverItsBody(t *testing.T) {
 	// Restart Mewla, none of them behind a Screen approval of the app.
 	var followed []string
 	restarts := 0
+	accessibility := "missing"
 	service.SetComputer(agentuse.ComputerHooks{
 		Status: func() agentuse.ComputerStatus {
 			return agentuse.ComputerStatus{State: agentuse.ComputerPermission, Permissions: []agentuse.ComputerGrant{
 				{ID: "screen_recording", Name: "Screen Recording", State: "granted"},
-				{ID: "accessibility", Name: "Accessibility", State: "missing"},
+				{ID: "accessibility", Name: "Accessibility", State: accessibility},
 			}}
 		},
 		Stop:    func() {},
@@ -95,7 +96,12 @@ func TestAgentUseSwitchIsSignedOverItsBody(t *testing.T) {
 	if code, _ := do(http.MethodPost, postPurpose(follow), follow); code != http.StatusOK || len(followed) != 1 || followed[0] != "accessibility" {
 		t.Fatalf("follow: %d %v", code, followed)
 	}
+	// Nothing waits for a restart: refused, so no paired device restarts Mewla at will.
 	restart := []byte(`{"restart":true}`)
+	if code, _ := do(http.MethodPost, postPurpose(restart), restart); code != http.StatusConflict || restarts != 0 {
+		t.Fatalf("restart with nothing waiting: %d %d", code, restarts)
+	}
+	accessibility = "restart"
 	if code, _ := do(http.MethodPost, postPurpose(restart), restart); code != http.StatusOK || restarts != 1 {
 		t.Fatalf("restart: %d %d", code, restarts)
 	}

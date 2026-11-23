@@ -57,6 +57,14 @@ impl Permission {
             Permission::Accessibility => "kTCCServiceAccessibility",
         }
     }
+
+    /// The service's name for `tccutil`.
+    fn tccutil_service(self) -> &'static str {
+        match self {
+            Permission::ScreenRecording => "ScreenCapture",
+            Permission::Accessibility => "Accessibility",
+        }
+    }
 }
 
 /// Where Mewla stands in a permission's list, as TCC's preflight answers this app.
@@ -138,17 +146,23 @@ fn tcc_preflight() -> Option<Preflight> {
     Some(unsafe { std::mem::transmute::<usize, Preflight>(address) })
 }
 
+/// TCC's own answer for this app: `None` where its preflight is not there.
+fn exact(permission: Permission) -> Option<Listed> {
+    let preflight = tcc_preflight()?;
+    let service = NSString::from_str(permission.tcc_service());
+    // SAFETY: an NSString is a CFString (toll-free bridged); no options.
+    let answer = unsafe { preflight(Retained::as_ptr(&service).cast(), std::ptr::null()) };
+    Some(match answer {
+        0 => Listed::Granted,
+        1 => Listed::Off,
+        _ => Listed::Missing,
+    })
+}
+
 /// Where this app stands in a permission's list (the daemon, this app's child, stands the same).
 pub fn listed(permission: Permission) -> Listed {
-    if let Some(preflight) = tcc_preflight() {
-        let service = NSString::from_str(permission.tcc_service());
-        // SAFETY: an NSString is a CFString (toll-free bridged); no options.
-        let answer = unsafe { preflight(Retained::as_ptr(&service).cast(), std::ptr::null()) };
-        return match answer {
-            0 => Listed::Granted,
-            1 => Listed::Off,
-            _ => Listed::Missing,
-        };
+    if let Some(listed) = exact(permission) {
+        return listed;
     }
     // SAFETY: plain calls without arguments.
     let granted = unsafe {
@@ -158,6 +172,43 @@ pub fn listed(permission: Permission) -> Listed {
         }
     };
     if granted { Listed::Granted } else { Listed::Missing }
+}
+
+/// Whether Allow clears this app's rows first: only when TCC itself says Mewla has no row that counts (a row of another
+/// signature of Mewla reads so, and the list shows it on while it grants nothing), and the daemon did not read it as
+/// switched off or given. A row switched off, or no exact answer, is left alone.
+fn clears(exact: Option<Listed>, daemon: Option<&str>) -> bool {
+    exact == Some(Listed::Missing) && !matches!(daemon, Some("off" | "granted" | "restart"))
+}
+
+/// Before asking: when Mewla has no row that counts, removes this app's own rows for the permission (`tccutil reset
+/// <service> <this bundle id>`: never a whole service, never another app's), so a row left by another signature of
+/// Mewla does not stand in the list as on, and dragging Mewla in (or macOS's own ask) writes one that counts. Rows of
+/// a path (an older Mewla's bare daemon, listed as "mewla") are not this bundle id's and stay as they are: nothing
+/// points at them. Any thread; returns whether it cleared.
+pub fn clear_stale(permission: Permission, daemon: Option<&str>) -> bool {
+    if !clears(exact(permission), daemon) {
+        return false;
+    }
+    let Some(id) = NSBundle::mainBundle().bundleIdentifier().map(|id| id.to_string()) else { return false };
+    if id.is_empty() {
+        return false;
+    }
+    match std::process::Command::new("/usr/bin/tccutil").args(["reset", permission.tccutil_service(), &id]).output() {
+        Ok(out) => {
+            log::warn!(
+                "permission panel: cleared {id}'s rows for {} ({}): {}",
+                permission.tccutil_service(),
+                out.status,
+                String::from_utf8_lossy(&out.stdout).trim()
+            );
+            out.status.success()
+        }
+        Err(err) => {
+            log::warn!("permission panel: tccutil: {err}");
+            false
+        }
+    }
 }
 
 /// System Settings' main window, in the window server's coordinates, when it is on screen.
@@ -485,5 +536,18 @@ mod tests {
         assert_eq!(instruction("Mewla", Listed::Off), "Turn on Mewla in the list");
         assert_eq!(Permission::from_id("accessibility"), Some(Permission::Accessibility));
         assert_eq!(Permission::from_id("chrome"), None);
+    }
+
+    #[test]
+    fn only_a_row_that_does_not_count_is_cleared() {
+        assert!(clears(Some(Listed::Missing), Some("missing")));
+        assert!(clears(Some(Listed::Missing), None));
+        assert!(!clears(Some(Listed::Off), Some("missing")));
+        assert!(!clears(Some(Listed::Granted), None));
+        assert!(!clears(Some(Listed::Missing), Some("off")));
+        assert!(!clears(Some(Listed::Missing), Some("granted")));
+        assert!(!clears(Some(Listed::Missing), Some("restart")));
+        // No exact answer (no TCC preflight): a row switched off cannot be told from none, so nothing is cleared.
+        assert!(!clears(None, Some("missing")));
     }
 }

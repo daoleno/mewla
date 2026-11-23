@@ -7,12 +7,14 @@
 # Writes <out>/walk.txt (each phase, the daemon's grants, the process tree), <out>/NN-*.png (the screen), the app's and
 # the daemon's logs, and tccd's lines for Mewla.
 set -euo pipefail
+[[ "${GITHUB_ACTIONS:-}" == true ]] || { echo "this script edits the system TCC.db: a CI Mac only" >&2; exit 2; }
 src="${1:?Mewla.app}"
 out="${2:?out dir}"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+stream=""
+trap '[[ -n "$stream" ]] && kill "$stream" 2>/dev/null; rm -rf "$work"' EXIT
 db="/Library/Application Support/com.apple.TCC/TCC.db"
 app=/Applications/Mewla.app
 cli="$app/Contents/Helpers/mewla"
@@ -33,6 +35,18 @@ clear_rows() { sudo sqlite3 "$db" "delete from access where client = 'com.daolen
 # A row for Mewla.app (what dragging it in, or + and choosing it, writes): service, auth (0 off, 2 on).
 row() {
   sudo sqlite3 "$db" "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified) values ('$1', 'com.daoleno.mewla', 0, $2, 3, 1, X'$app_req', 0, strftime('%s','now'));"
+}
+# A row for Mewla's bundle id written by another signature of Mewla (another team's Developer ID): System Settings
+# lists it as Mewla, switched on, while it grants this build nothing.
+echo 'identifier "com.daoleno.mewla" and anchor apple generic and certificate leaf[subject.OU] = "AAAAAAAAAA"' > "$work/foreign.txt"
+csreq -r "$work/foreign.txt" -b "$work/foreign.bin"
+foreign_req=$(xxd -p "$work/foreign.bin" | tr -d '\n')
+foreign_row() {
+  sudo sqlite3 "$db" "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified) values ('$1', 'com.daoleno.mewla', 0, 2, 3, 1, X'$foreign_req', 0, strftime('%s','now'));"
+}
+# The row an older Mewla's bare daemon left for Accessibility: its path, listed as a lowercase "mewla".
+path_row() {
+  sudo sqlite3 "$db" "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified) values ('$1', '$cli', 1, 2, 3, 1, NULL, 0, strftime('%s','now'));"
 }
 drop_row() { sudo sqlite3 "$db" "delete from access where service = '$1' and client = 'com.daoleno.mewla';"; }
 rows() { sudo sqlite3 "$db" "select service, client, client_type, auth_value from access where client = 'com.daoleno.mewla' or client like '$app/%';"; }
@@ -77,6 +91,9 @@ open_and_wait() { # devScript JSON, log line to wait for
 }
 shot() { screencapture -x "$out/$1.png" || true; }
 
+# Everything tccd says while the walk runs (what asked, for whom, what it answered).
+log stream --style compact --predicate 'process == "tccd"' > "$out/tccd-stream.log" 2>&1 &
+stream=$!
 say "install: $(defaults read "$app/Contents/Info.plist" CFBundleShortVersionString)"
 clear_rows; tcc_reload
 open_gui '{}'
@@ -85,6 +102,11 @@ say "processes (the daemon is the child of the app's own executable):"
 ps -axo pid,ppid,command | grep -E "Mewla.app/Contents/(MacOS|Helpers)" | grep -v grep | tee -a "$walk"
 launchctl print "gui/$(id -u)/com.daoleno.mewla.daemon" 2>/dev/null | grep -E "program|state =|pid =" | tee -a "$walk" || true
 note_grants
+
+# A Session with a live process, kept through the daemon restarting itself in place after a grant (below).
+"$(dirname "$0")/session-proof.sh" start "$cli" "$work/session" | tee -a "$walk"
+daemon_pid() { pgrep -f "^$app/Contents/Helpers/mewla serve" | head -1; }
+daemon_before=$(daemon_pid)
 
 # Item 3 on the real binaries: Mewla.app's row only (what + Mewla.app writes), the bare helper as its own job (0.4.24)
 # against the app's executable as the job with the helper its child (this change).
@@ -130,6 +152,7 @@ for permission in accessibility screen_recording; do
   wait_grant "$permission" off 20 || true; note_grants
   open_and_wait "{\"settings\":\"access\",\"allow\":\"$permission\"}" "dev script: allow $permission"; sleep 5
   shot "$n-$permission-2-denied-panel"
+  say "$permission: after Allow on a row switched off, the row stays: $(rows | grep "$service" | tr '\n' ' ')"
 
   say "$permission: row removed (−)"
   quit_settings; drop_row "$service"; tcc_reload
@@ -144,6 +167,41 @@ for permission in accessibility screen_recording; do
   note_grants
   sleep 3; shot "$n-$permission-5-granted"
   app_log | grep -E "dev script: (grants|allow)" | tail -12 | tee -a "$walk"
+done
+
+say "the daemon's process $daemon_before -> $(daemon_pid) (restarted in place after a grant when it changed)"
+"$(dirname "$0")/session-proof.sh" check "$cli" "$work/session" "after the restart in place" | tee -a "$walk"
+say "the app's connection to the daemon, as it changed:"
+app_log | grep -E "dev script: connection" | tee -a "$walk"
+
+# A stale row: Mewla's bundle id with another signature's requirement, switched on in the list, granting nothing.
+# Allow clears Mewla's own rows for that service (tccutil reset <service> com.daoleno.mewla), then asks; the old path
+# row stays as it is. A new row then counts.
+for permission in accessibility screen_recording; do
+  service=kTCCServiceAccessibility; [[ $permission == screen_recording ]] && service=kTCCServiceScreenCapture
+  n=$([[ $permission == accessibility ]] && echo 7 || echo 8)
+  say "$permission: a stale row (another signature of Mewla, on in the list)"
+  quit_gui; quit_settings; drop_row "$service"; foreign_row "$service"
+  [[ $permission == accessibility ]] && path_row "$service"
+  tcc_reload
+  wait_grant "$permission" missing 20 || true; note_grants
+  open "x-apple.systempreferences:com.apple.preference.security?Privacy_$([[ $permission == accessibility ]] && echo Accessibility || echo ScreenCapture)"
+  sleep 5; shot "$n-$permission-0-stale-listed-on"
+  quit_settings
+  open_and_wait "{\"settings\":\"access\",\"allow\":\"$permission\"}" "dev script: allow $permission"; sleep 5
+  shot "$n-$permission-1-stale-allow"
+  app_log | grep -E "permission panel: cleared" | tail -2 | tee -a "$walk"
+  say "$permission: after Allow, Mewla's rows: $(rows | tr '\n' ' ')"
+  if sudo sqlite3 "$db" "select count(*) from access where service = '$service' and client = 'com.daoleno.mewla';" | grep -qx 0; then
+    say "$permission: the stale row is gone"
+  else
+    say "$permission: the stale row is STILL THERE"
+  fi
+  say "$permission: a new grant (the drag, stood in for by its row)"
+  row "$service" 2; tcc_reload
+  if wait_grant "$permission" granted 60; then say "$permission: granted in the daemon after the stale row"; else say "$permission: NOT granted after the stale row"; fi
+  note_grants
+  sleep 3; shot "$n-$permission-2-stale-granted"
 done
 
 say "rows now:"; rows | tee -a "$walk"

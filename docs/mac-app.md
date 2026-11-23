@@ -71,8 +71,8 @@ itself: the daemon runs as the app's child, so there is one Mewla in each list,
 with its icon.
 
 **Settings → Privacy & access** shows each one as macOS holds it now: Allowed,
-**Allow…**, or **Restart Mewla** when macOS applies a grant only to a new
-process. **Allow…** opens the permission's list in System Settings with a small
+**Allow**, or **Restart Mewla** when macOS applies a grant only to a new
+process. **Allow** opens the permission's list in System Settings with a small
 panel beside it holding Mewla's icon: drag it into the list, or turn Mewla on if
 it is already there. The same panel brings Mewla back after you removed it with
 −. Once you give the permission, the panel closes, Mewla comes back to the front
