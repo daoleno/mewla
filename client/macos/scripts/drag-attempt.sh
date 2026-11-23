@@ -30,13 +30,11 @@ sudo rm -rf "$app"
 ditto "$src" "$app"
 sudo sqlite3 "$db" "delete from access where client = 'com.daoleno.mewla' or client like '$app/%';"
 tcc_reload
-# The unlock prompt's answer: this runner's own password, if it is one of the image's known ones (macOS 26 will not
-# set a new one without the old).
-password=""
-for candidate in runner admin vagrant; do
-  if dscl . -authonly "$(id -un)" "$candidate" >/dev/null 2>&1; then password=$candidate; break; fi
-done
-say "the runner's password: $([[ -n "$password" ]] && echo known || echo unknown)"
+# The unlock prompt's answer: a password set for the runner's account for this job (root can reset it; the machine
+# is thrown away after the job).
+password="Drag-$(uuidgen | cut -c1-8)"
+sudo sysadminctl -resetPasswordFor "$(id -un)" -newPassword "$password" 2>&1 | tail -2 || true
+if dscl . -authonly "$(id -un)" "$password" >/dev/null 2>&1; then say "the runner's password: set"; else say "the runner's password: could not be set"; password=""; fi
 
 cat > "$work/drag.swift" <<'SWIFT'
 import CoreGraphics
@@ -48,6 +46,21 @@ func windows() -> [[String: Any]] {
 }
 func bounds(_ w: [String: Any]) -> CGRect {
   CGRect(dictionaryRepresentation: (w[kCGWindowBounds as String] as! CFDictionary)) ?? .zero
+}
+if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "type" {
+  // Keys into whatever has the keyboard (the unlock prompt's password field), then Return.
+  let keys = CGEventSource(stateID: .hidSystemState)
+  for ch in CommandLine.arguments[2].utf16 {
+    for down in [true, false] {
+      let e = CGEvent(keyboardEventSource: keys, virtualKey: 0, keyDown: down)
+      var c = ch
+      e?.keyboardSetUnicodeString(stringLength: 1, unicodeString: &c)
+      e?.post(tap: .cghidEventTap)
+      usleep(30_000)
+    }
+  }
+  for down in [true, false] { CGEvent(keyboardEventSource: keys, virtualKey: 36, keyDown: down)?.post(tap: .cghidEventTap); usleep(30_000) }
+  exit(0)
 }
 let all = windows()
 if CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "list" {
@@ -139,10 +152,15 @@ for permission in accessibility screen_recording; do
   wait "$dragger" || true
   tee -a "$log" < "$work/drag.out"
   sleep 3; shot "$permission-2-after-drop"
-  say "unlock: $(unlock)"
+  say "unlock (scripting): $(unlock)"
+  if [[ -n "$password" ]]; then
+    # The prompt holds the keyboard on its password field: the password typed as keys, then Return.
+    "$work/drag" type "$password"
+    say "unlock: the password typed into the prompt"
+  fi
   sleep 4; shot "$permission-3-after-unlock"
   say "$permission rows: $(rows | tr '\n' ' ')"
-  for _ in $(seq 1 20); do
+  for _ in $(seq 1 40); do
     "$cli" agent-use status --json 2>/dev/null | grep -q "\"id\": *\"$permission\", *\"name\": *\"[^\"]*\", *\"state\": *\"\(granted\|restart\)\"" && break
     sleep 1
   done
