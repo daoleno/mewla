@@ -200,6 +200,7 @@ type Server struct {
 	tlsConfig                  *tls.Config
 	addresses                  *addressbook.Store
 	directEndpoints            func() []DirectEndpoint
+	linkRoute                  func() (LinkRoute, bool)
 	private                    *privateListeners
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
@@ -718,6 +719,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if s.triggers != nil {
 		s.sendTriggersSnapshot(conn, "")
 	}
+	// The route first: an app paired by the hosted address takes its pairing as a
+	// Relay route, then the direct addresses that follow apply to it.
+	s.sendLinkRoute(conn)
 	s.sendDirectEndpoints(conn)
 
 	for {
