@@ -25,6 +25,7 @@ import { MAC_SETTINGS, macShortcut, openMacSettings, type MacSettingsPage } from
 import { offerShortcutOnce, openShortcutOffer, startQuickChatShortcut } from "./QuickChatShortcut";
 import { openPairPhone } from "./PairPhone";
 import { openPerch, PERCH, sendToBrain, togglePerch } from "./Perch";
+import { relayProof } from "./relayProof";
 
 /** The perch's shortcut until the person picks another (DESIGN-MAC.md §2.2): ⇧⌘Space, which neither Spotlight,
  * Raycast (⌘Space) nor ChatGPT (⌥Space) holds. The host may name another (`host.params.quickChatShortcut`). */
@@ -35,7 +36,7 @@ const perchShortcut = macShortcut;
 
 const LOGIN_DEFAULT_KEY = "mewla:mac:start_at_login_default";
 
-type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean } };
+type MacParams = { release?: boolean; quickChatShortcut?: string; devScript?: { perch?: boolean; quickSend?: string; pairPhone?: boolean; settings?: MacSettingsPage; shortcutOffer?: boolean; terminal?: boolean; attach?: boolean; raise?: number; open?: "calendar" | "triggers" | "screen" | "computer"; trigger?: string; calendarDay?: number; calendarScene?: string; traySqueeze?: string; session?: string; size?: [number, number]; fullScreen?: boolean; minimize?: number; update?: boolean; grant?: "asked" | "open_settings" | "not_now"; imageInput?: boolean; relay?: string } };
 
 /** The menu bar cat's clip playing: the arc while Brain's turn runs, or a reaction once; its frame and its time. */
 type Playing = { clip: "arc" | MenuBarReaction; frame: number; ms: number };
@@ -255,6 +256,8 @@ export function startMac(): void {
           // The app's own update (macos-app.yml, `update`): once a newer release is found it is taken, as the row's button takes it.
           if (script.update) void updateProof();
           if (script.grant) void grantProof(script.grant);
+          // A computer on Mewla Relay: relay, LAN and back as the run cuts the network (relayProof.ts).
+          if (script.relay) void relayProof(script.relay);
           if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }
         // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
