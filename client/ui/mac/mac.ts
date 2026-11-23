@@ -7,6 +7,7 @@ import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready } from "../session";
 import { nav, openBrainTerminal, openPage, openSession } from "../shell/nav";
 import { focusComposer } from "../shell/desktop/keys";
+import { newestBrainUploads } from "../brain/composer";
 import { dayKey } from "../../core/calendar/agenda";
 import { showCalendarDay } from "../calendar/CalendarPage";
 import { clock } from "../calendar/clock";
@@ -222,6 +223,7 @@ export function startMac(): void {
       const now = route ? `${route.name}${route.workerId ? ` ${route.workerId}` : ""}` : "";
       if (now !== top) console.log(`dev script: page ${(top = now)}`);
     });
+    if (script.imageInput) imageInputLog();
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
     effect(() => {
@@ -287,6 +289,25 @@ export function startMac(): void {
       });
     });
   }
+}
+
+/**
+ * The image input run's log (macos-image-input.yml): the chips of Brain's composer each time they change (how many,
+ * each one's state and name), and each message the person sent, with the files it carried.
+ */
+function imageInputLog(): void {
+  effect(() => {
+    const items = newestBrainUploads()?.items() ?? [];
+    console.log(`dev script: chips ${items.length}${items.map((item) => ` [${item.status} ${item.asset.name}${item.error ? `: ${item.error}` : ""}]`).join("")}`);
+  });
+  const seen = new Set<string>();
+  effect(() => {
+    for (const event of brainChat()?.current.conversation?.events ?? []) {
+      if (event.kind !== "user_message" || seen.has(event.id)) continue;
+      seen.add(event.id);
+      console.log(`dev script: sent ${JSON.stringify(event.body ?? "")} with ${event.attachments?.length ?? 0} files`);
+    }
+  });
 }
 
 /**
