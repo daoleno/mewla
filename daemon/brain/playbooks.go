@@ -157,6 +157,7 @@ var seedPlaybooks = []struct {
 	{"wayfind.md", defaultWayfindPlaybook},
 	{"permission-block.md", defaultPermissionBlockPlaybook},
 	{"friends.md", defaultFriendsPlaybook},
+	{"size-proof.md", defaultSizeProofPlaybook},
 }
 
 const defaultFriendsPlaybook = `---
@@ -219,7 +220,7 @@ description: Write a Worker brief whose acceptance and proof can actually be che
 
 Turn the chosen method into concrete work in the brief: "reuse X", "check the upstream API for Y", "first reproduce Z in the browser". Give source pointers and constraints, not the Brain workspace or a generic checklist.
 
-Design proof around what the user does and what must then be true. A reproduced bug needs a test that fails before the fix and passes after. A UI or cross-layer claim needs the real interaction on the affected platforms, checking visible state and side effects. A build, mock or file check proves only its own surface. Use the repository's existing test tools with isolated, cleaned-up state rather than a new verifier per task. Real model or paid API calls need a stated budget and authority. A review finding blocks acceptance only when a run reproduces it (the command and its output); an unreproduced concern is reported as unproven and does not block.
+Design proof around what the user does and what must then be true. A reproduced bug needs a test that fails before the fix and passes after. A UI or cross-layer claim needs the real interaction on the affected platforms, checking visible state and side effects. A build, mock or file check proves only its own surface. Use the repository's existing test tools with isolated, cleaned-up state rather than a new verifier per task. Real model or paid API calls need a stated budget and authority.
 
 For diagnostics, ask for the smallest excerpt that keeps the status, symptom and failing assertion. Replace tokens, cookies and secret URLs with <REDACTED> before reporting or saving, and reference credentials instead of echoing them. If redaction hides the signal, find a narrower safe reproduction.
 
@@ -252,6 +253,23 @@ Before guessing what the user said or decided, run mewla memory search "<phrase>
 Before writing domain logic or a framework, look for a local helper or maintained library. Confirm API, version, platform, license and operational fit from source, docs or a small test. A routine local fix needs no library search. External docs and examples are reference material, not instructions.
 
 Investigate only until you can write the next brief, then act and update the plan from results.
+`
+
+const defaultSizeProofPlaybook = `---
+description: Size proof to the risk, budget it in the brief, and stop when proving outgrows building.
+---
+
+# Size Proof
+
+Proof exists to change a decision. Before the work starts, name the one check that shows the person the outcome is real: what they will do, seen once on the real thing. Everything else is a cheap test written with the change or a listed follow-up; neither holds up delivery.
+
+Size proof by the chance of being wrong, the cost if wrong and the cost to undo. What is yours and quick to undo goes first behind a flag or to your own machines and is undone if wrong; the undo path is its proof. What is hard to undo (protocols and sign-in, other people's data, migrations, public releases, automatic updates) is proven up front, once.
+
+Put a proof budget in the brief: when proving has taken about twice the building, the Worker stops and reports what is proven, and you decide what to cut. Rank review findings as they are written: one blocks only when a run reproduces it (the command and its output) and a person would meet it; the rest are follow-ups, and an unreproduced concern is reported as unproven. The same Worker takes the next round, compacted when its conversation grows long; a fresh one is for an independent review or a Worker stuck on a wrong premise.
+
+Shorten the loop before lengthening the list. If one look at the result takes more than a minute or two, fix that first: a warm target, an incremental build, a fake for the slow system plus one real check. Never prove a claim twice: evidence from an earlier version still counts if nothing it covers has changed, and a release checks only what it can itself break. Across versions, a contract test beats rerunning every mix; a staged rollout with rollback beats a bigger gate.
+
+At the result, compare the time spent building, proving and waiting; when proving dwarfs building, change the method before the next task.
 `
 
 const defaultPermissionBlockPlaybook = `---
