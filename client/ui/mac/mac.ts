@@ -397,10 +397,10 @@ async function updateProof(hold = 12): Promise<void> {
  * buttons call them.
  */
 async function attachProof(): Promise<void> {
-  const until = async (ok: () => boolean, ms = 60_000) => {
-    for (let waited = 0; !ok(); waited += 250) {
+  const until = async (ok: () => boolean, ms = 60_000, step = 250) => {
+    for (let waited = 0; !ok(); waited += step) {
       if (waited > ms) throw new Error("timed out");
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, step));
     }
   };
   try {
@@ -413,17 +413,26 @@ async function attachProof(): Promise<void> {
     uploads.add([new File(["refused"], `${"n".repeat(1100)}.txt`, { type: "text/plain" })]);
     await until(() => uploads.items().some((item) => item.status === "failed"));
     console.log(`dev script: attach failed ${uploads.items().find((item) => item.status === "failed")?.error ?? ""}`);
-    // 1 GB: still going when the run has captured the window (384 MB went up in 6 s on the runner).
-    uploads.add([new File([new Uint8Array(1 << 30)], "screen recording.mov", { type: "video/quicktime" })]);
-    await until(() => uploads.items().some((item) => item.status === "uploading"));
+    // 1 GB, for the run's capture of an uploading chip: it may be up before the capture on a fast runner, which costs
+    // only the picture. It is taken off the list after the capture's time, whatever it got to.
+    const big = new Uint8Array(1 << 30);
+    const listed = new Set(uploads.items().map((item) => item.id));
+    uploads.add([new File([big], "screen recording.mov", { type: "video/quicktime" })]);
+    await until(() => uploads.items().some((item) => !listed.has(item.id) && item.status !== "queued"));
     console.log("dev script: attach uploading");
-    // Long enough for the run to capture the chip, short enough that the 1 GB one is still going (a busy runner's timers lag).
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    const large = uploads.items().find((item) => item.status === "uploading");
-    if (large) {
+    for (const item of uploads.items()) if (!listed.has(item.id)) uploads.remove(item.id);
+    // Cancel, without a race (the 3 s hold above lost it to fast runners, 11-23): another 1 GB one, taken off the moment
+    // it is uploading (looked at every 10 ms; 1 GB does not go up in that).
+    const before = new Set(uploads.items().map((item) => item.id));
+    uploads.add([new File([big], "screen recording 2.mov", { type: "video/quicktime" })]);
+    const fresh = () => uploads.items().find((item) => !before.has(item.id));
+    await until(() => fresh()?.status === "uploading" || fresh()?.status === "failed", 60_000, 10);
+    const large = fresh();
+    if (large?.status === "uploading") {
       uploads.remove(large.id);
       console.log(`dev script: attach cancelled (${uploads.items().some((item) => item.id === large.id) ? "still listed" : "gone"})`);
-    } else console.log("dev script: attach cancel missed (the large one was up already)");
+    } else console.log(`dev script: attach cancel missed (${large?.status ?? "not listed"})`);
     const failed = uploads.items().find((item) => item.status === "failed");
     if (failed) {
       uploads.retry(failed.id);
