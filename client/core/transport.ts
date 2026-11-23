@@ -745,8 +745,9 @@ export class Transport {
   /** Ends the current socket as lost (not intentional): what is waiting fails, and the retry follows. */
   private kill(reason: string): void {
     const socket = this.socket;
-    socket?.close(4000, reason);
+    // The reason is told first: a platform whose close event comes at once (Bun's) would tell its own instead.
     socket?.onclose?.({ code: 4000, reason });
+    socket?.close(4000, reason);
   }
 
   private clearAttempt(): void {
