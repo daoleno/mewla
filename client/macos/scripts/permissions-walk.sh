@@ -44,9 +44,10 @@ foreign_req=$(xxd -p "$work/foreign.bin" | tr -d '\n')
 foreign_row() {
   sudo sqlite3 "$db" "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified) values ('$1', 'com.daoleno.mewla', 0, 2, 3, 1, X'$foreign_req', 0, strftime('%s','now'));"
 }
-# The row an older Mewla's bare daemon left for Accessibility: its path, listed as a lowercase "mewla".
+# The row an older Mewla's bare daemon left for Accessibility: its path, listed as a lowercase "mewla", switched off
+# (as 0.4.25's own use of Accessibility writes it; macos-permissions.yml `signed`).
 path_row() {
-  sudo sqlite3 "$db" "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified) values ('$1', '$cli', 1, 2, 3, 1, NULL, 0, strftime('%s','now'));"
+  sudo sqlite3 "$db" "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, flags, last_modified) values ('$1', '$cli', 1, 0, 3, 1, NULL, 0, strftime('%s','now'));"
 }
 drop_row() { sudo sqlite3 "$db" "delete from access where service = '$1' and client = 'com.daoleno.mewla';"; }
 rows() { sudo sqlite3 "$db" "select service, client, client_type, auth_value from access where client = 'com.daoleno.mewla' or client like '$app/%';"; }
@@ -170,7 +171,7 @@ for permission in accessibility screen_recording; do
   app_log | grep -E "dev script: (grants|allow)" | tail -12 | tee -a "$walk"
 done
 
-say "the daemon's process $daemon_before -> $(daemon_pid) (restarted in place after a grant when it changed)"
+say "the daemon restarted itself in place (an exec: the same pid, $daemon_before -> $(daemon_pid)) this many times: $(cat "$HOME/.mewla/logs/"*.log 2>/dev/null | grep -c "restarting in place" || true)"
 "$(dirname "$0")/session-proof.sh" check "$cli" "$session" "after the restart in place" | tee -a "$walk"
 say "the app's connection to the daemon, as it changed:"
 app_log | grep -E "dev script: connection" | tee -a "$walk"
@@ -193,6 +194,7 @@ for permission in accessibility screen_recording; do
   shot "$n-$permission-1-stale-allow"
   app_log | grep -E "permission panel: cleared" | tail -2 | tee -a "$walk"
   say "$permission: after Allow, Mewla's rows: $(rows | tr '\n' ' ')"
+  [[ $permission == accessibility ]] && say "accessibility: the old path row (\"mewla\") left as it was: $(sudo sqlite3 "$db" "select client, client_type, auth_value from access where service = '$service' and client = '$cli';")"
   if sudo sqlite3 "$db" "select count(*) from access where service = '$service' and client = 'com.daoleno.mewla';" | grep -qx 0; then
     say "$permission: the stale row is gone"
   else
