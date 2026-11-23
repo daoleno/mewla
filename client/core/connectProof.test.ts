@@ -139,3 +139,64 @@ describe("the binding", () => {
     expect(deviceBinding({ url: "not a url" })).toBeNull();
   });
 });
+
+// Brain 11-23 (no silent failures): a computer held to proofs that now runs a Mewla from before them (a downgrade)
+// refuses the bound connect. The app says so, by name, where the connect error shows, not a bare "error".
+describe("a computer held to proofs that runs an older Mewla now", () => {
+  /** The computer's /health answer to the app's challenge, as v0.4.25 gives it (no `connect_proof`) or as now. */
+  function healthAnswer(url: string, provesItself: boolean) {
+    const challenge = new URL(url).searchParams.get("challenge")!;
+    const timestamp = new Date().toISOString();
+    const signature = nacl.sign.detached(buildServerAssertionPayload("mewla-health-challenge", DAEMON_ID, timestamp, challenge), keys.secretKey);
+    return {
+      status: "ok", daemon_id: DAEMON_ID, daemon_public_key: server.daemonPublicKey, version: provesItself ? "0.4.26" : "0.4.25",
+      ...(provesItself ? { connect_proof: true } : {}),
+      assertion_purpose: "mewla-health-challenge", assertion_timestamp: timestamp, assertion_nonce: challenge, assertion_signature: bytesToHex(signature),
+    };
+  }
+  async function refusedConnect(provesItself: boolean): Promise<{ transport: Transport; asked: string[] }> {
+    const asked: string[] = [];
+    installMemoryPlatform({
+      openSocket: (url, protocols) => {
+        const socket = new FakeSocket(url, protocols);
+        sockets.push(socket);
+        return socket;
+      },
+      fetch: async (input) => {
+        asked.push(String(input));
+        return new Response(JSON.stringify(healthAnswer(String(input), provesItself)), { status: 200 });
+      },
+    });
+    await noteDaemonProves(server.daemonPublicKey);
+    const transport = new Transport(server);
+    transport.connect();
+    const deadline = Date.now() + 2_000;
+    while (!sockets.length && Date.now() < deadline) await wait(1);
+    // The older daemon refuses the bound connect at the handshake: the socket ends before it opens.
+    sockets.at(-1)!.close(1006, "");
+    return { transport, asked };
+  }
+
+  test("says the computer runs an older Mewla, and to update Mewla on it", async () => {
+    const { transport, asked } = await refusedConnect(false);
+    const deadline = Date.now() + 2_000;
+    while (!transport.problem.includes("older") && Date.now() < deadline) await wait(1);
+    expect(transport.problem).toBe("Desk runs an older Mewla. Update Mewla on Desk.");
+    expect(asked[0]).toStartWith("https://desk.example/health?challenge=");
+    // It stays the reason through the retries that follow.
+    while (sockets.length < 2 && Date.now() < deadline + 2_000) await wait(1);
+    sockets.at(-1)!.close(1006, "");
+    await wait(5);
+    expect(transport.problem).toBe("Desk runs an older Mewla. Update Mewla on Desk.");
+    transport.close();
+  });
+
+  test("a computer that does prove itself (a connect that failed for another reason) is not called older", async () => {
+    const { transport, asked } = await refusedConnect(true);
+    const deadline = Date.now() + 500;
+    while (!asked.length && Date.now() < deadline) await wait(1);
+    await wait(20);
+    expect(transport.problem).not.toContain("older");
+    transport.close();
+  });
+});

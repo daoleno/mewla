@@ -8,7 +8,7 @@ import {
   normalizePairingToken,
   normalizePublicKeyHex,
 } from "./auth";
-import { answerIsTheComputers, newChallenge, PAIR_CHALLENGE_PURPOSE, PROBE_CHALLENGE_PURPOSE } from "./daemonProof";
+import { answerIsTheComputers, daemonAnswer, newChallenge, olderMewlaLine, PAIR_CHALLENGE_PURPOSE, PROBE_CHALLENGE_PURPOSE } from "./daemonProof";
 
 export interface PairingInput {
   serverUrl: string;
@@ -18,6 +18,8 @@ export interface PairingInput {
   // "link" requests run through the app's own pinned Mewla Relay tunnel, so
   // their failures never describe loopback ports or cleartext HTTP.
   transport?: "link" | "direct";
+  /** What the person calls the computer, for a line that names it. */
+  computerName?: string;
 }
 
 // The pairing request never got an HTTP answer. Over Mewla Relay the daemon
@@ -100,16 +102,17 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   ) {
     throw new Error("Pairing target identity did not match the scanned link.");
   }
-  if (
-    !(await answerIsTheComputers({
-      purpose: PAIR_CHALLENGE_PURPOSE,
-      oldPurpose: "mewla-pair",
-      challengeHex,
-      daemonId: pairedDaemonId,
-      daemonPublicKey: pairedDaemonPublicKey,
-      body: payload,
-    }))
-  ) {
+  const answer = await daemonAnswer({
+    purpose: PAIR_CHALLENGE_PURPOSE,
+    oldPurpose: "mewla-pair",
+    challengeHex,
+    daemonId: pairedDaemonId,
+    daemonPublicKey: pairedDaemonPublicKey,
+    body: payload,
+  });
+  // A computer that proved before answering the old way, now, with its own key: it runs an older Mewla.
+  if (answer === "older") throw new Error(olderMewlaLine(input.computerName ?? ""));
+  if (answer !== "proved" && answer !== "old") {
     throw new Error("Pairing target failed daemon identity proof.");
   }
   return {

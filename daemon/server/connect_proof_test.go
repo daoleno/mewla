@@ -151,3 +151,15 @@ func TestAConnectMadeForAnotherHostIsRefusedOnTheTLSServerName(t *testing.T) {
 		t.Fatalf("made for evil.example, with its Host: %d", status)
 	}
 }
+
+// /health says this daemon proves itself, so an app that holds it to proofs can
+// name an older Mewla that does not.
+func TestHealthSaysTheDaemonProvesItself(t *testing.T) {
+	manager, _ := enrolledTestDevice(t)
+	srv := New(manager, watcher.New(time.Second), nil, nil, nil, nil, nil)
+	recorder := httptest.NewRecorder()
+	srv.handleHealth(recorder, httptest.NewRequest(http.MethodGet, "/health?challenge=00112233445566778899aabbccddeeff", nil))
+	if !strings.Contains(recorder.Body.String(), `"connect_proof":true`) {
+		t.Fatalf("health = %s", recorder.Body.String())
+	}
+}
