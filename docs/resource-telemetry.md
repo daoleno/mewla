@@ -142,7 +142,9 @@ minutes and not a spawn still being prepared, and none of its processes is a
 direct child of that host (a live pane). A Session whose agent exited stays on
 the host and keeps its resources until it is closed or reclaimed; its agent can
 be relaunched. A release stops the processes first, then moves the scratch to
-`gc/trash/` under the state root, then removes the lease. The trash keeps it
+`gc/trash/` under the state root, then removes the lease. A process still
+running from the scratch (its executable or working directory inside it) keeps
+the scratch and the lease until it is gone. The trash keeps it
 for three days: `mewla gc status` lists it and `mewla gc restore <id>` puts it
 back.
 No command-line arguments or environment variables are exposed by telemetry.
