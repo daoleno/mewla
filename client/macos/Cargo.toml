@@ -42,6 +42,23 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"
 # The release's secrets in the Keychain (secure.rs); already in the lock through NSH's networking.
 security-framework = "3.7.0"
 
+# NSH 0.6.1 plus what Mewla needs before NSH ships it (branch mewla/v0.6.1-file-contents of daoleno/nsh, proposed
+# upstream): a drop or a Finder paste hands the files over with their contents, so the app reads what the person gave
+# it without an fs grant; an image dragged out of a browser and the screenshot thumbnail (file promises, image data)
+# drop like files; a Finder copy pasted into a field that listens to pastes does not insert the files' names. Every
+# nsh crate comes from that commit (one nsh-core); the JS bundle is still built by the NSH 0.6.1 CLI.
+[patch.crates-io]
+nsh-base = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-core = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-engine = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-i18n = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-js = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-macros = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-package = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-platform-apple = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-platform-macos = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+nsh-updater = { git = "https://github.com/daoleno/nsh", rev = "531451a5c69cfb1b5a8ee81a41347e777c5601e0" }
+
 [profile.release]
 lto = "thin"
 codegen-units = 4

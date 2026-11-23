@@ -46,15 +46,24 @@ const APP_PICKER = platform.os === "macos";
 /** NSH's picker reads at most this much of a file; a larger one comes back unread. */
 const APP_PICK_MAX = 512 * 1024 * 1024;
 
-async function pickAppFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
-  const picked = await Picker.pickFiles({ multiple: maxCount > 1, limit: Math.max(1, maxCount), maxSize: APP_PICK_MAX });
+/** A file NSH hands over with its contents: a pick's (`Picker.pickFiles`), and on the Mac a drop's (`onFileDrop` `files`). */
+export type PickedFileEntry = { file: File | null; name: string; type: string; size: number };
+
+/**
+ * Picked or dropped files as chips, uploaded as the app's own. One unread (larger than a pick or a drop reads, 512 MB)
+ * is a failed chip that says so, never a retry. Each keeps its own name (a paste's generic "image.png" gets its time;
+ * a picked or dropped one is named).
+ */
+export function pickedAssets(picked: readonly PickedFileEntry[]): UploadDocumentAsset[] {
   const kept = keepAppFiles(picked.flatMap((pick) => (pick.file ? [pick.file] : [])));
-  // One unread (larger than the picker reads) is a failed chip that says so, never a retry.
-  // A picked file keeps its own name (a paste's generic "image.png" gets its time; a picked one is named).
   return picked.map((pick) => (pick.file ? { ...kept.shift()!, name: pick.name } : {
     uri: `app-file:unread:${pick.name}`, name: pick.name, mimeType: pick.type, size: pick.size,
     selectionError: "This file is larger than 512 MB.", selectionRetryable: false,
   }));
+}
+
+async function pickAppFiles(maxCount: number): Promise<UploadDocumentAsset[]> {
+  return pickedAssets(await Picker.pickFiles({ multiple: maxCount > 1, limit: Math.max(1, maxCount), maxSize: APP_PICK_MAX }));
 }
 
 function cancel(name: string, data: Record<string, string>): void {

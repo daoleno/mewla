@@ -1,9 +1,10 @@
 name: Mewla for Mac image input
 
-# Images into Brain's composer on a Mac as a person puts them there (owner issues 3 and 4, 2026-11-23): Mewla Dev runs
-# on this runner, and the run pastes with a real ⌘V (a screenshot to the clipboard, an image copied as Preview copies
-# it, a file copied in Finder, a spreadsheet cell) and drags a file in with a real AppKit drag from another app. Each
-# step is captured; the log says what the composer got. A push to a mac-image/ branch, or a dispatch.
+# Files and images into Mewla Dev's composers on a Mac as a person puts them there (owner issues 3 and 4, 2026-11-23):
+# pastes with a real ⌘V, real AppKit drags from another app, an image dragged out of Safari and Chrome, the screenshot
+# thumbnail, files in Desktop, Documents and Downloads (macOS's privacy prompts as a person meets them), large files,
+# a Session's chat and a Work's reply box (client/macos/scripts/image-input-run.sh). Mewla for Mac is built on the
+# daoleno/nsh build of NSH it ships with (client/macos/Cargo.toml). A push to a mac-image/ branch, or a dispatch.
 
 on:
   workflow_dispatch:
@@ -17,7 +18,7 @@ jobs:
   image:
     name: Paste and drop images into Mewla Dev
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -52,94 +53,9 @@ jobs:
           client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app" --dev
       - name: A stub agent, so Brain's chat opens
         run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
-      - name: Paste and drop into Brain's composer
-        run: |
-          set +e -u -o pipefail
-          D="$RUNNER_TEMP/image-run"; C="$D/captures"; mkdir -p "$D/data" "$C"
-          printf '%s' '{"mewla:theme_preference":"classic-light"}' > "$D/data/storage.json"
-          ditto -x -k "$RUNNER_TEMP/app/Mewla-Dev-"*-macos-aarch64.zip "$D"
-          S=client/macos/scripts
-          swiftc -O -o "$D/drag" "$S/drag.swift"
-          log() { cat "$D"/data/logs/* 2>/dev/null; }
-          wait_log() { for i in $(seq 1 "${2:-60}"); do log | grep -q "$1" && return 0; sleep 1; done; echo "never logged: $1"; return 1; }
-          shot() { "$S/capture-windows.sh" "Mewla Dev" "$C/$1" "$1-" >/dev/null || true; echo "captured $1"; }
-          front() { osascript -e 'tell application "System Events" to set frontmost of process "Mewla Dev" to true' || echo "could not bring Mewla Dev to the front"; sleep 1; }
-          menu_paste() { osascript -e 'tell application "System Events" to tell process "Mewla Dev" to get enabled of menu item "Paste" of menu 1 of menu bar item "Edit" of menu bar 1' 2>&1 || true; }
-          cmd_v() { osascript -e 'tell application "System Events" to keystroke "v" using command down' || echo "⌘V could not be sent"; }
-          # Two pictures: the screen's top left as PNG (the drag's file, and the "Copy Image" source).
-          screencapture -x -R 0,0,480,320 "$D/picture.png"; cp "$D/picture.png" "$D/dragged picture.png"
-
-          env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/bash LANG=en_US.UTF-8 TMPDIR="$TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-            MEWLA_APP_STATE_ROOT="$D/state" MEWLA_APP_DATA_DIR="$D/data" MEWLA_APP_ADDR=127.0.0.1:19877 \
-            MEWLA_APP_PHONE_ADDRESS=http://127.0.0.1:19877 MEWLA_APP_WINDOW_SIZE=1280x800 \
-            MEWLA_APP_DEV_SCRIPT='{"imageInput":true}' \
-            "$D/Mewla Dev.app/Contents/MacOS/Mewla Dev" > "$D/app.out" 2>&1 &
-          app=$!
-          wait_log "dev script: image ready" 180 || { log; exit 1; }
-          front
-          shot ready
-          # The main window (the largest of layer 0): a point in its conversation, in global points.
-          read -r mid_x mid_y <<<"$(python3 -I -c '
-          import re, sys
-          best = None
-          for line in open(sys.argv[1]):
-              m = re.match(r"\d+ 0 ([-\d.]+),([-\d.]+) ([\d.]+)x([\d.]+)", line)
-              if m:
-                  x, y, w, h = map(float, m.groups())
-                  if not best or w * h > best[2] * best[3]: best = (x, y, w, h)
-          x, y, w, h = best
-          print(int(x + w * 0.6), int(y + h * 0.45))' "$C/ready/windows.txt")"
-          echo "drop point: $mid_x,$mid_y"
-
-          step() { # name, then the command that fills the pasteboard
-            local name="$1"; shift
-            "$@"
-            swift "$S/pasteboard.swift" types
-            front
-            echo "$name: Paste in the Edit menu enabled: $(menu_paste)"
-            local before; before=$(log | grep -c "composer: pasted" || true)
-            cmd_v; sleep 4
-            local after; after=$(log | grep -c "composer: pasted" || true)
-            echo "$name: onPaste reports $((after - before)): $(log | grep "composer: pasted" | tail -1)"
-            shot "$name"
-          }
-          step screenshot screencapture -c -x -R 0,0,640,400
-          step copy-image swift "$S/pasteboard.swift" image "$D/picture.png"
-          step finder-file swift "$S/pasteboard.swift" file "$D/dragged picture.png"
-          step sheet-cell swift "$S/pasteboard.swift" rich "Q3 revenue 4,210" "$D/picture.png"
-
-          # A real drag from another app onto the conversation, held for a capture of the drop target.
-          rm -f "$D/holding"
-          "$D/drag" "$D/dragged picture.png" "$mid_x" "$mid_y" 6 "$D/holding" > "$D/drag.out" 2>&1 &
-          drag=$!
-          for i in $(seq 1 30); do [ -e "$D/holding" ] && break; sleep 0.5; done
-          sleep 1.5; shot dragging
-          # The whole screen too: the drag's own image is a window of the system's, not the app's.
-          screencapture -x "$C/dragging/screen.png"
-          wait "$drag"; echo "drag exit $?"; cat "$D/drag.out"
-          front; sleep 4; shot dropped
-
-          # Send what was attached: Return in the composer.
-          osascript -e 'tell application "System Events" to key code 36' || true
-          sleep 6; shot sent
-          log | grep -E "dev script|composer:|attach|upload" || true
-          echo "--- files the daemon took"; find "$D/state" -path "*uploads*" -type f -print 2>/dev/null | head -20
-          kill -TERM "$app" || true
-          for i in $(seq 1 60); do pgrep -f "$D" >/dev/null || break; sleep 1; done
-          pkill -TERM -f "$D" || true
-          if log | grep -E "ERROR (js|nsh)"; then exit 1; fi
-          # What a person would see: four chips (the screenshot, Copy Image, the Finder file, the dragged file; none for
-          # the spreadsheet cell), all uploaded, then Send takes them with the cell's text (not the Finder file's name).
-          fail=0
-          grep -q "drag ended: copy" "$D/drag.out" || { echo "FAIL: the drag was not taken"; fail=1; }
-          chips=$(log | grep "dev script: chips" | tail -2 | head -1)
-          echo "chips before Send: $chips"
-          [ "$(grep -o "\[ready " <<<"$chips" | wc -l | tr -d ' ')" = 4 ] || { echo "FAIL: not four ready chips"; fail=1; }
-          [ "$(grep -o "\[ready dragged picture.png\]" <<<"$chips" | wc -l | tr -d ' ')" = 2 ] || { echo "FAIL: the Finder file and the dragged file are not chips under their names"; fail=1; }
-          # Send took the four (the stub agent keeps no transcript, so the message itself is in the "sent" capture).
-          [ "$(log | grep "dev script: chips" | tail -1 | grep -c "chips 0$")" = 1 ] || { echo "FAIL: Send did not take the chips"; fail=1; }
-          [ "$(find "$D/state" -path "*uploads*" -type f | wc -l | tr -d ' ')" -ge 4 ] || { echo "FAIL: the daemon has fewer than four uploads"; fail=1; }
-          exit $fail
+      - name: Files and images into Mewla Dev's composers
+        timeout-minutes: 45
+        run: client/macos/scripts/image-input-run.sh "$(ls "$RUNNER_TEMP"/app/Mewla-Dev-*-macos-aarch64.zip)" "$RUNNER_TEMP/daemon/mewla-darwin-arm64"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

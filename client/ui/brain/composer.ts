@@ -6,8 +6,8 @@ import { chatSlashCommands } from "../../core/session/sessionRequests";
 import { agentKindFromProvider } from "../../core/sessions/workerPresentation";
 import { writeIntoDraft, type ComposerText } from "../chat/Composer";
 import { createAttachmentUploads } from "../more/files/Pages";
-import type { AttachmentUploads } from "../more/files/upload";
 import { registerShareTarget } from "../more/files/shareIn";
+import { markNewestUploads } from "../more/files/newestUploads";
 import { brainDraft } from "../session";
 import { MAX_COMPOSER_ATTACHMENTS } from "../../core/files/uploads";
 import { insertSkillMention, showComposerAlert } from "../session/SlashMenu";
@@ -26,12 +26,6 @@ import { currentBrain, type BrainSource } from "./source";
  * AttachmentTray (`uploads`); MentionPanel (`executors`); CodexStatusSheet and
  * CodexSkillsSheet on `statusOpen` / `skillsOpen` (a skill pick: `insertSkill`).
  */
-/** The newest Brain composer's attachments, for Mewla Dev's proof script (mac.ts `imageInput`). */
-const newest = signal<{ uploads: AttachmentUploads } | null>(null);
-export function newestBrainUploads(): AttachmentUploads | null {
-  return newest()?.uploads ?? null;
-}
-
 export function createBrainComposer(options: {
   text: ComposerText;
   /** A slash command that only runs in the terminal: Brain's own Session on its terminal. */
@@ -59,10 +53,7 @@ export function createBrainComposer(options: {
 
   const uploads = createAttachmentUploads();
   cleanup(() => uploads.dispose());
-  newest.set({ uploads });
-  cleanup(() => {
-    if (untracked(newest)?.uploads === uploads) newest.set(null);
-  });
+  markNewestUploads(uploads);
   // What other apps share to Mewla lands here: the files as chips, the text in the draft (more/files/shareIn.ts).
   cleanup(registerShareTarget({
     room: () => MAX_COMPOSER_ATTACHMENTS - uploads.items().length,

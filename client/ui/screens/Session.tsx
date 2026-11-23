@@ -68,6 +68,7 @@ import { gitReview, heldGitReview } from "../more/git/state";
 import { headerSize } from "../kit/density";
 import { FileDrop } from "../chat/FileDrop";
 import { attachIncoming, type IncomingFiles } from "../more/files/incoming";
+import { markNewestUploads } from "../more/files/newestUploads";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
 
@@ -401,6 +402,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
 
   // Files picked for the next message, uploaded to this computer as they are picked.
   const uploads = createAttachmentUploads();
+  markNewestUploads(uploads);
   cleanup(() => uploads.dispose());
   const uploading = () => uploads.items().some((item) => item.status === "uploading" || item.status === "queued");
   const attach = () => {

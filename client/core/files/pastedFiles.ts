@@ -28,9 +28,10 @@ export function pastedFileName(name: string, type: string, now: Date = new Date(
 export type PastedContent = { text: string; html: string; files: number; uris: readonly string[] };
 
 /**
- * What of a paste becomes chips; its text always goes into the field as typed (the field inserts it itself, on
- * the Mac before the app hears of the paste):
- * - a file copied in a file manager (`uris`, the desktops): the file;
+ * What of a paste becomes chips; its text always goes into the field as typed (the field inserts it itself; a Finder
+ * copy's names it leaves out on the Mac):
+ * - a file copied in a file manager (`uris`, the desktops): the file, whose contents come in `files` on the Mac
+ *   (`localFileContents` sorts them from icons);
  * - pictures (`files`: a screenshot to the clipboard, Copy Image): the pictures, unless the paste is formatted
  *   text with a picture of itself, as a spreadsheet cell or a selection on a web page copies: then only its
  *   text. Text that is only a link is the picture's address (a browser's Copy Image), not text of its own.
@@ -50,6 +51,35 @@ export function localFilePath(uri: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** The name of the local file or folder `uri` names (its path's last part); null when it names none. */
+export function localFileName(uri: string): string | null {
+  return localFilePath(uri)?.split("/").filter(Boolean).at(-1) ?? null;
+}
+
+/**
+ * Sorts what a drop or a paste delivered by the local files it named (`uris`: Finder's files, the desktops):
+ * - `keep`, for each delivered file by its name (`names`): with no local files named, every one (a screenshot, an
+ *   image from a page, a promised file); else only the named files' contents (an icon a file manager puts beside
+ *   them is not one);
+ * - `unread`: the named files that came without contents, which could not be read (the system refused, gone);
+ * - `folders`: how many folders were named, which never come (a folder's URL ends in "/").
+ */
+export function localFileContents(names: readonly string[], uris: readonly string[]): { keep: boolean[]; unread: { uri: string; name: string }[]; folders: number } {
+  const local = uris.flatMap((uri) => {
+    const name = localFileName(uri);
+    return name ? [{ uri, name }] : [];
+  });
+  const folders = local.filter(({ uri }) => uri.endsWith("/")).length;
+  const files = local.filter(({ uri }) => !uri.endsWith("/"));
+  const named = new Set(files.map(({ name }) => name));
+  const given = new Set(names);
+  return {
+    keep: names.map((name) => !local.length || named.has(name)),
+    unread: files.filter(({ name }) => !given.has(name)),
+    folders,
+  };
 }
 
 const TYPE_OF_EXTENSION: Record<string, string> = {

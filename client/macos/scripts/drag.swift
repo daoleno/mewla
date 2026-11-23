@@ -1,19 +1,19 @@
-// A real drag of a file into another app's window, as Finder starts one (macos-image-input.yml):
-//   swiftc -o drag drag.swift && ./drag <file> <to x> <to y> <hold seconds> <marker file>
-// A small window of its own (bottom left of the main screen) shows the file; the mouse is pressed on it through the
+// A real drag of files into another app's window, as Finder starts one (macos-image-input.yml):
+//   swiftc -o drag drag.swift && ./drag <to x> <to y> <hold seconds> <marker file> <file> [<file> ...]
+// A small window of its own (bottom left of the main screen) shows the files; the mouse is pressed on it through the
 // system's event stream (CGEvent, as a person's mouse arrives), the press starts an AppKit dragging session carrying the
-// file's URL, the mouse moves to <to x>, <to y> (global points, top left origin, as CGWindowList gives windows), stays
+// files' URLs, the mouse moves to <to x>, <to y> (global points, top left origin, as CGWindowList gives windows), stays
 // there <hold seconds> (the marker file is written once it is there, for a capture of the drop target), and is let go.
 // It prints how the drag ended: "drag ended: copy" when the window under the mouse took the file.
 import AppKit
 
 let args = CommandLine.arguments
-guard args.count == 6, let toX = Double(args[2]), let toY = Double(args[3]), let hold = Double(args[4]) else {
-  FileHandle.standardError.write("usage: drag <file> <to x> <to y> <hold seconds> <marker file>\n".data(using: .utf8)!)
+guard args.count >= 6, let toX = Double(args[1]), let toY = Double(args[2]), let hold = Double(args[3]) else {
+  FileHandle.standardError.write("usage: drag <to x> <to y> <hold seconds> <marker file> <file> [<file> ...]\n".data(using: .utf8)!)
   exit(2)
 }
-let file = URL(fileURLWithPath: args[1])
-let marker = args[5]
+let marker = args[4]
+let files = args[5...].map { URL(fileURLWithPath: $0) }
 
 final class Source: NSView, NSDraggingSource {
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -22,10 +22,13 @@ final class Source: NSView, NSDraggingSource {
     bounds.fill()
   }
   override func mouseDown(with event: NSEvent) {
-    print("drag: pressed on the file")
-    let item = NSDraggingItem(pasteboardWriter: file as NSURL)
-    item.setDraggingFrame(NSRect(x: 0, y: 0, width: 64, height: 64), contents: NSWorkspace.shared.icon(forFile: file.path))
-    beginDraggingSession(with: [item], event: event, source: self)
+    print("drag: pressed on \(files.count) file(s)")
+    let items = files.enumerated().map { index, file in
+      let item = NSDraggingItem(pasteboardWriter: file as NSURL)
+      item.setDraggingFrame(NSRect(x: index * 4, y: index * 4, width: 64, height: 64), contents: NSWorkspace.shared.icon(forFile: file.path))
+      return item
+    }
+    beginDraggingSession(with: items, event: event, source: self)
   }
   func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
     context == .outsideApplication ? .copy : []
