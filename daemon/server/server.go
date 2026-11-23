@@ -198,6 +198,7 @@ type Server struct {
 	runtimeClosing             bool
 	terminalCleanup            terminalCleanupOwner
 	tlsConfig                  *tls.Config
+	transportPin               string
 	addresses                  *addressbook.Store
 	directEndpoints            func() []DirectEndpoint
 	linkRoute                  func() (LinkRoute, bool)
@@ -265,6 +266,12 @@ type Server struct {
 // SetTLSConfig enables identity-bound TLS alongside local HTTP.
 func (s *Server) SetTLSConfig(config *tls.Config) {
 	s.tlsConfig = config
+}
+
+// SetTransportPin is the SPKI SHA-256 of this computer's transport key: a
+// device header bound to it ("pin:") was made inside TLS pinned to this key.
+func (s *Server) SetTransportPin(pin string) {
+	s.transportPin = strings.ToLower(strings.TrimSpace(pin))
 }
 
 func (s *Server) SetCalendar(store *calendar.Store, scheduler *calendar.Scheduler) {
@@ -680,6 +687,18 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	keepBacklogInOutbox(conn.UnderlyingConn())
+	// The first frame proves this is the computer the app paired: the daemon
+	// key signs the nonce of the app's own connect, before anything else can
+	// be queued for the socket. Older apps ignore it.
+	if proof, err := s.challengeProof(auth.ConnectProofPurpose, auth.AuthorizationNonce(authorizationFromRequest(r))); err == nil {
+		proof["type"] = "daemon_proof"
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := conn.WriteJSON(proof); err != nil {
+			_ = conn.Close()
+			return
+		}
+		_ = conn.SetWriteDeadline(time.Time{})
+	}
 	owner := &authenticatedClient{
 		deviceID: device.ID,
 		mewlaApp: app.AppPlatform != "",
@@ -4486,7 +4505,7 @@ func formatUploadBytes(size int64) string {
 }
 
 func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, purpose string) (*auth.TrustedDevice, bool) {
-	device, err := s.auth.VerifyAuthorization(authorizationFromRequest(r), purpose, 5*time.Minute)
+	device, err := s.auth.VerifyAuthorization(authorizationFromRequest(r), purpose, 5*time.Minute, s.requestBinding(r))
 	if err != nil {
 		s.logRefusedRequest(r, purpose, err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -4494,6 +4513,59 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 	}
 	auth.NotifyAuthenticated(r.Context())
 	return device, true
+}
+
+// requestBinding says whether a v2 device header's binding is the way this
+// request came (security review 11-23, PR B item 6): a host in the middle that
+// the app was made to talk to cannot hand the app's signature on to this
+// computer, since it names that host.
+//   - "pin:<pin>": made inside TLS pinned to this computer's transport key; it
+//     must be this computer's pin, over TLS.
+//   - "host:<name>": the request's Host. Over TLS this daemon terminated, the
+//     SNI must name it too, so whoever forwards through the relay (which routes
+//     by SNI) cannot pick the Host. A reverse proxy on this computer that
+//     rewrites Host passes the original in X-Forwarded-Host, read only from
+//     loopback and plain HTTP. Plain HTTP from elsewhere proves no host: a
+//     plain address has no channel security to bind to.
+func (s *Server) requestBinding(r *http.Request) auth.BindingCheck {
+	return func(binding string) bool {
+		if pin, ok := strings.CutPrefix(binding, "pin:"); ok {
+			return r.TLS != nil && s.transportPin != "" && pin == s.transportPin
+		}
+		host, ok := strings.CutPrefix(binding, "host:")
+		if !ok {
+			return false
+		}
+		if r.TLS != nil && r.TLS.ServerName != "" && bindingHostname(r.TLS.ServerName) != host {
+			return false
+		}
+		if bindingHostname(r.Host) == host {
+			return true
+		}
+		forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+		return r.TLS == nil && forwarded != "" && remoteIsLoopback(r) && bindingHostname(forwarded) == host
+	}
+}
+
+// bindingHostname is a Host (or SNI) as a binding names it: lowercase, no
+// port, no IPv6 brackets, no trailing dot (client/core deviceAuthContract.ts
+// bindingHost, line for line).
+func bindingHostname(hostport string) string {
+	host := strings.ToLower(strings.TrimSpace(hostport))
+	if split, _, err := net.SplitHostPort(host); err == nil {
+		host = split
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	return strings.TrimSuffix(host, ".")
+}
+
+func remoteIsLoopback(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // authSubprotocolPrefix starts the one WebSocket subprotocol a browser offers

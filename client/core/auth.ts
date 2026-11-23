@@ -104,6 +104,8 @@ export async function buildAuthorizationHeader(input: {
   purpose: AuthPurpose;
   /** The request's nonce when the answer must sign it (an app challenge, core/daemonProof.ts); else a random one. */
   nonceHex?: string;
+  /** What the header is bound to (core/daemonProof.ts `bindingFor`); none for an unbound one. */
+  binding?: string | null;
 }): Promise<string> {
   const daemonId = normalizeDaemonId(input.daemonId);
   if (!daemonId) {
@@ -120,6 +122,7 @@ export async function buildAuthorizationHeader(input: {
     seedHex: identity.seedHex,
     timestamp,
     nonceHex,
+    binding: input.binding,
   });
 }
 

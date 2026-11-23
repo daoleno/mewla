@@ -1,4 +1,4 @@
-import { normalizePublicKeyHex, verifyDaemonAssertion } from "./deviceAuthContract";
+import { deviceBinding, normalizePublicKeyHex, verifyDaemonAssertion } from "./deviceAuthContract";
 import { platform } from "./platform";
 import { bytesToHex } from "./protocolCrypto";
 
@@ -111,4 +111,14 @@ export async function answerIsTheComputers(input: {
     nonceHex: text(body.assertion_nonce),
     signatureHex: text(body.assertion_signature),
   });
+}
+
+/**
+ * The binding this app's device headers for `server` name at `url` (the address the request goes to), or null for an
+ * unbound (v1) header: only a computer that has proved signs challenges, and so takes bound headers (older mewla
+ * refuses them). A Relay pairing is always reached through a tunnel pinned to its transport key, so it binds that key.
+ */
+export async function bindingFor(server: { daemonPublicKey: string; transportKind?: string; transportPin?: string }, url: string): Promise<string | null> {
+  if (!(await daemonProves(server.daemonPublicKey))) return null;
+  return server.transportKind === "link" ? deviceBinding({ transportPin: server.transportPin }) : deviceBinding({ url });
 }

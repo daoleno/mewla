@@ -264,7 +264,7 @@ export class ScreenConnection {
     if (!this.route && this.watch && this.worker) params.worker = this.worker;
     if (this.drawsPointer) params.pointer = "local";
     const url = viewerURL(this.server, this.route?.path ?? "/screen/viewer", params);
-    const authorization = await deviceAuthorization(this.server, this.route?.purpose ?? "mewla-screen-view");
+    const authorization = await deviceAuthorization(this.server, this.route?.purpose ?? "mewla-screen-view", { url });
     if (this.closed) return;
     let socket: SocketLike;
     try {

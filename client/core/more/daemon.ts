@@ -1,5 +1,6 @@
 import { resolveStoredServerURL, serverURLNow } from "../link/pinnedTransport";
 import { getOrCreateLocalDeviceIdentity } from "../auth";
+import { bindingFor } from "../daemonProof";
 import { signDeviceAuthorization } from "../deviceAuthContract";
 import { buildHTTPURL } from "../pairing";
 import { platform } from "../platform";
@@ -62,7 +63,12 @@ function daemonURLAt(base: string, server: StoredServer, pathname: string, query
 }
 
 /** The `Authorization` header this phone's device key signs for one purpose on this computer. */
-export async function deviceAuthorization(server: StoredServer, purpose: string, nonceHex?: string): Promise<string> {
+/**
+ * The `Authorization` header this phone's device key signs for one purpose on this computer. With the `url` the request
+ * goes to, it is bound there (core/daemonProof.ts `bindingFor`), so a host in the middle cannot hand it on; a signature
+ * that is no request's (a Screen answer) passes none.
+ */
+export async function deviceAuthorization(server: StoredServer, purpose: string, options: { nonceHex?: string; url?: string } = {}): Promise<string> {
   const identity = await getOrCreateLocalDeviceIdentity();
   return signDeviceAuthorization({
     purpose,
@@ -70,7 +76,8 @@ export async function deviceAuthorization(server: StoredServer, purpose: string,
     deviceId: identity.deviceId,
     seedHex: identity.seedHex,
     timestamp: Date.now().toString(),
-    nonceHex: nonceHex ?? bytesToHex(platform().randomBytes(16)),
+    nonceHex: options.nonceHex ?? bytesToHex(platform().randomBytes(16)),
+    binding: options.url ? await bindingFor(server, options.url) : null,
   });
 }
 
@@ -94,7 +101,7 @@ export async function signedFetch(
       signal: controller.signal,
       headers: {
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
-        Authorization: await deviceAuthorization(server, signed, options.nonceHex),
+        Authorization: await deviceAuthorization(server, signed, { nonceHex: options.nonceHex, url }),
       },
       body: text,
     });

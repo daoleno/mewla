@@ -374,11 +374,11 @@ func TestComputerKeyOnlyOpensComputerRoute(t *testing.T) {
 		return auth.AuthorizationHeaderPrefix + "v1:computer-x:" + manager.DaemonID() + ":" + timestamp + ":" + hex.EncodeToString(nonce) + ":" + hex.EncodeToString(signature)
 	}
 	for _, purpose := range []string{"mewla-connect", "mewla-probe", auth.DeviceListPurpose, "mewla-screen"} {
-		if _, err := manager.VerifyAuthorization(sign(purpose), purpose, time.Minute); err == nil {
+		if _, err := manager.VerifyAuthorization(sign(purpose), purpose, time.Minute, nil); err == nil {
 			t.Fatalf("computer key accepted for %s", purpose)
 		}
 	}
-	if _, err := manager.VerifyAuthorization(sign(auth.ComputerPurpose), auth.ComputerPurpose, time.Minute); err != nil {
+	if _, err := manager.VerifyAuthorization(sign(auth.ComputerPurpose), auth.ComputerPurpose, time.Minute, nil); err != nil {
 		t.Fatalf("computer key refused on /computer: %v", err)
 	}
 
@@ -393,7 +393,7 @@ func TestComputerKeyOnlyOpensComputerRoute(t *testing.T) {
 	timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	signature := ed25519.Sign(phonePrivate, auth.BuildSignaturePayload(auth.ComputerPurpose, manager.DaemonID(), "phone", timestamp, hex.EncodeToString(nonce)))
 	header := auth.AuthorizationHeaderPrefix + "v1:phone:" + manager.DaemonID() + ":" + timestamp + ":" + hex.EncodeToString(nonce) + ":" + hex.EncodeToString(signature)
-	if _, err := manager.VerifyAuthorization(header, auth.ComputerPurpose, time.Minute); err == nil {
+	if _, err := manager.VerifyAuthorization(header, auth.ComputerPurpose, time.Minute, nil); err == nil {
 		t.Fatal("phone key accepted on /computer")
 	}
 }
