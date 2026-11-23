@@ -318,3 +318,67 @@ describe("Settings' Pair a computer", () => {
   });
 });
 
+
+// Owner issue 11-23 ("mewla: 协议的 computer 无法连接"): `mewla pair` on a computer with remote access gives a Mewla
+// Relay code. Mewla for Mac had no pinned tunnel (Pair stopped at "needs a current Android or iOS build"); it carries
+// them now, as the phones do. A browser can't, so it pairs at the code's stable address, on that computer's own page.
+describe("a Mewla Relay code on Pair a computer, on a Mac and in a browser", () => {
+  const thisMac = { expires_at: "2099-01-01T00:00:00Z", daemon_id: "b2".repeat(32), daemon_public_key: "c".repeat(64) };
+  const desk = { id: "s1", name: "This Mac", url: "ws://127.0.0.1:9876/ws", daemonId: "b2".repeat(32), daemonPublicKey: "c".repeat(64) };
+  const paired = { "mewla:v3:servers": JSON.stringify([desk]), "mewla:v1:current_server_id": "s1", "mewla:onboarded": "true" };
+  const keys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(9));
+  const relayCode = () => buildLinkPairingTestLink({
+    secretKey: keys.secretKey, publicKey: keys.publicKey, enrollmentToken: "2".repeat(64),
+    routeId: "3".repeat(32), transportPin: "4".repeat(64), label: "quiet-otter-3f9a", domain: "a.link.test", name: "region-a",
+    admissionAlias: "5".repeat(32), expiresAtMs: Date.now() + 3_600_000,
+  });
+  const tunnels = { "link.start": () => ({ port: 4100, rttMs: 20 }), "link.stop": () => null, "link.events": () => [] };
+
+  async function pairPageOn(platform: "macos" | "web", extra: Record<string, (data: any) => unknown>, network: Record<string, () => { status: number; body: unknown }>) {
+    const app = await open("../App.tsx", { host: phone({}, { "app.pairing": () => thisMac, ...extra }), platform, width: 1280, height: 800, storage: paired, network });
+    await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
+    await app.waitFor("id:pair-link");
+    app.onDialog(() => "Pair and grant access");
+    await app.type("id:pair-link", relayCode());
+    await app.press("id:pair-link-submit");
+    return app;
+  }
+  const saved = (app: Awaited<ReturnType<typeof open>>) => (JSON.parse(app.storage()["mewla:v3:servers"]!) as { id: string }[]).find((server) => server.id !== "s1");
+
+  test("a Mac pairs through its own pinned tunnel to the code's admission and keeps the route", async () => {
+    const relayComputer = testComputer("http://127.0.0.1:4100", 9);
+    const app = await pairPageOn("macos", tunnels, { [relayComputer.pairURL]: () => relayComputer.answer() });
+    await app.waitUntil(() => Boolean(saved(app)), { timeout: 10_000 });
+    expect(app.host.calls().find((call) => call.name === "link.start")?.data).toEqual({
+      key: `pair:${"3".repeat(32)}`, host: `${"5".repeat(32)}.a.link.test`, port: 443, pin: "4".repeat(64), mode: "on-demand",
+    });
+    expect(saved(app)).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "link", transportPin: "4".repeat(64), linkRouteId: "3".repeat(32) });
+  }, 20_000);
+
+  test("a browser has no tunnel: it pairs at the code's stable address", async () => {
+    const stable = testComputer("https://quiet-otter-3f9a.a.link.test", 9);
+    const app = await pairPageOn("web", {}, { [stable.pairURL]: () => stable.answer() });
+    await app.waitUntil(() => Boolean(saved(app)) || app.shows("id:pair-issue"), { timeout: 10_000 });
+    expect(app.shows("id:pair-issue") ? app.texts().join(" | ") : "").toBe("");
+    expect(saved(app)).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "manual" });
+    expect(app.host.calls().some((call) => call.name === "link.start")).toBe(false);
+  }, 20_000);
+
+  // The real page host (web/host.js) tells the page's origin by `app.origin`; a browser on 11-23 got "couldn't reach"
+  // for another computer's code because the app read the page's address where the browser does not keep it.
+  test("a browser on another computer's page says so, and sends nothing", async () => {
+    const stable = testComputer("https://quiet-otter-3f9a.a.link.test", 9);
+    const app = await pairPageOn("web", { "app.origin": () => "https://other-cat-1a2b.a.link.test" }, { [stable.pairURL]: () => stable.answer() });
+    await app.waitFor("id:pair-issue", { timeout: 10_000 });
+    expect(app.texts().join(" ")).toContain("This page reaches only other-cat-1a2b.a.link.test, the computer it came from. Open https://quiet-otter-3f9a.a.link.test in the browser to use that computer.");
+    expect(saved(app)).toBeUndefined();
+  }, 20_000);
+
+  test("a browser on the computer's own page pairs at that page's address", async () => {
+    const stable = testComputer("https://quiet-otter-3f9a.a.link.test", 9);
+    const app = await pairPageOn("web", { "app.origin": () => "https://quiet-otter-3f9a.a.link.test" }, { [stable.pairURL]: () => stable.answer() });
+    await app.waitUntil(() => Boolean(saved(app)) || app.shows("id:pair-issue"), { timeout: 10_000 });
+    expect(app.shows("id:pair-issue") ? app.texts().join(" | ") : "").toBe("");
+    expect(saved(app)).toMatchObject({ url: "wss://quiet-otter-3f9a.a.link.test/ws", transportKind: "manual" });
+  }, 20_000);
+});

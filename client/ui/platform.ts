@@ -43,6 +43,14 @@ export function nshPlatform(): Platform {
     // A browser negotiates permessage-deflate itself; the apps inflate the daemon's compressed messages.
     inflateRaw: os === "web" ? undefined : (data) => inflateRawSync(data),
     fetch: (input, init) => fetch(input, init),
-    linkTunnels: host.available() && (os === "ios" || os === "android") ? linkTunnels : undefined,
+    // The phone hosts and Mewla for Mac carry Mewla Relay's pinned tunnels (client/macos/src/link.rs); a browser can't.
+    linkTunnels: host.available() && (device.os === "ios" || device.os === "android" || device.os === "macos") ? linkTunnels : undefined,
+    pageOrigin: os === "web" && host.available() ? pageOrigin : undefined,
   };
+}
+
+/** The page's origin on the web, as its page host (web/host.js `app.origin`) reads it from the browser. */
+let origin: Promise<string | null> | undefined;
+function pageOrigin(): Promise<string | null> {
+  return (origin ??= host.call("app.origin").then((value) => (typeof value === "string" && value ? value : null), () => null));
 }

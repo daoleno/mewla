@@ -811,6 +811,32 @@ func linkSignaturePayload(payload []byte) []byte {
 	return signed
 }
 
+// CreateLinkRouteSignature signs this computer's Mewla Relay route for a paired
+// app (link.RouteBindingPayload) with the daemon identity the app pinned.
+func (m *Manager) CreateLinkRouteSignature(payload []byte) string {
+	return hex.EncodeToString(ed25519.Sign(m.privateKey, linkRouteSignaturePayload(payload)))
+}
+
+func VerifyLinkRouteSignature(publicKeyHex string, payload []byte, signatureHex string) bool {
+	publicKey, err := decodeFixedHex(publicKeyHex, ed25519.PublicKeySize)
+	if err != nil {
+		return false
+	}
+	signature, err := decodeFixedHex(signatureHex, ed25519.SignatureSize)
+	if err != nil {
+		return false
+	}
+	return ed25519.Verify(ed25519.PublicKey(publicKey), linkRouteSignaturePayload(payload), signature)
+}
+
+func linkRouteSignaturePayload(payload []byte) []byte {
+	const domain = "mewla-link-route-v1\x00"
+	signed := make([]byte, 0, len(domain)+len(payload))
+	signed = append(signed, domain...)
+	signed = append(signed, payload...)
+	return signed
+}
+
 func linkPairingSignaturePayload(payload []byte) []byte {
 	const domain = "mewla-link-pairing-v2\x00"
 	signed := make([]byte, 0, len(domain)+len(payload))

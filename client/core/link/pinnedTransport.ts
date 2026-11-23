@@ -137,7 +137,7 @@ export async function resolveStoredServerURL(server: StoredServer): Promise<stri
     return rewriteSelection(server, direct);
   }
   const relay = entry.relay;
-  if (entry.current === "relay" && relay && fresh(relay) && linkCandidates(server).some((candidate) => candidate.url === relay.remoteURL)) {
+  if (entry.current === "relay" && relay?.tunnelKey && fresh(relay) && linkCandidates(server).some((candidate) => candidate.url === relay.remoteURL)) {
     return rewriteSelection(server, relay);
   }
   // Callers that arrive while a choice is being made share it: tunnels are keyed per address, so
@@ -437,6 +437,23 @@ export function transportOpened(server: StoredServer): void {
   if (server.transportKind === "link" && paths.get(server.id)?.current) live.add(server.id);
 }
 
+/**
+ * A connection already open to the computer's hosted address (a pairing by that address that just became a Relay route,
+ * `linkRouteChange`) counts as on the relay: the path label says so, and `checkDirectPath` looks for a direct path
+ * beside it. It is no tunnel: its own TLS was checked when it opened. Once it ends, the relay is measured afresh through
+ * a pinned tunnel like any other.
+ */
+export function adoptRelayConnection(server: StoredServer): void {
+  if (server.transportKind !== "link") return;
+  const entry = pathsFor(server.id);
+  if (entry.current) return;
+  const address = requireTLSServerURL(server.url);
+  entry.relay = { path: "relay", remoteURL: server.url, localOrigin: `${address.protocol}//${address.host}`, tunnelKey: "", rttMs: NaN, measuredAt: Date.now() };
+  entry.current = "relay";
+  live.add(server.id);
+  publishPath(server.id);
+}
+
 /** The live connection failed: a failed direct path is closed and the relay kept ready; a failed relay is closed so it is measured afresh. */
 export async function transportFailed(server: StoredServer): Promise<void> {
   if (server.transportKind !== "link") return;
@@ -494,6 +511,7 @@ async function resolveOnDemandLinkURL(key: string, input: { transportPin: string
 }
 
 async function stopTunnel(key: string): Promise<void> {
+  if (!key) return;
   await platform().linkTunnels?.stop(key).catch(() => undefined);
 }
 

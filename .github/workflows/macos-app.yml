@@ -71,6 +71,38 @@ jobs:
       # takes a secret over from an older build's secure.json, and removes, under a test service of its own.
       - name: The Keychain keeps the release's secrets
         run: MEWLA_KEYCHAIN_TEST=1 cargo test --release --manifest-path client/macos/Cargo.toml keychain -- --nocapture
+      # What a relay → LAN proof can use on this runner: its private addresses, and whether pf can cut an established
+      # connection to the runner's own address (traffic to it rides lo0).
+      - name: The runner's network, for the Mewla Relay LAN proof
+        continue-on-error: true
+        run: |
+          ifconfig | grep -E "^[a-z]|inet " || true
+          ip=$(ipconfig getifaddr en0 || ifconfig | awk '/inet (10|192\.168|172\.(1[6-9]|2[0-9]|3[01]))\./ {print $2; exit}')
+          echo "private address: ${ip:-none}"
+          grep -v '^#' /etc/pf.conf || true
+          test -n "$ip" || exit 0
+          python3 - "$ip" <<'PY'
+          import socket, subprocess, sys, threading, time
+          ip = sys.argv[1]
+          srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind((ip, 18999)); srv.listen()
+          def serve():
+              c, _ = srv.accept()
+              while (d := c.recv(64)): c.sendall(d)
+          threading.Thread(target=serve, daemon=True).start()
+          cl = socket.create_connection((ip, 18999)); cl.settimeout(3)
+          cl.sendall(b"a"); print("before the cut:", cl.recv(8))
+          rules = f"block return quick proto tcp from any to {ip} port 18999\nblock return quick proto tcp from {ip} port 18999 to any\n"
+          subprocess.run(["sudo", "pfctl", "-a", "com.apple/250.MewlaProof", "-f", "-"], input=rules.encode())
+          subprocess.run(["sudo", "pfctl", "-E"]); subprocess.run(["sudo", "pfctl", "-k", ip])
+          t = time.time()
+          try:
+              cl.sendall(b"b"); print("after the cut:", cl.recv(8), f"{time.time()-t:.1f}s")
+          except Exception as e:
+              print("after the cut: error", type(e).__name__, e, f"{time.time()-t:.1f}s")
+          subprocess.run(["sudo", "pfctl", "-a", "com.apple/250.MewlaProof", "-F", "all"])
+          PY
+      - name: Mewla Relay's pinned tunnels carry bytes only to the pinned key
+        run: "cargo test --release --manifest-path client/macos/Cargo.toml link:: -- --nocapture"
       - name: The bundles carry their daemon and CLI
         run: |
           set -euo pipefail
@@ -236,14 +268,96 @@ jobs:
           codesign --verify --deep --strict "$mount/Mewla.app"
           codesign -dv "$mount/Mewla.app" 2>&1 | grep -E "flags=.*runtime"
           hdiutil detach "$mount"
-      # Mewla Dev alone, for a proof on a Mac beside an installed Mewla.
+      # `mewla://` links reach the release (owner issue 11-23: it claimed no scheme, and the app heard only the phone
+      # hosts' links): LaunchServices names the bundle for the scheme, and a pairing link asks to pair, opened while the
+      # app runs and as the link that launches it. Last in the job: the release registers its own daemon and login item.
+      - name: Mewla opens mewla:// links, while it runs and from a cold start
+        run: |
+          set -uo pipefail
+          L="$RUNNER_TEMP/links"; mkdir -p "$L"
+          ditto -x -k "$RUNNER_TEMP/app/Mewla-"[0-9]*-macos-aarch64.zip "$L"
+          swiftc -O -o "$L/check" client/macos/scripts/check-pair-window.swift
+          failed=0
+          echo "claims: $(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw "$L/Mewla.app/Contents/Info.plist" 2>&1)"
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$L/Mewla.app"
+          handler=$(swift -e 'import AppKit; print(NSWorkspace.shared.urlForApplication(toOpen: URL(string: "mewla://settings")!)?.path ?? "none")')
+          echo "mewla:// opens with: $handler"
+          # The job unpacked the same app before ($RUNNER_TEMP/app): either copy is Mewla, by its bundle id.
+          [ "$handler" != none ] && [ "$(plutil -extract CFBundleIdentifier raw "$handler/Contents/Info.plist")" = "$(plutil -extract CFBundleIdentifier raw "$L/Mewla.app/Contents/Info.plist")" ] || failed=1
+          # A pairing link to an address nothing answers at: the confirmation comes before anything is sent.
+          link="mewla://settings?u=http%3A%2F%2F127.0.0.1%3A9&k=$(printf 'b%.0s' $(seq 64))&t=$(printf 'c%.0s' $(seq 64))&n=Lab"
+          asked() {
+            for i in $(seq 1 30); do
+              rm -rf "$L/captures/$1"; client/macos/scripts/capture-windows.sh Mewla "$L/captures/$1" "$1-" >/dev/null 2>&1 || true
+              for png in "$L/captures/$1"/*.png; do
+                [ -f "$png" ] && "$L/check" "$png" confirm && { echo "$1: the link asked to pair (try $i)"; return 0; }
+              done
+              sleep 2
+            done
+            echo "$1: the link never reached the app"; return 1
+          }
+          open "$L/Mewla.app"; sleep 20
+          open "$link" || echo "open: no app for mewla://"
+          asked running || failed=1
+          pkill -x Mewla || true
+          for i in $(seq 1 20); do pgrep -x Mewla >/dev/null || break; sleep 1; done
+          open "$link" || echo "open: no app for mewla://"
+          asked cold || failed=1
+          pkill -x Mewla || true
+          if [ "$failed" != 0 ]; then
+            cat "$L"/captures/*/windows.txt 2>/dev/null || true
+            find "$HOME/Library/Logs" "$HOME/Library/Application Support/com.daoleno.mewla" -name '*.log' 2>/dev/null | while read -r f; do echo "--- $f"; tail -40 "$f"; done
+          fi
+          exit $failed
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-macos-link-captures-${{ github.sha }}
+          path: ${{ runner.temp }}/links/captures
+          if-no-files-found: ignore
+          retention-days: 7
+      # Mewla Dev alone, for a proof on a Mac beside an installed Mewla (and `relay-lan`), even when a step above failed.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: mewla-dev-macos-${{ github.sha }}
           path: ${{ runner.temp }}/app/Mewla-Dev-*.zip
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+  # Mewla for Mac on a computer reached through Mewla Relay (owner 11-23: did the desktop app ever find the LAN?): a
+  # relay, an account service and a computer of the run's own, Mewla Dev pairing its Relay code; relay, then the LAN,
+  # pf cuts the LAN, relay, then the LAN again, each path as the app shows it, a reminder on each reaching the
+  # computer once (scripts/tests/relay-lan/mac.sh).
+  relay-lan:
+    name: Mewla for Mac moves between Mewla Relay and the LAN
+    needs: app
+    # On the Mewla Dev the build made, whatever a later smoke step of that job said.
+    if: ${{ !cancelled() && needs.app.result != 'skipped' }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - uses: actions/download-artifact@v4
+        with:
+          name: mewla-dev-macos-${{ github.sha }}
+          path: ${{ runner.temp }}/app
+      - name: Relay, LAN, relay and LAN again, with a reminder on each path
+        run: scripts/tests/relay-lan/mac.sh "$(ls "$RUNNER_TEMP"/app/Mewla-Dev-*-macos-aarch64.zip)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mewla-macos-relay-lan-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/relay-lan/captures
+            ${{ runner.temp }}/relay-lan/reminders.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Taking over today's install on a clean Mac (FACTS.md §3): the released daemon with install.sh and
   # mewla boot install, a paired device, then Mewla installed and opened. One daemon, the app's LaunchAgent, with
@@ -526,6 +640,9 @@ jobs:
           # What the updater leaves beside the app while it works is gone.
           ls -la /Applications | grep -i -E "mewla|nsh" || true
           test "$(ls -A /Applications | grep -c -i 'nsh-updater')" -eq 0
+          # The updated app claims mewla:// links (the whole bundle came with the update, its Info.plist too).
+          test "$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw /Applications/Mewla.app/Contents/Info.plist)" = mewla
+          echo "the updated Mewla claims mewla://"
       - name: What the app and its daemon said
         if: always()
         run: |

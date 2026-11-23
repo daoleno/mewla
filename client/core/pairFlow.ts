@@ -1,4 +1,5 @@
-import { parseConnectLink, type ConnectionImportPayload } from "./connection";
+import { expiredConnectLink, parseConnectLink, type ConnectionImportPayload } from "./connection";
+import { platform } from "./platform";
 import {
   releasePairingConfirmTransport,
   releasePairingLinkTransport,
@@ -14,6 +15,11 @@ import {
   PairingUnreachableError,
 } from "./pairing";
 import type { StoredServerInput } from "./storedServerContract";
+
+/** Whether an opened link is a pairing code, also one that expired: it goes to pairing, which says why. */
+export function isPairingLink(text: string): boolean {
+  return Boolean(readPairingLink(text)) || expiredConnectLink(text.trim());
+}
 
 /** Reads a pasted, scanned or opened pairing link; null when the text is not one. */
 export function readPairingLink(text: string): ConnectionImportPayload | null {
@@ -69,6 +75,16 @@ export const NOT_A_CODE: PairingProblem = {
   detail: "Scan the QR code mewla shows, or paste the link from mewla pair --details.",
 };
 
+export const CODE_EXPIRED: PairingProblem = {
+  title: "Code expired",
+  detail: "This pairing code has expired. Run mewla pair on the computer for a new one.",
+};
+
+/** Why text that does not pair is no code: a Mewla Relay code past its expiry, or not a code at all. */
+export function pairingLinkProblem(text: string): PairingProblem {
+  return expiredConnectLink(text.trim()) ? CODE_EXPIRED : NOT_A_CODE;
+}
+
 export const NOTHING_TO_PASTE: PairingProblem = {
   title: "Nothing to paste",
   detail: "Copy the link from mewla pair --details on your computer, then tap Paste again.",
@@ -123,7 +139,10 @@ export function pairingProblem(error: unknown): PairingProblem {
  * `onProgress` hears what a slow Link pairing is doing.
  */
 export async function pairWith(payload: ConnectionImportPayload, onProgress?: (message: string) => void): Promise<StoredServerInput> {
-  if (payload.link) return pairThroughLink(payload, payload.link, onProgress);
+  if (payload.link) {
+    return platform().linkTunnels ? pairThroughLink(payload, payload.link, onProgress) : pairAtStableAddress(payload, payload.link, onProgress);
+  }
+  await refuseAnotherPage(payload.url);
   const pairing = await enrollWithDaemon({
     serverUrl: payload.url,
     daemonId: payload.daemonId,
@@ -140,13 +159,89 @@ export async function pairWith(payload: ConnectionImportPayload, onProgress?: (m
   };
 }
 
+// The stable URL every later connection uses: the candidate whose admission this code names.
+function stableURLOf(payload: ConnectionImportPayload, link: NonNullable<ConnectionImportPayload["link"]>): string {
+  return link.candidates.find((candidate) => candidate.admissionUrl === payload.url)?.url || link.candidates[0]?.url || payload.url;
+}
+
+/**
+ * A Mewla Relay code where no host carries the pinned tunnel (a browser). With remote access on (`mewla
+ * login`), the code's stable address carries a WebPKI certificate for the same transport key, so the system's TLS
+ * reaches the computer there; the daemon's signed answer still proves it is the computer the code names. The address
+ * is kept as the computer's own: every later connection goes to it straight, as to any address.
+ */
+async function pairAtStableAddress(
+  payload: ConnectionImportPayload,
+  link: NonNullable<ConnectionImportPayload["link"]>,
+  onProgress?: (message: string) => void,
+): Promise<StoredServerInput> {
+  // On a computer's own page, the candidate at the page's address (a computer on more than one relay has one each).
+  const page = hostOf((await pageOrigin()) ?? "");
+  const stableURL = link.candidates.find((candidate) => page && hostOf(candidate.url) === page)?.url ?? stableURLOf(payload, link);
+  await refuseAnotherPage(stableURL);
+  onProgress?.(`Connecting to ${linkDisplayName(payload.name, stableURL)} through Mewla…`);
+  let pairing: { daemonId: string; daemonPublicKey: string };
+  try {
+    pairing = await enrollWithDaemon({
+      serverUrl: stableURL,
+      daemonId: payload.daemonId,
+      daemonPublicKey: payload.daemonPublicKey,
+      enrollmentToken: payload.enrollmentToken,
+      transport: "link",
+    });
+  } catch (error) {
+    if (!(error instanceof PairingUnreachableError)) throw error;
+    const device = platform().os === "web" ? "browser" : "app";
+    throw new PairingUnreachableError(
+      `This ${device} couldn't reach ${hostOf(stableURL)}. A ${device} reaches a computer on Mewla Relay only when remote access is on there (mewla login) and mewla is running.`,
+    );
+  }
+  return {
+    name: payload.name || "",
+    url: stableURL,
+    daemonId: pairing.daemonId,
+    daemonPublicKey: pairing.daemonPublicKey,
+    transportKind: "manual",
+  };
+}
+
+/** The page's origin in a browser (asked of the page host), else null. */
+async function pageOrigin(): Promise<string | null> {
+  return platform().os === "web" ? ((await platform().pageOrigin?.().catch(() => null)) ?? null) : null;
+}
+
+const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A browser's page reaches only the computer that serves it (the daemon's `connect-src`): a code for another
+ * computer is refused with that reason before anything is sent, not left to fail as "couldn't reach".
+ */
+async function refuseAnotherPage(target: string): Promise<void> {
+  const page = await pageOrigin();
+  if (!page) return;
+  const pageHost = hostOf(page);
+  const targetHost = hostOf(target);
+  if (!pageHost || !targetHost || pageHost === targetHost) return;
+  const hostname = (host: string) => host.replace(/:\d+$/, "");
+  if (LOOPBACK.has(hostname(pageHost)) && LOOPBACK.has(hostname(targetHost))) return;
+  const open = /^(wss|https):/i.test(target.trim()) ? ` Open https://${targetHost} in the browser to use that computer.` : "";
+  throw new PairingUnreachableError(`This page reaches only ${pageHost}, the computer it came from.${open}`);
+}
+
 async function pairThroughLink(
   payload: ConnectionImportPayload,
   link: NonNullable<ConnectionImportPayload["link"]>,
   onProgress?: (message: string) => void,
 ): Promise<StoredServerInput> {
-  // The stable URL every later connection uses: the candidate whose admission this code names.
-  const stableURL = link.candidates.find((candidate) => candidate.admissionUrl === payload.url)?.url || link.candidates[0]?.url || payload.url;
+  const stableURL = stableURLOf(payload, link);
   onProgress?.(`Connecting to ${linkDisplayName(payload.name, stableURL)} through Mewla…`);
   const pairing = await pairOverLink(payload, link, stableURL, onProgress);
   return {

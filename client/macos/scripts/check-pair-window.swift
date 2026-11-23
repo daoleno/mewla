@@ -19,6 +19,7 @@ let qr = (barcode.results ?? []).first {
 let link = qr != nil
 switch CommandLine.arguments[2] {
 case "title": exit(title ? 0 : 1)
+case "confirm": exit(lines.contains { $0.hasPrefix("pair this") } ? 0 : 1)
 case "closed": exit(title || link ? 1 : 0)
 case "qr": exit(title && link ? 0 : 1)
 case "connections": exit(lines.contains("phones reach this mac") ? 0 : 1)

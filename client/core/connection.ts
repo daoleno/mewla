@@ -16,6 +16,8 @@ export interface LinkTransportEnrollment {
   routeId: string;
   transportPin: string;
   candidates: LinkTransportCandidate[];
+  /** When the code stops pairing (the signed expiry). */
+  expiresAtMs: number;
 }
 
 export interface ConnectionImportPayload {
@@ -52,6 +54,19 @@ const normalizePublicKeyHex = (value: string | null | undefined) =>
   normalizeFixedHex(value, 64);
 
 export function parseConnectLink(
+  rawValue: string,
+): ConnectionImportPayload | null {
+  const payload = readConnectLink(rawValue);
+  return payload?.link && payload.link.expiresAtMs <= Date.now() ? null : payload;
+}
+
+/** Whether the text is a Mewla Relay pairing code the computer signed that has expired. */
+export function expiredConnectLink(rawValue: string): boolean {
+  const payload = readConnectLink(rawValue);
+  return Boolean(payload?.link && payload.link.expiresAtMs <= Date.now());
+}
+
+function readConnectLink(
   rawValue: string,
 ): ConnectionImportPayload | null {
   const trimmed = rawValue.trim();
@@ -150,6 +165,7 @@ function verifiedLinkPairing(input: {
       routeId: input.routeId,
       transportPin: input.transportPin,
       candidates: input.candidates,
+      expiresAtMs: input.expiresAtMs,
     },
   };
 }
@@ -188,7 +204,7 @@ function parseCompactLinkPairingPayload(
     const signature = bytesToHex(take(64));
     const label = takeText() || routeId;
     const count = take(1)[0];
-    if (count === 0 || count > MAX_LINK_CANDIDATES || expiresAtMs <= Date.now()) {
+    if (count === 0 || count > MAX_LINK_CANDIDATES) {
       return null;
     }
     const candidates: LinkTransportCandidate[] = [];
