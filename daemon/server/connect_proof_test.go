@@ -96,8 +96,11 @@ func TestRequestBinding(t *testing.T) {
 		{"plain LAN by address", request("192.168.1.20:9876", "192.168.1.30:5000", "", "", false), "host:192.168.1.20", true},
 		{"IPv6 in brackets", request("[fd7a:115c::1]:9876", "[fd7a:115c::2]:5000", "", "", false), "host:fd7a:115c::1", true},
 		{"plain, a Host that is a name, made for another", request("desk.local:9876", "192.168.1.30:5000", "", "", false), "host:evil.example", false},
+		// X-Forwarded-Host is never read (round 2 F1): behind a proxy that rewrites Host to its upstream address the
+		// address case accepts any binding, whatever the header says (until 9055ad4b8 "passes another name" was refused
+		// on the header).
 		{"a proxy on this computer that passes the name it was asked for", request("127.0.0.1:9876", "127.0.0.1:5000", "", "Desk.Example", false), "host:desk.example", true},
-		{"a proxy on this computer that passes another name", request("127.0.0.1:9876", "127.0.0.1:5000", "", "evil.example", false), "host:desk.example", false},
+		{"a proxy on this computer that rewrites Host to its address passes another name", request("127.0.0.1:9876", "127.0.0.1:5000", "", "evil.example", false), "host:desk.example", true},
 		{"a proxy on this computer that rewrites Host to its upstream address and passes nothing (nginx's default)", request("127.0.0.1:9876", "127.0.0.1:5000", "", "", false), "host:desk.example", true},
 		{"a proxy that rewrites Host to localhost", request("localhost:9876", "127.0.0.1:5000", "", "", false), "host:desk.example", true},
 		{"X-Forwarded-Host from elsewhere counts for nothing", request("desk.local:9876", "192.168.1.30:5000", "", "evil.example", false), "host:evil.example", false},
@@ -113,6 +116,53 @@ func TestRequestBinding(t *testing.T) {
 		if got := bindingHostname(in); got != want {
 			t.Errorf("bindingHostname(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Security review 11-23, round 2 F1: the reviewer's four requests, each from the
+// peer it comes from, and the tunnel setups our docs describe, with the headers
+// measured at a header echo behind them (RESULT.md, 2026-11-23 round 2). The
+// binding holds where a tunnel keeps the public Host; a plain listener or a
+// proxy that rewrites Host to an address carries none (docs/security-and-privacy.md).
+func TestRequestBindingOnPlainHTTP(t *testing.T) {
+	srv := New(nil, nil, nil, nil, nil, nil, nil)
+	request := func(host, remote, forwarded string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "/ws", nil)
+		r.Host, r.RemoteAddr, r.TLS = host, remote, nil
+		if forwarded != "" {
+			r.Header.Set("X-Forwarded-Host", forwarded)
+		}
+		return r
+	}
+	cases := []struct {
+		name string
+		r    *http.Request
+		want bool
+	}{
+		// The reviewer's table (REVIEW-2.md F1). Row 1 was accepted at 9055ad4b8.
+		{"Host desk.example.com from loopback, X-Forwarded-Host evil.example", request("desk.example.com", "127.0.0.1:5000", "evil.example"), false},
+		{"the same without X-Forwarded-Host", request("desk.example.com", "127.0.0.1:5000", ""), false},
+		// Rows 3 and 4 stay accepted, a stated limit: whoever reaches a plain listener sets the Host (a byte
+		// forwarder passes the app's own, which names it), so refusing them would stop no relay.
+		{"Host the LAN IP (--lan), from the LAN", request("192.168.1.20:9876", "192.168.1.30:5000", ""), true},
+		{"Host localhost", request("localhost:9876", "127.0.0.1:5000", ""), true},
+		// Cloudflare Tunnel (cloudflared to http://127.0.0.1:9876) keeps the public Host and passes a client's
+		// X-Forwarded-Host as it came; tailscale serve keeps the Host and sets X-Forwarded-Host to it.
+		{"Cloudflare Tunnel, a forged X-Forwarded-Host", request("desk.example.com", "127.0.0.1:5000", "evil.example"), false},
+		{"tailscale serve", request("desk.tail1234.ts.net", "127.0.0.1:5000", "desk.tail1234.ts.net"), false},
+		{"a proxy that rewrites Host to a name of its own and sets X-Forwarded-Host (outside the documented setups)", request("mewla:9876", "172.17.0.2:5000", "evil.example"), false},
+	}
+	for _, c := range cases {
+		if got := srv.requestBinding(c.r)("host:evil.example"); got != c.want {
+			t.Errorf("%s: host:evil.example taken = %v, want %v", c.name, got, c.want)
+		}
+	}
+	// What the setups that keep the Host are bound to still passes.
+	if !srv.requestBinding(request("desk.example.com", "127.0.0.1:5000", "evil.example"))("host:desk.example.com") {
+		t.Error("Cloudflare Tunnel refused the binding to its own public name")
+	}
+	if !srv.requestBinding(request("desk.tail1234.ts.net", "127.0.0.1:5000", "desk.tail1234.ts.net"))("host:desk.tail1234.ts.net") {
+		t.Error("tailscale serve refused the binding to its own name")
 	}
 }
 

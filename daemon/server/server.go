@@ -4524,11 +4524,18 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 //   - "host:<name>" over TLS this daemon terminated (Mewla Relay, the hosted
 //     address): the SNI must name it, so whoever forwards through the relay,
 //     which routes by SNI, cannot reach this computer with it.
-//   - "host:<name>" over plain HTTP: the request's Host, or X-Forwarded-Host
-//     from a reverse proxy on this computer. A Host that is an address (a
-//     proxy's upstream, a LAN IP) says nothing of the name the app used and
-//     is accepted: plain HTTP has no channel to bind to, so a host in the
-//     middle could name anything there anyway.
+//   - "host:<name>" over plain HTTP: the request's Host, and nothing else.
+//     X-Forwarded-Host is a client's word even through a proxy on this
+//     computer (Cloudflare Tunnel and tailscale serve pass one a client sent),
+//     so trusting it from loopback let any host relay through them (security
+//     review 11-23, round 2 F1). A tunnel that keeps the public Host routes by
+//     it, so a host in the middle cannot reach this computer through it with
+//     its own name. A Host that is an address (a proxy's upstream, a LAN IP,
+//     localhost) says nothing of the name the app used and is accepted from
+//     any peer: whoever reaches a plain listener sets its Host anyway, so
+//     refusing would stop no relay, only the proxies that rewrite Host.
+//     Binding holds only where every path to this daemon is TLS it terminates,
+//     or a tunnel that keeps the public Host.
 func (s *Server) requestBinding(r *http.Request) auth.BindingCheck {
 	return func(binding string) bool {
 		if pin, ok := strings.CutPrefix(binding, "pin:"); ok {
@@ -4542,9 +4549,6 @@ func (s *Server) requestBinding(r *http.Request) auth.BindingCheck {
 			return bindingHostname(r.TLS.ServerName) == host
 		}
 		seen := bindingHostname(r.Host)
-		if forwarded := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); r.TLS == nil && forwarded != "" && remoteIsLoopback(r) {
-			seen = bindingHostname(forwarded)
-		}
 		if seen == host {
 			return true
 		}
@@ -4562,15 +4566,6 @@ func bindingHostname(hostport string) string {
 	}
 	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 	return strings.TrimSuffix(host, ".")
-}
-
-func remoteIsLoopback(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 // authSubprotocolPrefix starts the one WebSocket subprotocol a browser offers
