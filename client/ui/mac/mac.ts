@@ -20,7 +20,7 @@ import { grantRequestAction } from "../../core/screen/grantRequest";
 import { getAgentUse } from "../../core/settings/computer";
 import { grantOf } from "../../core/settings/macGrants";
 import { allowGrant } from "./permissionGuide";
-import { isMacApp, isThisMac, joinLocalDaemon, MAC_TITLE_BAR, showMainWindow } from "./local";
+import { isMacApp, isThisMac, joinLocalDaemon, localProblem, MAC_TITLE_BAR, showMainWindow } from "./local";
 import { MENU_BAR_CLIPS, MENU_BAR_IMAGES } from "./menubarImages";
 import { startMacMenus } from "./menus";
 import { atLogin, readStartAtLogin, setStartAtLogin, toggleStartAtLogin } from "./login";
@@ -103,6 +103,10 @@ export function startMac(): void {
   effect(() => {
     if (!joined || connection() !== "waiting" || !isThisMac(current())) return;
     void untracked(joinLocalDaemon);
+  });
+  // And once it answers again, the reason goes with it, without waiting for the next ask.
+  effect(() => {
+    if (connection() === "connected" && isThisMac(current())) untracked(() => localProblem.set(""));
   });
 
   const cat = computed(() => menuBarItem({ cat: catNow(), needs: trayState().needs.length, update: Boolean(catUpdateHint()) }));

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
-import { httpOrigin, ownEntryPlan, phonesAndBrowsers, seenWords } from "./thisMac";
+import { httpOrigin, ownEntryPlan, phonesAndBrowsers, seenWords, thisMacWords } from "./thisMac";
 
 const now = new Date(2026, 10, 20, 14, 5);
 const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).toISOString();
@@ -68,5 +68,21 @@ describe("This Mac's own entry", () => {
     const a = mac("s1", "wss://quiet-otter.m.mewla.ai/ws");
     const b = mac("s2", "ws://192.168.1.20:9876/ws");
     expect(ownEntryPlan([a, b], KEY, LOCAL, "s2")).toEqual({ keep: b, drop: ["s1"], rewrite: true });
+  });
+});
+
+describe("thisMacWords", () => {
+  test("the join's own problem first", () => {
+    expect(thisMacWords({ kind: "offline", diagnosis: "Server unreachable", problem: "The port 9876 is taken.", words: "Offline · Server unreachable" })).toBe("The port 9876 is taken.");
+  });
+  test("nothing answers at loopback: Mewla is not running, not Offline", () => {
+    expect(thisMacWords({ kind: "offline", diagnosis: "Server unreachable", problem: "", words: "Offline · Server unreachable" })).toBe("Mewla is not running");
+    expect(thisMacWords({ kind: "offline", diagnosis: "Daemon refused connection", problem: "", words: "Offline · Daemon refused connection" })).toBe("Mewla is not running");
+    expect(thisMacWords({ kind: "offline", problem: "", words: "Offline" })).toBe("Mewla is not running");
+  });
+  test("another cause keeps its words; online and connecting stay", () => {
+    expect(thisMacWords({ kind: "offline", diagnosis: "Daemon rejected handshake", problem: "", words: "Offline · Daemon rejected handshake" })).toBe("Offline · Daemon rejected handshake");
+    expect(thisMacWords({ kind: "online", problem: "", words: "Online" })).toBe("Online");
+    expect(thisMacWords({ kind: "connecting", problem: "", words: "Connecting…" })).toBe("Connecting…");
   });
 });

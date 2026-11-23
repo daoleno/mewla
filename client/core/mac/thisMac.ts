@@ -71,3 +71,14 @@ export function ownEntryPlan(
     rewrite: Boolean(keep && (keep.url !== local || keep.transportKind === "link" || keep.transportPin || keep.linkRouteId || keep.transportCandidates?.length)),
   };
 }
+
+/**
+ * This Mac's state words in the pane (after "This Mac · "): why the app could not join its own Mewla, else, when its
+ * loopback socket finds nothing to answer, that Mewla is not running here, never a bare "Offline" (owner 11-23). A
+ * loopback address has no network, DNS or relay in the way, so unreachable or refused can only mean that.
+ */
+export function thisMacWords(input: { kind: string; diagnosis?: string; problem: string; words: string }): string {
+  if (input.problem) return input.problem;
+  const unreachable = !input.diagnosis || input.diagnosis === "Server unreachable" || input.diagnosis === "Daemon refused connection";
+  return input.kind === "offline" && unreachable ? "Mewla is not running" : input.words;
+}
