@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # One bounded attempt at the drag itself on a CI Mac (macos-permissions.yml `drag`): with no row for Mewla, Allow
 # opens System Settings on the list and the panel beside it; synthetic pointer events (CGEvent, posted from this job's
-# pre-granted shell) press the panel's icon, move into the list and let go, holding over the list for a capture. If
-# macOS asks to unlock, the runner's own password (set for this throwaway machine) is typed in. Then: did macOS write a
-# row, and did Mewla notice? Each step's screen is kept.
+# pre-granted shell) press the panel's icon, move into the list and let go, holding over the list for a capture. System
+# Settings takes the drop and asks for an administrator's password ("Privacy & Security is trying to modify your
+# system settings"), where a person types theirs; the runner cannot. Each step's screen is kept, and whether macOS
+# wrote a row.
 #   client/macos/scripts/drag-attempt.sh <Mewla.app> <out dir>
 set -euo pipefail
-[[ "${GITHUB_ACTIONS:-}" == true ]] || { echo "this script edits the system TCC.db and the runner's password: a CI Mac only" >&2; exit 2; }
+[[ "${GITHUB_ACTIONS:-}" == true ]] || { echo "this script edits the system TCC.db: a CI Mac only" >&2; exit 2; }
 src="${1:?Mewla.app}"
 out="${2:?out dir}"
 mkdir -p "$out"
@@ -30,11 +31,8 @@ sudo rm -rf "$app"
 ditto "$src" "$app"
 sudo sqlite3 "$db" "delete from access where client = 'com.daoleno.mewla' or client like '$app/%';"
 tcc_reload
-# The unlock prompt's answer: a password set for the runner's account for this job (root can reset it; the machine
-# is thrown away after the job).
-password="Drag-$(uuidgen | cut -c1-8)"
-sudo sysadminctl -resetPasswordFor "$(id -un)" -newPassword "$password" 2>&1 | tail -2 || true
-if dscl . -authonly "$(id -un)" "$password" >/dev/null 2>&1; then say "the runner's password: set"; else say "the runner's password: could not be set"; password=""; fi
+# The prompt asks for an administrator's password, which a runner's account does not give out (not one of the image's
+# known ones; root cannot set a new one without the old: tried in run 45132805657).
 
 cat > "$work/drag.swift" <<'SWIFT'
 import CoreGraphics
@@ -46,21 +44,6 @@ func windows() -> [[String: Any]] {
 }
 func bounds(_ w: [String: Any]) -> CGRect {
   CGRect(dictionaryRepresentation: (w[kCGWindowBounds as String] as! CFDictionary)) ?? .zero
-}
-if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "type" {
-  // Keys into whatever has the keyboard (the unlock prompt's password field), then Return.
-  let keys = CGEventSource(stateID: .hidSystemState)
-  for ch in CommandLine.arguments[2].utf16 {
-    for down in [true, false] {
-      let e = CGEvent(keyboardEventSource: keys, virtualKey: 0, keyDown: down)
-      var c = ch
-      e?.keyboardSetUnicodeString(stringLength: 1, unicodeString: &c)
-      e?.post(tap: .cghidEventTap)
-      usleep(30_000)
-    }
-  }
-  for down in [true, false] { CGEvent(keyboardEventSource: keys, virtualKey: 36, keyDown: down)?.post(tap: .cghidEventTap); usleep(30_000) }
-  exit(0)
 }
 let all = windows()
 if CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "list" {
@@ -106,32 +89,6 @@ print("dropped at \(to)")
 SWIFT
 swiftc -O "$work/drag.swift" -o "$work/drag" 2>&1 | tail -5
 
-unlock() { # type the password into an unlock prompt if one is up; prints what it saw
-  osascript - "$password" <<'OSA' 2>&1 || true
-on run argv
-  tell application "System Events"
-    repeat with pname in {"SecurityAgent", "System Settings", "coreautha"}
-      try
-        tell process pname
-          repeat with w in windows
-            try
-              set f to (text fields of w)
-              if (count of f) > 0 then
-                set focused of (last item of f) to true
-                keystroke (item 1 of argv)
-                key code 36
-                return pname & ": typed into " & (count of f) & " field(s) of '" & (title of w) & "'"
-              end if
-            end try
-          end repeat
-        end tell
-      end try
-    end repeat
-  end tell
-  return "no unlock prompt"
-end run
-OSA
-}
 
 for permission in accessibility screen_recording; do
   service=kTCCServiceAccessibility; [[ $permission == screen_recording ]] && service=kTCCServiceScreenCapture
@@ -152,18 +109,9 @@ for permission in accessibility screen_recording; do
   wait "$dragger" || true
   tee -a "$log" < "$work/drag.out"
   sleep 3; shot "$permission-2-after-drop"
-  say "unlock (scripting): $(unlock)"
-  if [[ -n "$password" ]]; then
-    # The prompt holds the keyboard on its password field: the password typed as keys, then Return.
-    "$work/drag" type "$password"
-    say "unlock: the password typed into the prompt"
-  fi
-  sleep 4; shot "$permission-3-after-unlock"
+  osascript -e 'tell application "System Events" to get name of every process whose name contains "SecurityAgent"' 2>&1 | sed 's/^/password prompt process: /' | tee -a "$log" || true
+  sleep 2; shot "$permission-3-password-prompt"
   say "$permission rows: $(rows | tr '\n' ' ')"
-  for _ in $(seq 1 40); do
-    "$cli" agent-use status --json 2>/dev/null | grep -q "\"id\": *\"$permission\", *\"name\": *\"[^\"]*\", *\"state\": *\"\(granted\|restart\)\"" && break
-    sleep 1
-  done
   say "$permission daemon: $("$cli" agent-use status --json 2>/dev/null | python3 -I -c 'import json,sys; print(" ".join(g["id"]+"="+g["state"] for g in (json.load(sys.stdin).get("computer") or {}).get("permissions") or []))' || true)"
   app_log | grep -E "dev script: (grants|allow)" | tail -6 | tee -a "$log"
 done
