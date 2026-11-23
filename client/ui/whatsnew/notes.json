@@ -53,8 +53,8 @@
       ],
       "fixes": [
         "The counts at the top of the home tray stay on one line in a narrow column.",
-        "A reply from another computer reaches the Work or Brain chat you have open.",
-        "A code for a computer you already have, at a new address, asks first and names the host."
+        "A Worker whose Work is finished closes its Session by itself; open Work keeps it.",
+        "A reply from another computer reaches the Work or Brain chat you have open."
       ]
     },
     {
