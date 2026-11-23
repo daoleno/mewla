@@ -67,8 +67,8 @@ guard let settings = all.filter({ ($0[kCGWindowOwnerName as String] as? String) 
 }
 let p = bounds(panel), s = bounds(settings)
 let from = CGPoint(x: p.minX + 124, y: p.minY + 70)
-// The list: the window's right part, below its title (the pane's app list).
-let to = CGPoint(x: s.minX + s.width * 0.66, y: s.minY + s.height * 0.42)
+// The list: the window's right part, on its first rows (both panes' lists start there).
+let to = CGPoint(x: s.minX + s.width * 0.65, y: s.minY + 190)
 print("panel \(p) settings \(s) from \(from) to \(to)")
 let source = CGEventSource(stateID: .hidSystemState)
 func post(_ type: CGEventType, _ at: CGPoint) {
@@ -76,15 +76,16 @@ func post(_ type: CGEventType, _ at: CGPoint) {
 }
 post(.mouseMoved, from); usleep(300_000)
 post(.leftMouseDown, from); usleep(250_000)
-let steps = 60
+// Slowly, as a hand does (the drag image follows the pointer behind it).
+let steps = 120
 for i in 1...steps {
   let t = CGFloat(i) / CGFloat(steps)
   post(.leftMouseDragged, CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t))
-  usleep(25_000)
+  usleep(40_000)
 }
 // Hold over the list (the run captures the screen now), with small moves so the drop target keeps tracking.
-for i in 0..<30 {
-  post(.leftMouseDragged, CGPoint(x: to.x + CGFloat(i % 2), y: to.y))
+for i in 0..<50 {
+  post(.leftMouseDragged, CGPoint(x: to.x + CGFloat(i % 3) * 2, y: to.y + CGFloat(i % 2) * 2))
   usleep(100_000)
 }
 post(.leftMouseUp, to)
@@ -133,7 +134,8 @@ for permission in accessibility screen_recording; do
   "$work/drag" list | tee -a "$log"
   "$work/drag" "$permission" > "$work/drag.out" 2>&1 &
   dragger=$!
-  sleep 2.6; shot "$permission-1-holding-over-list"
+  sleep 6.5; screencapture -x -C "$out/$permission-1-holding-over-list.png" || true
+  sleep 2; screencapture -x -C "$out/$permission-1b-holding-later.png" || true
   wait "$dragger" || true
   tee -a "$log" < "$work/drag.out"
   sleep 3; shot "$permission-2-after-drop"
