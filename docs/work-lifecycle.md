@@ -599,19 +599,37 @@ current Turn; superseded identities cannot mutate a reused Session.
 is derived from closed Work and each Session's current delegated Turn rather
 than a second persisted workflow; the only record kept is a `reclaimed` mark on
 the exact Turn once its teardown finished, so finished Sessions are not torn
-down again on every reconcile. The Turn need not have reported its end: a
-Worker that stopped without a report, was released as lost, or had its Work
-closed under it is reclaimed too, once its Session sits idle at its prompt
-(its agent's record says the turn settled, the screen shows the input prompt
-with no spinner and no background shells, agents or monitors) and the screen
-has stayed unchanged for 60 s. Until then the teardown waits, which is not an
-error. Besides Work changes and startup, the 10 s supervision pass runs this
-cleanup, so a Session that goes idle after its Work closed is reclaimed then;
-a Session the pass was refused is asked again only by a later Work close or
-restart. A finished scheduled-action run (Calendar) reclaims its Worker
-Session the same way: once the run is completed or failed and the Session is
-idle at its prompt, through the same teardown (its model route and Codex
-resources are released), and never while Brain has given that Session open
+down again on every reconcile.
+
+A delegated Session exists only while it has something of its own to do. It
+is reclaimed when its Work is closed; when its Work is open but a newer
+Worker holds the Work's newest Turn; or when it is the Work's own Worker, the
+Work waits and the wait has ended (the wait's `-until` or default end, a keep
+verdict's end, or for a question or a runtime event 24 h after the wait
+began). Until then the Work's own Worker keeps its conversation: a reviewer
+waiting for the author's push, a Worker waiting on an answer. An `until_done`
+Work keeps its Worker while it is open, and a result Brain has not settled
+keeps it too. A Session with an Attempt or a prompt on its way in is never
+reclaimed. The Turn need not have reported its end: a Worker that stopped
+without a report, was released as lost, ended on a provider error that will
+not be retried, or had its Work closed under it is reclaimed too, once its
+Session rests. Resting is decided by the agent's own record (its hooks or
+app-server, else its transcript): a last turn that ended at least 60 s ago is
+rest, a running one is not, whatever the composer shows (Claude's `Resend
+your message to try again` or `Once fixed, resend your message` placeholder
+after a provider error). The screen only vetoes: a working spinner or
+background shells, agents or monitors of its own keep the Session. Without a
+readable record, the screen must sit at the agent's empty input prompt,
+unchanged for 60 s. A Session that is closed for any of these reasons, or is
+an open Work's Worker whose turn reported done, still waits for rest. Until
+then the teardown waits, which is not an error; a wait that lasts 10 minutes
+for the same reason is logged once with that reason. Besides Work changes and
+startup, the 10 s supervision pass runs this cleanup; a Session the pass was
+refused is asked again only by a later Work close or restart. A finished
+scheduled-action run (Calendar) reclaims its Worker Session the same way: once
+the run is completed or failed and the Session rests, through the same
+teardown (its model route and Codex resources are released), and never while
+Brain has given that Session open
 Work since. A refused, failed or retryable teardown is never
 marked. A completed Session whose pane id now belongs to another process or
 pane generation is a final refusal for that record, so it ends the startup

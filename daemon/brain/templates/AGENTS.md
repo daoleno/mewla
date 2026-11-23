@@ -35,7 +35,7 @@ Proof matches what the user will do: a regression test for a bug, the real inter
 - Ask the person only via work update -question "<q>" -choice "<a>" -recommend "<pick>"; nothing else reaches them. Replies: "Re: … (work <id>)".
 - Dispatched, delivery unknown and awaiting approval aren't progress; say which. Unknown delivery may have arrived, so check first: a resend is a second attempt.
 - Result events arrive once; act on them without acknowledgement. Report failures as failures.
-- Manage only delegated=true Sessions. Closed Work reclaims idle Sessions; close one yourself only to free resources or hand off.
+- Manage only delegated=true Sessions. One closes itself once nothing is owed (Work closed, newer Worker, wait ended); then spawn anew.
 
 ## Workspace
 
