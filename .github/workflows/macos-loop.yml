@@ -1,0 +1,130 @@
+name: Mewla for Mac warm loop
+
+# A warm Mac for one Worker's task: builds Mewla Dev once, then holds the runner so a computer can reach it over ssh
+# (rsync the change, rebuild incrementally, relaunch, screenshot, read the log, click and type). Started by a push to
+# a mac-loop/ branch whose tip adds .github/mac-loop/authorized_key, a per-run PUBLIC key; the private half never leaves
+# the computer that pushed. client/macos/scripts/loop/mac-loop.sh drives it.
+#
+# The way in: an sshd of the job's own (not the system's), a child of the hold step so its sessions share the step's
+# GUI session, key-only (no password, no PAM), on 127.0.0.1; a cloudflared quick tunnel (outbound from the runner)
+# carries it. The tunnel's hostname and the sshd's host key go up as an artifact (readable while the run is going),
+# never into the log. Stop: touch ~/mac-loop/stop over ssh; the step ends and the run goes green.
+
+on:
+  push:
+    branches: ["mac-loop/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    name: Warm Mewla Dev
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: The run's key is there
+        run: test -s .github/mac-loop/authorized_key && ssh-keygen -l -f .github/mac-loop/authorized_key
+      - name: Stamp
+        run: date -u +%s > "$RUNNER_TEMP/t0"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Zig, the terminal engine and the web VT from main's cache
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          lib: darwin_arm64
+          web: "true"
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            client/macos/target
+          key: macos-app-v1-${{ hashFiles('client/macos/Cargo.toml', 'client/macos/Cargo.lock') }}
+          restore-keys: macos-app-v1-
+      - name: Stub agent
+        run: sudo clang -Wall -Werror client/macos/scripts/stub-claude.c -o /usr/local/bin/claude
+      - name: Build the daemon
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
+          ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
+      - name: Package Mewla Dev
+        run: client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$HOME/mac-loop/app" --dev
+      - name: Built
+        run: echo "cold build $(( $(date -u +%s) - $(cat "$RUNNER_TEMP/t0") )) s"
+      - name: sshd and the tunnel
+        run: |
+          set -euo pipefail
+          L="$HOME/mac-loop"; mkdir -p "$L/sshd" "$L/out"
+          echo "$GITHUB_WORKSPACE" > "$L/workspace"
+          ssh-keygen -q -t ed25519 -N '' -f "$L/sshd/host_key"
+          install -m 600 .github/mac-loop/authorized_key "$L/sshd/authorized_keys"
+          cat > "$L/sshd/config" <<EOF
+          ListenAddress 127.0.0.1
+          Port 22022
+          HostKey $L/sshd/host_key
+          AuthorizedKeysFile $L/sshd/authorized_keys
+          PidFile $L/sshd/pid
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          UsePAM no
+          PermitRootLogin no
+          AllowUsers $USER
+          StrictModes no
+          AcceptEnv LANG
+          SetEnv MEWLA_LOOP=1
+          EOF
+          sed -i '' 's/^ *//' "$L/sshd/config"
+          /usr/sbin/sshd -t -f "$L/sshd/config"
+          curl -fsSL -o "$L/cf.tgz" https://github.com/cloudflare/cloudflared/releases/download/2026.10.0/cloudflared-darwin-arm64.tgz
+          tar -xzf "$L/cf.tgz" -C "$L"
+          "$L/cloudflared" --version
+          # A click at global points (CGEvent), for mac-loop.sh click.
+          printf '%s\n' 'import CoreGraphics; import Foundation' \
+            'let a = CommandLine.arguments; let p = CGPoint(x: Double(a[1])!, y: Double(a[2])!)' \
+            'for t in [CGEventType.mouseMoved, .leftMouseDown, .leftMouseUp] { CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)!.post(tap: .cghidEventTap); usleep(80000) }' > "$L/click.swift"
+          swiftc -O -o "$L/click" "$L/click.swift"
+      # Started in the background here, they outlive the step (a runner reaps orphans only at the job's end); their
+      # sessions stay in the job's GUI session.
+      - name: Open the way in
+        run: |
+          set -euo pipefail
+          L="$HOME/mac-loop"
+          nohup /usr/sbin/sshd -D -e -f "$L/sshd/config" > "$L/sshd/log" 2>&1 &
+          nohup "$L/cloudflared" tunnel --no-autoupdate --url ssh://127.0.0.1:22022 > "$L/cf.log" 2>&1 &
+          host=""
+          for i in $(seq 1 90); do host=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$L/cf.log" | head -1 | sed 's#https://##' || true); [ -n "$host" ] && break; sleep 1; done
+          [ -n "$host" ] || { echo "no tunnel"; tail -20 "$L/cf.log"; exit 1; }
+          # What an ssh session needs of this job's environment (setup-go's PATH and the rest).
+          printf 'export PATH=%q\nexport RUNNER_TEMP=%q\nexport GITHUB_WORKSPACE=%q\nexport GOCACHE=%q\n' "$PATH" "$RUNNER_TEMP" "$GITHUB_WORKSPACE" "$(go env GOCACHE)" > "$L/env.sh"
+          mkdir -p "$L/meet"; printf '%s\n' "$host" > "$L/meet/host"; cut -d' ' -f1,2 "$L/sshd/host_key.pub" > "$L/meet/host_key.pub"; echo "$USER" > "$L/meet/user"
+          echo "tunnel up at $(date -u +%T), $(( $(date -u +%s) - $(cat "$RUNNER_TEMP/t0") )) s after the start"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-loop-meet-${{ github.run_id }}
+          path: ~/mac-loop/meet
+          retention-days: 1
+      - name: Hold (until ~/mac-loop/stop or the timeout)
+        run: |
+          L="$HOME/mac-loop"
+          while [ ! -e "$L/stop" ]; do sleep 5; done
+          echo "stopped at $(date -u +%T)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-loop-captures-${{ github.run_id }}
+          path: ~/mac-loop/out
+          if-no-files-found: ignore
+          retention-days: 3
