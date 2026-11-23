@@ -61,11 +61,13 @@ var codexFooterReadyRe = regexp.MustCompile(`(?im)^[\t \x{00A0}]*(?:model:\s*)?g
 //
 // Empty composers are often "❯" + U+00A0. Recent Claude versions also render
 // a built-in suggestion such as `❯ Try "fix lint errors"` in the empty
-// composer. Go regexp \s does not match NBSP, so claudeComposerRe lists it
+// composer, and after a provider error it shows `❯ Resend your message to try
+// again` there (captured live 2026-11-23 after 429s; `Once fixed, resend your
+// message` after a 403). Go regexp \s does not match NBSP, so claudeComposerRe lists it
 // explicitly while accepting only this fixed placeholder shape, not arbitrary
 // nonempty drafts.
 var claudeHeaderRe = regexp.MustCompile(`Claude Code v?\d+\.\d+\.\d+`)
-var claudeComposerRe = regexp.MustCompile(`(?m)^[\t \x{00A0}]*❯(?:[\t \x{00A0}]*(?:Try[\t ]+(?:"[^"\n]+"|“[^”\n]+”|'[^'\n]+')))?[\t \x{00A0}]*$`)
+var claudeComposerRe = regexp.MustCompile(`(?m)^[\t \x{00A0}]*❯(?:[\t \x{00A0}]*(?:Try[\t ]+(?:"[^"\n]+"|“[^”\n]+”|'[^'\n]+')|Resend your message to try again|Once fixed, resend your message))?[\t \x{00A0}]*$`)
 
 // The footer wraps at narrow worker panes, so the two footer tokens may land
 // on adjacent lines. Keep the span bounded to the current footer and require
@@ -1566,10 +1568,10 @@ var ErrOwnershipProbeUnavailable = errors.New("delegated Session ownership probe
 // boundary into an ambient user session.
 var ErrUnownedSession = errors.New("Session is not owned by Mewla")
 
-// ErrSessionReclaimed is input refused because Mewla closed the Session
-// after its Work was completed. Reopening the Work does not bring the Session
-// back; a new Worker carries the Work on.
-var ErrSessionReclaimed = errors.New("Mewla closed this Session after its Work was completed; reopening the Work does not reopen it, start a new Worker")
+// ErrSessionReclaimed is input refused because Mewla closed the Session once
+// nothing was owed by it (brain.CompletedOwnedTurns). Reopening the Work does
+// not bring the Session back; a new Worker carries the Work on.
+var ErrSessionReclaimed = errors.New("Mewla closed this Session once nothing was owed by it (its turn had ended and its Work closed, a newer Worker took the Work over, or the Work's wait ended); reopening the Work does not reopen it: start a new Worker with mewla worker spawn -work <work id> and give it the previous Worker's report")
 
 // ErrSessionEnded is input refused because the Session's program has ended.
 var ErrSessionEnded = errors.New("the program in this Session has ended")
@@ -4820,6 +4822,18 @@ func loginShellFromPasswd() string {
 // KillCompletedSession shares the input lock with sends, so acceptance cleanup
 // cannot kill a newer turn admitted between its eligibility read and teardown.
 func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
+	return w.killOwnedSession(sessionID, turnID, false)
+}
+
+// KillRestingSession is KillCompletedSession for a Session whose Work may
+// still be open (a newer Worker took it over, or its wait ran out): even a turn
+// that reported its end is torn down only once the Session has rested, so a
+// Worker that went on after its report is never cut off.
+func (w *Watcher) KillRestingSession(sessionID, turnID string) error {
+	return w.killOwnedSession(sessionID, turnID, true)
+}
+
+func (w *Watcher) killOwnedSession(sessionID, turnID string, alwaysRest bool) error {
 	return w.sessionInputOwner().serialized(sessionID, func() error {
 		if w.turnLedger == nil {
 			return fmt.Errorf("completed Session cleanup requires canonical ledger")
@@ -4832,8 +4846,8 @@ func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
 			return fmt.Errorf("completed Session %s ownership changed", sessionID)
 		}
 		// A turn whose Worker never reported its end (it stopped silently, was
-		// released as lost, or its Work was closed under it) is removed only
-		// once the Session has settled idle at its prompt.
+		// released as lost, ended on a provider error, or its Work was closed
+		// under it) is removed only once the Session has rested (sessionRest).
 		reported := turn.Status == TurnDone || turn.Status == TurnFailed
 		pending, err := w.pendingInputAdmissions(sessionID)
 		if err != nil {
@@ -4860,8 +4874,10 @@ func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
 				return err
 			}
 		}
-		if !reported && !w.SessionSettledIdle(sessionID, time.Now().UTC()) {
-			return ErrSessionNotIdle
+		if !reported || alwaysRest {
+			if err := w.sessionSettled(sessionID, time.Now().UTC()); err != nil {
+				return err
+			}
 		}
 		return w.KillSession(sessionID)
 	})

@@ -80,7 +80,12 @@ is total minus available, and `swap_used_bytes` is swap total minus swap free.
 The ring is in memory and restarts empty. No synthetic backfill is generated. Consumers are
 best-effort attribution from process ownership markers, the Brain host, Docker
 metadata, and remaining user processes. A consumer with `owner=orphaned_worker`
-is a process tree left after a Worker reached `done` or was closed.
+is a process tree this daemon started (it holds this daemon's Worker resource
+lease) left after its Worker reached `done` or was closed. A process that only
+carries a Worker id in its environment (another Mewla daemon's Session, or a
+service an agent detached, such as Codex's shared app-server) is `user`:
+this daemon did not start it and does not end it. Closing a Session stops its
+lease, which ends every process holding it, reparented ones included.
 
 ## Brain pressure events
 
