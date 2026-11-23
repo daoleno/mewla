@@ -8,15 +8,17 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
-const gcUsage = `Usage: mewla gc <status|keep|release|restore> [flags]
+const gcUsage = `Usage: mewla gc <status|why|keep|release|restore> [flags]
 
   status            What this Session holds and what happens to it when it ends,
                     and what the collector moved to its trash (--all: everyone's)
@@ -26,6 +28,8 @@ const gcUsage = `Usage: mewla gc <status|keep|release|restore> [flags]
   release PATH|ID   Move a path in this Session's scratch to the trash now, or
                     end one of this Session's keeps
   restore ID        Put a trashed item back where it was
+  why PID|PATH      What holds a process or a path: its Session and Work, or
+                    that it is not Mewla's
 `
 
 func runGCCommand(args []string, stderr io.Writer) error {
@@ -45,6 +49,8 @@ func runGCCommand(args []string, stderr io.Writer) error {
 		return runGCKeep(args[1:], os.Stdout, stderr)
 	case "release":
 		return runGCRelease(args[1:], os.Stdout, stderr)
+	case "why":
+		return runGCWhy(args[1:], os.Stdout, stderr)
 	default:
 		fmt.Fprint(stderr, gcUsage)
 		return fmt.Errorf("unknown gc subcommand %q", args[0])
@@ -216,7 +222,7 @@ func runGCRestore(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla gc restore", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	stateDir := fs.String("state-dir", "", "state directory (default: this Session's, else ~/.mewla)")
-	if err := fs.Parse(gcFlagsFirst(args)); err != nil {
+	if err := fs.Parse(gcFlagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
@@ -331,7 +337,7 @@ func runGCKeep(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	untilFlag := fs.String("until", "", "keep it until this date (YYYY-MM-DD) or for this many days (7d); 30 days at most")
 	why := fs.String("why", "", "why it must outlive the Session")
-	if err := fs.Parse(gcFlagsFirst(args)); err != nil {
+	if err := fs.Parse(gcFlagsFirst(fs, args)); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 || *untilFlag == "" {
@@ -406,12 +412,12 @@ func runGCRelease(args []string, stdout, stderr io.Writer) error {
 }
 
 // gcFlagsFirst lets the path come before the flags (keep PATH --until …).
-func gcFlagsFirst(args []string) []string {
+func gcFlagsFirst(fs *flag.FlagSet, args []string) []string {
 	var flags, rest []string
 	for i := 0; i < len(args); i++ {
 		if strings.HasPrefix(args[i], "-") {
 			flags = append(flags, args[i])
-			if !strings.Contains(args[i], "=") && i+1 < len(args) {
+			if !strings.Contains(args[i], "=") && !gcBoolFlag(fs, args[i]) && i+1 < len(args) {
 				flags = append(flags, args[i+1])
 				i++
 			}
@@ -420,4 +426,109 @@ func gcFlagsFirst(args []string) []string {
 		rest = append(rest, args[i])
 	}
 	return append(flags, rest...)
+}
+
+// gcBoolFlag reports whether arg names a flag of fs that takes no value.
+func gcBoolFlag(fs *flag.FlagSet, arg string) bool {
+	f := fs.Lookup(strings.TrimLeft(arg, "-"))
+	if f == nil {
+		return false
+	}
+	b, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return ok && b.IsBoolFlag()
+}
+
+func runGCWhy(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla gc why", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	asJSON := fs.Bool("json", false, "print JSON")
+	stateDir := fs.String("state-dir", "", "state directory (default: this Session's, else ~/.mewla)")
+	if err := fs.Parse(gcFlagsFirst(fs, args)); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: mewla gc why PID|PATH [--json] [--state-dir DIR]")
+	}
+	req := control.Request{Type: "gc_why"}
+	if pid, err := strconv.Atoi(fs.Arg(0)); err == nil && pid > 0 {
+		req.ProcessID = pid
+	} else {
+		path, err := filepath.Abs(fs.Arg(0)) // the daemon's working directory is not this one
+		if err != nil {
+			return err
+		}
+		req.Path = path
+	}
+	daemonDir := *stateDir
+	if daemonDir == "" {
+		daemonDir = strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
+	}
+	var why gc.Why
+	resp, err := callControl(cliConfig{stateDir: daemonDir}, req)
+	older := err == nil && !resp.OK && resp.Error != nil && resp.Error.Code == "unknown_request"
+	switch {
+	case err == nil && resp.OK && resp.Why != nil:
+		why = *resp.Why
+	case err == nil && !older:
+		return controlResponseError(resp)
+	default:
+		// No daemon to ask, or one from before gc why: what the records on
+		// disk tell, without the live Sessions' names and Work.
+		_, sessionRoot := gcCallingSession()
+		if *stateDir != "" {
+			sessionRoot = *stateDir
+		}
+		root, rootErr := gcStateRoot(sessionRoot)
+		if rootErr != nil {
+			return rootErr
+		}
+		lookup := gc.WhyLookup{Root: root}
+		if req.ProcessID > 0 {
+			why, err = gc.WhyProcess(lookup, req.ProcessID)
+		} else {
+			why, err = gc.WhyPath(lookup, req.Path)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if *asJSON {
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(why)
+	}
+	writeGCWhy(stdout, why)
+	return nil
+}
+
+var gcWhyKinds = map[string]string{"session": "Session", "work": "Work", "kept": "keep"}
+
+func writeGCWhy(out io.Writer, why gc.Why) {
+	for i, link := range why.Chain {
+		indent := ""
+		if i > 0 {
+			indent = "  "
+		}
+		var line string
+		switch link.Kind {
+		case "unheld", "outside":
+			line = "not Mewla's: " + link.Name
+			if link.ID != "" {
+				line += " " + link.ID
+			}
+		default:
+			kind := link.Kind
+			if title, ok := gcWhyKinds[kind]; ok {
+				kind = title
+			}
+			line = strings.TrimSpace(kind + " " + link.ID + " " + link.Name)
+			if link.State != "" {
+				line += ", " + link.State
+			}
+			if link.By != "" {
+				line += " (" + link.By + ")"
+			}
+		}
+		fmt.Fprintln(out, indent+line)
+	}
 }
