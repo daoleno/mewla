@@ -85,7 +85,14 @@ let retry: ReturnType<typeof setTimeout> | null = null;
  * Relay moves to loopback in place (same id: its Sessions and name stay); a second one goes; a daemon that no longer
  * knows this app is paired again. Until the daemon answers, why not is said, and the app asks again every 20 s.
  */
-export async function joinLocalDaemon(): Promise<void> {
+let joining: Promise<void> | null = null;
+
+export function joinLocalDaemon(): Promise<void> {
+  joining ??= join().finally(() => (joining = null));
+  return joining;
+}
+
+async function join(): Promise<void> {
   if (retry) clearTimeout(retry);
   retry = null;
   if (!untracked(localDaemonKey)) {
