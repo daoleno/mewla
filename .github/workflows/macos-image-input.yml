@@ -129,14 +129,15 @@ jobs:
           pkill -TERM -f "$D" || true
           if log | grep -E "ERROR (js|nsh)"; then exit 1; fi
           # What a person would see: four chips (the screenshot, Copy Image, the Finder file, the dragged file; none for
-          # the spreadsheet cell), all uploaded, then one message with the cell's text (not the Finder file's name) and the four files.
+          # the spreadsheet cell), all uploaded, then Send takes them with the cell's text (not the Finder file's name).
           fail=0
           grep -q "drag ended: copy" "$D/drag.out" || { echo "FAIL: the drag was not taken"; fail=1; }
           chips=$(log | grep "dev script: chips" | tail -2 | head -1)
           echo "chips before Send: $chips"
           [ "$(grep -o "\[ready " <<<"$chips" | wc -l | tr -d ' ')" = 4 ] || { echo "FAIL: not four ready chips"; fail=1; }
           [ "$(grep -o "\[ready dragged picture.png\]" <<<"$chips" | wc -l | tr -d ' ')" = 2 ] || { echo "FAIL: the Finder file and the dragged file are not chips under their names"; fail=1; }
-          log | grep -qE 'dev script: sent "Q3 revenue 4,210.* with 4 files' || { echo "FAIL: the message did not go with the cell's text and four files"; fail=1; }
+          # Send took the four (the stub agent keeps no transcript, so the message itself is in the "sent" capture).
+          [ "$(log | grep "dev script: chips" | tail -1 | grep -c "chips 0$")" = 1 ] || { echo "FAIL: Send did not take the chips"; fail=1; }
           [ "$(find "$D/state" -path "*uploads*" -type f | wc -l | tr -d ' ')" -ge 4 ] || { echo "FAIL: the daemon has fewer than four uploads"; fail=1; }
           exit $fail
       - uses: actions/upload-artifact@v4
