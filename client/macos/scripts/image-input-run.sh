@@ -218,7 +218,7 @@ drop_file 1 "$D/m0" "$D/locked.png"
 unread='\[failed (locked\.png|File): Mewla can.t read this file\.\]'
 wait_chips "$unread" 30 && report "unreadable file dropped: $(chips | grep -oE "\[failed [^]]*\]")" || failed "an unreadable dropped file has no chip that says why"
 "$B/pasteboard" file "$D/locked.png"; front; cmd_v
-wait_chips "($unread.*){2}" 30 && report "unreadable file pasted: a second such chip; the field holds '$(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //')'" || failed "an unreadable pasted file has no chip that says why"
+wait_chips "($unread.*){2}" 30 && report "unreadable file pasted: a second such chip; onPaste reported '$(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //')'" || failed "an unreadable pasted file has no chip that says why"
 report "phase 3 chips: $(chips)"
 shot phase3
 send; sleep 2; report "phase 3 after Send: $(chips)"
