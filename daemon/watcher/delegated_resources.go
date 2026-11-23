@@ -37,6 +37,27 @@ type delegatedResourceManager interface {
 	Release(target, unit string) error
 }
 
+// goneReleaser is a resource manager that releases the units of Sessions its
+// session host no longer has (resource_gone.go). windows is a successful
+// inventory from host.
+type goneReleaser interface {
+	releaseGone(windows []sessionPane, host sessionHostIdentity)
+}
+
+// sessionHostIdentity names the session host an inventory came from: its pid
+// and start time, from the welcome of the connection that read it.
+type sessionHostIdentity struct {
+	PID       int
+	StartedAt time.Time
+}
+
+func (h sessionHostIdentity) known() bool { return h.PID > 1 && !h.StartedAt.IsZero() }
+
+// hostIdentifier is a session backend that can name its host.
+type hostIdentifier interface {
+	hostIdentity() sessionHostIdentity
+}
+
 type noopDelegatedResourceManager struct{}
 
 func (noopDelegatedResourceManager) Prepare(int) (*delegatedResourceSpec, error) {

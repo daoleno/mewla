@@ -1,0 +1,202 @@
+//go:build linux || darwin
+
+package watcher
+
+import (
+	"errors"
+	"log"
+	"sort"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/gc"
+	"github.com/daoleno/mewla/daemon/workerproc"
+)
+
+// A Session can end without KillSession: its session host stops or crashes
+// (a reboot, an OOM kill, a host that was replaced), and every Session in it
+// goes with it. Its lease and scratch then stayed forever, because only
+// KillSession released them. releaseGone releases them, but only on positive
+// evidence that the Session is gone, never on a short or unreadable inventory.
+//
+// The evidence for a unit, all of it required:
+//   - the unit is on no Session (alive or exited) in two successful
+//     inventories at least goneConfirm apart, both from the same connected
+//     session host (same pid and start time); a host that changes restarts the
+//     count;
+//   - the lease is older than goneConfirm and is not a reservation of this
+//     process (a Prepare not yet Bound);
+//   - none of the processes the lease owns is a direct child of that host,
+//     which is what a live pane is (read fresh, just before the release).
+const (
+	goneScanEvery      = 30 * time.Second
+	goneConfirm        = 2 * time.Minute
+	trashFinalizeEvery = time.Hour
+)
+
+type goneEvidence struct {
+	host        sessionHostIdentity
+	firstAbsent time.Time
+	seen        int
+}
+
+type goneLeases struct {
+	lastScan     time.Time
+	lastFinalize time.Time
+	absent       map[string]goneEvidence
+	releasing    bool
+}
+
+// goneCandidates records one inventory's evidence and returns the units whose
+// Sessions are proven gone. The caller holds no lock.
+func (m *portableDelegatedResourceManager) goneCandidates(windows []sessionPane, host sessionHostIdentity, now time.Time) []workerproc.Lease {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !host.known() || m.gone.releasing {
+		return nil
+	}
+	if !m.gone.lastScan.IsZero() && now.Sub(m.gone.lastScan) < goneScanEvery {
+		return nil
+	}
+	m.gone.lastScan = now
+	if m.gone.absent == nil {
+		m.gone.absent = map[string]goneEvidence{}
+	}
+	carried := make(map[string]bool, len(windows))
+	for _, window := range windows {
+		if window.resourceUnit != "" {
+			carried[window.resourceUnit] = true
+		}
+	}
+	leases, err := workerproc.ListLeases(m.leaseDir)
+	if err != nil {
+		log.Printf("watcher: read leases: %v", err)
+		return nil
+	}
+	listed := make(map[string]bool, len(leases))
+	var due []workerproc.Lease
+	for _, lease := range leases {
+		unit := lease.ResourceID
+		listed[unit] = true
+		if !validDelegatedResourceUnit(m.owner, unit) || carried[unit] {
+			delete(m.gone.absent, unit)
+			continue
+		}
+		if until, ok := m.reserved[unit]; ok && now.Before(until) {
+			continue
+		}
+		if !lease.StartedAt.IsZero() && now.Sub(lease.StartedAt) < goneConfirm {
+			continue
+		}
+		evidence, ok := m.gone.absent[unit]
+		if !ok || evidence.host != host {
+			m.gone.absent[unit] = goneEvidence{host: host, firstAbsent: now, seen: 1}
+			continue
+		}
+		evidence.seen++
+		m.gone.absent[unit] = evidence
+		if evidence.seen >= 2 && now.Sub(evidence.firstAbsent) >= goneConfirm {
+			due = append(due, lease)
+		}
+	}
+	for unit := range m.gone.absent {
+		if !listed[unit] {
+			delete(m.gone.absent, unit)
+		}
+	}
+	sort.Slice(due, func(a, b int) bool { return due[a].ResourceID < due[b].ResourceID })
+	if len(due) > 0 {
+		m.gone.releasing = true
+	}
+	return due
+}
+
+// releaseGone releases the leases whose Sessions are proven gone, and deletes
+// trash past its grace. It runs in its own goroutine so a poll never waits on
+// a process stop; one runs at a time.
+func (m *portableDelegatedResourceManager) releaseGone(windows []sessionPane, host sessionHostIdentity) {
+	now := m.clock()
+	due := m.goneCandidates(windows, host, now)
+	finalize := m.finalizeDue(now)
+	if len(due) == 0 && !finalize {
+		return
+	}
+	go func() {
+		if len(due) > 0 {
+			defer func() {
+				m.mu.Lock()
+				m.gone.releasing = false
+				m.mu.Unlock()
+			}()
+			m.releaseDue(due, host)
+		}
+		if finalize {
+			deleted, err := gc.Finalize(m.stateRoot(), m.clock())
+			if err != nil {
+				log.Printf("watcher: trash: %v", err)
+			}
+			for _, item := range deleted {
+				log.Printf("watcher: trash: deleted %s (%s, trashed %s)", item.ID, item.Original, item.TrashedAt.Format(time.RFC3339))
+			}
+		}
+	}()
+}
+
+func (m *portableDelegatedResourceManager) finalizeDue(now time.Time) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.gone.lastFinalize.IsZero() && now.Sub(m.gone.lastFinalize) < trashFinalizeEvery {
+		return false
+	}
+	m.gone.lastFinalize = now
+	return true
+}
+
+func (m *portableDelegatedResourceManager) releaseDue(due []workerproc.Lease, host sessionHostIdentity) {
+	records, err := workerproc.Processes(true)
+	if err != nil {
+		log.Printf("watcher: read processes before releasing gone Sessions: %v", err)
+		return
+	}
+	for _, lease := range due {
+		unit := lease.ResourceID
+		if pane, ok := livePaneOf(records, lease, host); ok {
+			log.Printf("watcher: kept lease %s: process %d is a live pane of the session host", unit, pane)
+			m.forgetGone(unit)
+			continue
+		}
+		m.mu.Lock()
+		evidence := m.gone.absent[unit]
+		m.mu.Unlock()
+		if err := m.releaseUnit(unit, releaseReasonGone); err != nil {
+			var inUse *scratchInUseError
+			if errors.As(err, &inUse) {
+				m.noteScratchKept(unit, inUse)
+			} else {
+				log.Printf("watcher: release lease %s of a gone Session: %v", unit, err)
+			}
+			continue
+		}
+		m.forgetGone(unit)
+		log.Printf("watcher: released lease %s: its Session is on no session host inventory since %s (host pid %d)", unit, evidence.firstAbsent.UTC().Format(time.RFC3339), host.PID)
+	}
+}
+
+func (m *portableDelegatedResourceManager) forgetGone(unit string) {
+	m.mu.Lock()
+	delete(m.gone.absent, unit)
+	m.mu.Unlock()
+}
+
+// livePaneOf returns a process the lease owns that is a direct child of the
+// session host: a pane. Its Session is not gone, whatever the inventory said.
+func livePaneOf(records map[int]workerproc.Process, lease workerproc.Lease, host sessionHostIdentity) (int, bool) {
+	if !host.known() {
+		return 0, false
+	}
+	for pid, p := range workerproc.Owned(records, lease) {
+		if p.PPID == host.PID {
+			return pid, true
+		}
+	}
+	return 0, false
+}

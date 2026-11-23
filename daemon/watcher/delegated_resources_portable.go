@@ -3,7 +3,9 @@
 package watcher
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/workerproc"
 	"github.com/google/uuid"
@@ -28,6 +31,11 @@ type portableDelegatedResourceManager struct {
 	reserved     map[string]time.Time
 	lastFullScan time.Time
 	now          func() time.Time
+
+	// gone is the evidence that a lease's Session is gone (resource_gone.go).
+	gone goneLeases
+	// keptLogged is the last "kept scratch" line logged per unit.
+	keptLogged map[string]string
 }
 
 func newPortableDelegatedResourceManager(owner string) (*portableDelegatedResourceManager, error) {
@@ -73,7 +81,7 @@ func (m *portableDelegatedResourceManager) Prepare(_ int) (*delegatedResourceSpe
 		err = workerproc.WriteOwnershipLease(path, unit)
 	}
 	if err != nil {
-		_ = m.removeOwnedTempDir(unit)
+		_ = m.releaseOwnedTempDir(unit, "")
 		m.forgetUnit(unit)
 		return nil, err
 	}
@@ -104,7 +112,8 @@ func (m *portableDelegatedResourceManager) UnitForTarget(target string) string {
 }
 
 // Re-observation never kills: live legacy scopes and their processes survive
-// daemon replacement. Only explicit Worker/Work cleanup calls Release.
+// daemon replacement. Releases come from explicit Worker/Work cleanup and from
+// releaseGone, which needs positive evidence that a Session is gone.
 func (m *portableDelegatedResourceManager) Reconcile(windows []sessionPane) {
 	m.mu.Lock()
 	observe := m.lastFullScan.IsZero() || m.now().Sub(m.lastFullScan) >= 5*time.Second
@@ -132,25 +141,69 @@ func (m *portableDelegatedResourceManager) Release(target, unit string) error {
 	if unit == "" {
 		return nil
 	}
+	err := m.releaseUnit(unit, releaseReasonClosed)
+	var inUse *scratchInUseError
+	if errors.As(err, &inUse) {
+		// The Session is closed; its scratch and lease stay until the process
+		// using the scratch is gone, and the release of gone Sessions finishes.
+		m.noteScratchKept(unit, inUse)
+		m.forgetUnit(unit)
+		return nil
+	}
+	return err
+}
+
+// Why a unit's scratch went to the trash.
+const (
+	releaseReasonClosed = "Session closed"
+	releaseReasonGone   = "Session gone from the session host"
+)
+
+func (m *portableDelegatedResourceManager) releaseUnit(unit, reason string) error {
 	if !validDelegatedResourceUnit(m.owner, unit) {
 		return fmt.Errorf("refuse unowned delegated resource unit %q", unit)
 	}
-	if err := m.stopLease(unit); err != nil {
+	if err := m.stopLease(unit, reason); err != nil {
 		return err
 	}
 	m.forgetUnit(unit)
+	m.mu.Lock()
+	delete(m.keptLogged, unit)
+	m.mu.Unlock()
 	return nil
 }
 
-func (m *portableDelegatedResourceManager) stopLease(unit string) error {
+// stopLease stops what the unit owns, then moves its scratch to the trash,
+// then removes the lease. In that order: a directory is never moved while a
+// process may still write to it, and a crash at any step leaves the lease, so
+// the next release finishes the rest.
+func (m *portableDelegatedResourceManager) stopLease(unit, reason string) error {
 	path, err := workerproc.LeasePath(m.leaseDir, unit)
 	if err != nil {
 		return err
 	}
-	if err := workerproc.StopLease(path); err != nil {
+	lease, err := workerproc.ReadLease(path)
+	switch {
+	case err == nil:
+		if err := workerproc.StopOwned(lease, nil); err != nil {
+			return err
+		}
+	case os.IsNotExist(err):
+	default:
 		return err
 	}
-	return m.removeOwnedTempDir(unit)
+	if err := m.releaseOwnedTempDir(unit, reason); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// stateRoot is the state root the scratch root sits in; the trash is under it.
+func (m *portableDelegatedResourceManager) stateRoot() string {
+	return filepath.Dir(m.tempRoot)
 }
 
 func (m *portableDelegatedResourceManager) createOwnedTempDir(unit string) (string, error) {
@@ -176,7 +229,10 @@ func (m *portableDelegatedResourceManager) createOwnedTempDir(unit string) (stri
 	return tempDir, nil
 }
 
-func (m *portableDelegatedResourceManager) removeOwnedTempDir(unit string) error {
+// releaseOwnedTempDir moves the unit's scratch to the trash with reason, or
+// deletes it when reason is "" (a scratch made a moment ago for a spawn that
+// failed holds nothing).
+func (m *portableDelegatedResourceManager) releaseOwnedTempDir(unit, reason string) error {
 	tempDir, err := m.resourceTempDir(unit)
 	if err != nil {
 		return err
@@ -202,57 +258,56 @@ func (m *portableDelegatedResourceManager) removeOwnedTempDir(unit string) error
 	if !ok || markedUnit != unit {
 		return nil
 	}
-	if err := removeOwnedTree(tempDir); err != nil {
-		return fmt.Errorf("remove delegated temporary directory: %w", err)
+	if reason == "" {
+		if err := gc.RemoveTree(tempDir); err != nil {
+			return fmt.Errorf("remove delegated temporary directory: %w", err)
+		}
+		return nil
+	}
+	// A process still running from the scratch (its exe or its cwd inside)
+	// keeps it, and the lease with it: moving the directory would take the
+	// evidence of whose that process is (PR 2 stops such processes).
+	if user, ok := scratchUser(tempDir); ok {
+		return &scratchInUseError{dir: tempDir, user: user}
+	}
+	if _, err := gc.Trash(m.stateRoot(), gc.KindScratch, tempDir, unit, reason, m.clock()); err != nil {
+		return fmt.Errorf("move delegated temporary directory to the trash: %w", err)
 	}
 	return nil
 }
 
-// removeOwnedTree deletes an already-validated owned temp tree. Nested tool
-// caches (for example Go module dirs) may be mode 0555/000 with 0444 files;
-// restore owner rwx on directories first so WalkDir can traverse and RemoveAll
-// can unlink them.
-func removeOwnedTree(root string) error {
-	if err := makeOwnedTreeDirsOwnerAccessible(root); err != nil {
-		return err
-	}
-	return os.RemoveAll(root)
+// scratchInUseError says a unit's scratch was kept because a process still
+// uses it. The lease stays, so a later release tries again.
+type scratchInUseError struct {
+	dir  string
+	user scratchUsage
 }
 
-// makeOwnedTreeDirsOwnerAccessible walks root without following symlinks and
-// adds owner read+write+execute (mode|0700) only to real directories inside
-// that tree. Owner-write alone is not enough: mode 000/0444 directories cannot
-// be traversed until execute (and usually read) are restored. Callers must
-// already have validated ownership of root; this never chmods sibling or
-// foreign paths.
-func makeOwnedTreeDirsOwnerAccessible(root string) error {
-	info, err := os.Lstat(root)
-	if err != nil {
-		return err
+func (e *scratchInUseError) Error() string {
+	return fmt.Sprintf("kept scratch %s: process %d (%s) is still using it", e.dir, e.user.PID, e.user.Exe)
+}
+
+// noteScratchKept logs a kept scratch once per unit and user, not on every
+// retry.
+func (m *portableDelegatedResourceManager) noteScratchKept(unit string, err *scratchInUseError) {
+	line := err.Error()
+	m.mu.Lock()
+	if m.keptLogged == nil {
+		m.keptLogged = map[string]string{}
 	}
-	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil
+	same := m.keptLogged[unit] == line
+	m.keptLogged[unit] = line
+	m.mu.Unlock()
+	if !same {
+		log.Printf("watcher: %s", line)
 	}
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		mode := info.Mode().Perm()
-		if mode&0o700 == 0o700 {
-			return nil
-		}
-		return os.Chmod(path, mode|0o700)
-	})
+}
+
+func (m *portableDelegatedResourceManager) clock() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
 }
 
 func readDelegatedTempMarker(tempDir string) (string, bool) {
