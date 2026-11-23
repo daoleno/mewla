@@ -23,11 +23,19 @@ func classifyProcess(command string) []string {
 	}
 	return kinds
 }
+// ownsUnit reports whether unit is a delegated resource unit this daemon's
+// resource manager issued.
+func ownsUnit(manager delegatedResourceManager, unit string) bool {
+	owner, ok := manager.(interface{ OwnsUnit(string) bool })
+	return ok && owner.OwnsUnit(unit)
+}
+
 func attributeConsumers(consumers []ProcessConsumer, w *Watcher) []ProcessConsumer {
 	byID := map[string]*classifier.Worker{}
 	byToken := map[string]*classifier.Worker{}
+	var manager delegatedResourceManager = noopDelegatedResourceManager{}
 	if w != nil {
-		manager := w.resourceManager()
+		manager = w.resourceManager()
 		for _, worker := range w.Workers() {
 			if worker == nil {
 				continue
@@ -46,8 +54,17 @@ func attributeConsumers(consumers []ProcessConsumer, w *Watcher) []ProcessConsum
 		}
 		if worker == nil {
 			if c.Owner == "worker" {
-				c.Owner = "orphaned_worker"
 				c.Status = "unknown"
+				if ownsUnit(manager, c.ID) {
+					// Mewla started this tree (it holds this daemon's lease) and
+					// its Session is gone.
+					c.Owner = "orphaned_worker"
+				} else {
+					// Only a Worker id in its environment: another Mewla's
+					// Session, or a service an agent detached (Codex's shared
+					// app-server). This daemon did not start it and does not end it.
+					c.Owner, c.WorkerID = "user", ""
+				}
 			}
 			continue
 		}

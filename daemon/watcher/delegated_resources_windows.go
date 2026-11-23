@@ -75,6 +75,11 @@ func (m *jobDelegatedResourceManager) Bind(target, unit string) {
 	m.mu.Unlock()
 }
 
+// OwnsUnit reports whether unit was issued by this daemon (its owner).
+func (m *jobDelegatedResourceManager) OwnsUnit(unit string) bool {
+	return validDelegatedResourceUnit(m.owner, unit)
+}
+
 func (m *jobDelegatedResourceManager) UnitForTarget(target string) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

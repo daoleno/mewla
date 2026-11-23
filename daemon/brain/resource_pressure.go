@@ -62,7 +62,9 @@ func (s *Service) ResourceWorkContext(consumers []watcher.ProcessConsumer) ([]wa
 	for i := range out {
 		item, ok := byWorker[out[i].WorkerID]
 
-		if ok && out[i].Owner != "brain" {
+		// Only a tree this daemon started is a Worker's: a process that merely
+		// carries a Worker id (another Mewla's, an agent's detached service) is not.
+		if ok && (out[i].Owner == "worker" || out[i].Owner == "orphaned_worker") {
 			out[i].WorkID = item.ID
 			out[i].Title = item.Title
 			if item.Status == WorkDone || item.Status == WorkCancelled {
