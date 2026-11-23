@@ -128,7 +128,7 @@ runs:
         set -euo pipefail
         [[ "$(uname -m)" == "x86_64" ]] || { echo "error: pinned ccache is x86_64 only" >&2; exit 1; }
         archive="$RUNNER_TEMP/ccache.tar.xz"
-        curl -fsSL -o "$archive" \
+        curl -fsSL --retry 5 --retry-all-errors -o "$archive" \
           https://github.com/ccache/ccache/releases/download/v4.11.3/ccache-4.11.3-linux-x86_64.tar.xz
         echo "7766991b91b3a5a177ab33fa043fe09e72c68586d5a86d20a563a05b74f119c0  $archive" | sha256sum -c -
         mkdir -p "$RUNNER_TEMP/ccache-bin"
