@@ -42,19 +42,25 @@ func whyFixture(t *testing.T) (root, unit, scratch string) {
 	return root, unit, scratch
 }
 
-// startStripped starts a copy of sleep that lives in dir, as `setsid env -i`
-// would: a new session and no environment at all.
+// startStripped starts a copy of this test binary that lives in dir, as
+// `setsid env -i` would: a new session and no environment at all. The copy
+// runs TestWhyFixtureSleeps, which only sleeps. (Not a copy of sleep: where
+// coreutils is a multicall binary, a copy named "mewla" exits at once.)
 func startStripped(t *testing.T, dir, name string, cwd string) int {
 	t.Helper()
-	exe := filepath.Join(dir, name)
-	raw, err := os.ReadFile("/usr/bin/sleep")
+	self, err := os.Executable()
 	if err != nil {
-		t.Skip("no /usr/bin/sleep to copy")
+		t.Fatal(err)
 	}
+	raw, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(dir, name)
 	if err := os.WriteFile(exe, raw, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(exe, "30")
+	cmd := exec.Command(exe, "-test.run=^TestWhyFixtureSleeps$", whyFixtureArg)
 	cmd.Env, cmd.Dir = []string{}, cwd
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
@@ -62,12 +68,29 @@ func startStripped(t *testing.T, dir, name string, cwd string) int {
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	// Wait until the exec has happened: the exe link names the copy.
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if target, _ := os.Readlink(filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid), "exe")); target == exe {
+	link := filepath.Join("/proc", strconv.Itoa(cmd.Process.Pid), "exe")
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		target, err := os.Readlink(link)
+		if target == exe {
 			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the fixture never ran as %s: exe %q, %v", exe, target, err)
 		}
 	}
 	return cmd.Process.Pid
+}
+
+const whyFixtureArg = "why-fixture-sleeps"
+
+// TestWhyFixtureSleeps is the stripped process of the tests above when its
+// binary is run by startStripped; in a test run it does nothing.
+func TestWhyFixtureSleeps(t *testing.T) {
+	if os.Args[len(os.Args)-1] != whyFixtureArg {
+		return
+	}
+	time.Sleep(30 * time.Second)
+	os.Exit(0)
 }
 
 func chainText(why Why) string {
