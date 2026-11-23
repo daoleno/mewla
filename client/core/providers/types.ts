@@ -165,12 +165,12 @@ export function normalizeProviderClient(
 }
 
 /**
- * An agent whose Session lists and switches its own models (DSH, Antigravity):
- * its runtime carries the models, not the computer's Providers.
+ * A Session's runtime that carries its agent's own models (`native_models`):
+ * the agent lists and switches them itself, whichever agent it is. Otherwise
+ * the Session runs on one of the computer's Providers.
  */
-export function isNativeModelClient(value: string | null | undefined): boolean {
-  const client = normalizeProviderClient(value);
-  return client === "dsh" || client === "antigravity";
+export function isAgentModelRuntime(selection: Pick<ThreadRuntimeSelection, "native_models"> | null | undefined): boolean {
+  return Array.isArray(selection?.native_models);
 }
 
 export function isSupportedProviderClient(

@@ -6,6 +6,12 @@ const net = require("net");
 const crypto = require("crypto");
 
 const SOCKET = __MEWLA_SOCKET__;
+
+// Pi's own reading of the thinking levels a model takes.
+let supportedThinkingLevels = null;
+try {
+  supportedThinkingLevels = require("@earendil-works/pi-ai").getSupportedThinkingLevels;
+} catch (_) {}
 const RETRY_MS = 2000;
 
 module.exports = function (pi) {
@@ -53,7 +59,50 @@ module.exports = function (pi) {
       }
     } else if (message.t === "abort" && ctx && !ctx.isIdle()) {
       ctx.abort();
+    } else if (message.t === "models" && ctx) {
+      send({ t: "models", id: message.id, models: models() });
+    } else if (message.t === "set_model" && ctx) {
+      setModel(message).then(
+        () => send({ t: "models", id: message.id, models: models() }),
+        (error) => send({ t: "models_failed", id: message.id, error: String(error && error.message || error) }),
+      );
     }
+  };
+
+  // The models Pi can use with the person's sign-ins, as its own /model
+  // offers them: the scoped ones when the person scoped some.
+  const available = () => {
+    const scoped = ctx.scopedModels || [];
+    return scoped.length > 0 ? scoped.map((entry) => entry.model) : ctx.modelRegistry.getAvailable();
+  };
+  const levels = (model) => {
+    if (typeof supportedThinkingLevels === "function") {
+      try {
+        return supportedThinkingLevels(model);
+      } catch (_) {}
+    }
+    return model.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"];
+  };
+  const models = () => {
+    const current = ctx.model;
+    return {
+      current: current ? current.provider + "/" + current.id : "",
+      thinking: pi.getThinkingLevel ? pi.getThinkingLevel() : "",
+      available: available().map((model) => ({
+        provider: model.provider,
+        id: model.id,
+        name: model.name || "",
+        thinking: levels(model),
+      })),
+    };
+  };
+  const setModel = async (message) => {
+    const target = available().find((model) => model.provider + "/" + model.id === message.model);
+    if (!target) throw new Error("Pi has no model " + message.model);
+    if (!ctx.model || ctx.model.provider !== target.provider || ctx.model.id !== target.id) {
+      if (!(await pi.setModel(target))) throw new Error("No API key for " + target.provider);
+    }
+    if (message.thinking) pi.setThinkingLevel(message.thinking);
   };
 
   const connect = () => {

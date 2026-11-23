@@ -1,4 +1,4 @@
-import { describe, expect, open, test } from "nsh/test";
+import { describe, expect, open, test, type App } from "nsh/test";
 import { answering, expoTokenService, framesOf, paired, pairedTwo, phoneHost, pressUntil, pressWhenEnabled, typeUntil } from "../testing/fixtures";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 
@@ -291,6 +291,12 @@ describe("Sessions", () => {
   }, 20_000);
 });
 
+/** Puts the focus in the composer as a tap does, with nothing typed. */
+async function focusComposer(app: App): Promise<void> {
+  await app.compose("id:composer", "a");
+  await app.compose("id:composer", "");
+}
+
 describe("a Session", () => {
   const transcript = [
     { id: "u1", seq: 1, kind: "user_message", timestamp: "2026-11-11T07:00:00.000Z", body: "Delete the build folder" },
@@ -370,6 +376,8 @@ describe("a Session", () => {
     });
     await app.waitFor("text:codex run", { timeout: 10_000 });
     await app.press("text:codex run");
+    await app.waitFor("id:composer");
+    await focusComposer(app);
     await app.waitFor("id:model-chip");
     expect(app.texts()).toContain("gpt-6");
     await app.type("id:composer", "/sta");
@@ -381,8 +389,48 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "codex_status").at(-1)).toMatchObject({ target_id: "w3" });
     await app.back();
     await app.waitFor("id:status-meter", { state: "gone" });
+    await focusComposer(app);
     await app.press("id:model-chip");
     await app.waitFor("id:model-row-gpt-6");
+  }, 20_000);
+
+  test("a Session on its agent's own sign-in shows its model by the agent's name and lists the agent's models", async () => {
+    const pi = session("w6", { name: "pi run", status: "done", provider: "pi", command: "pi", capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true } });
+    const runtime = {
+      session_id: "w6", client: "pi", connection_id: "pi", connection_name: "Pi", model_id: "go/deepseek-flash", reasoning_effort: "high",
+      reasoning_efforts: ["minimal", "high"], credential_ready: true, hot_switchable: true,
+      native_models: [
+        { id: "go/deepseek-flash", display_name: "DeepSeek Flash", available: true, source: "pi_native", reasoning_efforts: ["minimal", "high"] },
+        { id: "go/kimi", display_name: "Kimi", available: true, source: "pi_native", reasoning_efforts: [] },
+      ],
+    };
+    const app = await sessionsApp({ worker_sessions: [pi], conversations: { w6: [] }, replies: { get_thread_runtime: { type: "thread_runtime", runtime } } });
+    await app.waitFor("text:pi run", { timeout: 10_000 });
+    await app.press("text:pi run");
+    await app.waitFor("id:composer");
+    // At rest the composer shows no model; it shows beside Send once the field is focused.
+    await app.wait(800);
+    expect(app.count("id:model-chip")).toBe(0);
+    expect(app.count("id:composer-tools")).toBe(0);
+    await focusComposer(app);
+    await app.waitFor("id:composer-tools");
+    await app.waitFor("id:model-chip");
+    expect(app.texts()).toContain("DeepSeek Flash");
+    await app.press("id:model-chip");
+    await app.waitFor("id:model-row-go/kimi");
+    expect(framesOf(app.host.posts(), "list_providers")).toHaveLength(0);
+  }, 20_000);
+
+  test("a Session whose agent gives no model list shows no model control, focused or not", async () => {
+    const cursor = session("w7", { name: "cursor run", status: "done", provider: "cursor", command: "cursor-agent", capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true } });
+    const app = await sessionsApp({ worker_sessions: [cursor], conversations: { w7: [] }, replies: { get_thread_runtime: { type: "error", code: "binding_not_found", message: "Cursor Agent: Error: Authentication required." } } });
+    await app.waitFor("text:cursor run", { timeout: 10_000 });
+    await app.press("text:cursor run");
+    await app.waitFor("id:composer");
+    await focusComposer(app);
+    await app.wait(800);
+    expect(app.count("id:model-chip")).toBe(0);
+    expect(app.count("id:composer-tools")).toBe(0);
   }, 20_000);
 
   test("a Calendar run's Session is titled by its run, says where it came from, and opens its Work", async () => {

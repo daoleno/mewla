@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
@@ -33,80 +34,54 @@ type dshModels struct {
 	} `json:"groups"`
 }
 
-func (s *Server) dshSessionID(workerID string) string {
-	worker := s.lookupWorker(workerID)
-	if worker == nil || s.structuredProviderForWorker(worker) != work.WorkerProviderDSH {
-		return ""
+// dshSessionModels is DSH's own model menu: the models of the provider the
+// Session runs on, switched by DSH itself.
+type dshSessionModels struct{}
+
+func (dshSessionModels) Models(ctx context.Context, worker *classifier.Worker) (AgentModels, error) {
+	var models dshModels
+	if err := work.CallDSH(ctx, work.DSHSessionID(worker.Command), "session.models", map[string]any{}, &models); err != nil {
+		return AgentModels{}, err
 	}
-	return work.DSHSessionID(worker.Command)
+	return dshAgentModels(models), nil
 }
 
-func (s *Server) handleDSHThreadRuntime(conn *websocket.Conn, raw clientMessage, mutation bool) bool {
-	workerID := raw.WorkerID
-	if workerID == "" {
-		workerID = raw.SessionID
-	}
-	id := s.dshSessionID(workerID)
-	if id == "" {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if mutation {
-		if raw.Runtime == nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "profile_invalid", "runtime is required")
-			return true
-		}
-		choice := map[string]any{"provider": raw.Runtime.ConnectionID, "model": raw.Runtime.ModelID}
-		if raw.Runtime.Effect != "" && !raw.Runtime.UseDefaultEffect {
-			choice["reasoningEffort"] = raw.Runtime.Effect
-		}
-		if err := work.CallDSH(ctx, id, "session.selectModel", choice, nil); err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "runtime_switch_failed", err.Error())
-			return true
-		}
-	}
+func (d dshSessionModels) SetModel(ctx context.Context, worker *classifier.Worker, model, effort string) (AgentModels, error) {
+	id := work.DSHSessionID(worker.Command)
 	var models dshModels
 	if err := work.CallDSH(ctx, id, "session.models", map[string]any{}, &models); err != nil {
-		s.sendErrorWithRequestID(conn, raw.RequestID, "binding_not_found", err.Error())
-		return true
+		return AgentModels{}, err
 	}
-	label := models.Current.Provider
-	choices := []map[string]any{}
-	var efforts []string
-	defaultEffort := ""
+	choice := map[string]any{"provider": models.Current.Provider, "model": model}
+	if effort != "" {
+		choice["reasoningEffort"] = effort
+	}
+	if err := work.CallDSH(ctx, id, "session.selectModel", choice, nil); err != nil {
+		return AgentModels{}, err
+	}
+	after, err := d.Models(ctx, worker)
+	// Native acknowledgement applies the selection; DSH saves its session log
+	// asynchronously, so no daemon fsync is claimed.
+	after.Unsaved = "DSH accepted the choice; its native session log saves asynchronously."
+	return after, err
+}
+
+func dshAgentModels(models dshModels) AgentModels {
+	out := AgentModels{Label: models.Current.Provider, Current: models.Current.Model, Effort: models.Current.Effort}
 	for _, group := range models.Groups {
 		if group.ID != models.Current.Provider {
 			continue
 		}
-		label = group.Name
+		out.Label = group.Name
 		for _, model := range group.Models {
-			values := []string{}
+			efforts := []string{}
 			for _, effort := range model.Reasoning.Efforts {
-				values = append(values, effort.ID)
+				efforts = append(efforts, effort.ID)
 			}
-			choices = append(choices, map[string]any{"id": model.ID, "display_name": model.Name, "available": true, "source": "dsh_native", "reasoning_efforts": values, "reasoning_effort_default": model.Reasoning.Default})
-			if model.ID == models.Current.Model {
-				efforts = values
-				defaultEffort = model.Reasoning.Default
-			}
+			out.Models = append(out.Models, AgentModel{ID: model.ID, Name: model.Name, Efforts: efforts, DefaultEffort: model.Reasoning.Default})
 		}
 	}
-	selection := map[string]any{"session_id": workerID, "client": "dsh", "connection_id": models.Current.Provider, "connection_name": label, "provider_label": label, "model_id": models.Current.Model, "reasoning_effort": models.Current.Effort, "reasoning_efforts": efforts, "reasoning_effort_default": defaultEffort, "credential_ready": models.Routable, "hot_switchable": true, "native_models": choices}
-	messageType := "thread_runtime"
-	if mutation {
-		messageType = "thread_runtime_set"
-	}
-	// Native acknowledgement applies the selection. Native event persistence is
-	// asynchronous, so do not claim a daemon fsync that did not occur.
-	payload := map[string]any{"type": messageType, "request_id": raw.RequestID, "worker_id": workerID, "runtime": selection}
-	if mutation {
-		payload["persistence_outcome"] = "applied"
-		payload["persistence_durable"] = false
-		payload["persistence_warning"] = "DSH accepted the choice; its native session log saves asynchronously."
-	}
-	s.sendJSON(conn, payload)
-	return true
+	return out
 }
 
 func (s *Server) handleDSHImage(conn *websocket.Conn, raw clientMessage) {

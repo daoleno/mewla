@@ -22,6 +22,21 @@ type Message struct {
 	Aborted bool   `json:"aborted"`
 	Stop    string `json:"stop"`
 	Error   string `json:"error"`
+	// Models answers a models or set_model request.
+	Models *Models `json:"models,omitempty"`
+}
+
+// Models is Pi's model menu as the extension reads it: the current model
+// ("provider/id"), its thinking level, and the models Pi can use.
+type Models struct {
+	Current   string `json:"current"`
+	Thinking  string `json:"thinking"`
+	Available []struct {
+		Provider string   `json:"provider"`
+		ID       string   `json:"id"`
+		Name     string   `json:"name"`
+		Thinking []string `json:"thinking"`
+	} `json:"available"`
 }
 
 // ParseMessage decodes one line.
