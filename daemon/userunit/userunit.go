@@ -85,6 +85,25 @@ func NestingSlice(cgroup string, own func(token string) bool) string {
 	return ""
 }
 
+// SessionTokens lists the tokens of the Session slices in a cgroup text,
+// outermost first: one for a Session's process, more when a Mewla nested in a
+// Session runs Sessions of its own.
+func SessionTokens(cgroup string) []string {
+	var tokens []string
+	for _, line := range strings.Split(cgroup, "\n") {
+		path, ok := strings.CutPrefix(line, "0::")
+		if !ok {
+			continue
+		}
+		for _, part := range strings.Split(path, "/") {
+			if isSessionSlice(part) {
+				tokens = append(tokens, sliceToken(part))
+			}
+		}
+	}
+	return tokens
+}
+
 // sliceToken is the token of the Session a Session slice is: its last one.
 func sliceToken(slice string) string {
 	name := strings.TrimSuffix(slice, sliceSuffix)
