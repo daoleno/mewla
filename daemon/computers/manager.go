@@ -670,7 +670,7 @@ func (m *Manager) inboundViewLocked(id string) (OutboxView, bool) {
 			state = StateQueued
 		}
 		return OutboxView{ID: id, Direction: DirectionIn, Computer: m.peerNameLocked(key), Kind: record.Kind, ReplyTo: record.ReplyTo,
-			State: state, Disposition: record.Disposition, Error: record.Error, UpdatedAt: record.At}, true
+			State: state, Disposition: record.Disposition, Error: record.Error, CreatedAt: record.At, UpdatedAt: record.At}, true
 	}
 	for identity, refused := range m.refused {
 		key, ok := inboundKeyOf(identity, id)
