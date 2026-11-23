@@ -1,34 +1,64 @@
 name: Mewla for Mac warm loop
 
-# A warm Mac for one Worker's task: builds Mewla Dev once, then holds the runner so a computer can reach it over ssh
-# (rsync the change, rebuild incrementally, relaunch, screenshot, read the log, click and type). Started by a push to
-# a mac-loop/ branch whose tip adds .github/mac-loop/authorized_key, a per-run PUBLIC key; the private half never leaves
-# the computer that pushed. client/macos/scripts/loop/mac-loop.sh drives it.
+# A warm Mac for one Worker's task, off release time: builds Mewla Dev once, then holds the runner so a computer can
+# reach it over ssh (rsync the change, rebuild incrementally, relaunch, screenshot, read the log, click and type).
+# client/macos/scripts/loop/mac-loop.sh starts it (`gh workflow run` with a per-run PUBLIC key; the private half never
+# leaves the computer that started it) and drives it; client/macos/scripts/loop/README.md has the commands and rules.
 #
-# The way in: an sshd of the job's own (not the system's), a child of the hold step so its sessions share the step's
-# GUI session, key-only (no password, no PAM), on 127.0.0.1; a cloudflared quick tunnel (outbound from the runner)
-# carries it. The tunnel's hostname and the sshd's host key go up as an artifact (readable while the run is going),
-# never into the log. Stop: touch ~/mac-loop/stop over ssh; the step ends and the run goes green.
+# The way in: an sshd of the job's own (not the system's), started by a step so its sessions share the job's GUI
+# session, key-only (no password, no PAM), on 127.0.0.1; a cloudflared quick tunnel (outbound from the runner) carries
+# it. The tunnel's hostname and the sshd's host key go up as an artifact (readable while the run is going), never into
+# the log. No repository secret is used.
 #
-# It holds one of the account's 5 concurrent macOS runners for as long as it is warm (up to timeout-minutes), the same
-# runners the release and the Mac proof lanes queue for: stop it as soon as the task is done.
+# It yields, always: mac-loop.sh refuses to start beside a release or another loop (yield.py blockers), and the hold
+# ends the run as soon as any other macOS job in the repo has waited `yield_after` seconds for a runner (yield.py
+# waiters): the account's macOS runners are few, and the releases and proof lanes come first. It holds `minutes`
+# (default 45) at most; touch ~/mac-loop/stop over ssh to end it sooner.
 
 on:
-  push:
-    branches: ["mac-loop/**"]
+  workflow_dispatch:
+    inputs:
+      pubkey:
+        description: "The run's ssh public key (ssh-ed25519 …); mac-loop.sh start makes it"
+        type: string
+        required: true
+      minutes:
+        description: "How long to hold the warm Mac at most"
+        type: number
+        default: 45
+      host:
+        description: "Build the host's loop profile in the background once warm (for Rust host changes)"
+        type: boolean
+        default: false
+      yield_after:
+        description: "Leave when another macOS job has been queued this many seconds"
+        type: number
+        default: 120
 
 permissions:
   contents: read
+  actions: read
+
+# One loop at a time (mac-loop.sh start also refuses while one is queued or running).
+concurrency:
+  group: macos-loop
+  cancel-in-progress: false
 
 jobs:
   warm:
     name: Warm Mewla Dev
     runs-on: macos-26
-    timeout-minutes: 120
+    timeout-minutes: ${{ fromJSON(inputs.minutes) + 30 }}
     steps:
       - uses: actions/checkout@v4
-      - name: The run's key is there
-        run: test -s .github/mac-loop/authorized_key && ssh-keygen -l -f .github/mac-loop/authorized_key
+      - name: The run's key
+        env:
+          PUBKEY: ${{ inputs.pubkey }}
+        run: |
+          mkdir -p "$HOME/mac-loop/sshd"
+          [[ "$PUBKEY" =~ ^ssh-ed25519\ [A-Za-z0-9+/]+=*(\ [A-Za-z0-9._@-]+)?$ ]] || { echo "pubkey: not one ssh-ed25519 public key"; exit 1; }
+          printf '%s\n' "$PUBKEY" > "$HOME/mac-loop/sshd/authorized_keys"; chmod 600 "$HOME/mac-loop/sshd/authorized_keys"
+          ssh-keygen -l -f "$HOME/mac-loop/sshd/authorized_keys"
       - name: Stamp
         run: date -u +%s > "$RUNNER_TEMP/t0"
       - uses: actions/setup-go@v5
@@ -73,7 +103,6 @@ jobs:
           L="$HOME/mac-loop"; mkdir -p "$L/sshd" "$L/out"
           echo "$GITHUB_WORKSPACE" > "$L/workspace"
           ssh-keygen -q -t ed25519 -N '' -f "$L/sshd/host_key"
-          install -m 600 .github/mac-loop/authorized_key "$L/sshd/authorized_keys"
           cat > "$L/sshd/config" <<EOF
           ListenAddress 127.0.0.1
           Port 22022
@@ -119,11 +148,35 @@ jobs:
           name: mac-loop-meet-${{ github.run_id }}
           path: ~/mac-loop/meet
           retention-days: 1
-      - name: Hold (until ~/mac-loop/stop or the timeout)
+      # The host's loop profile (client/macos/Cargo.toml [profile.loop]): from cold it is a full build of NSH, so it
+      # starts here, in the background, only when asked; remote.sh host waits for it.
+      - name: The host's loop profile, in the background
+        if: ${{ inputs.host }}
         run: |
           L="$HOME/mac-loop"
-          while [ ! -e "$L/stop" ]; do sleep 5; done
-          echo "stopped at $(date -u +%T)"
+          nohup bash -c 'start=$(date +%s); cargo build --profile loop --manifest-path client/macos/Cargo.toml > "$1/prewarm.log" 2>&1; echo "prewarm exit $? after $(( $(date +%s) - start )) s" >> "$1/prewarm.log"' _ "$L" > /dev/null 2>&1 &
+          echo $! > "$L/prewarm.pid"
+      - name: Hold (until ~/mac-loop/stop, another macOS job waits, or the time is up)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MINUTES: ${{ inputs.minutes }}
+          YIELD_AFTER: ${{ inputs.yield_after }}
+        run: |
+          L="$HOME/mac-loop"; end=$(( $(date +%s) + MINUTES * 60 )); next=0
+          while :; do
+            [ -e "$L/stop" ] && { echo "stopped by its user at $(date -u +%T)"; break; }
+            [ "$(date +%s)" -ge "$end" ] && { echo "held $MINUTES min: time is up at $(date -u +%T)"; break; }
+            if [ "$(date +%s)" -ge "$next" ]; then
+              next=$(( $(date +%s) + 60 ))
+              waiting=$(python3 -I client/macos/scripts/loop/yield.py waiters "$YIELD_AFTER" "$GITHUB_RUN_ID" 2>&1) || { echo "yield check failed: $waiting"; waiting=""; }
+              if [ -n "$waiting" ]; then
+                echo "yielding at $(date -u +%T) to:"; echo "$waiting"
+                echo "$waiting" > "$L/yielded"
+                break
+              fi
+            fi
+            sleep 5
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -46,3 +46,12 @@ security-framework = "3.7.0"
 lto = "thin"
 codegen-units = 4
 strip = true
+
+# The warm Mac loop's host builds only (client/macos/scripts/loop): release code without LTO, many codegen units and
+# incremental, so a change to this crate relinks without the thin-LTO pass. Never shipped: package.sh, the release
+# workflows and every proof lane build with [profile.release] above, unchanged.
+[profile.loop]
+inherits = "release"
+lto = false
+codegen-units = 256
+incremental = true

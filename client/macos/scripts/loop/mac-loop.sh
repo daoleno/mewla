@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # A warm Mac for one task, from this (Linux) computer: .github/workflows/macos-loop.yml on a GitHub macOS runner.
 #
-#   mac-loop.sh start            push a per-run public key to mac-loop/run, wait for the runner, write the ssh config
+#   mac-loop.sh start [--host] [--minutes N]
+#                                refuse beside a release or another loop; else dispatch the workflow with a per-run
+#                                public key, wait for the runner, write the ssh config (--host: build the host's loop
+#                                profile in the background once warm, for Rust host changes; --minutes: default 45)
 #   mac-loop.sh ui|host|daemon   sync this checkout, rebuild that part on the runner, relaunch Mewla Dev, screenshot
-#                                (MAC_LOOP_FAST=1 host: release without LTO in a target of its own; cold, it is a full build)
 #   mac-loop.sh launch           relaunch Mewla Dev as it is, then a screenshot
 #   mac-loop.sh shot [name]      screenshot of the screen into $MAC_LOOP_DIR/shots/<name>.png
 #   mac-loop.sh log [n]          the last n lines of the app's and its daemon's logs
@@ -12,39 +14,46 @@
 #   mac-loop.sh stop             end the hold step (the run goes green) and forget the key
 #
 # State (the private key, the ssh config) lives in $MAC_LOOP_DIR (default: $TMPDIR/mac-loop); the key never leaves it.
-# Needs gh (the daoleno account), cloudflared, rsync and ssh here.
+# Needs gh (the daoleno account), cloudflared, rsync and ssh here. The rules: README.md beside this script.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../../../.." && pwd)"
 dir="${MAC_LOOP_DIR:-${TMPDIR:-/tmp}/mac-loop}"
 repo=daoleno/mewla
-branch=mac-loop/run
+ref="${MAC_LOOP_REF:-main}"
 gh_() { GH_TOKEN="$(gh auth token -u daoleno)" gh "$@"; }
 now() { date +%s.%N; }
 stamp() { printf '%-26s %6.1f s\n' "$1" "$(echo "$(now) - $2" | bc)"; }
-sshc() { ssh -F "$dir/ssh_config" mac "$@"; }
+# A session on the runner; when it fails, the run may have yielded to a waiting macOS job or run out of time.
+sshc() {
+  ssh -F "$dir/ssh_config" mac "$@" || { local rc=$?; echo "(no Mac: has run $(cat "$dir/run" 2>/dev/null) yielded or ended? gh run view it)" >&2; return $rc; }
+}
 
 cmd="${1:-}"; shift || true
 case "$cmd" in
 start)
+  host_build=false; minutes=45
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --host) host_build=true; shift ;;
+      --minutes) minutes="${2:?}"; shift 2 ;;
+      *) echo "start: unknown argument $1" >&2; exit 2 ;;
+    esac
+  done
+  # Never beside a release or another loop (the hold itself leaves when another macOS job waits).
+  blocked=$(GITHUB_REPOSITORY=$repo GH_TOKEN="$(gh auth token -u daoleno)" python3 -I "$(dirname "$0")/yield.py" blockers)
+  [[ -z "$blocked" ]] || { echo "not now:"; echo "$blocked"; exit 1; }
   mkdir -p "$dir"; chmod 700 "$dir"
   t0=$(now)
   rm -f "$dir/key" "$dir/key.pub"
   ssh-keygen -q -t ed25519 -N '' -C mac-loop -f "$dir/key"
-  # The commit: this checkout's HEAD plus the public key, made without touching the checkout or its index.
-  cd "$root"
-  blob=$(git hash-object -w "$dir/key.pub")
-  idx="$dir/index"; rm -f "$idx"
-  GIT_INDEX_FILE="$idx" git read-tree HEAD
-  GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$blob,.github/mac-loop/authorized_key"
-  tree=$(GIT_INDEX_FILE="$idx" git write-tree); rm -f "$idx"
-  commit=$(git commit-tree "$tree" -p HEAD -m "mac-loop: a run's public key")
-  GH_TOKEN="$(gh auth token -u daoleno)" git push -q -f "https://github.com/$repo.git" "$commit:refs/heads/$branch"
-  stamp pushed "$t0"
+  since=$(date -u +%Y-%m-%dT%H:%M:%SZ -d '-5 seconds')
+  gh_ workflow run macos-loop.yml --repo "$repo" --ref "$ref" -f pubkey="$(cat "$dir/key.pub")" -f minutes="$minutes" -f host="$host_build"
+  stamp dispatched "$t0"
   run=""
   while [[ -z "$run" ]]; do
     sleep 3
-    run=$(gh_ api "repos/$repo/actions/runs?branch=$branch&head_sha=$commit" --jq '.workflow_runs[0].id // empty')
+    run=$(gh_ api "repos/$repo/actions/workflows/macos-loop.yml/runs?event=workflow_dispatch&created=>=$since" --jq '.workflow_runs[0].id // empty')
   done
   echo "$run" > "$dir/run"; stamp "run $run" "$t0"
   started=""
@@ -92,7 +101,7 @@ sync)
 ui|host|daemon|launch)
   t0=$(now)
   [[ "$cmd" == launch ]] || "$0" sync
-  sshc "MAC_LOOP_FAST=${MAC_LOOP_FAST:-} bash \"\$(cat ~/mac-loop/workspace)/client/macos/scripts/loop/remote.sh\" $cmd"
+  sshc "bash \"\$(cat ~/mac-loop/workspace)/client/macos/scripts/loop/remote.sh\" $cmd"
   "$0" shot "${1:-$cmd}"
   stamp "$cmd: edit to screenshot" "$t0"
   ;;
