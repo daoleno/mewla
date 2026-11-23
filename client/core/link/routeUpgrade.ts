@@ -16,6 +16,8 @@ export interface LinkRouteChange {
   transportPin: string;
   linkRouteId: string;
   transportCandidates: StoredTransportCandidate[];
+  /** A Relay pairing whose address the route no longer lists (a rename, `mewla login -name`) moves to its first one. */
+  url?: string;
 }
 
 /**
@@ -56,7 +58,7 @@ const hex = (value: unknown, length: number) => (typeof value === "string" && ne
  * that is not the computer's own (a signature that does not verify, a stale one).
  */
 export function linkRouteChange(server: StoredServer, frame: Record<string, unknown>): LinkRouteChange | null {
-  if (server.transportKind === "link" || !platform().linkTunnels) return null;
+  if (!platform().linkTunnels) return null;
   const routeId = hex(frame.route_id, 32);
   const pin = hex(frame.transport_pin, 64);
   const signature = hex(frame.signature, 128);
@@ -75,9 +77,11 @@ export function linkRouteChange(server: StoredServer, frame: Record<string, unkn
   if (!candidates.length) return null;
   const binding = linkRouteBinding({ daemonId, daemonPublicKey, routeId, transportPin: pin, issuedAtMs: issued, candidates });
   if (!binding || !verifyLinkRouteSignature({ daemonPublicKey, bindingPayload: binding, signatureHex: signature })) return null;
-  // Only the pairing at one of the route's own addresses (the hosted one): a pairing by a LAN or other address stays.
   const here = normalizeServerURL(server.url);
-  if (!here || !candidates.some((candidate) => normalizeServerURL(candidate.url) === here)) return null;
+  const listedHere = Boolean(here) && candidates.some((candidate) => normalizeServerURL(candidate.url) === here);
+  if (server.transportKind === "link") return newerRoute(server, routeId, pin, candidates, listedHere);
+  // Only the pairing at one of the route's own addresses (the hosted one): a pairing by a LAN or other address stays.
+  if (!listedHere) return null;
   return {
     transportKind: "link",
     transportPin: pin,
@@ -91,6 +95,30 @@ export function linkRouteChange(server: StoredServer, frame: Record<string, unkn
 }
 
 /**
+ * A Relay pairing takes the computer's newer route (review 11-23, finding 5): a new route id or new relay addresses
+ * (a rename), under the transport key it is pinned to. A route under another key is not taken: the connection it came
+ * over is pinned to this one, so a computer with a new key cannot be reached to tell it, and only pairing again moves
+ * the pin. The same route changes nothing.
+ */
+function newerRoute(server: StoredServer, routeId: string, pin: string, candidates: { name: string; url: string }[], listedHere: boolean): LinkRouteChange | null {
+  if (pin !== server.transportPin?.toLowerCase()) return null;
+  const urls = candidates.map((candidate) => normalizeServerURL(candidate.url) || candidate.url);
+  const held = (server.transportCandidates ?? []).filter((candidate) => candidate.kind === "link").map((candidate) => candidate.url);
+  const same = routeId === server.linkRouteId?.toLowerCase() && listedHere && urls.length === held.length && urls.every((url) => held.includes(url));
+  if (same) return null;
+  return {
+    transportKind: "link",
+    transportPin: pin,
+    linkRouteId: routeId,
+    transportCandidates: [
+      ...candidates.map((candidate, index) => ({ name: candidate.name, kind: "link" as const, url: urls[index] })),
+      ...(server.transportCandidates ?? []).filter((candidate) => candidate.kind === "direct"),
+    ],
+    ...(listedHere ? {} : { url: urls[0] }),
+  };
+}
+
+/**
  * `linkRouteChange`, taken only once a tunnel pinned to the route's key reached the computer at the address the app is
  * paired by: a host whose tunnels don't work (an older host binary, a network that blocks them) keeps the pairing it
  * has, which works, rather than one it could not reconnect on.
@@ -99,7 +127,7 @@ export async function provenLinkRouteChange(server: StoredServer, frame: Record<
   const change = linkRouteChange(server, frame);
   const tunnels = platform().linkTunnels;
   if (!change || !tunnels) return null;
-  const address = new URL(server.url);
+  const address = new URL(change.url ?? server.url);
   const key = `route-check:${server.id}`;
   try {
     await tunnels.start(key, address.hostname, address.port ? Number(address.port) : 443, change.transportPin, "measure");

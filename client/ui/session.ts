@@ -205,9 +205,17 @@ export function switchTo(server: StoredServer | null): void {
     // the pairing becomes that route in place, with no step for the person (core/link/routeUpgrade.ts). The check
     // through a pinned tunnel takes a moment; the addresses heard meanwhile are applied once it is a route.
     next.on("link_route", async (frame) => {
-      const change = await provenLinkRouteChange(next.server, frame);
-      if (!change || transport !== next || next.server.transportKind === "link") return;
-      const upgraded: StoredServer = { ...next.server, ...change };
+      const before = next.server;
+      const change = await provenLinkRouteChange(before, frame);
+      // Taken against the route it was checked for (an earlier route taken meanwhile stays); LAN and Tailscale
+      // addresses heard meanwhile are kept.
+      const now = next.server;
+      if (!change || transport !== next || now.transportKind !== before.transportKind || now.linkRouteId !== before.linkRouteId || now.transportPin !== before.transportPin) return;
+      change.transportCandidates = [
+        ...change.transportCandidates.filter((candidate) => candidate.kind !== "direct"),
+        ...(now.transportCandidates ?? []).filter((candidate) => candidate.kind === "direct"),
+      ];
+      const upgraded: StoredServer = { ...now, ...change };
       next.adopt(upgraded);
       if (current()?.id === upgraded.id) current.set(upgraded);
       const saved = updateServer(upgraded.id, change);
