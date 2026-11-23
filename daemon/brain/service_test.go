@@ -642,6 +642,25 @@ func (w *fakeWatcher) KillCompletedSession(sessionID, turnID string) error {
 	return w.KillSession(sessionID)
 }
 
+// KillRestingSession is KillCompletedSession that waits for rest even after
+// a reported turn, as the watcher does for an open Work's Session.
+func (w *fakeWatcher) KillRestingSession(sessionID, turnID string) error {
+	turn, found, err := w.turnStore.Turn(sessionID)
+	if err != nil {
+		return err
+	}
+	if !found || turn.TurnID != turnID {
+		return fmt.Errorf("completed Session ownership changed")
+	}
+	if worker := w.GetWorker(sessionID); worker != nil && (worker.Hidden || !worker.Delegated) {
+		return fmt.Errorf("not a delegated Worker")
+	}
+	if w.busy[sessionID] {
+		return watcher.ErrSessionNotIdle
+	}
+	return w.KillSession(sessionID)
+}
+
 func (w *fakeWatcher) ReclaimIdleSession(sessionID string) error {
 	if w.busy[sessionID] {
 		return watcher.ErrSessionNotIdle

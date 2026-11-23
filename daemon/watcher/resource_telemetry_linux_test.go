@@ -83,3 +83,40 @@ func TestResourceJSONUsesDistinctContractFields(t *testing.T) {
 		t.Fatal(payload)
 	}
 }
+
+type unitOwningManager struct {
+	noopDelegatedResourceManager
+	owned string
+}
+
+func (m unitOwningManager) OwnsUnit(unit string) bool { return unit == m.owned }
+
+// 11-23: two process trees carrying a Worker id were reported as orphaned
+// Workers although this daemon started neither: another Mewla daemon's Brain
+// host (an isolated test daemon left running) and Codex's shared app-server,
+// which detached from the Worker that first started it. Only a tree holding
+// this daemon's own resource lease, whose Session is gone, is an orphan.
+func TestOnlyATreeThisDaemonStartedIsAnOrphanedWorker(t *testing.T) {
+	uid := os.Getuid()
+	ours := "mewla-worker-owner-0123456789abcdef0123456789abcdef.scope"
+	records := map[int]workerproc.Process{
+		10: {PID: 10, UID: uid, ResourceID: ours, WorkerID: "mh-gone", Start: "1", RSS: 100, Args: "claude"},
+		20: {PID: 20, UID: uid, WorkerID: "mh-ea6cc5123c96fdef18bda153", Start: "2", RSS: 120, Args: "claude --permission-mode bypassPermissions"},
+		30: {PID: 30, UID: uid, WorkerID: "mh-cf3b58ae58b819b6ddf47e09", Start: "3", RSS: 80, Args: "codex app-server daemon pid-update-loop"},
+	}
+	w := New(time.Second)
+	w.resources = unitOwningManager{owned: ours}
+	out := attributeConsumers(processConsumers(records, nil, 0), w)
+	owners := map[int]string{}
+	for _, c := range out {
+		for _, p := range c.Processes {
+			owners[p.PID] = c.Owner
+			if c.Owner == "user" && c.WorkerID != "" {
+				t.Errorf("pid %d: a tree this daemon did not start keeps the Worker id %q", p.PID, c.WorkerID)
+			}
+		}
+	}
+	if owners[10] != "orphaned_worker" || owners[20] != "user" || owners[30] != "user" {
+		t.Fatalf("owners = %v", owners)
+	}
+}

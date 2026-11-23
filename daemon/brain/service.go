@@ -159,9 +159,12 @@ type Service struct {
 	reconcileMu sync.Mutex
 	// reclaimRefused holds the completed Sessions this process was refused
 	// tearing down (session + turn), so the periodic pass reports each once.
-	reclaimMu        sync.Mutex
-	reclaimRefused   map[string]bool
-	reclaimLastErr   string
+	reclaimMu      sync.Mutex
+	reclaimRefused map[string]bool
+	reclaimLastErr string
+	// reclaimWaits are the reclaimable Sessions still kept by work of their
+	// own, for logging a lasting wait once. Guarded by reclaimMu.
+	reclaimWaits     map[string]*reclaimWait
 	hostActivationMu sync.Mutex
 	// hostLaunching holds the Sessions this daemon launched whose first
 	// activation has not been accepted. Guarded by hostActivationMu.
@@ -389,13 +392,16 @@ func (s *Service) reconcileCompletedSessionsWith(workID string, periodic bool) e
 	if s == nil || s.store == nil || s.watcher == nil {
 		return nil
 	}
-	turns, err := s.store.CompletedOwnedTurns(workID)
+	entries, err := s.store.CompletedOwnedTurns(workID)
 	if err != nil {
 		return err
 	}
+	resting, _ := s.watcher.(restingSessionKiller)
 	var result error
 	var reclaimed []watcher.TurnSnapshot
-	for _, turn := range turns {
+	waiting := map[string]bool{}
+	for _, entry := range entries {
+		turn := entry.TurnSnapshot
 		key := turn.SessionID + "\x00" + turn.TurnID
 		s.reclaimMu.Lock()
 		refused := s.reclaimRefused[key]
@@ -403,7 +409,13 @@ func (s *Service) reconcileCompletedSessionsWith(workID string, periodic bool) e
 		if periodic && refused {
 			continue
 		}
+		if entry.Open && resting == nil {
+			continue // only a watcher that can wait for rest may close an open Work's Session
+		}
 		err := s.teardownSessionWith(turn.SessionID, func(id string) error {
+			if entry.Open {
+				return resting.KillRestingSession(id, turn.TurnID)
+			}
 			return s.watcher.KillCompletedSession(id, turn.TurnID)
 		})
 		if errors.Is(err, watcher.ErrUnownedSession) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) ||
@@ -417,17 +429,74 @@ func (s *Service) reconcileCompletedSessionsWith(workID string, periodic bool) e
 			s.reclaimMu.Unlock()
 		}
 		if errors.Is(err, watcher.ErrSessionNotIdle) {
-			continue // the Worker is still at work; a later pass looks again
+			// The Worker still has something of its own running; a later pass
+			// looks again. A wait that lasts is said once, never silently.
+			waiting[turn.SessionID] = true
+			s.noteReclaimWait(turn.SessionID, entry.Why, err)
+			continue
 		}
 		if err == nil {
 			reclaimed = append(reclaimed, turn)
+			log.Printf("brain reclaimed Session %s: %s and it has nothing of its own running", turn.SessionID, entry.Why)
 		}
 		result = errors.Join(result, err)
+	}
+	if workID == "" {
+		s.forgetReclaimWaits(waiting)
 	}
 	if err := s.store.MarkTurnsReclaimed(reclaimed); err != nil {
 		result = errors.Join(result, err)
 	}
 	return result
+}
+
+// restingSessionKiller is the watcher's teardown that always waits until the
+// Session rests (watcher.KillRestingSession), for a Session of an open Work.
+type restingSessionKiller interface {
+	KillRestingSession(sessionID, turnID string) error
+}
+
+// reclaimWaitReported is how long a reclaimable Session may wait on its own
+// running work before the wait is written to the log, once.
+const reclaimWaitReported = 10 * time.Minute
+
+type reclaimWait struct {
+	since  time.Time
+	reason string
+	logged bool
+}
+
+// noteReclaimWait records that a reclaimable Session is still kept by work of
+// its own, and logs it once it has been kept for reclaimWaitReported by the
+// same reason, so a Session that never rests is visible instead of silent.
+func (s *Service) noteReclaimWait(sessionID, why string, err error) {
+	reason := strings.TrimPrefix(err.Error(), watcher.ErrSessionNotIdle.Error()+": ")
+	now := s.nowUTC()
+	s.reclaimMu.Lock()
+	defer s.reclaimMu.Unlock()
+	if s.reclaimWaits == nil {
+		s.reclaimWaits = map[string]*reclaimWait{}
+	}
+	wait := s.reclaimWaits[sessionID]
+	if wait == nil || wait.reason != reason {
+		s.reclaimWaits[sessionID] = &reclaimWait{since: now, reason: reason}
+		return
+	}
+	if !wait.logged && now.Sub(wait.since) >= reclaimWaitReported {
+		wait.logged = true
+		log.Printf("brain Session %s is kept although %s: %s (since %s)", strings.TrimPrefix(sessionID, runWaitKey), why, reason, wait.since.Format(time.RFC3339))
+	}
+}
+
+// forgetReclaimWaits drops the waits of Sessions that no longer wait.
+func (s *Service) forgetReclaimWaits(waiting map[string]bool) {
+	s.reclaimMu.Lock()
+	defer s.reclaimMu.Unlock()
+	for id := range s.reclaimWaits {
+		if !waiting[id] && !strings.HasPrefix(id, runWaitKey) {
+			delete(s.reclaimWaits, id)
+		}
+	}
 }
 
 // cleanupRefusal is a completed Session Mewla declined to remove because it
