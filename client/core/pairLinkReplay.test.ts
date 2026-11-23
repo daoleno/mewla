@@ -5,6 +5,7 @@ import { buildLinkPairingTestLink } from "./testing/linkPairingTestLink";
 import { installMemoryPlatform } from "./testing/memoryPlatform";
 import { alreadyPairedWith, pairingScopeCopy, pairingTarget, pairWith, readPairingLink } from "./pairFlow";
 import { bytesToHex } from "./protocolCrypto";
+import { resetDaemonProofsForTests } from "./daemonProof";
 import { mergeStoredServer, type StoredServer } from "./storedServerContract";
 
 // Security review of PR #27, finding 1 (11-23): a `mewla://` link anyone can make (the computer's id and key are on every
@@ -28,7 +29,19 @@ function recordedAnswer() {
   return { daemon_id: DAEMON_ID, daemon_public_key: KEY, assertion_timestamp: timestamp, assertion_nonce: nonce, assertion_signature: bytesToHex(signature) };
 }
 
-afterEach(() => installMemoryPlatform());
+/** The computer's answer to this app's challenge (daemon/server handlePair), under `purpose`. */
+function challengedAnswer(challenge: string, purpose = "mewla-pair-challenge") {
+  const timestamp = new Date().toISOString();
+  const signature = nacl.sign.detached(buildServerAssertionPayload(purpose, DAEMON_ID, timestamp, challenge), keys.secretKey);
+  return { ...recordedAnswer(), proof: { purpose, timestamp, nonce: challenge, signature: bytesToHex(signature) } };
+}
+
+const answerJSON = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+afterEach(() => {
+  installMemoryPlatform();
+  resetDaemonProofsForTests();
+});
 
 describe("a link to a computer this app has, at another address (review 11-23, finding 1)", () => {
   test("asks first, naming the host the pairing will talk to, and pairs only there", async () => {
@@ -49,10 +62,16 @@ describe("a link to a computer this app has, at another address (review 11-23, f
     expect(copy.title).toBe("Pair this Mac?");
     expect(copy.message).toContain("access to evil.example (Desk),");
 
-    // What the person confirmed is where it pairs: the address the confirmation named, as a second entry.
-    const input = await pairWith(payload);
+    // And a person who confirms is not fooled: the recorded answer signs no challenge of this app's, and is stale.
+    await expect(pairWith(payload)).rejects.toThrow("Pairing target failed daemon identity proof.");
     expect(asked.every((url) => url.startsWith("https://evil.example/"))).toBe(true);
-    expect(input.url).toBe(target.url);
+  });
+
+  test("what the person confirmed is where it pairs: the address the confirmation named, as a second entry", async () => {
+    installMemoryPlatform({ os: "desktop", fetch: async (_input, init) => answerJSON(challengedAnswer(JSON.parse(String(init?.body)).challenge)) });
+    const payload = readPairingLink(link(EVIL))!;
+    const input = await pairWith(payload);
+    expect(input.url).toBe((await pairingTarget(payload)).url);
     expect(mergeStoredServer(input, owned, () => "s2").servers.map((server) => server.url)).toEqual([EVIL, DESK]);
   });
 
@@ -98,5 +117,47 @@ describe("a link to a computer this app has, at another address (review 11-23, f
     expect(pairingScopeCopy("phone", target).message).toContain("access to evil.example (Desk at desk.example),");
     const long = await pairingTarget(readPairingLink(named("D".repeat(80)))!);
     expect(long.name).toBe(`${"D".repeat(39)}…`);
+  });
+});
+
+// Security review 11-23, PR B item 5: `/pair` signs a challenge of this app's. An older mewla, which does not, is
+// answered the old way only while it has never proved, and only with an answer signed within minutes.
+describe("the computer's answer to /pair", () => {
+  const sent: { challenge?: string }[] = [];
+  const pairDesk = async (answer: (challenge: string) => unknown) => {
+    installMemoryPlatform({
+      os: "android",
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { challenge: string };
+        sent.push(body);
+        return answerJSON(answer(body.challenge));
+      },
+    });
+    return pairWith(readPairingLink(link(DESK))!);
+  };
+  const oldAnswer = (signedAt: Date) => {
+    const timestamp = signedAt.toISOString();
+    const signature = nacl.sign.detached(buildServerAssertionPayload("mewla-pair", DAEMON_ID, timestamp, "8".repeat(32)), keys.secretKey);
+    return { ...recordedAnswer(), assertion_timestamp: timestamp, assertion_nonce: "8".repeat(32), assertion_signature: bytesToHex(signature) };
+  };
+
+  test("is the computer's when it signs this app's challenge, and the app's challenge is fresh each time", async () => {
+    await pairDesk((challenge) => challengedAnswer(challenge));
+    await pairDesk((challenge) => challengedAnswer(challenge));
+    expect(sent.at(-1)!.challenge).toMatch(/^[0-9a-f]{32}$/);
+    expect(sent.at(-1)!.challenge).not.toBe(sent.at(-2)!.challenge);
+  });
+
+  test("is refused when it answers another challenge, or under the /health purpose anyone can have for any challenge", async () => {
+    await expect(pairDesk(() => challengedAnswer("f".repeat(32)))).rejects.toThrow("identity proof");
+    await expect(pairDesk((challenge) => challengedAnswer(challenge, "mewla-health-challenge"))).rejects.toThrow("identity proof");
+  });
+
+  test("from an older mewla (no proof) is taken while fresh, until that computer has once proved", async () => {
+    await expect(pairDesk(() => oldAnswer(new Date(Date.now() - 10 * 60_000)))).rejects.toThrow("identity proof");
+    expect((await pairDesk(() => oldAnswer(new Date()))).url).toBe(DESK);
+    // It updates and answers a challenge once: from then on an answer without a proof is not that computer.
+    await pairDesk((challenge) => challengedAnswer(challenge));
+    await expect(pairDesk(() => oldAnswer(new Date()))).rejects.toThrow("identity proof");
   });
 });

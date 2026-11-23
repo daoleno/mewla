@@ -465,6 +465,29 @@ func TestChallengeAssertionBindsToTheCallersChallenge(t *testing.T) {
 	}
 }
 
+// Each challenged answer is for its own purpose: the /health answer, which
+// anyone can have for any challenge, never passes as the /pair, probe or
+// connect answer for the same challenge (security review 11-23, PR B).
+func TestChallengeAnswersAreForTheirOwnPurpose(t *testing.T) {
+	manager, err := NewManager(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewManager returned error: %v", err)
+	}
+	challenge := "00112233445566778899aabbccddeeff"
+	purposes := []ChallengePurpose{HealthChallengePurpose, PairChallengePurpose, ProbeChallengePurpose, ConnectProofPurpose}
+	for _, signed := range purposes {
+		answer, err := manager.CreateChallengeAssertionFor(signed, challenge)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, checked := range purposes {
+			if got := VerifyChallengeAssertionFor(manager.PublicKeyHex(), checked, challenge, answer); got != (signed == checked) {
+				t.Fatalf("answer signed for %s verified as %s: %v", signed, checked, got)
+			}
+		}
+	}
+}
+
 func buildTestAuthorizationHeader(t *testing.T, privateKey ed25519.PrivateKey, daemonID, deviceID, purpose string) string {
 	t.Helper()
 

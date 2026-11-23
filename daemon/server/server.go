@@ -658,11 +658,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		if _, ok := s.authenticateRequest(w, r, "mewla-probe"); !ok {
 			return
 		}
-		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", map[string]any{
+		s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", s.probeAnswer(r, map[string]any{
 			"ok":                true,
 			"daemon_id":         s.auth.DaemonID(),
 			"daemon_public_key": s.auth.PublicKeyHex(),
-		})
+		}))
 		return
 	}
 	device, ok := s.authenticateRequest(w, r, "mewla-connect")
@@ -969,12 +969,25 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		DeviceID          string `json:"device_id"`
 		DeviceName        string `json:"device_name"`
 		DevicePublicKey   string `json:"device_public_key"`
+		// Challenge is the app's own 16 bytes (hex): the answer signs it, so a
+		// recorded answer proves nothing to the next app. Older apps send none.
+		Challenge string `json:"challenge"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 8192)
 	decoder := json.NewDecoder(r.Body)
 	if decoder.Decode(&raw) != nil || decoder.Decode(new(any)) != io.EOF {
 		http.Error(w, "invalid json body", http.StatusBadRequest)
 		return
+	}
+	// A bad challenge is refused before the one-time code is spent on it.
+	var proof map[string]any
+	if raw.Challenge != "" {
+		signed, err := s.challengeProof(auth.PairChallengePurpose, raw.Challenge)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		proof = signed
 	}
 
 	device, err := s.auth.EnrollDevice(
@@ -990,13 +1003,42 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-pair", map[string]any{
+	answer := map[string]any{
 		"ok":                true,
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
 		"device_id":         device.ID,
 		"device_name":       device.Name,
-	})
+	}
+	if proof != nil {
+		answer["proof"] = proof
+	}
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-pair", answer)
+}
+
+// challengeProof is the daemon's answer to a caller-chosen challenge, beside
+// the response's own assertion (which older apps check): purpose, time,
+// challenge and signature.
+func (s *Server) challengeProof(purpose auth.ChallengePurpose, challengeHex string) (map[string]any, error) {
+	assertion, err := s.auth.CreateChallengeAssertionFor(purpose, challengeHex)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"purpose":   string(purpose),
+		"timestamp": assertion.Timestamp,
+		"nonce":     assertion.NonceHex,
+		"signature": assertion.SignatureHex,
+	}, nil
+}
+
+// probeAnswer is a paired device's /auth-check answer: the daemon's old
+// assertion, and a proof over the nonce of the device's own signed request.
+func (s *Server) probeAnswer(r *http.Request, payload map[string]any) map[string]any {
+	if proof, err := s.challengeProof(auth.ProbeChallengePurpose, auth.AuthorizationNonce(authorizationFromRequest(r))); err == nil {
+		payload["proof"] = proof
+	}
+	return payload
 }
 
 func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
@@ -1004,13 +1046,13 @@ func (s *Server) handleAuthCheck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", map[string]any{
+	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-probe", s.probeAnswer(r, map[string]any{
 		"ok":                true,
 		"device_id":         device.ID,
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
 		"name":              s.computerName,
-	})
+	}))
 }
 
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
@@ -4553,7 +4595,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeSignedJSON(w, http.StatusOK, auth.HealthChallengePurpose, assertion, payload)
+	writeSignedJSON(w, http.StatusOK, string(auth.HealthChallengePurpose), assertion, payload)
 }
 
 func (s *Server) writeJSONWithAssertion(w http.ResponseWriter, status int, purpose string, payload map[string]any) {

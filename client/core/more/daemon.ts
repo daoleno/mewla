@@ -35,6 +35,8 @@ export interface SignedOptions {
   body?: unknown;
   query?: Record<string, string | undefined>;
   timeoutMs?: number;
+  /** The request's nonce, when the answer must sign it (a challenge of this app's, `newChallenge`). */
+  nonceHex?: string;
 }
 
 /** `prefix:sha256=<hex of the body>`, the purpose of a signed POST. */
@@ -60,7 +62,7 @@ function daemonURLAt(base: string, server: StoredServer, pathname: string, query
 }
 
 /** The `Authorization` header this phone's device key signs for one purpose on this computer. */
-export async function deviceAuthorization(server: StoredServer, purpose: string): Promise<string> {
+export async function deviceAuthorization(server: StoredServer, purpose: string, nonceHex?: string): Promise<string> {
   const identity = await getOrCreateLocalDeviceIdentity();
   return signDeviceAuthorization({
     purpose,
@@ -68,7 +70,7 @@ export async function deviceAuthorization(server: StoredServer, purpose: string)
     deviceId: identity.deviceId,
     seedHex: identity.seedHex,
     timestamp: Date.now().toString(),
-    nonceHex: bytesToHex(platform().randomBytes(16)),
+    nonceHex: nonceHex ?? bytesToHex(platform().randomBytes(16)),
   });
 }
 
@@ -92,7 +94,7 @@ export async function signedFetch(
       signal: controller.signal,
       headers: {
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
-        Authorization: await deviceAuthorization(server, signed),
+        Authorization: await deviceAuthorization(server, signed, options.nonceHex),
       },
       body: text,
     });
