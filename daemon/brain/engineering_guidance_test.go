@@ -27,8 +27,8 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 5780 {
 		t.Fatalf("standing guidance missing or oversized: %d bytes", len(agents))
 	}
-	if len(catalog.Playbooks) != 5 {
-		t.Fatalf("expected five lazy playbooks, got %d", len(catalog.Playbooks))
+	if len(catalog.Playbooks) != 6 {
+		t.Fatalf("expected six lazy playbooks, got %d", len(catalog.Playbooks))
 	}
 	methodMarkers := map[string][]string{
 		"slice-work":     {"read a few actual session transcripts", "missing information", "a wrong or missing test", "a bad split", "an unclear instruction", "fix that cause"},
@@ -64,6 +64,28 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	if len(detailMarkers) != 0 {
 		t.Fatalf("missing methods: %v", detailMarkers)
 	}
+	// size-proof is opened from the delegation policy, read before every brief
+	// and review, like permission-block; its method stays out of standing text.
+	if !strings.Contains(productDelegationPolicy, "playbooks/size-proof.md") {
+		t.Fatal("delegation policy does not point to size-proof")
+	}
+	sizeProof, err := store.ReadWorkspaceFile("playbooks/size-proof.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sizeProof.Content) > 2100 {
+		t.Fatalf("size-proof oversized: %d bytes", len(sizeProof.Content))
+	}
+	for _, detail := range []string{"name the one check", "the cost to undo", "about twice the building", "a person would meet it", "compacted when its conversation grows long", "Never prove a claim twice"} {
+		if !strings.Contains(sizeProof.Content, detail) || strings.Contains(agents, detail) || strings.Contains(productDelegationPolicy, detail) {
+			t.Fatalf("size-proof detail missing or duplicated in standing guidance: %q", detail)
+		}
+	}
+	// The blocking rule for review findings lives in size-proof alone.
+	delegateBrief, err := store.ReadWorkspaceFile("playbooks/delegate-brief.md")
+	if err != nil || strings.Contains(delegateBrief.Content, "blocks acceptance only when") {
+		t.Fatalf("delegate-brief still carries the finding rule: %v", err)
+	}
 	for _, provider := range []string{"pi", "codex"} {
 		t.Run(provider, func(t *testing.T) {
 			service := newTestService(t, store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{
@@ -91,7 +113,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 }
 
 func TestEngineeringMethodDeltaSeedDelivery(t *testing.T) {
-	for _, name := range []string{"slice-work.md", "delegate-brief.md"} {
+	for _, name := range []string{"slice-work.md", "delegate-brief.md", "size-proof.md"} {
 		for _, repair := range []string{"startup", "housekeeping"} {
 			for _, variant := range []string{"whitespace-edit", "custom-note", "unknown", "empty", "missing"} {
 				t.Run(name+"/"+repair+"/"+variant, func(t *testing.T) {

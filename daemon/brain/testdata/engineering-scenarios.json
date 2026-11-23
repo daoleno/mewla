@@ -43,5 +43,14 @@
     "expected_judgments": ["Revisit the delay assumption and test whether stale ownership, not timing, explains cached-response behavior.", "Inspect the prior decision with provenance and use a discriminating observation across the actual state boundary.", "Replace unsuitable verification tooling or the approach without silently reducing the user's goal or demanding new gates."],
     "reject_signals": ["Adding a third retry or longer sleep without new evidence", "Continuing to use response status as screen proof", "Writing reports instead of resolving the next unknown"],
     "example_brief": "Stop extending the retry workaround. Inspect the recorded single-owner decision and trace cached responses across the account-state boundary. Build one discriminating test that distinguishes timing from stale ownership, using the actual menu and records where the status helper cannot observe the defect. Recommend and implement the evidence-supported fix within existing authority, preserving the original cross-platform outcome and reporting any necessary scope decision."
+  },
+  {
+    "id": "proof-in-proportion",
+    "user": "Fix the save button's color in dark mode. The reviewer's list of checks from last time is attached.",
+    "context": "A one-line change in a shared theme file, easy to revert. The attached list asks for real devices on both platforms, a clean release build, a fresh install, every screen in both themes, older app versions and a screenshot per screen. One look at the app on the warm local target takes under a minute; a remote CI round takes about fifteen.",
+    "playbooks": ["delegate-brief", "size-proof"],
+    "expected_judgments": ["Name one decisive check: the button seen once in dark mode on the warm target, with the existing theme test and required gates.", "Put a proof budget in the brief: the Worker stops and reports when proving passes about twice the building.", "Rank the attached list: an item blocks only if a run reproduces a problem a person would meet; the rest are listed follow-ups or left to the release."],
+    "reject_signals": ["Requiring every listed check before delivery", "Looking at the result through remote CI rounds", "A clean release build or fresh install for a revertible change", "A new Worker for each review round"],
+    "example_brief": "Fix the save button's dark-mode color in the shared theme. Decisive proof: the button seen once in dark mode on the warm local target, plus the existing theme test and required repository gates; the change is quick to revert, so no release build or fresh install. Building should take minutes: if proving passes about twice that, stop and report what is proven. Of the attached checks, none blocks unless a run reproduces a problem a person would meet; list the rest as follow-ups."
   }
 ]

@@ -1,6 +1,6 @@
 # Evaluate Brain engineering guidance
 
-Use the five cases in
+Use the six cases in
 [`engineering-scenarios.json`](../../daemon/brain/testdata/engineering-scenarios.json).
 They contain user requests, bounded context, acceptable judgments, rejection
 signals and illustrative briefs. The examples are not golden model outputs;
@@ -13,6 +13,7 @@ judge decisions and proportionality, not exact wording or playbook names.
 | Interactive UI bug | Reproduce and verify the actual interaction and shared contract; distinguish both-platform behavior from device evidence. |
 | Apparently green helper-only result | Withhold acceptance of the full outcome and request the missing proof, without redundant polling. |
 | Repeated approach failure | Revisit the shared premise and unsuitable observation tool; run a discriminating experiment rather than another retry patch. |
+| Proof in proportion | A small revertible fix with a long attached check list: one decisive check on the real thing, a proof budget, and the rest ranked as follow-ups. |
 
 ## Deterministic delivery tests
 
