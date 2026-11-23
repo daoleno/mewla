@@ -316,8 +316,9 @@ jobs:
           path: ${{ runner.temp }}/links/captures
           if-no-files-found: ignore
           retention-days: 7
-      # Mewla Dev alone, for a proof on a Mac beside an installed Mewla.
+      # Mewla Dev alone, for a proof on a Mac beside an installed Mewla (and `relay-lan`), even when a step above failed.
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: mewla-dev-macos-${{ github.sha }}
           path: ${{ runner.temp }}/app/Mewla-Dev-*.zip
@@ -332,7 +333,8 @@ jobs:
   relay-lan:
     name: Mewla for Mac moves between Mewla Relay and the LAN
     needs: app
-    if: ${{ !cancelled() && needs.app.result == 'success' }}
+    # On the Mewla Dev the build made, whatever a later smoke step of that job said.
+    if: ${{ !cancelled() && needs.app.result != 'skipped' }}
     runs-on: macos-26
     timeout-minutes: 40
     steps:
