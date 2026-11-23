@@ -141,7 +141,19 @@ same session host (same pid and start time), the lease is older than two
 minutes and not a spawn still being prepared, and none of its processes is a
 direct child of that host (a live pane). A Session whose agent exited stays on
 the host and keeps its resources until it is closed or reclaimed; its agent can
-be relaunched. A release stops the processes first, then moves the scratch to
+be relaunched. On Linux with a systemd user manager, a Session is a slice of
+it (`mewla-worker-<owner>-<token>.slice`): each program the session host starts
+for it runs in a scope of its own inside that slice (`OOMPolicy=continue`, so
+an out-of-memory kill takes only its victim), and what the program starts stays
+in the slice whatever it does to its session or environment (`setsid`,
+`env -i`, a tmux pane, which tmux puts in a scope of the caller's slice). A
+Mewla started inside another Mewla's Session finds that slice in its own
+cgroup and puts its session host unit and its own Sessions' slices in it, so
+ending the outer Session ends the nested one. A daemon restarted from a shell
+in one of its own Sessions does not nest there: it skips its own Sessions'
+slices. A host started before this change keeps its
+programs where they were until it restarts. A release stops the Session's
+slice and the processes, then moves the scratch to
 `gc/trash/` under the state root, then removes the lease. A process still
 running from the scratch (its executable or working directory inside it) keeps
 the scratch and the lease until it is gone. The trash keeps it

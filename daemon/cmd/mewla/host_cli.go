@@ -31,9 +31,10 @@ func runHostCommand(args []string, stderr io.Writer) error {
 	}
 	fs := flag.NewFlagSet("mewla host", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var stateDir, socket string
+	var stateDir, socket, enclosing string
 	fs.StringVar(&stateDir, "state-dir", "", "state directory whose Sessions this host keeps (default: ~/.mewla)")
 	fs.StringVar(&socket, "socket", "", "socket path (default: derived from the state directory)")
+	fs.StringVar(&enclosing, "enclosing-slice", "", "the Session slice of another Mewla this host is part of (set by the daemon)")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla host [--state-dir DIR] [--socket PATH]")
 		fmt.Fprintln(stderr, "       mewla host status [--state-dir DIR] [--socket PATH] [--json]")
@@ -62,7 +63,7 @@ func runHostCommand(args []string, stderr io.Writer) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	defer cancel()
-	server := sessionhost.NewServer(sessionhost.ServerOptions{SocketPath: path, HostVersion: hostVersion()})
+	server := sessionhost.NewServer(sessionhost.ServerOptions{SocketPath: path, HostVersion: hostVersion(), SessionScopes: true, EnclosingSlice: enclosing})
 	return server.Run(ctx)
 }
 

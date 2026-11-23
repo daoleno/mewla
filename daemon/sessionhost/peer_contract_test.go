@@ -31,6 +31,7 @@ const otherUserEnv = "MEWLA_SESSIONHOST_OTHER_USER_CMD"
 const testHostEnv = "MEWLA_SESSIONHOST_TEST_HOST"
 
 func TestMain(m *testing.M) {
+	RunScopeExec()
 	if path := os.Getenv(probeEnv); path != "" {
 		os.Exit(probeHost(path))
 	}

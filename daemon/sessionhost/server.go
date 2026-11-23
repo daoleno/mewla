@@ -31,12 +31,27 @@ type ServerOptions struct {
 	SocketPath  string
 	HostVersion string
 	Logf        func(format string, args ...any)
+	// SessionScopes: a program started for a Session that has a resource
+	// unit runs in a systemd scope inside the Session's slice (Linux, when
+	// the user manager answers; see package userunit), so that ending the
+	// Session ends every process it started. Only the real host sets it: the
+	// program is first this binary, which must handle ScopeExecArg.
+	SessionScopes bool
+	// EnclosingSlice is the Session slice of another Mewla this host is part
+	// of, as the daemon that started it decided (StartOptions.EnclosingSlice);
+	// its Sessions' slices go under it.
+	EnclosingSlice string
 
 	// Test seams.
 	newScreen   func(ghosttyvt.Options) (screen, error)
 	engine      *bool
 	allowPeer   func(uid uint32) bool
 	socketCheck time.Duration
+	// userUnits, placeInScope and placeTimeout stand in for the user manager
+	// when programs are placed (scope.go).
+	userUnits    func() bool
+	placeInScope func(pid int, slice, description string) (string, error)
+	placeTimeout time.Duration
 	// listening is called once the socket accepts connections: the file exists
 	// as soon as it is bound, before it listens, and a client that connects in
 	// between is refused.
@@ -50,6 +65,9 @@ type Server struct {
 	engine    bool
 	allowPeer func(uid uint32) bool
 	startedAt time.Time
+	// enclosing is the Session slice this host itself runs in (a Mewla
+	// started inside another one's Session), "" when none.
+	enclosing string
 
 	mu          sync.Mutex
 	sessions    map[string]*session
@@ -74,6 +92,9 @@ func NewServer(opts ServerOptions) *Server {
 	}
 	if s.newScreen == nil {
 		s.newScreen = newEngineScreen
+	}
+	if opts.SessionScopes {
+		s.enclosing = opts.EnclosingSlice
 	}
 	if opts.engine != nil {
 		s.engine = *opts.engine

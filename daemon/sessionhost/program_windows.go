@@ -21,7 +21,11 @@ type conptyProgram struct {
 	hangupOnce sync.Once
 }
 
-func startProgram(path string, argv, env []string, dir string, cols, rows int) (program, error) {
+// RunScopeExec: Windows hosts never hold a program to place it.
+func RunScopeExec() {}
+
+// place is never set here: Windows Sessions are held by Job Objects.
+func startProgram(path string, argv, env []string, dir string, cols, rows int, _ func(pid int)) (program, error) {
 	resolved := append([]string{path}, argv[1:]...)
 	pc, err := platform.StartPseudoConsole(platform.ConsoleSpec{Argv: resolved, Env: env, Dir: dir, Cols: cols, Rows: rows})
 	if err != nil {
