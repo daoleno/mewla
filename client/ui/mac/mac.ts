@@ -229,9 +229,10 @@ export function startMac(): void {
       if (now !== top) console.log(`dev script: page ${(top = now)}`);
     });
     if (script.imageInput) imageInputLog();
-    // Image input in a Session's chat and a Work's reply box too: the run makes them on this daemon (a Session of
-    // that name, a Work of that id); each opens once it exists, its composer taking the keyboard.
-    if (script.imageSession) openOnceThere("session", () => untracked(workers).find((worker) => worker.name === script.imageSession)?.id, () => workers(), openSession);
+    // Image input in a Session's chat and a Work's reply box too: the run makes them on this daemon (a Session named
+    // so, which the daemon names "<name> (<id>)"; a Work of that id); each opens once it exists, its composer taking
+    // the keyboard.
+    if (script.imageSession) openOnceThere("session", () => untracked(workers).find((worker) => worker.name.startsWith(script.imageSession!))?.id, () => workers(), openSession);
     if (script.imageWork) openOnceThere("work", () => untracked(workSurface).slips.find((slip) => slip.workId === script.imageWork)?.workId, () => workSurface(), openWorkDetail);
     // The app's lifecycle as NSH tells it (on a Mac `background` is hidden or covered): whether the window could draw.
     effect(() => console.log(`dev script: lifecycle ${lifecycle()}`));
