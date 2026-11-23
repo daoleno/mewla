@@ -80,6 +80,10 @@ var mac struct {
 	CGEventKeyboardSetUnicodeString func(event uintptr, length uint64, text *uint16)
 	CGEventPost                     func(tap uint32, event uintptr)
 	CFRelease                       func(ref uintptr)
+	// TCCAccessPreflight (TCC.framework, private; nil when absent) tells a
+	// row switched off (1) from no row at all (2), which the public checks
+	// can't: 0 is granted.
+	TCCAccessPreflight func(service objc.ID, options uintptr) int32
 
 	CMSampleBufferGetImageBuffer func(sample uintptr) uintptr
 	CVPixelBufferRetain          func(buffer uintptr) uintptr
@@ -185,6 +189,12 @@ func loadMacFunctions() error {
 		// arrived in macOS 13 and earlier; anything older lacks them.
 		return fmt.Errorf("this version of macOS lacks %s", strings.Join(missing, ", "))
 	}
+	// Optional: only the states it tells apart depend on it.
+	if tcc, err := purego.Dlopen("/System/Library/PrivateFrameworks/TCC.framework/TCC", purego.RTLD_NOW|purego.RTLD_GLOBAL); err == nil {
+		if _, err := purego.Dlsym(tcc, "TCCAccessPreflight"); err == nil {
+			purego.RegisterLibFunc(&mac.TCCAccessPreflight, tcc, "TCCAccessPreflight")
+		}
+	}
 	if objc.GetClass("SCStream") == 0 {
 		return errors.New("this version of macOS has no ScreenCaptureKit")
 	}
@@ -223,16 +233,42 @@ func nsErrorText(err objc.ID) string {
 	return objc.Send[string](desc, objc.RegisterName("UTF8String"))
 }
 
-// ProcessPermissions reports this process's own view of each permission;
-// `mewla screen preflight` prints it for the daemon.
+// tccServices are the TCC services of the permissions.
+var tccServices = map[string]string{
+	permScreenRecording: "kTCCServiceScreenCapture",
+	permAccessibility:   "kTCCServiceAccessibility",
+}
+
+// listedSuffix marks the keys of ProcessPermissions that say whether macOS
+// has a row for Mewla at all ("accessibility:listed").
+const listedSuffix = ":listed"
+
+// ProcessPermissions reports this process's own view of each permission and
+// whether macOS lists Mewla for it; `mewla screen preflight` prints it for the
+// daemon.
 func ProcessPermissions() map[string]bool {
 	if loadMac() != nil {
 		return nil
 	}
-	return map[string]bool{
+	view := map[string]bool{
 		permScreenRecording: mac.CGPreflightScreenCaptureAccess(),
 		permAccessibility:   mac.AXIsProcessTrusted(),
 	}
+	for id, service := range tccServices {
+		view[id+listedSuffix] = tccListed(service)
+	}
+	return view
+}
+
+// tccListed is whether macOS has a row for this process's identity in the
+// service's list (on or off); true when it can't tell.
+func tccListed(service string) bool {
+	if mac.TCCAccessPreflight == nil {
+		return true
+	}
+	listed := true
+	withPool(func() { listed = mac.TCCAccessPreflight(nsString(service), 0) != 2 })
+	return listed
 }
 
 // loggedStale notes each permission logged as not yet effective.
@@ -273,28 +309,51 @@ func (b *macBackend) Capability(ctx context.Context) Capability {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	permission := func(id, name, guidance string) Permission {
-		p := Permission{ID: id, Name: name, Granted: live[id], CanOpen: true, Guidance: guidance}
 		// Input posted by a process that isn't trusted yet is dropped
 		// silently, so a stale Accessibility grant always needs a restart.
-		// Capture reports its own failure; see Start.
-		if b.stale[id] || (id == permAccessibility && live[id] && !own[id]) {
+		// Capture reports its own failure (b.stale); see Start.
+		counts := own[id] || id == permScreenRecording
+		listed, known := live[id+listedSuffix]
+		p := Permission{ID: id, Name: name, Granted: live[id], CanOpen: true, Guidance: guidance,
+			State: permissionState(counts, live[id], listed || !known, b.stale[id])}
+		if p.State == PermissionRestart {
 			p.Granted, p.RestartRequired = false, true
 			p.Guidance = "Allowed. Restart Mewla on this computer to apply it."
 		}
 		return p
 	}
-	// macOS lists the daemon under Mewla.app when boot install runs it from
-	// there, otherwise under the executable or the terminal that started it.
-	entry := "mewla (or the terminal app that runs it)"
-	if bundleIcon() != "" {
-		entry = "Mewla"
-	}
+	entry := listedName()
 	return Capability{Supported: true, Permissions: []Permission{
 		permission(permScreenRecording, "Screen Recording",
 			"In System Settings → Privacy & Security → Screen & System Audio Recording, turn on "+entry+"."),
 		permission(permAccessibility, "Accessibility",
 			"In System Settings → Privacy & Security → Accessibility, turn on "+entry+"."),
 	}}
+}
+
+// listedName is what macOS lists this daemon as in Privacy & Security: the app
+// it runs in (Mewla for Mac runs it as a child of the app's own executable,
+// so both grants belong to the app; boot install's Mewla.app is its own), or,
+// run from anywhere else, the executable or the terminal that started it.
+func listedName() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return "mewla"
+	}
+	if name := containingApp(executable); name != "" {
+		return name
+	}
+	return "mewla (or the terminal app that runs it)"
+}
+
+// containingApp is the name of the .app an executable sits in, or "".
+func containingApp(executable string) string {
+	for dir := filepath.Dir(executable); dir != "/" && dir != "."; dir = filepath.Dir(dir) {
+		if strings.HasSuffix(dir, ".app") {
+			return strings.TrimSuffix(filepath.Base(dir), ".app")
+		}
+	}
+	return ""
 }
 
 // RequestPermissions shows macOS's own prompts, then guides the person at the

@@ -26,3 +26,50 @@ jobs:
         with:
           name: tcc-probe-${{ github.sha }}
           path: ${{ runner.temp }}/tcc-probe
+
+  walk:
+    name: The permission flow, state by state
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Zig, the terminal engine and the web VT from main's cache
+        uses: ./.github/actions/desktop-release-cache
+        with:
+          lib: darwin_arm64
+          web: "true"
+      - name: Install NSH
+        run: client/scripts/fetch-nsh.sh
+      - name: Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            client/macos/target
+          key: macos-app-v1-${{ hashFiles('client/macos/Cargo.toml', 'client/macos/Cargo.lock') }}
+          restore-keys: macos-app-v1-
+      - name: Build the daemon
+        env:
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: |
+          export MEWLA_GHOSTTY_DESKTOP_CACHE="$HOME/.cache/mewla/ghostty-release/darwin_arm64"
+          ./scripts/build-daemon-linux.sh --out-dir "$RUNNER_TEMP/daemon" --targets darwin-arm64 --web-ui build
+      - name: Package Mewla (the release's layout, signed ad hoc)
+        run: client/macos/package.sh --daemon "$RUNNER_TEMP/daemon/mewla-darwin-arm64" --out "$RUNNER_TEMP/app"
+      - name: The host's tests (the panel's placement, its line)
+        run: cargo test --release --manifest-path client/macos/Cargo.toml -- --nocapture
+      - name: Walk the flow
+        run: client/macos/scripts/permissions-walk.sh "$RUNNER_TEMP/app/Mewla.app" "$RUNNER_TEMP/walk"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: permissions-walk-${{ github.sha }}
+          path: ${{ runner.temp }}/walk

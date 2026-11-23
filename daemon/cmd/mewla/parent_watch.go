@@ -38,6 +38,29 @@ func stopWithParent(ctx context.Context, stop context.CancelCauseFunc) {
 	})
 }
 
+// stopWithHostEnv is set by Mewla for Mac's own executable when launchd runs
+// the daemon through it (client/macos/src/host.rs), so that macOS charges the
+// daemon's permissions to the app: the host's pid. Should the host end without
+// passing on launchd's stop (a SIGKILL), the daemon stops as on any stop; the
+// session host and its Sessions run on, as on a daemon restart.
+const stopWithHostEnv = "MEWLA_STOP_WITH_HOST"
+
+// stopWithHost stops the daemon once its parent is no longer the process
+// named by MEWLA_STOP_WITH_HOST; nothing without it. Unlike stopWithParent,
+// the session host is left running.
+func stopWithHost(ctx context.Context, stop context.CancelCauseFunc) {
+	value := os.Getenv(stopWithHostEnv)
+	_ = os.Unsetenv(stopWithHostEnv)
+	host, err := strconv.Atoi(value)
+	if err != nil || host <= 1 {
+		return
+	}
+	go watchParent(ctx, host, os.Getppid, time.Second, func() {
+		log.Printf("mewla: stopping: the app's host (pid %d) that runs it is gone", host)
+		stop(nil)
+	})
+}
+
 // watchParent calls gone once ppid() is no longer parent (an orphan is
 // adopted by launchd or init), checking every interval until ctx ends.
 func watchParent(ctx context.Context, parent int, ppid func() int, interval time.Duration, gone func()) {

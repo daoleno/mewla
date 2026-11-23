@@ -341,6 +341,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	defer restartDaemon(nil)
 	// An app that runs its own daemon (Mewla Dev for Mac) takes it with it.
 	stopWithParent(stopRequested, restartDaemon)
+	stopWithHost(stopRequested, restartDaemon)
 	// The daemon's runtime ends only after the model relay has drained, so a
 	// stop or restart never cuts a Worker's reply (relay_stop.go).
 	ctx, endRuntime := context.WithCancelCause(context.Background())
@@ -1086,7 +1087,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 		OpenSettings: func(permission string) error {
 			return screenService.OpenAgentSettings(ctx, permission)
 		},
-		Stop: screenService.StopAgent,
+		Stop:    screenService.StopAgent,
+		Follow:  grantManager.Follow,
+		Restart: grantManager.RestartNow,
 	})
 	if hold, release, ok := screenService.AgentDisplay(); ok {
 		// The browser's agent windows open on the agent display too, off the
