@@ -5,7 +5,7 @@ import { bindingHost, buildBoundSignaturePayload, buildServerAssertionPayload, d
 import { bytesToHex } from "./protocolCrypto";
 import type { StoredServer } from "./storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "./testing/memoryPlatform";
-import { Transport, transportTiming } from "./transport";
+import { Transport, transportTiming, type PathMoves } from "./transport";
 import { AUTH_SUBPROTOCOL_PREFIX } from "./webSocketAuth";
 
 // Security review 11-23, PR B item 6: the app checks the computer's identity on connect (its first frame signs the
@@ -199,4 +199,96 @@ describe("a computer held to proofs that runs an older Mewla now", () => {
     expect(transport.problem).not.toContain("older");
     transport.close();
   });
+});
+
+// Security review 11-23, round 2 F3: the move's socket (relay → LAN) is held to a proof over its own nonce before the
+// Transport moves onto it. Until then nothing goes out on it and nothing it sends is heard.
+describe("a move to a direct path, for a computer held to its proof", () => {
+  const PIN = "ab".repeat(32);
+  const relayServer: StoredServer = { ...server, url: "wss://quiet-otter.m.mewla.ai/ws", transportKind: "link", transportPin: PIN };
+  const DIRECT = "wss://127.0.0.1:47001/ws";
+  beforeEach(() => {
+    noteDaemonProves(server.daemonPublicKey);
+    Object.assign(transportTiming, { silentLimitMs: 60_000, moveCheckMs: 2, moveCheckMaxMs: 8, moveHealthyChecks: 1, moveOpenLimitMs: 2_000, moveBackoffMs: 60_000, retireLimitMs: 2_000 });
+  });
+
+  async function until(condition: () => boolean, what: string): Promise<void> {
+    const deadline = Date.now() + 2_000;
+    while (!condition() && Date.now() < deadline) await wait(1);
+    if (!condition()) throw new Error(`never: ${what}`);
+  }
+
+  /** Connected and proved on the relay, a move's socket to the direct path open beside it, a frame waiting to go out. */
+  async function moving() {
+    const record = { moved: 0, abandoned: 0, path: "relay" };
+    const moves: PathMoves = {
+      current: () => record.path,
+      check: async () => ({ url: DIRECT, path: "lan" }),
+      moved: () => {
+        record.moved++;
+        record.path = "lan";
+      },
+      abandoned: () => void record.abandoned++,
+    };
+    const transport = new Transport(relayServer, async (stored) => stored.url, moves);
+    const heard: string[] = [];
+    for (const type of ["connected", "moved", "brain_snapshot", "daemon_proof"]) transport.on(type, () => void heard.push(type));
+    transport.connect();
+    await until(() => sockets.length === 1, "the relay socket");
+    const relay = sockets[0]!;
+    relay.open();
+    relay.receive(proofFrame(nonceOf(relay)));
+    await until(() => transport.state === "connected", "connected on the relay");
+    await until(() => sockets.length === 2, "the move's socket");
+    const direct = sockets[1]!;
+    expect(direct.url).toBe(DIRECT);
+    expect(headerOf(direct)).toStartWith("Device v2:");
+    expect(Buffer.from(headerOf(direct).split(":")[5], "base64url").toString()).toBe(`pin:${PIN}`);
+    // Its own nonce, not the relay connect's.
+    expect(nonceOf(direct)).not.toBe(nonceOf(relay));
+    direct.open();
+    await wait(5);
+    return { transport, relay, direct, record, heard };
+  }
+
+  test("open is not enough: the Transport stays on the relay and sends nothing on it until it proves", async () => {
+    const { transport, relay, direct, record } = await moving();
+    expect(record.moved).toBe(0);
+    transport.send({ type: "ping_while_moving" });
+    expect(relay.sent.map((text) => JSON.parse(text).type)).toContain("ping_while_moving");
+    expect(direct.sent).toEqual([]);
+    transport.close();
+  });
+
+  test("a proof over its own nonce moves it, and what came behind the proof is heard after the move", async () => {
+    const { transport, direct, record, heard } = await moving();
+    direct.receive(proofFrame(nonceOf(direct)));
+    direct.receive({ type: "brain_snapshot" });
+    await until(() => record.moved === 1, "the move");
+    await wait(10);
+    expect(heard).toEqual(["connected", "moved", "brain_snapshot"]);
+    transport.send({ type: "ping_after" });
+    expect(direct.sent.map((text) => JSON.parse(text).type)).toContain("ping_after");
+    transport.close();
+  });
+
+  for (const [why, first] of [
+    ["the relay connect's proof played back (another nonce)", (_direct: FakeSocket, relay: FakeSocket) => proofFrame(nonceOf(relay))],
+    ["no proof at all", () => ({ type: "brain_snapshot" })],
+  ] as const) {
+    test(`${why}: the move is given up, nothing ever went out on it, and the relay connection carries on`, async () => {
+      const { transport, relay, direct, record, heard } = await moving();
+      const queued = relay.sent.length;
+      direct.receive((first as (direct: FakeSocket, relay: FakeSocket) => object)(direct, relay));
+      direct.receive({ type: "brain_snapshot" });
+      await until(() => record.abandoned === 1, "the move given up");
+      expect(record.moved).toBe(0);
+      expect(direct.sent).toEqual([]);
+      expect(heard).toEqual(["connected"]);
+      expect(transport.state).toBe("connected");
+      transport.send({ type: "ping_after" });
+      expect(relay.sent.length).toBe(queued + 1);
+      transport.close();
+    });
+  }
 });
