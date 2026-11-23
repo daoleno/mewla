@@ -12,6 +12,7 @@ import "../App";
 import { installPlatform, platform } from "../../core/platform";
 import { FakeDaemon } from "../testing/fakeDaemon";
 import { scenario, storage } from "./scenario";
+import { setPaneWidth, SQUEEZE_SETS, squeezeState } from "./traySqueeze";
 
 const workbench = (JSON.parse(storage["mewla:v3:servers"] ?? "[]") as { daemonId: string; daemonPublicKey: string }[])[0];
 const qr = { size: 21, rows: Array.from({ length: 21 }, (_, y) => Array.from({ length: 21 }, (_, x) => ((x * 7 + y * 3) % 5 < 2 ? "1" : "0")).join("")) };
@@ -30,6 +31,10 @@ const call = host.call.bind(host);
 (host as { call: typeof host.call }).call = ((name: string, ...rest: unknown[]) =>
   name === "app.pairing" ? Promise.resolve(pairing) : (call as (...args: unknown[]) => Promise<unknown>)(name, ...rest)) as typeof host.call;
 
-const daemon = new FakeDaemon({ ...scenario(), admitsInput: { reply: "On it. I will tell you when the pricing page is ready." } });
+// The tray's squeeze capture: `traySqueeze` in the dev script names a count set (traySqueeze.ts), the pane at the Mac's least.
+const squeeze = SQUEEZE_SETS[(host.params as { devScript?: { traySqueeze?: string } } | undefined)?.devScript?.traySqueeze ?? ""];
+if (squeeze) setPaneWidth(240);
+
+const daemon = new FakeDaemon({ ...(squeeze ? squeezeState(squeeze) : scenario()), admitsInput: { reply: "On it. I will tell you when the pricing page is ready." } });
 installPlatform({ ...platform(), openSocket: () => daemon.open() });
 host.on<Record<string, unknown>>("app.daemonPush", (frame) => daemon.push(frame as { type: string }));

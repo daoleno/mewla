@@ -172,7 +172,12 @@ preference.
 - **Home's tray** (SPEC §1.2, §3.2, §11; `ui/tray/Tray.tsx`, `core/tray/model.ts`)
   rises from the bottom, its top hanging just under home's header and filling
   to the screen's bottom whatever it lists; the header and the page dim under
-  it. Its title row ends in the options glyph (Sort, Services), then +. "N
+  it. Its title row ends in the options glyph (Sort, Services), then +; its
+  counts ("1 needs you · 1 new · 3 running") are one line that never wraps:
+  when the words do not fit the column (the Mac's 240, the wide pane's 280,
+  the phone's 320) needs you gives way to its dot and number, then running
+  ("● 1 · 1 new · ● 3", `core/tray/counts.ts`); a long project chip is cut
+  before its number is. "N
   running" counts the Running rows that are not quiet (`runningCount`): the
   state control, the tray's title and the cat read that one number, so quiet
   queued or waiting Work leaves "All quiet" and the napping cat. A row's line
