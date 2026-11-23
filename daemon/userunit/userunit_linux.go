@@ -3,6 +3,7 @@
 package userunit
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -24,6 +25,9 @@ const (
 	scopeStopTimeout = 10 * time.Second
 	// placeWait bounds the wait for a started scope to hold its process.
 	placeWait = 2 * time.Second
+	// callWait bounds each conversation with the user manager: a wedged bus
+	// never holds a caller.
+	callWait = 3 * time.Second
 )
 
 // NestingSliceOf is the Session slice this process nests in (see
@@ -44,12 +48,12 @@ func Available() bool {
 
 // connect reaches the person's user manager over their session bus, whatever
 // this process's environment says.
-func connect() (*dbus.Conn, error) {
+func connect(ctx context.Context) (*dbus.Conn, error) {
 	bus := filepath.Join(fmt.Sprintf("/run/user/%d", os.Getuid()), "bus")
 	if _, err := os.Stat(bus); err != nil {
 		return nil, ErrUnsupported
 	}
-	conn, err := dbus.Connect("unix:path=" + bus)
+	conn, err := dbus.Connect("unix:path="+bus, dbus.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("user bus: %w", err)
 	}
@@ -65,7 +69,9 @@ func PlaceInScope(pid int, slice, description string) (string, error) {
 	if pid <= 1 || !isSessionSlice(slice) {
 		return "", fmt.Errorf("place pid %d in %q: not a Session slice", pid, slice)
 	}
-	conn, err := connect()
+	ctx, cancel := context.WithTimeout(context.Background(), callWait)
+	defer cancel()
+	conn, err := connect(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -92,7 +98,7 @@ func PlaceInScope(pid int, slice, description string) (string, error) {
 		}
 	}{}
 	var job dbus.ObjectPath
-	if err := conn.Object(systemdDest, systemdPath).Call(manager+".StartTransientUnit", 0, scope, "fail", props, aux).Store(&job); err != nil {
+	if err := conn.Object(systemdDest, systemdPath).CallWithContext(ctx, manager+".StartTransientUnit", 0, scope, "fail", props, aux).Store(&job); err != nil {
 		return "", fmt.Errorf("start %s: %w", scope, err)
 	}
 	cgroupFile := fmt.Sprintf("/proc/%d/cgroup", pid)
@@ -120,7 +126,9 @@ func StopSession(unit string, wait time.Duration) ([]string, error) {
 	if token == "" {
 		return nil, nil
 	}
-	conn, err := connect()
+	ctx, cancel := context.WithTimeout(context.Background(), wait+callWait)
+	defer cancel()
+	conn, err := connect(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +142,7 @@ func StopSession(unit string, wait time.Duration) ([]string, error) {
 			JobType                                                        string
 			JobPath                                                        dbus.ObjectPath
 		}
-		if err := obj.Call(manager+".ListUnitsByPatterns", 0, []string{}, []string{sessionSlicePattern(token)}).Store(&units); err != nil {
+		if err := obj.CallWithContext(ctx, manager+".ListUnitsByPatterns", 0, []string{}, []string{sessionSlicePattern(token)}).Store(&units); err != nil {
 			return nil, fmt.Errorf("list the slices of %s: %w", unit, err)
 		}
 		var names []string
@@ -151,7 +159,7 @@ func StopSession(unit string, wait time.Duration) ([]string, error) {
 	}
 	for _, slice := range slices {
 		var job dbus.ObjectPath
-		if err := obj.Call(manager+".StopUnit", 0, slice, "replace").Store(&job); err != nil {
+		if err := obj.CallWithContext(ctx, manager+".StopUnit", 0, slice, "replace").Store(&job); err != nil {
 			return nil, fmt.Errorf("stop %s: %w", slice, err)
 		}
 	}

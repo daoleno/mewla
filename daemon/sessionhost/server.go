@@ -47,6 +47,11 @@ type ServerOptions struct {
 	engine      *bool
 	allowPeer   func(uid uint32) bool
 	socketCheck time.Duration
+	// userUnits, placeInScope and placeTimeout stand in for the user manager
+	// when programs are placed (scope.go).
+	userUnits    func() bool
+	placeInScope func(pid int, slice, description string) (string, error)
+	placeTimeout time.Duration
 	// listening is called once the socket accepts connections: the file exists
 	// as soon as it is bound, before it listens, and a client that connects in
 	// between is refused.
