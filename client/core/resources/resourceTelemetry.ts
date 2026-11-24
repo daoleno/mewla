@@ -2,6 +2,8 @@
 // The daemon omits unsupported measurements; the normalized view keeps that
 // distinction as `undefined` instead of inventing zeros.
 
+import { normalizeHolds, type ResourceHolds } from "./holds";
+
 export type ResourcePressureState = "normal" | "elevated" | "critical";
 
 export interface PsiAverages {
@@ -126,6 +128,8 @@ export interface ResourceTelemetry {
   consumers: ResourceConsumer[];
   history: ResourceHistorySample[];
   signals: ResourceSignal[];
+  /** What the collector holds and did; absent from daemons before it. */
+  holds?: ResourceHolds;
 }
 
 type Raw = Record<string, unknown>;
@@ -338,6 +342,7 @@ export function normalizeResourceTelemetry(payload: unknown): ResourceTelemetry 
       .sort((a, b) => b.rssBytes - a.rssBytes),
     history,
     signals: compact((Array.isArray(source.signals) ? source.signals : []).map(normalizeSignal)),
+    holds: normalizeHolds(source.holds),
   };
 }
 

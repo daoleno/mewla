@@ -57,3 +57,32 @@ func TestWhyNamesAnEndedSessionFromTheLedger(t *testing.T) {
 		t.Fatalf("chain %+v", why.Chain)
 	}
 }
+
+// Brain's host has no slice and no lease: the session host's inventory of
+// panes is what names its processes.
+func TestAProcessAPaneStartedIsItsSessionsAndBrainsHostIsBrain(t *testing.T) {
+	records := map[int]workerproc.Process{300: {PPID: 200}, 200: {PPID: 100}, 100: {PPID: 1}, 400: {PPID: 100}}
+	l := WhyLookup{Root: t.TempDir(),
+		Pane: func(pid int) (WhySession, bool) {
+			switch pid {
+			case 200:
+				return WhySession{ID: "mh-brain", Name: "Brain", Brain: true}, true
+			case 400:
+				return WhySession{ID: "mh-worker", Name: "fix the build"}, true
+			}
+			return WhySession{}, false
+		},
+		Work: func(id string) (WhyLink, bool) { return WhyLink{ID: "w-1", Name: "Build"}, id == "mh-worker" },
+	}
+	why := whyProcess(l, whyProc{pid: 300, name: "python3"}, records)
+	if !why.Brain || !why.Mewla || len(why.Chain) != 2 || why.Chain[1].ID != "mh-brain" || why.Chain[1].By != "the Session's pane 200 started it" {
+		t.Fatalf("Brain's child = %+v", why)
+	}
+	why = whyProcess(l, whyProc{pid: 400, name: "node"}, records)
+	if why.Brain || len(why.Chain) != 3 || why.Chain[1].By != "it is the Session's pane" || why.Chain[2].ID != "w-1" {
+		t.Fatalf("a Worker's pane = %+v", why)
+	}
+	if why = whyProcess(l, whyProc{pid: 100, name: "tmux"}, records); why.Mewla || why.Brain {
+		t.Fatalf("the host itself = %+v", why)
+	}
+}

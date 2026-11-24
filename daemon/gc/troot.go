@@ -63,9 +63,13 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 		return nil, nil, err
 	}
 	reads := readsRecorded(root)
+	keeps, err := ListKeeps(stateRoot)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if before[name] {
+		if before[name] || keptIn(keeps, filepath.Join(root, name)) {
 			continue
 		}
 		path := filepath.Join(root, name)
@@ -78,10 +82,8 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 		if info.Mode().IsRegular() && strings.HasSuffix(name, ".lock") {
 			continue
 		}
-		if info.IsDir() {
-			if marker, err := os.Lstat(filepath.Join(path, scratchMarker)); err == nil && marker.Mode().IsRegular() {
-				continue // a Session's scratch: its lease releases it
-			}
+		if info.IsDir() && hasMarker(path) {
+			continue // a Session's scratch: its lease releases it
 		}
 		if _, used := usage.Uses(path); used {
 			continue
@@ -100,6 +102,58 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 		moved = append(moved, item)
 	}
 	return moved, unread, nil
+}
+
+// restartInTRoot makes a restored item of the t/ root an ordinary unmarked
+// item whose 48 h start now: a Session's marker would leave it to a lease
+// that is gone, a place in the first sweep's list would leave it alone
+// forever, and the restore is a use (without it, old files are trashed again
+// on the next pass). Items restored elsewhere are left as they were.
+func restartInTRoot(stateRoot, original string, now time.Time) {
+	root := filepath.Join(stateRoot, "t")
+	if filepath.Dir(original) != root {
+		return
+	}
+	_ = os.Remove(filepath.Join(original, scratchMarker))
+	_ = os.Chtimes(original, now, now)
+	path := snapshotPath(stateRoot)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var snapshot rootSnapshot
+	if json.Unmarshal(raw, &snapshot) != nil {
+		return
+	}
+	name, kept := filepath.Base(original), snapshot.Names[:0]
+	for _, n := range snapshot.Names {
+		if n != name {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) == len(snapshot.Names) {
+		return
+	}
+	snapshot.Names = kept
+	if data, err := json.MarshalIndent(snapshot, "", "  "); err == nil {
+		_ = writeFileAtomic(path, append(data, '\n'))
+	}
+}
+
+// hasMarker reports whether dir is marked as a Session's scratch.
+func hasMarker(dir string) bool {
+	marker, err := os.Lstat(filepath.Join(dir, scratchMarker))
+	return err == nil && marker.Mode().IsRegular()
+}
+
+// keptIn reports whether a keep still in place is path or inside it.
+func keptIn(keeps []Keep, path string) bool {
+	for _, k := range keeps {
+		if k.Moved == "" && (k.Path == path || within(k.Path, path)) {
+			return true
+		}
+	}
+	return false
 }
 
 // readSnapshot returns the names the t/ root held when the rule came,

@@ -53,6 +53,7 @@ import { copyMenu, DisplayTitle, EmptyState, Meter, Notice, Page, Section, Secti
 import { LEAD_SLOT, meterColor, RowTile, StateLine, type Lead } from "../../kit/RowTile";
 import { Segmented } from "../../kit/Segmented";
 import { connected, daemon, daemonName, daemonState } from "../daemon";
+import { Holds } from "./Holds";
 import type { PageNav } from "../routes";
 
 const PAGE_SIZE = 30;
@@ -194,6 +195,7 @@ function Ready(props: { telemetry: ResourceTelemetry; onRefresh: () => void }) {
         <View style={{ flexGrow: 1, flexBasis: basis() }}><Swap t={t()} /></View>
       </View>
       <Consumers t={t()} />
+      <If when={t().holds}><Holds holds={t().holds!} onRestored={props.onRefresh} /></If>
     </View>
   );
 }
