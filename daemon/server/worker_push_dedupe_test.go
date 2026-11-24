@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/daoleno/mewla/daemon/answered"
 	"path/filepath"
 	"testing"
 	"time"
@@ -122,5 +123,43 @@ func TestPushKeyReadsThePromptFromEventDetails(t *testing.T) {
 	event.Worker.DetailsJSON = ""
 	if got := workerPushKey(event); got != "turn:turn:a|Waiting for Claude permission" {
 		t.Fatalf("fallback key = %q", got)
+	}
+}
+
+// 0.4.28 gate: Claude asked a question again, word for word, seconds after it
+// was answered. Its card is drawn again (each showing has its time); the phone
+// is told again too. Without an answer between them it stays one push.
+func TestTheSameQuestionAskedAgainAfterItsAnswerIsPushedAgain(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pusher := &recordingNotificationPusher{}
+	srv, turnID := ledgerNotificationServer(t, "agent-1")
+	srv.pusher = pusher
+	srv.answered = ledger
+	clock := time.Now().UTC()
+	srv.workerPushNow = func() time.Time { return clock }
+
+	srv.maybeNotifyForSessionEvent(promptTransition("agent-1", turnID, "running", "blocked", "P"))
+	clock = clock.Add(2 * time.Second)
+	srv.maybeNotifyForSessionEvent(promptTransition("agent-1", turnID, "blocked", "running", ""))
+	clock = clock.Add(2 * time.Second)
+	srv.maybeNotifyForSessionEvent(promptTransition("agent-1", turnID, "running", "blocked", "P"))
+	if got := countKind(pusher.snapshot(), "blocked"); got != 1 {
+		t.Fatalf("a blink with no answer pushed %d times, want 1", got)
+	}
+
+	answeredAt := clock.Add(time.Second)
+	if _, _, err := ledger.Record(answered.Request{ID: "prompt:agent-1:P:1", Kind: "permission", SessionID: "agent-1", Outcome: answered.OutcomeApproved,
+		By: answered.Answerer{Kind: answered.ByDevice}, AnsweredAt: answeredAt, Anchor: answered.Anchor{PromptID: "P"}}); err != nil {
+		t.Fatal(err)
+	}
+	clock = answeredAt.Add(time.Second)
+	srv.maybeNotifyForSessionEvent(promptTransition("agent-1", turnID, "blocked", "running", ""))
+	clock = clock.Add(5 * time.Second)
+	srv.maybeNotifyForSessionEvent(promptTransition("agent-1", turnID, "running", "blocked", "P"))
+	if got := countKind(pusher.snapshot(), "blocked"); got != 2 {
+		t.Fatalf("the question asked again after its answer pushed %d times in all, want 2", got)
 	}
 }
