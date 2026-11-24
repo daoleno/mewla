@@ -38,17 +38,6 @@ export function seenWords(iso: string, now: Date): string {
 }
 
 /**
- * The http origin of a computer's address, which is stored as its WebSocket (`ws://127.0.0.1:9876/ws`): where its
- * own files are served (the terminal page's on a Mac). Empty for anything else.
- */
-export function httpOrigin(address: string): string {
-  const match = /^(wss?|https?):\/\/([^/?#]+)/i.exec(address.trim());
-  if (!match) return "";
-  const scheme = match[1].toLowerCase();
-  return `${scheme === "wss" || scheme === "https" ? "https" : "http"}://${match[2]}`;
-}
-
-/**
  * This Mac's own computer among the stored ones (owner 11-23: "a Mac app always has its own computer"): the one entry
  * for its daemon's key, reached at its own loopback address. `keep` is that entry (the one already at `localURL`, else
  * the current one, else the first), `drop` the other entries for the same key (no second "MacBook Pro"), and `rewrite`

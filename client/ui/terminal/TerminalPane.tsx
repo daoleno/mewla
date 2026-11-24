@@ -23,10 +23,10 @@ import { SlowLine, StateView, states, useWait } from "../kit/wait";
 import { current, resumeConnection } from "../session";
 
 /**
- * The phones' native view; the web's and the Mac's is libghostty-vt (WebAssembly) on a canvas in a web view, with the
- * same contract (on the Mac its page comes from this Mac's daemon, WebTerminalSurface).
+ * The native view on the phones and the Mac (client/macos/src/terminal); the web's is libghostty-vt (WebAssembly) on a
+ * canvas in a web view, with the same contract (WebTerminalSurface).
  */
-const webSurface = platform.os === "web" || platform.os === "macos";
+const webSurface = platform.os === "web";
 /**
  * Mewla for Mac's terminal fills the right pane under its header on the canvas: no group around it (no surface,
  * radius or inset), 10 20 inside the grid (RESULT-DESIGN-PAIRS #5). The phones and the web keep the group.

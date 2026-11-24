@@ -1,7 +1,6 @@
 import { cleanup, effect, platform, signal, untracked, WebView, type NativeComponentProps, type NativeComponentRef, type WebViewRef } from "nsh";
 import { coalesce, parseWebTerminalEvent, terminalPageHtml, WEB_TERMINAL_FONT, webCommand, webTheme, type WebTerminalCommand } from "../../../core/terminal/webSurface";
 import type { TerminalEvents, TerminalProps } from "../contract";
-import { localDaemonURL } from "../../mac/local";
 
 /** The contract's events, and `probe` (the `probe` command's answer, for checks). */
 export type WebTerminalEvents = TerminalEvents & { probe: { text: string; drawn: string; history: number; grid: string } };
@@ -33,10 +32,7 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
   let outbox: WebTerminalCommand[] = [];
   let queued = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  // On a Mac the page is not served by the app's origin: its files come from this Mac's own daemon (loopback).
-  // On a Mac the page comes from this Mac's daemon (its terminal.js, VT and fonts); elsewhere it carries no base.
-  const macDaemonBase = platform.os === "macos" ? localDaemonURL() || undefined : undefined;
-  const page = macDaemonBase ? terminalPageHtml(`${macDaemonBase}/terminal/`) : (html ??= terminalPageHtml());
+  const page = (html ??= terminalPageHtml());
 
   const flush = () => {
     if (!ready || !web || outbox.length === 0) return;
@@ -44,16 +40,7 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
     outbox = [];
     web.postMessage(JSON.stringify(batch));
   };
-  // A Mac's terminal says once in the app's log how far it got (the page, its grid, the first output): the only
-  // view of it a run on a machine nobody watches has.
-  const mac = platform.os === "macos";
-  let sized = false;
-  let wrote = false;
   const post = (message: WebTerminalCommand) => {
-    if (mac && !wrote && message.type === "write") {
-      wrote = true;
-      console.log(`terminal: first output (${message.data.length} chars)`);
-    }
     outbox.push(message);
     if (message.type !== "write") return flush();
     if (queued) return;
@@ -110,7 +97,6 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
       case "ready":
         // A page that loads again starts empty: its theme and font first.
         ready = true;
-        if (mac) console.log("terminal: page ready");
         clearTimeout(timer);
         keyboardOnlyWeb.set(!event.touch);
         outbox = [...[theme, font].filter((m): m is WebTerminalCommand => m !== null), ...outbox];
@@ -120,10 +106,6 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
         keyboardOnlyWeb.set(!event.touch);
         return;
       case "size":
-        if (mac && !sized) {
-          sized = true;
-          console.log(`terminal: grid ${event.cols}x${event.rows}`);
-        }
         return props.onSize?.({ cols: event.cols, rows: event.rows });
       case "failed":
         return props.onFailed?.({ message: event.message });
@@ -139,12 +121,6 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
         return props.onCopy?.({ text: event.text });
       case "probe":
         return props.onProbe?.({ text: event.text, drawn: event.drawn, history: event.history, grid: event.grid });
-      case "painted":
-        if (mac) console.log(`terminal: ${event.cells > 0 ? "first paint" : "first draw"} (${event.cells} non-blank cells)`);
-        return;
-      case "visibility":
-        if (mac) console.log(`terminal: page ${event.state}`);
-        return;
     }
   };
 
@@ -158,7 +134,6 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
       accessibilityLabel="Terminal"
       class={props.class ?? "flex-1"}
       html={page}
-      baseUrl={macDaemonBase}
       scrollable={false}
       onLoadStart={() => {
         ready = false;
