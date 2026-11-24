@@ -67,6 +67,11 @@ func AnswerPanePrompt(pane PanePrompts, workerID string, answer PromptAnswer, ho
 	if err != nil {
 		return nil, err
 	}
+	if prompt == nil && len(answer.Answers) > 0 && load != nil && !latestChoicePassed(load, choiceGoneSettle) {
+		// No prompt Mewla can read on screen, yet the transcript still waits for an answer: the question has
+		// not passed (owner 11-24), the Terminal only does not show it as Mewla can read it.
+		return nil, fmt.Errorf("%w: the Terminal doesn't show this question; answer it there", watcher.ErrClaudeChoiceRefused)
+	}
 	if prompt == nil || prompt.ID != answer.PromptID {
 		return nil, fmt.Errorf("%w: %w", watcher.ErrPromptGone, watcher.ErrClaudeChoiceRefused)
 	}
@@ -254,5 +259,22 @@ func (s *Server) choiceConversationLoader(resolved resolvedCodexConversationWork
 			conversation = work.PreferHostBoundConversation(conversation, bound)
 		}
 		return conversation, nil
+	}
+}
+
+// latestChoicePassed reports whether the transcript has no question waiting
+// for an answer within settle.
+func latestChoicePassed(load func() (work.CodexConversation, error), settle time.Duration) bool {
+	deadline := time.Now().Add(settle)
+	for {
+		if conversation, err := load(); err == nil {
+			if _, pending := work.LatestPendingConversationChoice(conversation); !pending {
+				return true
+			}
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }

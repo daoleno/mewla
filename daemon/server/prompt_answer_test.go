@@ -123,6 +123,9 @@ func TestAnswerPanePromptChoiceUsesTranscriptQuestions(t *testing.T) {
 	}{
 		{name: "stale prompt id", prompt: prompt, answer: PromptAnswer{PromptID: "choice0", Answers: answer.Answers}, conv: choiceConversation(work.ConversationChoicePending), wantGone: true},
 		{name: "transcript has no pending question", prompt: prompt, answer: answer, conv: choiceConversation(work.ConversationChoiceAnswered, "Apple", "Red"), wantGone: true},
+		// The pane shows no prompt Mewla can read, the transcript still waits: not passed (owner 11-24).
+		{name: "no prompt on screen but the transcript waits", prompt: nil, answer: answer, conv: choiceConversation(work.ConversationChoicePending)},
+		{name: "no prompt on screen and nothing pending", prompt: nil, answer: answer, conv: choiceConversation(work.ConversationChoiceAnswered, "Apple", "Red"), wantGone: true},
 		{name: "a menu number does not answer a question", prompt: prompt, answer: PromptAnswer{PromptID: "choice1", Number: 1}, conv: choiceConversation(work.ConversationChoicePending)},
 	}
 	for _, tc := range cases {

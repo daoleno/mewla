@@ -25,8 +25,8 @@ import (
 //	Review your answers
 //	 ● Which colors?
 //	   → Red, Blue
-//	Ready to submit your answers?
-//	❯ 1. Submit answers
+//	Ready to submit your answers?          gone in 2.1.331
+//	❯ 1. Submit answers                    the review step's mark
 //	  2. Cancel
 //
 // The preview layout draws a box to the right of each row and has no
@@ -76,6 +76,7 @@ var (
 	claudeChoiceCheckboxRe  = regexp.MustCompile(`^\[([ ✔])\]\s?(.*)$`)
 	claudeChoiceBoxRe       = regexp.MustCompile(`\s{2,}[│┌└├┐┘].*$`)
 	claudeChoiceSubmitRowRe = regexp.MustCompile(`^\s*(❯)?\s*Submit\s*$`)
+	claudeChoiceReviewRowRe = regexp.MustCompile(`^\s*(❯)?\s*1\.\sSubmit answers\s*$`)
 	claudeChoiceTabRe       = regexp.MustCompile(`([☐☒])\s+(.+?)(?:\s{2,}|$)`)
 	claudeChoiceGutterRe    = regexp.MustCompile(`^\s*│\s?`)
 )
@@ -102,6 +103,9 @@ func isClaudeChoiceTabBar(line string) bool {
 // pane. It returns Kind none for anything it cannot prove.
 func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 	lines := strings.Split(strings.ReplaceAll(pane, "\r\n", "\n"), "\n")
+	// The review step ends on its "1. Submit answers" row (2.1.296 also drew
+	// "Ready to submit your answers?" above it; 2.1.331 does not), a question
+	// on its "Enter to select" footer, whichever is lowest.
 	footer, review := -1, -1
 	for index := len(lines) - 1; index >= 0; index-- {
 		trimmed := strings.TrimSpace(lines[index])
@@ -109,7 +113,7 @@ func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 			footer = index
 			break
 		}
-		if trimmed == "Ready to submit your answers?" {
+		if claudeChoiceReviewRowRe.MatchString(lines[index]) {
 			review = index
 			break
 		}
@@ -131,7 +135,7 @@ func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 	if tabBar < 0 {
 		rows := lines[:end]
 		if review >= 0 {
-			rows = lines[review+1:]
+			rows = lines[review:]
 		}
 		if claudeChoiceClipped(rows) {
 			return claudeChoiceScreen{Kind: claudeChoiceScreenClipped}
@@ -148,7 +152,7 @@ func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 		return claudeChoiceScreen{}
 	}
 	if review >= 0 {
-		return parseClaudeChoiceReview(screen, lines[tabBar+1:], lines[review+1:])
+		return parseClaudeChoiceReview(screen, lines[tabBar+1:review], lines[review:])
 	}
 	return parseClaudeChoiceQuestion(screen, lines[tabBar+1:footer])
 }
