@@ -359,8 +359,11 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   // A reply's link and a path the terminal showed (ui/chat/links.ts): a file opens in the preview against
   // this run of the Session (without one it says why, parity #38); a page opens in the browser.
   const sessionFiles: ChatFiles = {
+    // The run its files open through: the live one, or once it ended, its last (the daemon's `file_run`), so a Done
+    // Session's chat still opens what its agent wrote.
     identity: () => {
       const w = untracked(worker);
+      if (w?.file_run) return { workerId: props.workerId, processId: w.file_run.process_id, startedAt: w.file_run.started_at };
       return w?.process_id && w.started_at ? { workerId: props.workerId, processId: w.process_id, startedAt: w.started_at } : null;
     },
     notice: (text) => notice.set(text),

@@ -35,7 +35,9 @@ export function sessionFileMetaLine(metadata: SessionFileMetadata | null, refere
   return [where, sessionFileKindLabel(metadata), formatSessionFileSize(metadata.size)].filter(Boolean).join(" · ");
 }
 
-export function sessionFileProblemTitle(input: { stale: boolean; tooLarge: boolean }): string {
+export function sessionFileProblemTitle(input: { stale: boolean; tooLarge: boolean; gone?: boolean }): string {
+  // Deleted or moved since the Session wrote it (a worktree or scratch folder collected): said as such.
+  if (input.gone) return "File is gone";
   if (input.stale) return "File changed";
   return input.tooLarge ? "File too large" : "Could not open file";
 }

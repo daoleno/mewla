@@ -89,3 +89,8 @@ describe("download through the host", () => {
     expect(h.order).toEqual(["pick"]);
   });
 });
+
+test("a file deleted or moved since the Session wrote it is gone", () => {
+  expect(sessionFileProblemTitle({ stale: false, tooLarge: false, gone: true })).toBe("File is gone");
+  expect(sessionFileProblemTitle({ stale: true, tooLarge: false })).toBe("File changed");
+});

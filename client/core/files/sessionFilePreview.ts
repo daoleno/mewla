@@ -364,6 +364,15 @@ export function normalizeSessionFileText(
   };
 }
 
+/** The file is no longer there (the computer answered `session_file_missing`, or 404 for a stream). */
+export function isMissingSessionFileError(error: unknown): boolean {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : "";
+  return code === "session_file_missing";
+}
+
 export function isStaleSessionFileError(error: unknown): boolean {
   const code =
     error && typeof error === "object" && "code" in error
