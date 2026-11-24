@@ -126,6 +126,12 @@ daemon_up() {
   printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-lane; exit 0; }\nexec sleep 86400\n' > "$lane/bin/cursor-agent"
   printf '#!/bin/sh\necho "systemd-run is off for the lane daemon" >&2\nexit 1\n' > "$lane/bin/systemd-run"
   chmod +x "$lane/bin/cursor-agent" "$lane/bin/systemd-run"
+  # The Brain host runs the stub by its absolute path: by name, a login shell's PATH can find the owner's real
+  # cursor-agent first (0.4.28 gate: it ran signed out and wrote ~/.cursor/projects/<scratch state>).
+  mkdir -p "$lane/state"
+  # The lane's state lasts from run to run: the entry is added once, beside whatever else a proof put there.
+  grep -qs '^name = "agent"$' "$lane/state/executors.toml" ||
+    printf '\n[[executors]]\nname = "agent"\ncommand = "%s"\nkind = "cursor"\n' "$lane/bin/cursor-agent" >> "$lane/state/executors.toml"
   touch "$lane/home/.zshrc"
   # setsid may fork: the shell that execs the daemon writes its own pid, which stays the daemon's.
   # `setsid -f` forks and returns at once: a backgrounded subshell would stay behind as the server's parent and hold the
