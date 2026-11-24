@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildChatComposerPlaceholder, chatAgentSupportsSlashCommands } from "./chatComposerPresentation";
+import { buildChatComposerPlaceholder } from "./chatComposerPresentation";
 
 // The first two from the Expo app's services/connectionLifecycle.test.ts; the rest pin the file's other rules.
 describe("composer placeholder", () => {
@@ -8,7 +8,6 @@ describe("composer placeholder", () => {
       buildChatComposerPlaceholder({
         agentKind: "codex",
         connectionState: "connecting",
-        slashQueryActive: false,
       }),
     ).toBe("Connecting…");
   });
@@ -18,20 +17,16 @@ describe("composer placeholder", () => {
       buildChatComposerPlaceholder({
         agentKind: "codex",
         connectionState: "offline",
-        slashQueryActive: false,
       }),
     ).toBe("Connection unavailable");
   });
 
-  test("names the agent, searches commands only for Codex, and an explicit placeholder wins", () => {
-    const connected = { connectionState: "connected" as const, slashQueryActive: false };
+  test("names the agent and an explicit placeholder wins", () => {
+    const connected = { connectionState: "connected" as const };
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "claude" })).toBe("Message Claude");
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "antigravity" })).toBe("Message Antigravity");
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "terminal" })).toBe("Message");
-    expect(buildChatComposerPlaceholder({ ...connected, agentKind: "codex", slashQueryActive: true })).toBe("Search commands");
-    expect(buildChatComposerPlaceholder({ ...connected, agentKind: "claude", slashQueryActive: true })).toBe("Message Claude");
+    expect(buildChatComposerPlaceholder({ ...connected, agentKind: "codex" })).toBe("Message Codex");
     expect(buildChatComposerPlaceholder({ ...connected, agentKind: "codex", explicitPlaceholder: " Reply " })).toBe("Reply");
-    expect(chatAgentSupportsSlashCommands("codex")).toBe(true);
-    expect(chatAgentSupportsSlashCommands("claude")).toBe(false);
   });
 });

@@ -752,15 +752,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	eventHub.OnApprovalResolved(func(workerID string, approval agentevents.Approval, e agentevents.Event) {
 		recordAgentResolution(answeredRequests, workerID, approval, e, srv.SettleTerminalAnswer)
 	})
-	if codexFollow != nil {
-		srv.SetCodexStatus(func(ctx context.Context, workerID string) (any, error) {
-			status, err := codexFollow.Status(ctx, workerID)
-			if errors.Is(err, ErrNoCodexStatus) {
-				return nil, server.ErrCodexStatusUnavailable
-			}
-			return status, err
-		})
-	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
 	eventHub.OnCommandsStopped(func(e agentevents.Event) { srv.RecordStoppedCommands(stoppedCommandsRecord(e)) })
 	agentEvents.gate = permissionGateHooks(w, brainStore, brainService, srv.WorkerApprovalsChanged)

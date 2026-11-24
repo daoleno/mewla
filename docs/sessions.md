@@ -291,6 +291,21 @@ share sheet with that file. On the web the same buttons are Download and Copy.
 A picture in a Calendar run's result opens the same viewer. If saving fails, a
 line at the bottom says why.
 
+### Attachments
+
+**+** at the left of the composer (Brain's chat, a Session's chat, a Work's
+reply) puts something from the device into the message. On a phone or a tablet
+it opens a sheet of three tiles: **Photos** (the system photo picker, newest
+first, several at once, no permission asked; HEIC photos arrive as JPEG),
+**Camera** (a photo taken now; the system asks for the camera the first time)
+and **Files** (Files, Downloads and other apps' documents). The keyboard goes
+down while the sheet is open and comes back after. On a desktop or in a browser
+**+** opens the file dialog directly. What you pick shows above the field as
+chips (a picture as itself, a file by name and size) with its upload progress
+and ×; Send works once they are uploaded. A message carries at most eight files.
+Camera needs the Android or iPhone app from version 0.4.27 on; with an older app
+the sheet shows Photos and Files.
+
 Paste a screenshot or a copied picture into the composer and it becomes a chip
 above the field, the same as one you attached; pasted text goes in as typed. On
 Mewla for Mac a file copied in Finder pastes as that file (not its name). A
@@ -404,7 +419,7 @@ supports. For Codex that is the one case still found by looking: a Codex you
 opened by hand, like the Brain when it runs on Codex, has no app-server of
 Mewla's, so its conversation is matched by folder and start time in Codex's
 own thread records (read by Mewla itself, on Windows too) and by the files it
-holds open, and its Status sheet says to type `/status` in the Terminal. A Codex that Mewla started is not looked for
+holds open. A Codex that Mewla started is not looked for
 at all: until it announces its thread (a moment after it starts) there is
 nothing to read, and only if it has not announced one after 30 seconds is its
 transcript searched for.

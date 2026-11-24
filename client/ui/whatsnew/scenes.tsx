@@ -644,6 +644,55 @@ function ShareIn() {
   );
 }
 
+/** "+" in the composer: the attach sheet rises (Photos, Camera, Files), Photos is tapped, the screenshot is a chip. */
+function AttachSheet() {
+  const sheet = loop([{ offset: 0, opacity: 0, translateY: 30 }, { offset: 0.12, opacity: 0, translateY: 30 }, { offset: 0.2, opacity: 1, translateY: 0 }, { offset: 0.42, opacity: 1, translateY: 0 }, { offset: 0.48, opacity: 0, translateY: 30 }, { offset: 1, opacity: 0, translateY: 30 }]);
+  const chip = loop(appear(0.52, 6));
+  const uploading = loop(between(0.52, 0.7));
+  const ready = loop([{ offset: 0, opacity: 0 }, { offset: 0.72, opacity: 0 }, { offset: 0.76, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const Tile = (props: { icon: IconName; label: string }) => (
+    <View class="h-[52px] flex-1 items-center justify-center gap-1 rounded-[12px] bg-muted">
+      <Icon name={props.icon} size={16} tone="ink" />
+      <Text class="text-[9px] font-semibold text-foreground">{props.label}</Text>
+    </View>
+  );
+  return (
+    <View class="relative h-[150px] w-[250px]">
+      {/* Brain's composer: "+" pressed, then the screenshot as a chip, the draft still the person's. */}
+      <View class="absolute inset-0 justify-end">
+        <View class="gap-2 rounded-[20px] border border-border bg-card p-2">
+          <View class="w-[150px] flex-row items-center gap-2 rounded-[12px] bg-muted px-2 py-1.5" style={chip}>
+            <Picture w={26} h={26} radius={6} />
+            <View class="flex-1 gap-0.5">
+              <Text class="text-[11px] font-semibold text-foreground line-clamp-1">Screenshot.png</Text>
+              <View class="relative h-[12px]">
+                <Text class="absolute text-[9px] text-muted-foreground" style={uploading}>Uploading</Text>
+                <Text class="absolute text-[9px] text-muted-foreground" style={ready}>Ready</Text>
+              </View>
+            </View>
+            <Icon name="close" size={12} tone="soft" />
+          </View>
+          <View class="relative flex-row items-center gap-2">
+            <Icon name="add" size={16} tone="soft" />
+            <Text class="flex-1 text-[12px] text-muted-foreground">What is on this screen?</Text>
+            <View class="size-[26px] items-center justify-center rounded-full bg-foreground"><Icon name="arrow-up" size={13} tone="canvas" /></View>
+            <Press at={0.06} style={{ left: -6, top: -6 }} />
+          </View>
+        </View>
+      </View>
+      <Card class="absolute bottom-0 left-0 right-0 gap-2 border border-border px-3 pb-3 pt-2" style={sheet}>
+        <View class="h-[4px] w-[28px] self-center rounded-full bg-track" />
+        <View class="relative flex-row gap-2">
+          <Tile icon="image" label="Photos" />
+          <Tile icon="camera" label="Camera" />
+          <Tile icon="folder" label="Files" />
+          <Press at={0.34} style={{ left: 22, top: 12 }} />
+        </View>
+      </Card>
+    </View>
+  );
+}
+
 /** A file's status tile on the Git page (more/git/parts.tsx StatusTile): its mark in its colour on its wash. */
 function GitTile(props: { mark: "M" | "A"; tone: "warning" | "add"; alpha: number }) {
   return (
@@ -911,6 +960,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "work-menu": WorkMenu,
   "trigger-watch": TriggerWatch,
   "share-in": ShareIn,
+  "attach-sheet": AttachSheet,
   "git-button": GitButton,
   "work-closes": WorkCloses,
   "calendar-day": CalendarDay,

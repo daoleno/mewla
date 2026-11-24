@@ -361,15 +361,13 @@ describe("a Session", () => {
     expect(answers.at(-1)).toMatchObject({ worker_id: "w5", process_id: 77, dsh_answer: { epoch: "e1", rpcId: "r1", outcome: "allowed-once" } });
   }, 20_000);
 
-  test("a Codex Session's /status opens its status, and its model chip opens Model & Effort", async () => {
+  test("a Codex Session's /status is sent as typed, and its model chip opens Model & Effort", async () => {
     const codex = session("w3", { name: "codex run", status: "done", provider: "codex", command: "codex", capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true } });
     const runtime = { session_id: "w3", client: "codex", connection_id: "c1", connection_name: "OpenAI", model_id: "gpt-6", reasoning_efforts: ["low", "high"], credential_ready: true, hot_switchable: true };
     const app = await sessionsApp({
       worker_sessions: [codex],
       conversations: { w3: [] },
       replies: {
-        codex_slash_commands: { type: "codex_slash_commands", commands: [{ value: "/status", name: "status", description: "Show status", category: "session", chat_supported: true }] },
-        codex_status: { type: "codex_status", status: { thread: { id: "th-1", model: "gpt-6", effort: "high", cwd: "/repo" }, limits: [{ id: "codex", windows: [{ used_percent: 25, window_minutes: 300 }] }] } },
         get_thread_runtime: { type: "thread_runtime", runtime },
         list_providers: { type: "providers", revision: 1, connections: [{ id: "c1", name: "OpenAI", clients: ["codex"], credential_ready: true, advanced: false }], defaults: { codex: { connection_id: "c1" } }, presets: [], models: { c1: [{ id: "gpt-6", available: true, source: "catalog" }] } },
       },
@@ -380,15 +378,12 @@ describe("a Session", () => {
     await focusComposer(app);
     await app.waitFor("id:model-chip");
     expect(app.texts()).toContain("gpt-6");
-    await app.type("id:composer", "/sta");
-    await app.waitFor("id:slash-status");
-    await app.type("id:composer", "tus");
-    await app.press("id:send");
-    await app.waitFor("id:status-meter");
-    expect(framesOf(app.host.posts(), "send_input")).toHaveLength(0);
-    expect(framesOf(app.host.posts(), "codex_status").at(-1)).toMatchObject({ target_id: "w3" });
-    await app.back();
-    await app.waitFor("id:status-meter", { state: "gone" });
+    await typeUntil(app, "id:composer", "/status", "id:send");
+    await pressWhenEnabled(app, "id:send");
+    await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1);
+    expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ worker_id: "w3", text: "/status" });
+    expect(framesOf(app.host.posts(), "codex_slash_commands")).toHaveLength(0);
+    expect(framesOf(app.host.posts(), "codex_status")).toHaveLength(0);
     await focusComposer(app);
     await app.press("id:model-chip");
     await app.waitFor("id:model-row-gpt-6");
@@ -553,7 +548,7 @@ describe("a Session", () => {
     await app.waitFor("id:git-page");
   }, 20_000);
 
-  test("Attach File uploads a picked file and the message carries where the computer keeps it", async () => {
+  test("+ › Files uploads a picked file and the message carries where the computer keeps it", async () => {
     const app = await open(APP, {
       host: phoneHost({ brain: {}, worker_sessions: [session("w6", { name: "attach" })], conversations: { w6: [] } }, {
         "files.pick": () => [{ uri: "content://picker/plan.pdf", name: "plan.pdf", mimeType: "application/pdf", size: 2048 }],
@@ -566,8 +561,8 @@ describe("a Session", () => {
     await app.host.send("links.open", { url: "mewla://sessions/w6" });
     await app.waitFor("id:composer");
     // Under a full suite's load a press or the first keys after a sheet closes can be lost: each step waits for what it does.
-    await pressUntil(app, "id:composer-plus", "id:attach-file");
-    await pressUntil(app, "id:attach-file", "text:Ready");
+    await pressUntil(app, "id:composer-plus", "id:attach-files");
+    await pressUntil(app, "id:attach-files", "text:Ready");
     await typeUntil(app, "id:composer", "Read this", "id:send");
     await pressWhenEnabled(app, "id:send");
     await app.waitUntil(() => framesOf(app.host.posts(), "send_input").length === 1);

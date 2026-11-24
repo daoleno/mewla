@@ -47,9 +47,6 @@ import { ProviderOutageRow, providerOutage } from "./ProviderOutageRow";
 import { HOME_HEADER_HEIGHT, homeHeaderInset, Tray } from "../tray/Tray";
 import { BrainChatFailed, BrainChatUnavailable, BrainHostSheet, BrainMenu, brainChatState, brainChatUnavailable, brainComposerBlock, createBrainComposer, currentBrain, MentionPanel } from "../brain";
 import { newSessionOpen } from "../screens/NewSession";
-import { ComposerPlusButton, SlashMenu } from "../session/SlashMenu";
-import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
-import { CodexStatusSheet } from "../session/CodexStatusSheet";
 import { AttachmentTray } from "../more/files/Pages";
 import { tray } from "../tray/state";
 import { rail, wide } from "../shell/layout";
@@ -469,7 +466,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
 
 function Composer(props: { text: ReturnType<typeof createComposerText>; editor: ReturnType<typeof createMessageEdit>; dropInto: DropInto }) {
   const editor = props.editor;
-  const tools = createBrainComposer({ text: props.text, onOpenTerminal: (id) => openBrainTerminal(id), onNotice: (text) => notice.set(text), onSent: () => brainSends.set(untracked(brainSends) + 1) });
+  const tools = createBrainComposer({ text: props.text, onNotice: (text) => notice.set(text), onSent: () => brainSends.set(untracked(brainSends) + 1) });
   // Pasted into the field or dropped on the thread: chips, as picked ones.
   const attach = (incoming: IncomingFiles) => void attachIncoming(tools.uploads, incoming).catch((error) => notice.set(error instanceof Error ? error.message : "Could not attach the file."));
   props.dropInto.set({ attach });
@@ -486,22 +483,16 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
         running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}
         active={() => homeShown() && !trayOpen()} pickerOpen={tools.pickerOpen}
         onFiles={attach}
-        leading={<ComposerPlusButton pinned={tools.pinned} connected={() => connection() === "connected"} onPress={() => tools.pinned.set(!untracked(tools.pinned))} />}
+        attach={tools.attach}
         onRecall={() => {
           const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
           if (item) editor.open(item);
         }}>
         <MentionPanel text={props.text.text} executors={tools.executors} onPick={(draft) => props.text.set(draft)} />
-        <SlashMenu text={props.text.text} commands={tools.commands} commandsUnavailable={tools.commandsUnavailable} agentKind={tools.kind} connected={() => connection() === "connected"}
-          pinned={tools.pinned} onPick={tools.pick} onAttach={tools.attach} uploading={tools.uploading} />
         <If when={tools.uploads.items().length > 0}><AttachmentTray uploads={tools.uploads} /></If>
         <If when={editor.edit()}><EditChip editor={editor} /></If>
         <If when={notice()}><Text testID="brain-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
       </ChatComposer>
-      <If when={hostId()}><>
-          <CodexStatusSheet open={tools.statusOpen} onClose={() => tools.statusOpen.set(false)} transport={currentTransport()!} workerId={hostId()} />
-          <CodexSkillsSheet open={tools.skillsOpen} onClose={() => tools.skillsOpen.set(false)} transport={currentTransport()!} cwd={brain()?.host_worker?.cwd} onPick={tools.insertSkill} />
-        </></If>
     </>
   );
 }
