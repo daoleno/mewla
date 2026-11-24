@@ -46,6 +46,7 @@ func (s *Service) raiseNoteCompactionsDue() {
 	if err := s.raiseNoteCompactions(); err != nil {
 		log.Printf("brain note budgets: %v", err)
 	}
+	s.raiseTReviewDue()
 }
 
 // raiseNoteCompactions opens one compaction Work for each note over its

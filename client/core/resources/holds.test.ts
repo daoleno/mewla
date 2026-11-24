@@ -35,6 +35,7 @@ describe("holds", () => {
 
   test("words", () => {
     expect(holdKindLabel("scratch")).toBe("Session scratch");
+    expect(holdKindLabel("review")).toBe("To review");
     expect(growthText(1_000_000, formatBytes)).toBe(`+${formatBytes(1_000_000)} in 7 days`);
     expect(growthText(-300, formatBytes)).toBe(`−${formatBytes(300)} in 7 days`);
     expect(growthText(0, formatBytes)).toBe("Same as 7 days ago");
