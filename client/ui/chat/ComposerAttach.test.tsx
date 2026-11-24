@@ -60,6 +60,41 @@ describe("the composer's +", () => {
     expect(pick).toMatchObject({ kind: "images", multiple: true, limit: 8, format: "compatible" });
   });
 
+  test("on iOS a tile opens its picker over the open sheet, and the sheet goes once the photo is picked", async () => {
+    const app = await open(COMPOSER, { ...phone(), platform: "ios" });
+    const sheetAtPick: boolean[] = [];
+    app.onPick(() => {
+      sheetAtPick.push(app.shows("id:attach-sheet"));
+      return [PHOTO];
+    });
+    await app.press("id:composer-plus");
+    await app.press("id:attach-photos");
+    await app.waitFor("text:Ready");
+    expect(sheetAtPick).toEqual([true]);
+    await app.waitUntil(() => !app.shows("id:attach-sheet"));
+  });
+
+  test("a picker that fails or comes back empty lets the next one open: picking never sticks", async () => {
+    const shape = phone({ camera: true });
+    const app = await open(COMPOSER, {
+      ...shape,
+      host: { ...shape.host, handlers: { ...shape.host.handlers, "files.capture": () => Promise.reject(new Error("The camera could not open.")) } },
+      platform: "ios",
+    });
+    let photos = 0;
+    app.onPick(() => (photos += 1) === 1 ? null : [PHOTO]);
+    await app.press("id:composer-plus");
+    await app.press("id:attach-camera");
+    await app.waitFor("text:The camera could not open.");
+    await app.press("id:composer-plus");
+    await app.press("id:attach-photos");
+    await app.waitUntil(() => app.picks().length === 1);
+    await app.press("id:composer-plus");
+    await app.press("id:attach-photos");
+    await app.waitFor("text:Ready");
+    expect(app.picks()).toHaveLength(2);
+  });
+
   test("a closed picker attaches nothing and says nothing", async () => {
     const app = await open(COMPOSER, { ...phone(), platform: "android" });
     app.onPick(() => null);
