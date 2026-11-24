@@ -451,6 +451,13 @@ its workspace under `worklog/<topic>/`, which nothing collects, and runs the
 Trigger there (`mewla trigger create -cwd`). A Worker's helper goes in the project's worktree, or
 `mewla gc keep` keeps it from its TMPDIR.
 
+Before stopping a process or deleting a path you did not make, ask what
+holds it: `mewla gc why PID` or `mewla gc why PATH` names the Session and the
+Work it belongs to and how that is known (its Session's slice, a process the
+Session's lease recorded, or its executable, working directory or
+`--state-dir` in a Session's scratch), or says it is not Mewla's. Process
+chains are read from `/proc`, on Linux; paths work everywhere.
+
 On a daemon without `mewla gc keep`, write what must stay outside TMPDIR: in
 the project's worktree or the Brain worklog. Anything collected by mistake
 stays in the trash for three days: `mewla gc restore <id>`.
