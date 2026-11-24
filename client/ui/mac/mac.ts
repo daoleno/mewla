@@ -283,7 +283,7 @@ export function startMac(): void {
           if (script.allow) void allowProof(script.allow);
           if (script.minimize) setTimeout(() => { Window.get("main")?.minimize(); console.log("dev script: minimized"); }, script.minimize * 1000);
         }
-        // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in a web view).
+        // Brain's host's terminal in the window (the Mac's terminal view: libghostty-vt in an AppKit view, client/macos/src/terminal).
         if (!terminal && script.terminal && hostId) {
           terminal = true;
           openBrainTerminal(hostId);
