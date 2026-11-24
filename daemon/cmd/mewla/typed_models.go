@@ -142,3 +142,12 @@ func (t *typedModels) SetModel(ctx context.Context, worker *classifier.Worker, m
 	}
 	return t.Models(ctx, worker)
 }
+
+// Settle makes a pick held during the turn that just ended before the next
+// message is sent, so that message runs on it.
+func (t *typedModels) Settle(ctx context.Context, worker *classifier.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	return t.later.settle(ctx, worker.ID)
+}

@@ -86,6 +86,13 @@ func (c *claudeModels) list(ctx context.Context, worker *classifier.Worker) ([]w
 	return models, nil
 }
 
+// ModelsAvailable: Claude runs in the Session. A Session Mewla just made
+// runs its shell for a moment before Claude starts (its command is the
+// shell's then), and Claude's list is read with Claude's own command line.
+func (c *claudeModels) ModelsAvailable(worker *classifier.Worker) bool {
+	return work.InferWorkerProvider(worker.Command) == work.WorkerProviderClaude
+}
+
 // Models reads the Session's menu.
 func (c *claudeModels) Models(ctx context.Context, worker *classifier.Worker) (server.AgentModels, error) {
 	models, err := c.list(ctx, worker)
@@ -404,3 +411,12 @@ func indexOf(values []string, value string) int {
 }
 
 func containsString(values []string, value string) bool { return indexOf(values, value) >= 0 }
+
+// Settle makes a pick held during the turn that just ended before the next
+// message is sent, so that message runs on it.
+func (c *claudeModels) Settle(ctx context.Context, worker *classifier.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	return c.later.settle(ctx, worker.ID)
+}

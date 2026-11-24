@@ -49,6 +49,14 @@ type agyModels struct {
 // every later start of the Session.
 type agySessionModels struct{ sessions AntigravitySessions }
 
+// ModelsAvailable: the Session's Antigravity program is linked to Mewla.
+func (a agySessionModels) ModelsAvailable(worker *classifier.Worker) bool {
+	if linked, ok := a.sessions.(interface{ Linked(workerID string) bool }); ok {
+		return linked.Linked(worker.ID)
+	}
+	return true
+}
+
 func (a agySessionModels) Models(ctx context.Context, worker *classifier.Worker) (AgentModels, error) {
 	raw, err := a.sessions.Models(ctx, worker.ID)
 	if err != nil {

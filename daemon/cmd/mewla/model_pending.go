@@ -27,8 +27,10 @@ type turnPending struct {
 }
 
 type heldChoice struct {
-	choice server.AgentChoice
-	gen    uint64
+	choice   server.AgentChoice
+	gen      uint64
+	apply    func(ctx context.Context) error
+	applying bool
 }
 
 func newTurnPending(hub *agentevents.Hub) *turnPending {
@@ -82,7 +84,7 @@ func (t *turnPending) hold(workerID string, choice server.AgentChoice, apply fun
 	gen := turnPendingGen.n
 	turnPendingGen.Unlock()
 	t.mu.Lock()
-	t.pending[workerID] = heldChoice{choice: choice, gen: gen}
+	t.pending[workerID] = heldChoice{choice: choice, gen: gen, apply: apply}
 	t.mu.Unlock()
 	go func() {
 		deadline := time.Now().Add(t.wait)
@@ -95,7 +97,7 @@ func (t *turnPending) hold(workerID string, choice server.AgentChoice, apply fun
 			}
 			time.Sleep(t.poll)
 		}
-		if !t.current(workerID, gen) {
+		if !t.claim(workerID, gen) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -117,4 +119,57 @@ func (t *turnPending) current(workerID string, gen uint64) bool {
 	defer t.mu.Unlock()
 	held, ok := t.pending[workerID]
 	return ok && held.gen == gen
+}
+
+// claim marks the held choice as being made; false when it is gone or
+// already being made.
+func (t *turnPending) claim(workerID string, gen uint64) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	held, ok := t.pending[workerID]
+	if !ok || held.gen != gen || held.applying {
+		return false
+	}
+	held.applying = true
+	t.pending[workerID] = held
+	return true
+}
+
+// settle makes a held choice now, when the agent's turn is over: a message
+// about to be sent then runs on it. A choice already being made is waited
+// for. While a turn runs the choice stays held.
+func (t *turnPending) settle(ctx context.Context, workerID string) error {
+	if t == nil {
+		return nil
+	}
+	for {
+		t.mu.Lock()
+		held, ok := t.pending[workerID]
+		if !ok {
+			t.mu.Unlock()
+			return nil
+		}
+		if !held.applying {
+			if t.busy(workerID) {
+				t.mu.Unlock()
+				return nil
+			}
+			held.applying = true
+			t.pending[workerID] = held
+			t.mu.Unlock()
+			err := held.apply(ctx)
+			t.mu.Lock()
+			if now, ok := t.pending[workerID]; ok && now.gen == held.gen {
+				delete(t.pending, workerID)
+			}
+			t.mu.Unlock()
+			return err
+		}
+		t.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }

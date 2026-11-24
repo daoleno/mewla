@@ -476,6 +476,16 @@ func (g *gate) targets(s *session, view runtimeView) [2]choice {
 	return t
 }
 
+// screenText is the Session's whole screen.
+func (g *gate) screenText(s *session) string {
+	reply, err := g.c.request(map[string]any{"type": "terminal_snapshot", "target_id": s.id}, 10*time.Second, "terminal_snapshot")
+	if err != nil {
+		return ""
+	}
+	text, _ := reply["text"].(string)
+	return text
+}
+
 // screen is the Session's last screen lines, for a note.
 func (g *gate) screen(s *session) string {
 	reply, err := g.c.request(map[string]any{"type": "terminal_snapshot", "target_id": s.id}, 10*time.Second, "terminal_snapshot")
@@ -497,10 +507,10 @@ func (g *gate) screen(s *session) string {
 
 func (g *gate) walk(s *session) {
 	offered := g.offered(s, 25*time.Second)
-	if !offered && strings.Contains(g.screen(s), "Update available") {
+	if text := g.screenText(s); !offered && (strings.Contains(text, "Update available") || strings.Contains(text, "Skip until next version")) {
 		// The agent asks about its own update before it starts its
 		// conversation; the gate skips it, as a person would answer it.
-		_, _ = g.c.request(map[string]any{"type": "send_key", "worker_id": s.id, "key": "Escape"}, 5*time.Second, "send_key_result")
+		_, _ = g.c.request(map[string]any{"type": "send_key", "worker_id": s.id, "key": "Escape"}, 3*time.Second, "send_key_result")
 	}
 	if !offered && !g.offered(s, 65*time.Second) {
 		_, err := g.runtime(s)

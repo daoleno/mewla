@@ -63,3 +63,10 @@ func TestOpenCodeSessionReadOffItsProcess(t *testing.T) {
 		t.Fatalf("session %q present %v err %v", token, present, err)
 	}
 }
+
+// A DSH Session whose program has not opened its socket yet is not ready.
+func TestDSHSessionReadyNeedsItsSocket(t *testing.T) {
+	if DSHSessionReady("session-00000000-0000-0000-0000-000000000000") {
+		t.Fatal("a DSH Session without a socket is ready")
+	}
+}

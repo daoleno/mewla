@@ -150,3 +150,12 @@ func opencodeAgentModels(models []opencodeapi.ModelInfo, current opencodeapi.Mod
 	}
 	return out
 }
+
+// Settle makes a pick held during the turn that just ended before the next
+// message is sent, so that message runs on it.
+func (o *opencodeEvents) Settle(ctx context.Context, worker *classifier.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	return o.later.settle(ctx, worker.ID)
+}

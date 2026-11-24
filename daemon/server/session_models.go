@@ -63,6 +63,26 @@ type SessionModelsAvailability interface {
 	ModelsAvailable(worker *classifier.Worker) bool
 }
 
+// SessionModelsSettle is implemented by an agent that holds a pick for the
+// end of a turn: Settle makes a held pick now when the turn is over.
+type SessionModelsSettle interface {
+	Settle(ctx context.Context, worker *classifier.Worker) error
+}
+
+// settleSessionModels makes a held pick before a message is sent to the
+// Session, so the message's turn runs on it.
+func (s *Server) settleSessionModels(workerID string) {
+	worker := s.lookupWorker(workerID)
+	_, models := s.sessionModelsProvider(worker)
+	settle, ok := models.(SessionModelsSettle)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = settle.Settle(ctx, worker)
+}
+
 // sessionModelsAvailable reports whether the Session can be offered its
 // agent's menu now.
 func sessionModelsAvailable(models SessionModels, worker *classifier.Worker) bool {
