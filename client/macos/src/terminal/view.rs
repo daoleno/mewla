@@ -360,6 +360,27 @@ define_class!(
             self.flush();
         }
 
+        // VoiceOver: a text area named Terminal whose value is the screen's text.
+        #[unsafe(method(isAccessibilityElement))]
+        fn is_accessibility_element(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method_id(accessibilityRole))]
+        fn accessibility_role(&self) -> Retained<NSString> {
+            NSString::from_str("AXTextArea")
+        }
+
+        #[unsafe(method_id(accessibilityLabel))]
+        fn accessibility_label(&self) -> Retained<NSString> {
+            NSString::from_str("Terminal")
+        }
+
+        #[unsafe(method_id(accessibilityValue))]
+        fn accessibility_value(&self) -> Retained<NSString> {
+            NSString::from_str(&self.screen_text())
+        }
+
         #[unsafe(method(copy:))]
         fn copy(&self, _sender: Option<&AnyObject>) {
             let text = self.selected_text();
@@ -1152,6 +1173,26 @@ impl TermView {
             at = run.col + run.cells;
         }
         (utf16(&units), index)
+    }
+
+    /// The live screen as text, a line per row, without the blank end of each row or the blank rows below.
+    fn screen_text(&self) -> String {
+        let (text, changed) = {
+            let mut s = self.ivars().state.borrow_mut();
+            if s.needs_pull {
+                Self::pull(&mut s);
+            }
+            let mut lines: Vec<String> = s.grid.iter().map(|line| Self::row_text(line, 0).0.trim_end().to_string()).collect();
+            while lines.last().is_some_and(|l| l.is_empty()) {
+                lines.pop();
+            }
+            (lines.join("\n"), !s.changed.is_empty() || s.changed_all)
+        };
+        if changed {
+            // The rows this read took from the VT are drawn too.
+            self.queue_refresh();
+        }
+        text
     }
 
     /// The content line and column under a mouse event; None outside the grid.
