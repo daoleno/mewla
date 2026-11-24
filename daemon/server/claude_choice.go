@@ -30,6 +30,11 @@ type ChoiceSelection struct {
 
 const answerChoiceConfirmTimeout = 8 * time.Second
 
+// choiceGoneSettle is how long the transcript gets to record a question the
+// Terminal no longer shows (answered there a moment ago) before Mewla says
+// the screen, not the question, is what it cannot read.
+const choiceGoneSettle = 1500 * time.Millisecond
+
 func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 	var request answerChoiceRequest
 	if len(raw.ChoiceAnswer) == 0 || json.Unmarshal(raw.ChoiceAnswer, &request) != nil {
@@ -120,6 +125,12 @@ func driveChoiceAnswer(workerID string, request answerChoiceRequest, load func()
 		return nil, err
 	}
 	if err := drive(workerID, questions, answers); err != nil {
+		if errors.Is(err, watcher.ErrClaudeChoiceGone) && !choicePassed(load, request.CallID, choiceGoneSettle) {
+			// The transcript still waits for this answer: the question has not
+			// passed, the Terminal only does not show it as Mewla can read it.
+			log.Printf("answer_choice %s call=%s: screen says gone, transcript says pending: %v", workerID, request.CallID, err)
+			return nil, fmt.Errorf("%w: the Terminal doesn't show this question; answer it there", watcher.ErrClaudeChoiceRefused)
+		}
 		return nil, err
 	}
 	deadline := time.Now().Add(answerChoiceConfirmTimeout)
@@ -140,6 +151,23 @@ func driveChoiceAnswer(workerID string, request answerChoiceRequest, load func()
 		}
 		if !time.Now().Before(deadline) {
 			return nil, fmt.Errorf("the answer was submitted but Claude has not recorded it yet")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// choicePassed reports whether the transcript stops waiting for this call
+// within settle: answered, dismissed or replaced.
+func choicePassed(load func() (work.CodexConversation, error), callID string, settle time.Duration) bool {
+	deadline := time.Now().Add(settle)
+	for {
+		if conversation, err := load(); err == nil {
+			if _, pending := work.PendingConversationChoice(conversation, callID); !pending {
+				return true
+			}
+		}
+		if !time.Now().Before(deadline) {
+			return false
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
