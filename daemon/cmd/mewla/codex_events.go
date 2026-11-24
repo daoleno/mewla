@@ -39,6 +39,9 @@ type codexEvents struct {
 	// socketSource names the app-server socket of a Worker whose launch did
 	// not come from the adapter.
 	socketSource func(workerID string) string
+	// gatewayServes says whether Mewla's machine gateway answers a model, for
+	// a Session whose Codex sends its turns there.
+	gatewayServes func(model string) bool
 }
 
 func newCodexEvents(ctx context.Context, hub *agentevents.Hub) *codexEvents {
@@ -50,6 +53,13 @@ func newCodexEvents(ctx context.Context, hub *agentevents.Hub) *codexEvents {
 func (c *codexEvents) SetSocketSource(source func(workerID string) string) {
 	c.mu.Lock()
 	c.socketSource = source
+	c.mu.Unlock()
+}
+
+// SetGatewayModels installs which models the machine gateway answers.
+func (c *codexEvents) SetGatewayModels(serves func(model string) bool) {
+	c.mu.Lock()
+	c.gatewayServes = serves
 	c.mu.Unlock()
 }
 
