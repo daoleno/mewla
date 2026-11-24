@@ -89,8 +89,11 @@ Backups sit beside the migrated directory: `~/.mewla/brain/legacy-state-<UTC
 time>/state/…`, `~/.mewla/calendar`'s sibling `~/.mewla/legacy-calendar-<UTC
 time>/calendar/calendar.json…`. Brain's backup also
 takes the repair copies the old store had accumulated (`*.pre-digest-repair-*`,
-`*.schema1.bak`, `messages-<n>.jsonl`, crash-left `.tmp-*`). Nothing is deleted;
-remove a backup yourself once you are satisfied. `mewla` never reads one.
+`*.schema1.bak`, `messages-<n>.jsonl`, crash-left `.tmp-*`). `mewla` never reads
+one. A backup made by a migration has its term at birth: a keep (owner `mewla`)
+for 30 days, after which the collector moves it to the trash for three more
+(`mewla gc status --all` lists both). Backups from before this rule have no
+keep and stay until removed by hand.
 
 A crash at any point reruns safely: before step 4 the next start rebuilds from
 the untouched files; after it the database carries its migration record and the
