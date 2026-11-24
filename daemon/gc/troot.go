@@ -102,6 +102,42 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 	return moved, unread, nil
 }
 
+// restartInTRoot makes a restored item of the t/ root an ordinary unmarked
+// item whose 48 h start now: a Session's marker would leave it to a lease
+// that is gone, a place in the first sweep's list would leave it alone
+// forever, and the restore is a use (without it, old files are trashed again
+// on the next pass). Items restored elsewhere are left as they were.
+func restartInTRoot(stateRoot, original string, now time.Time) {
+	root := filepath.Join(stateRoot, "t")
+	if filepath.Dir(original) != root {
+		return
+	}
+	_ = os.Remove(filepath.Join(original, scratchMarker))
+	_ = os.Chtimes(original, now, now)
+	path := snapshotPath(stateRoot)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var snapshot rootSnapshot
+	if json.Unmarshal(raw, &snapshot) != nil {
+		return
+	}
+	name, kept := filepath.Base(original), snapshot.Names[:0]
+	for _, n := range snapshot.Names {
+		if n != name {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) == len(snapshot.Names) {
+		return
+	}
+	snapshot.Names = kept
+	if data, err := json.MarshalIndent(snapshot, "", "  "); err == nil {
+		_ = writeFileAtomic(path, append(data, '\n'))
+	}
+}
+
 // readSnapshot returns the names the t/ root held when the rule came,
 // writing them the first time.
 func readSnapshot(stateRoot string, entries []os.DirEntry, now time.Time) (map[string]bool, error) {
