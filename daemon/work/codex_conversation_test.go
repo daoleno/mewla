@@ -2142,3 +2142,48 @@ func assertEvent(t *testing.T, event CodexConversationEvent, kind, role, title, 
 		t.Fatalf("event = %#v, want kind=%s role=%s title=%s body~%s", event, kind, role, title, bodyPart)
 	}
 }
+
+// 0.4.28 gate (lane A a2.1): the route refused the Session's model and the turn
+// ended with only its error on task_complete. The chat showed the person's
+// message and nothing else. A second refused turn with the same message shows
+// again: it is that turn's error.
+func TestParseCodexConversation_ATurnThatEndsWithAnErrorSaysIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	refused := "unexpected status 404 Not Found: request failed, url: http://127.0.0.1:3428/v1/responses"
+	turn := func(id, at, ended string) []map[string]any {
+		return []map[string]any{
+			{"type": "event_msg", "timestamp": at, "payload": map[string]any{"type": "task_started", "turn_id": id}},
+			{"type": "event_msg", "timestamp": at, "payload": map[string]any{"type": "user_message", "message": "CODEX51"}},
+			{"type": "event_msg", "timestamp": ended, "payload": map[string]any{"type": "task_complete", "turn_id": id, "last_agent_message": nil, "error": map[string]any{"message": refused}}},
+		}
+	}
+	lines := append(turn("t1", "2026-11-24T17:27:35.140Z", "2026-11-24T17:27:41.037Z"), turn("t2", "2026-11-24T17:28:35Z", "2026-11-24T17:28:36Z")...)
+	// A Codex that says it twice (an error event, then the turn's end) shows it once.
+	lines = append(lines,
+		map[string]any{"type": "event_msg", "timestamp": "2026-11-24T17:29:00Z", "payload": map[string]any{"type": "task_started", "turn_id": "t3"}},
+		map[string]any{"type": "event_msg", "timestamp": "2026-11-24T17:29:01Z", "payload": map[string]any{"type": "error", "message": "model not offered", "codex_error_info": map[string]any{"http_connection_failed": map[string]any{"http_status_code": 404}}}},
+		map[string]any{"type": "event_msg", "timestamp": "2026-11-24T17:29:01Z", "payload": map[string]any{"type": "task_complete", "turn_id": "t3", "error": "model not offered"}},
+	)
+	items := make([]any, len(lines))
+	for index, line := range lines {
+		items[index] = line
+	}
+	writeJSONL(t, path, items...)
+
+	got, err := parseCodexConversation(path)
+	if err != nil {
+		t.Fatalf("parseCodexConversation: %v", err)
+	}
+	var errors []CodexConversationEvent
+	for _, event := range got.Events {
+		if event.Kind == "status" && event.Title == "Codex error" {
+			errors = append(errors, event)
+		}
+	}
+	if len(errors) != 3 || errors[0].Body != refused || errors[0].Status != "failed" || errors[1].Body != refused || errors[2].Body != "model not offered" {
+		t.Fatalf("each refused turn says its error once: %#v", errors)
+	}
+	if got.Activity == nil || got.Activity.Status != ProviderActivityFailed {
+		t.Fatalf("a refused turn is a failed turn: %#v", got.Activity)
+	}
+}
