@@ -104,3 +104,43 @@ func TestAgySocketReportsEveryFastProviderOutcome(t *testing.T) {
 		t.Fatal("agy recovery left the provider held")
 	}
 }
+
+// agy links to Mewla before its own setup says which model the Session runs
+// on: the menu is offered only once it has.
+func TestAgyMenuWaitsForAgyToSayItsModel(t *testing.T) {
+	const session = "agy-0b6a3c1e-0000-4000-8000-00000000abce"
+	a := newAgyEvents(context.Background(), agentevents.NewHub(), nil, func() []*classifier.Worker {
+		return []*classifier.Worker{{ID: "worker", Command: "mewla agy-session --agy-session " + session}}
+	})
+	server, client := net.Pipe()
+	defer client.Close()
+	go a.serve(server)
+	encoder, decoder := json.NewEncoder(client), json.NewDecoder(client)
+	if err := encoder.Encode(work.AntigravityLinkMessage{T: "hello", Session: session, Conversation: "conversation"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for a.conn("worker") == nil && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	answer := func(current string) {
+		var asked work.AntigravityLinkMessage
+		if err := decoder.Decode(&asked); err != nil {
+			t.Error(err)
+			return
+		}
+		models, _ := json.Marshal(map[string]string{"current": current})
+		_ = encoder.Encode(work.AntigravityLinkMessage{T: "reply", Req: asked.Req, Models: models})
+	}
+	go answer("")
+	if a.Linked("worker") {
+		t.Fatal("the menu was offered before agy said its model")
+	}
+	go answer("gemini-4-carbon-low")
+	if !a.Linked("worker") {
+		t.Fatal("the menu was not offered once agy said its model")
+	}
+	if !a.Linked("worker") { // no question to agy this time: nothing answers it
+		t.Fatal("a Session whose model agy said lost its menu")
+	}
+}

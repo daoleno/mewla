@@ -13,7 +13,9 @@
 # --keep leaves the scratch daemon running and its folder in place.
 #
 # It never touches the live daemon: own state root, own port, env -i, and
-# every process it starts is stopped by pid. Spend: a few one-line turns per
+# every process it starts is stopped by pid. It leaves this computer's Codex
+# config and Claude Code settings alone (MEWLA_NO_CONFIG_TAKEOVER) and fails
+# if either changed during the run. Spend: a few one-line turns per
 # agent on cheap models (cmd/mewla-model-gate defaultTargets), well under
 # 5 USD for the whole matrix. Not for hosted CI: it needs the agents'
 # sign-ins. Run it before a release that touches model switching
@@ -115,6 +117,7 @@ up() {
   env -i HOME="$HOME" USER="$USER" LANG=en_US.UTF-8 TERM=xterm-256color SHELL=/bin/zsh \
     PATH="$AGENT_PATH" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-}" \
     TMUX_TMPDIR="$S/tmux" MEWLA_STATE_ROOT="$S/state" MEWLA_NO_AUTOUPDATE=1 MEWLA_BRAIN_HOST_EXECUTOR=brainstub \
+    MEWLA_NO_CONFIG_TAKEOVER=1 \
     "$S/bin/mewla" serve -addr "127.0.0.1:$PORT" -loopback-only -state-dir "$S/state" >> "$S/daemon.log" 2>&1 < /dev/null &
     echo $! > "$S/daemon.pid")
 }
@@ -146,7 +149,20 @@ cleanup() {
   [ -f "$S/pair.log" ] && sed -E "s/(p%3D|p=)[A-Za-z0-9_%-]+/\1<redacted>/g" "$S/pair.log" | tail -5 >&2
   case "$S" in /tmp/mpg.??????) rm -rf -- "$S" ;; esac
 }
-trap cleanup EXIT
+# The person's own agent configs: the run must leave them byte for byte.
+OWN_CONFIGS="$HOME/.codex/config.toml $HOME/.claude/settings.json"
+configs_sum() { for f in $OWN_CONFIGS; do [ -f "$f" ] && sha256sum "$f"; done; }
+CONFIGS_BEFORE=$(configs_sum)
+finish() {
+  local rc=$?
+  cleanup
+  if [ "$(configs_sum)" != "$CONFIGS_BEFORE" ]; then
+    echo "FAIL: the run changed $OWN_CONFIGS" >&2
+    exit 1
+  fi
+  exit $rc
+}
+trap finish EXIT
 
 up
 for _ in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 1; done

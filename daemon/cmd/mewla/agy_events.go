@@ -55,6 +55,8 @@ type agyConn struct {
 	// asking holds the decisions this Session waits on, by id, with the
 	// cancel of the wait on a person or Brain.
 	asking map[string]context.CancelFunc
+	// modelsReady: agy has said which model the Session runs on.
+	modelsReady bool
 	// questions are the questions agy asked with its ask_question tool. agy
 	// ends its turn while one waits (the answer is the next message), and the
 	// hub settles a decision whenever the agent moves, so these are stated
@@ -482,7 +484,34 @@ func (a *agyEvents) interrupt(sessionID string) (handled bool, err error) {
 }
 
 // Linked reports a Session whose program is connected to Mewla.
-func (a *agyEvents) Linked(workerID string) bool { return a.conn(workerID) != nil }
+// Linked reports a Session whose agy program is linked to Mewla and has told
+// it the model it runs on (agy says so once its own setup is done, a moment
+// after the link).
+func (a *agyEvents) Linked(workerID string) bool {
+	c := a.conn(workerID)
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	ready := c.modelsReady
+	c.mu.Unlock()
+	if ready {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	reply, err := c.request(ctx, map[string]any{"t": "models"})
+	var models struct {
+		Current string `json:"current"`
+	}
+	if err != nil || json.Unmarshal(reply.Models, &models) != nil || models.Current == "" {
+		return false
+	}
+	c.mu.Lock()
+	c.modelsReady = true
+	c.mu.Unlock()
+	return true
+}
 
 // Models asks a Session what agy offers and uses now.
 func (a *agyEvents) Models(ctx context.Context, workerID string) (json.RawMessage, error) {
