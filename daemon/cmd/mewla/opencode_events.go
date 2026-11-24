@@ -44,6 +44,8 @@ type opencodeEvents struct {
 	now      func() time.Time
 	provider func(*classifier.Worker) string
 	open     func(context.Context) (opencodeService, error)
+	// later holds a model choice made while a turn runs.
+	later *turnPending
 
 	mu      sync.Mutex
 	workers map[string]*opencodeWorker
@@ -63,7 +65,7 @@ type opencodeWorker struct {
 
 func newOpencodeEvents(ctx context.Context, hub *agentevents.Hub, provider func(*classifier.Worker) string) *opencodeEvents {
 	return &opencodeEvents{
-		ctx: ctx, hub: hub, now: time.Now, provider: provider,
+		ctx: ctx, hub: hub, now: time.Now, provider: provider, later: newTurnPending(hub),
 		open:    func(ctx context.Context) (opencodeService, error) { return opencodeapi.OpenLive(ctx) },
 		workers: map[string]*opencodeWorker{},
 	}

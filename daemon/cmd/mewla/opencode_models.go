@@ -71,7 +71,9 @@ func (o *opencodeEvents) Models(ctx context.Context, worker *classifier.Worker) 
 			return server.AgentModels{}, err
 		}
 	}
-	return opencodeAgentModels(models, current), nil
+	out := opencodeAgentModels(models, current)
+	out.Pending = o.later.of(worker.ID)
+	return out, nil
 }
 
 // SetModel switches the session's next turns to the model and variant.
@@ -89,7 +91,22 @@ func (o *opencodeEvents) SetModel(ctx context.Context, worker *classifier.Worker
 	} else if !found {
 		return server.AgentModels{}, errOpencodeNoSession
 	}
-	if err := service.SwitchModel(ctx, session, opencodeapi.ModelRef{ID: id, ProviderID: provider, Variant: effort}); err != nil {
+	ref := opencodeapi.ModelRef{ID: id, ProviderID: provider, Variant: effort}
+	// A turn under way keeps the model it started with and writes it back to
+	// the session as it ends, over a switch made meanwhile: the choice is
+	// held and made when the turn ends.
+	if o.later.busy(worker.ID) {
+		o.later.hold(worker.ID, server.AgentChoice{Model: model, Effort: effort}, func(ctx context.Context) error {
+			service, session, err := o.modelService(worker.ID)
+			if err != nil {
+				return err
+			}
+			return service.SwitchModel(ctx, session, ref)
+		})
+		return o.Models(ctx, worker)
+	}
+	o.later.drop(worker.ID)
+	if err := service.SwitchModel(ctx, session, ref); err != nil {
 		return server.AgentModels{}, err
 	}
 	return o.Models(ctx, worker)

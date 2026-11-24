@@ -359,6 +359,7 @@ Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NO
 | `scripts/stage-release.sh` | Deterministic stage tree |
 | `scripts/sign-release-manifest.sh` | Validate the updater key and sign the exact manifest bytes |
 | `scripts/verify-release-identity.sh` | Tracked identity + stage layout |
+| `scripts/model-picker-gate.sh` | Before a release that touches model switching: walks every agent × moment (new Session, after the first message, while working, after a daemon restart) against the real agents signed in on this computer, on an isolated daemon, and checks each pick in the agent's own record of its next turn (`--routes` adds this computer's default Provider connections). Local only: hosted CI has no agent sign-ins |
 
 ## Safety
 

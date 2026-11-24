@@ -90,7 +90,13 @@ module.exports = function (pi) {
         return supportedThinkingLevels(model);
       } catch (_) {}
     }
-    return model.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"];
+    // Pi's own rule (pi-ai getSupportedThinkingLevels), for a Pi that does
+    // not hand its models module to extensions: a level the model maps to
+    // null is not taken, and xhigh and max only when the model maps them.
+    if (!model.reasoning) return ["off"];
+    const map = model.thinkingLevelMap || {};
+    return ["off", "minimal", "low", "medium", "high", "xhigh", "max"].filter((level) =>
+      map[level] === null ? false : level === "xhigh" || level === "max" ? map[level] !== undefined : true);
   };
   const models = () => {
     const current = ctx.model;
