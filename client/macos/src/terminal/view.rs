@@ -634,7 +634,8 @@ impl TermView {
         let told = self.ivars().told.get();
         if told & (1 << bit) == 0 {
             self.ivars().told.set(told | (1 << bit));
-            log::info!("{}", line());
+            // Warn: the release logger keeps info only for the app's own code (target `js`).
+            log::warn!("{}", line());
         }
     }
 
@@ -675,7 +676,7 @@ impl TermView {
         let (all, whole) = (sorted(false), sorted(true));
         let rows = times.iter().map(|t| t.2).sum::<usize>() as f64 / times.len() as f64;
         let s = self.ivars().state.borrow();
-        log::info!(
+        log::warn!(
             "terminal view: {} frames of {}x{} cells ({:.1} rows drawn each): median {:.2} ms, p95 {:.2} ms, max {:.2} ms; {} whole: median {:.2} ms, p95 {:.2} ms",
             all.len(), s.cols, s.rows, rows, at(&all, 0.5), at(&all, 0.95), at(&all, 1.0), whole.len(), at(&whole, 0.5), at(&whole, 0.95)
         );
