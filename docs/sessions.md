@@ -83,7 +83,9 @@ it opens [Git review](#git-review).
   browser, or a file path to preview the file.
   On Android, pinch to change the text size between 8 and 14 (10 by default).
   The phone remembers it, and the terminal takes the new size once you lift
-  your fingers. Drag one finger up or down to scroll back through what the
+  your fingers. On a Mac, **View › Bigger Terminal Text** (⌘+) and **Smaller
+  Terminal Text** (⌘−) step it between 9 and 24 (13 by default), and the Mac
+  remembers it. Drag one finger up or down to scroll back through what the
   Session printed, and flick to keep going; it returns to the live screen at
   the bottom. A program that fills the whole screen (Claude Code, Codex, `less`)
   has no history to scroll, so the drag goes to it the way a mouse wheel does:
