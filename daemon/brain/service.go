@@ -18,6 +18,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -476,34 +477,63 @@ type reclaimWait struct {
 // noteReclaimWait records that a reclaimable Session is still kept by work of
 // its own, and logs it once it has been kept for reclaimWaitReported by the
 // same reason, so a Session that never rests is visible instead of silent.
+//
+// The same moment it is written to the collector's ledger as the Session's
+// held_because, which mewla gc status shows; it is cleared when the wait ends.
 func (s *Service) noteReclaimWait(sessionID, why string, err error) {
 	reason := strings.TrimPrefix(err.Error(), watcher.ErrSessionNotIdle.Error()+": ")
 	now := s.nowUTC()
+	id := strings.TrimPrefix(sessionID, runWaitKey)
 	s.reclaimMu.Lock()
-	defer s.reclaimMu.Unlock()
 	if s.reclaimWaits == nil {
 		s.reclaimWaits = map[string]*reclaimWait{}
 	}
 	wait := s.reclaimWaits[sessionID]
 	if wait == nil || wait.reason != reason {
 		s.reclaimWaits[sessionID] = &reclaimWait{since: now, reason: reason}
+		s.reclaimMu.Unlock()
+		if wait != nil && wait.logged {
+			s.recordHold(id, "", now)
+		}
 		return
 	}
-	if !wait.logged && now.Sub(wait.since) >= reclaimWaitReported {
+	report := !wait.logged && now.Sub(wait.since) >= reclaimWaitReported
+	if report {
 		wait.logged = true
-		log.Printf("brain Session %s is kept although %s: %s (since %s)", strings.TrimPrefix(sessionID, runWaitKey), why, reason, wait.since.Format(time.RFC3339))
+	}
+	since := wait.since
+	s.reclaimMu.Unlock()
+	if report {
+		log.Printf("brain Session %s is kept although %s: %s (since %s)", id, why, reason, since.Format(time.RFC3339))
+		s.recordHold(id, why+": "+reason, since)
 	}
 }
 
 // forgetReclaimWaits drops the waits of Sessions that no longer wait.
 func (s *Service) forgetReclaimWaits(waiting map[string]bool) {
+	var cleared []string
 	s.reclaimMu.Lock()
-	defer s.reclaimMu.Unlock()
-	for id := range s.reclaimWaits {
+	for id, wait := range s.reclaimWaits {
 		if !waiting[id] && !strings.HasPrefix(id, runWaitKey) {
+			if wait.logged {
+				cleared = append(cleared, id)
+			}
 			delete(s.reclaimWaits, id)
 		}
 	}
+	s.reclaimMu.Unlock()
+	for _, id := range cleared {
+		s.recordHold(id, "", s.nowUTC())
+	}
+}
+
+// recordHold writes why a Session is held (or, empty, that it no longer is)
+// to the collector's ledger under this Brain's state root.
+func (s *Service) recordHold(sessionID, because string, since time.Time) {
+	if s == nil || s.store == nil || s.store.Root == "" {
+		return
+	}
+	gc.HoldSession(filepath.Dir(s.store.Root), sessionID, because, since)
 }
 
 // cleanupRefusal is a completed Session Mewla declined to remove because it

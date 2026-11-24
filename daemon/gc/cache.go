@@ -65,6 +65,7 @@ func EvictCache(stateRoot string, budget int64, usage Usage) ([]Evicted, error) 
 			return evicted, err
 		}
 		total -= e.bytes
+		Record(stateRoot, Event{Action: ActionEvicted, Kind: SizeCache, Subject: e.path, Bytes: e.bytes, Detail: "cache over its budget; last changed " + e.changed.Format(time.RFC3339)})
 		evicted = append(evicted, Evicted{Path: e.path, Bytes: e.bytes, Changed: e.changed})
 	}
 	return evicted, nil

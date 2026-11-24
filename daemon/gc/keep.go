@@ -63,7 +63,11 @@ func AddKeep(stateRoot, path, owner string, until time.Time, why string, now tim
 	for _, k := range keeps {
 		if k.Owner == owner && k.Path == path {
 			k.Until, k.Why = until.UTC(), why
-			return k, writeKeep(stateRoot, k)
+			if err := writeKeep(stateRoot, k); err != nil {
+				return k, err
+			}
+			Record(stateRoot, Event{At: now, Action: ActionKept, Kind: KindKept, Subject: path, Owner: owner, Detail: keepDetail(k)})
+			return k, nil
 		}
 	}
 	var raw [4]byte
@@ -72,7 +76,15 @@ func AddKeep(stateRoot, path, owner string, until time.Time, why string, now tim
 		ID:   now.UTC().Format("20060102-150405") + "-" + hex.EncodeToString(raw[:]),
 		Path: path, Owner: owner, Until: until.UTC(), Why: why, CreatedAt: now.UTC(),
 	}
-	return k, writeKeep(stateRoot, k)
+	if err := writeKeep(stateRoot, k); err != nil {
+		return k, err
+	}
+	Record(stateRoot, Event{At: now, Action: ActionKept, Kind: KindKept, Subject: path, Owner: owner, Detail: keepDetail(k)})
+	return k, nil
+}
+
+func keepDetail(k Keep) string {
+	return k.ID + ": until " + k.Until.Format(time.DateOnly) + ": " + k.Why
 }
 
 // ListKeeps returns every keep, oldest first.
@@ -160,6 +172,7 @@ func MoveKept(stateRoot, owner, scratch string) ([]KeepNote, error) {
 		if err := os.Rename(k.Path, dest); err != nil {
 			return notes, fmt.Errorf("move kept %s: %w", k.Path, err)
 		}
+		Record(stateRoot, Event{Action: ActionKeptMoved, Kind: KindKept, Subject: k.Path, Owner: k.Owner, Bytes: Size(dest), Detail: k.ID + ": to " + dest})
 		notes = append(notes, KeepNote{Keep: k})
 	}
 	return notes, nil
@@ -205,6 +218,7 @@ func ReleaseKeep(stateRoot, id, owner string, now time.Time) (Keep, error) {
 }
 
 func dropKeep(stateRoot string, k Keep, reason string, now time.Time) error {
+	Record(stateRoot, Event{At: now, Action: ActionKeepEnded, Kind: KindKept, Subject: k.Path, Owner: k.Owner, Detail: k.ID + ": " + reason})
 	if k.Moved != "" {
 		if _, err := os.Lstat(k.Moved); err == nil {
 			if _, err := Trash(stateRoot, KindKept, k.Moved, k.Owner, reason, now); err != nil {
