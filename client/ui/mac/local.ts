@@ -137,7 +137,8 @@ async function join(): Promise<void> {
       // Made current, or connected again where it now is: an entry moved to loopback in place keeps its id, and the
       // connection that was current kept dialing the old address (the 0.4.27 gate: Offline after the update, Try
       // again dialing the hosted name again, Online only on the next launch).
-      if (untracked(current)?.id !== own.id || plan.rewrite) switchTo(own);
+      const now = untracked(current);
+      if (now?.id !== own.id || now.url !== own.url || (now.transportKind ?? "manual") !== (own.transportKind ?? "manual")) switchTo(own);
       // A daemon that revoked this app (the entry removed while it answered) is paired again, in place.
       const entry = own;
       if (payload && (await checkComputer(entry)).state === "unpaired") {
