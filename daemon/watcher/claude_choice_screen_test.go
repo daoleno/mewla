@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // Fixtures are real Claude Code 2.1.296 screens, as plain text.
@@ -276,5 +278,22 @@ func TestParseClaudeChoiceScreen_CardTallerThanThePaneIsClipped(t *testing.T) {
 		if screen := readClaudeChoiceFixture(t, name); screen.Kind != claudeChoiceScreenClipped {
 			t.Fatalf("%s: screen = %+v", name, screen)
 		}
+	}
+}
+
+// A Session sitting on the 2.1.331 review step waits for the person: blocked,
+// with a choice prompt the card answers (the real capture, not a made-up one).
+func TestChoicePrompt_Review2331IsABlockedChoice(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "claude_choice", "wide_review_2_1_331_cjk_other.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signal := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "claude"}, PaneContent: string(data)})
+	if signal.State != classifier.StateBlocked || signal.Source != "claude_pane_choice" {
+		t.Fatalf("signal = %+v", signal)
+	}
+	signal = withChoicePrompt(signal, string(data))
+	if signal.Prompt == nil || signal.Prompt.Kind != classifier.PromptChoice || signal.Prompt.ID == "" || len(signal.Prompt.Questions) != 2 || !signal.Prompt.Questions[1].Answered {
+		t.Fatalf("prompt = %+v", signal.Prompt)
 	}
 }
