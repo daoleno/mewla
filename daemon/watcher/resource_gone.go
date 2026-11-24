@@ -228,9 +228,18 @@ func (m *portableDelegatedResourceManager) collect() {
 	if !ok {
 		return
 	}
-	swept, unread, err := gc.SweepUnmarked(root, usage, now)
+	swept, unproven, err := gc.SweepUnmarked(root, usage, now)
 	if err != nil {
 		log.Printf("watcher: t/ sweep: %v", err)
+	} else {
+		// Where reads leave no trace the sweep takes nothing it cannot prove
+		// unread; what it found goes to review, and Brain is asked about it
+		// (daemon/brain/t_review.go).
+		gc.SyncReviews(root, unproven, now)
+	}
+	unread := make([]string, 0, len(unproven))
+	for _, u := range unproven {
+		unread = append(unread, u.Path)
 	}
 	for _, item := range swept {
 		log.Printf("watcher: moved %s to the trash (%s): %s", item.Original, item.ID, item.Reason)
@@ -241,7 +250,7 @@ func (m *portableDelegatedResourceManager) collect() {
 	m.gone.unread = held
 	m.mu.Unlock()
 	if changed && held != "" {
-		log.Printf("watcher: t/ is mounted noatime, so reads leave no trace: kept %d unmarked item(s) holding files: %s", len(unread), held)
+		log.Printf("watcher: t/ is mounted noatime, so reads leave no trace: %d unmarked item(s) holding files are put to review, none taken: %s", len(unread), held)
 	}
 	evicted, err := gc.EvictCache(root, gc.CacheBudget, usage)
 	if err != nil {

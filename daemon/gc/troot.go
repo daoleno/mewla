@@ -48,8 +48,10 @@ var readsRecorded = recordsReads
 // UnmarkedGrace. Only directories and regular files are candidates; sockets,
 // pipes, symlinks and *.lock files stay. On a file system that does not record
 // reads, an item holding a file is not proven unread: it stays, and is
-// returned in unread.
-func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, unread []string, err error) {
+// returned in unproven, whether it is new or was there before the rule (a
+// kept item, a Session's scratch and an item in use are not). The caller
+// puts those to review (SyncReviews) instead of leaving them for ever.
+func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, unproven []Unproven, err error) {
 	root := filepath.Join(stateRoot, "t")
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {
@@ -67,9 +69,11 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 	if err != nil {
 		return nil, nil, err
 	}
+	asked := knownReviews(stateRoot)
+	cutoff := now.Add(-UnmarkedGrace)
 	for _, entry := range entries {
 		name := entry.Name()
-		if before[name] || keptIn(keeps, filepath.Join(root, name)) {
+		if keptIn(keeps, filepath.Join(root, name)) {
 			continue
 		}
 		path := filepath.Join(root, name)
@@ -88,20 +92,38 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 		if _, used := usage.Uses(path); used {
 			continue
 		}
-		switch touchedSince(path, now.Add(-UnmarkedGrace), reads) {
+		if before[name] {
+			// There before the rule: never trashed here. Where reads leave no
+			// trace it is put to review, and an item already there is not walked
+			// again: it stays while its top is unchanged.
+			if reads {
+				continue
+			}
+			if r, ok := asked[path]; ok && r.Answer == "" {
+				if !info.ModTime().After(cutoff) {
+					unproven = append(unproven, r.unproven())
+				}
+				continue
+			}
+			if outcome, tally := examine(path, cutoff, reads); outcome == unprovenTree {
+				unproven = append(unproven, tally.unproven(stateRoot, path, info, true))
+			}
+			continue
+		}
+		switch outcome, tally := examine(path, cutoff, reads); outcome {
 		case touched:
 			continue
-		case unproven:
-			unread = append(unread, path)
+		case unprovenTree:
+			unproven = append(unproven, tally.unproven(stateRoot, path, info, false))
 			continue
 		}
 		item, err := Trash(stateRoot, KindUnmarked, path, "", ReasonUnmarked, now)
 		if err != nil {
-			return moved, unread, err
+			return moved, unproven, err
 		}
 		moved = append(moved, item)
 	}
-	return moved, unread, nil
+	return moved, unproven, nil
 }
 
 // restartInTRoot makes a restored item of the t/ root an ordinary unmarked
@@ -196,22 +218,24 @@ func readSnapshot(stateRoot string, entries []os.DirEntry, now time.Time) (map[s
 type touch int
 
 const (
-	untouched touch = iota
-	touched         // changed or read after the cutoff, or unreadable
-	unproven        // holds a file whose reads the file system does not record
+	untouched    touch = iota
+	touched            // changed or read after the cutoff, or unreadable
+	unprovenTree       // holds a file whose reads the file system does not record
 )
 
-// touchedSince looks for anything in the tree at path (itself included)
+// examine looks for anything in the tree at path (itself included)
 // modified after cutoff, or a file in it read after cutoff: a helper script a
 // Trigger runs every few minutes, or a binary, is used between two /proc reads
 // and never modified. With relatime (the Linux default) a read file's access
 // time moves at least once a day, well inside UnmarkedGrace; mounted noatime
-// (reads false) it never does, so any file leaves the tree unproven. A
+// (reads false) it never does, so any file leaves the tree unprovenTree. A
 // directory's access time is not counted: listing it, as this walk does,
-// moves it.
-func touchedSince(path string, cutoff time.Time, reads bool) touch {
+// moves it. The tally of a walk that was not cut short by a change is what
+// the review lists: bytes, the newest change and the commonest extensions.
+func examine(path string, cutoff time.Time, reads bool) (touch, tally) {
 	result := untouched
-	_ = filepath.WalkDir(path, func(_ string, entry fs.DirEntry, err error) error {
+	t := tally{exts: map[string]int{}}
+	_ = filepath.WalkDir(path, func(p string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			result = touched // unreadable: not proven unchanged
 			return fs.SkipAll
@@ -222,12 +246,19 @@ func touchedSince(path string, cutoff time.Time, reads bool) touch {
 			result = touched
 			return fs.SkipAll
 		}
-		if !reads && info.Mode().IsRegular() {
-			result = unproven // keep looking: a change still says touched
+		if info.ModTime().After(t.newest) {
+			t.newest = info.ModTime()
+		}
+		if info.Mode().IsRegular() {
+			t.bytes += info.Size()
+			t.exts[strings.ToLower(filepath.Ext(p))]++
+			if !reads {
+				result = unprovenTree // keep looking: a change still says touched
+			}
 		}
 		return nil
 	})
-	return result
+	return result, t
 }
 
 func writeFileAtomic(path string, data []byte) error {

@@ -287,6 +287,9 @@ func (l WhyLookup) sessionChain(unit, by string) []WhyLink {
 }
 
 func unmarkedState(root, name string) string {
+	if r, ok := ReviewOf(root, filepath.Join(root, "t", name)); ok && (r.Answer == "" || r.Answer == AnswerKeep) {
+		return "unmarked; " + ReviewWhy(r)
+	}
 	if raw, err := os.ReadFile(snapshotPath(root)); err == nil && strings.Contains(string(raw), `"`+name+`"`) {
 		return "unmarked; there before the t/ rule, left alone"
 	}
