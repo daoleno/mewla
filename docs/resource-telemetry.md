@@ -423,8 +423,8 @@ and sorting. Switching the canonical server still clears the previous snapshot.
 
 ### Held by Mewla
 
-A snapshot from a daemon with the collector's ledger carries `holds`. The daemon
-reads it from the ledger and the trash and keep records, and reuses one reading
+A snapshot from a daemon whose collector runs (Linux and macOS; Windows has none)
+carries `holds`. The daemon reads it from the ledger and the trash and keep records, and reuses one reading
 for 30 seconds. It holds:
 
 - `kinds`: one entry each for Session scratch, unclaimed scratch, the trash, kept

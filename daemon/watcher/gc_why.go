@@ -29,3 +29,10 @@ func (w *Watcher) GCWhyLookup() (gc.WhyLookup, bool) {
 		return gc.WhySession{}, false
 	}}, true
 }
+
+// GCCollects reports whether this daemon's collector runs: it measures sizes
+// and moves items to the trash. Windows' resource manager has no collector.
+func (w *Watcher) GCCollects() bool {
+	_, ok := w.resourceManager().(interface{ collect() })
+	return ok
+}
