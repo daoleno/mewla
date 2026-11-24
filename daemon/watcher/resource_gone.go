@@ -7,6 +7,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/gc"
@@ -45,6 +46,10 @@ type goneLeases struct {
 	lastFinalize time.Time
 	absent       map[string]goneEvidence
 	releasing    bool
+	// passes counts the goroutines releaseGone started that have not ended.
+	// releasing is set only while a release is due, so a pass that only runs
+	// the collector is not told by it; tests join on this.
+	passes sync.WaitGroup
 	// unread is the last list of t/ items the sweep kept because their file
 	// system records no reads; it is logged when it changes.
 	unread string
@@ -124,7 +129,9 @@ func (m *portableDelegatedResourceManager) releaseGone(windows []sessionPane, ho
 	if len(due) == 0 && !finalize {
 		return
 	}
+	m.gone.passes.Add(1)
 	go func() {
+		defer m.gone.passes.Done()
 		if len(due) > 0 {
 			defer func() {
 				m.mu.Lock()
