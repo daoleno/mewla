@@ -1,9 +1,12 @@
 package server
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -132,5 +135,94 @@ func TestLostClientLogLineCarriesCauseAndLinkState(t *testing.T) {
 	}
 	if strings.Contains(line, "Device ") {
 		t.Errorf("the log holds an Authorization header: %q", line)
+	}
+}
+
+// A write that fails because the phone is already gone is the phone hanging up,
+// not the daemon closing it, even when the writer finds out before the reader.
+// The pending message here is what the daemon had queued when the phone left.
+func TestWriteFailingFirstOnAGonePeerIsPeerClosed(t *testing.T) {
+	type served struct {
+		conn   *websocket.Conn
+		outbox *clientOutbox
+		link   *wsLink
+	}
+	servedCh := make(chan served, 1)
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		servedCh <- served{conn, newClientOutbox(conn), keepWebSocketAlive(conn)}
+	}))
+	defer httpServer.Close()
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	var s served
+	select {
+	case s = <-servedCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("connection never reached the handler")
+	}
+	defer s.conn.Close()
+	defer s.link.stop()
+
+	// The phone's end resets the connection; nothing reads on the daemon's
+	// side yet, so the first thing to notice is the writer.
+	tcp := client.UnderlyingConn().(*net.TCPConn)
+	if err := tcp.SetLinger(0); err != nil {
+		t.Fatal(err)
+	}
+	_ = tcp.Close()
+
+	message := []byte(`{"type":"worker_session_list","sessions":[]}`)
+	deadline := time.Now().Add(3 * time.Second)
+	for st := s.outbox.stats(); st.peerWrite == "" && st.failure == ""; st = s.outbox.stats() {
+		if time.Now().After(deadline) {
+			t.Fatalf("the writer never failed; stats %+v", s.outbox.stats())
+		}
+		_ = s.outbox.enqueue(websocket.TextMessage, message, false)
+		time.Sleep(5 * time.Millisecond)
+	}
+	out := s.outbox.stats()
+	if out.failure != "" {
+		t.Fatalf("a peer's reset was recorded as the daemon's failure: %q", out.failure)
+	}
+	_, _, readErr := s.conn.ReadMessage()
+	if readErr == nil {
+		t.Fatal("the read loop did not end")
+	}
+	if cause := s.link.endCause(readErr, out); cause != "peer-closed" {
+		t.Fatalf("cause = %q (write: %s; read: %v)", cause, out.peerWrite, readErr)
+	}
+	if line := s.link.describe(out); !strings.Contains(line, "writeErr=") {
+		t.Fatalf("the write error is not in the line: %q", line)
+	}
+}
+
+// Only the writer's own reasons for giving up make a close the daemon's, and
+// only a hung-up peer's errno makes one the peer's.
+func TestOutboxFailureClassifiesWhoClosed(t *testing.T) {
+	op := func(err error) error {
+		return &net.OpError{Op: "write", Net: "tcp", Err: os.NewSyscallError("write", err)}
+	}
+	for _, tc := range []struct {
+		name     string
+		err      error
+		peerGone bool
+	}{
+		{"broken pipe", op(syscall.EPIPE), true},
+		{"connection reset", op(syscall.ECONNRESET), true},
+		{"connection aborted", op(syscall.ECONNABORTED), true},
+		{"fell behind", errOutboxOverflow, false},
+		{"stalled write", os.ErrDeadlineExceeded, false},
+		{"its own close", net.ErrClosed, false},
+	} {
+		if got := isPeerGone(tc.err); got != tc.peerGone {
+			t.Errorf("%s: isPeerGone = %t", tc.name, got)
+		}
 	}
 }
