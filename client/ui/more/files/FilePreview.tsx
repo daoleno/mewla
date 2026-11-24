@@ -209,6 +209,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
     <NavPage
       title={title()}
       testID="file-preview"
+      // A page is as wide as the pane on a desktop and in a browser, as a browser shows it; the rest reads in the column.
+      column={shownPage() ? "full" : "page"}
       // The side rail's: Back closes it there, so Close stays in the header only.
       rail={[
         { id: "file-refresh", transient: true, icon: "refresh", label: "Refresh changed file", onPress: () => void load(), shown: () => stale() },
