@@ -5,7 +5,8 @@
       "date": "2026-11-24",
       "highlights": [],
       "fixes": [
-        "Closing a sheet no longer leaves the app blank."
+        "Closing a sheet no longer leaves the app blank.",
+        "A finished Session's chat, and the files it named, still open."
       ]
     },
     {
