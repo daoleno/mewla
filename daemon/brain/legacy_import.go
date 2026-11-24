@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/sqlitedb"
 )
@@ -78,6 +80,12 @@ func openStateDatabase(stateDir string) (*sql.DB, error) {
 		Primaries: func() ([]string, error) { return legacyPrimaryFiles(stateDir) },
 		Artifacts: func() ([]string, error) { return legacyArtifacts(stateDir) },
 		Open:      openBrainDatabase,
+		SetAside: func(dir string, at time.Time) {
+			// stateDir is <state>/brain/state: the collector's records are in <state>.
+			if err := gc.KeepBackup(filepath.Dir(filepath.Dir(stateDir)), dir, "Brain's files from before the move to SQLite", at); err != nil {
+				log.Printf("brain: give the backup %s its term: %v", dir, err)
+			}
+		},
 		Build: func(db *sql.DB, record *sqlitedb.Record) error {
 			details, err := buildMigratedDatabase(stateDir, db, record)
 			if err != nil {
