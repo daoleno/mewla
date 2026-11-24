@@ -207,7 +207,9 @@ marked block in Codex's `config.toml`, backed up first) and Claude Code
 that gateway. So a CLI you start in a plain terminal or an IDE uses the
 selected connection too. The gateway swaps in the real key and forwards the
 request unchanged. Running Claude Sessions use a new connection from their next
-request.
+request. A second daemon run for a test beside your own
+(`MEWLA_NO_CONFIG_TAKEOVER=1`) leaves both files alone; with a `CODEX_HOME` of
+its own it points that copy's Codex config at its gateway instead.
 
 **Images and web search in Codex.** Codex's built-in `image_gen` and `web.run`
 tools call their own endpoints (`/v1/images/generations`, `/v1/images/edits`,
