@@ -477,6 +477,96 @@ describe("Mewla for Mac", () => {
     expect(stored.map((server) => `${server.name} ${server.url}`).sort()).toEqual(["MacBook Pro ws://127.0.0.1:19878/ws", "manjaro ws://127.0.0.1:2/ws"]);
   }, 90_000);
 
+  // The 0.4.27 gate (a2, c1…c8): this Mac's only entry stored by its hosted name and current, and its daemon restarted by
+  // the update as the app starts. The entry moved to loopback in place (same id), but the connection kept dialing the
+  // hosted name: Offline until the next launch, Try again dialing the hosted name again.
+  const local = `mewla://pair?u=${encodeURIComponent("ws://127.0.0.1:1/ws")}&n=Desk&d=${"a".repeat(64)}&k=${"b".repeat(64)}&t=${"7".repeat(64)}`;
+  const hostedCurrent = {
+    ...paired,
+    "mewla:v3:servers": JSON.stringify([{
+      id: "s1", name: "MacBook Pro", url: "wss://quiet-otter.m.mewla.ai/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64),
+      transportKind: "link", transportPin: "e".repeat(64), linkRouteId: "f".repeat(32),
+    }]),
+    "mewla:v1:current_server_id": "s1",
+  };
+  const restarting = () => phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => ({ ...pairing, local_link: local }) });
+
+  test("this Mac's current entry by its hosted name, its daemon restarting under the first launch: Online at loopback once it answers, no relaunch", async () => {
+    const host = restarting();
+    (host.params as Record<string, unknown>).refuseSockets = ["quiet-otter", "127.0.0.1:1/"];
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: hostedCurrent, host });
+    const stored = () => JSON.parse(app.storage()["mewla:v3:servers"] ?? "[]") as Array<{ id: string; url: string; transportKind?: string; transportPin?: string; linkRouteId?: string }>;
+    await app.waitUntil(() => stored()[0]?.url === "ws://127.0.0.1:1/ws", { timeout: 15_000 });
+    expect([stored()[0].transportKind, stored()[0].transportPin, stored()[0].linkRouteId]).toEqual(["manual", undefined, undefined]);
+    // Down for a while: the connection backs off at loopback, never a reconnect loop (each join would switch again).
+    const sockets = () => Number(app.storage()["fake:sockets"] ?? "0");
+    const before = sockets();
+    await app.wait(10_000);
+    expect(sockets() - before).toBeLessThan(8);
+    expect(app.shows("text:This Mac · Online")).toBe(false);
+    // The restart is over: its daemon answers at loopback (the hosted name never does here).
+    await app.host.send("app.refuseSockets", ["quiet-otter"]);
+    await app.waitFor("text:This Mac · Online", { timeout: 20_000 });
+    expect(stored().map((server) => `${server.id} ${server.url}`)).toEqual(["s1 ws://127.0.0.1:1/ws"]);
+  }, 60_000);
+
+  test("Try again on this Mac tries at once: from Offline after its daemon came back, Online without waiting out the backoff", async () => {
+    const host = restarting();
+    (host.params as Record<string, unknown>).refuseSockets = ["quiet-otter", "127.0.0.1:1/"];
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: hostedCurrent, host });
+    // Down long enough that the pane says Offline and the next retry is many seconds away (1, 2, 4, 8, 16 s).
+    await app.waitFor("id:wait-reconnect", { timeout: 30_000 });
+    await app.wait(14_000);
+    await app.host.send("app.refuseSockets", ["quiet-otter"]);
+    await app.press("id:wait-reconnect");
+    await app.waitFor("text:This Mac · Online", { timeout: 2_000 });
+  }, 60_000);
+
+  // The 0.4.27 gate (h1): this Mac's entry beside the current computer, its daemon stopped; the row read "Offline · last
+  // seen 12:34 AM" from the current computer's view of it.
+  test("this Mac's entry beside another current computer, its Mewla not answering: its row says Mewla is not running, not when it was last seen", async () => {
+    const storage = {
+      ...paired,
+      "mewla:v3:servers": JSON.stringify([
+        { id: "s1", name: "MacBook Pro", url: "ws://127.0.0.1:1/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) },
+        { id: "s2", name: "manjaro", url: "ws://127.0.0.1:2/ws", daemonId: "c".repeat(64), daemonPublicKey: "d".repeat(64) },
+      ]),
+      "mewla:v1:current_server_id": "s2",
+      "mewla:v1:mac_local_daemon_key": "b".repeat(64),
+    };
+    const computers = { computers: [{ daemon_id: "a".repeat(64), name: "MacBook Pro", online: false, last_seen: new Date(Date.now() - 30 * 60_000).toISOString() }], open_requests: 0 };
+    // Its pairing answers (as `mewla pair` does with no daemon); nothing listens at its loopback address.
+    const host = phoneHost({ brain, computers }, { "app.pairing": () => ({ ...pairing, local_link: local }) });
+    (host.params as Record<string, unknown>).refuseSockets = ["127.0.0.1:1/"];
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage, host });
+    // The launch's join makes this Mac current; the person goes back to manjaro, as on the gate's Mac.
+    await app.waitUntil(() => app.storage()["mewla:v1:current_server_id"] === "s1", { timeout: 15_000 });
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-s2", { timeout: 10_000 });
+    await app.press("id:computer-s2");
+    await app.waitUntil(() => app.storage()["mewla:v1:current_server_id"] === "s2", { timeout: 10_000 });
+    await app.waitFor("text:manjaro", { timeout: 10_000 });
+    await app.press("id:home-cat");
+    await app.waitFor("id:computer-s1", { timeout: 10_000 });
+    await app.waitFor("id:computer-s1 >> text:Mewla is not running", { timeout: 15_000 });
+    expect(app.texts().some((text) => text.startsWith("Offline · last seen"))).toBe(false);
+  }, 45_000);
+
+  // The 0.4.27 gate (finding 4): after pairing a new computer the Mac app stayed on "Waking up" until reopened: a
+  // pairing on the Mac took the phone's connected step, which on the Mac is the window while this Mac starts.
+  test("a computer paired on the Mac is the computer at once: its Brain, not \"Waking up\" until the app is reopened", async () => {
+    const lab = testComputer("http://10.0.0.8:9876", 11);
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}), network: { [lab.pairURL]: lab.answer() } });
+    app.onDialog(() => "Pair and grant access");
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    await app.openWithUrl(lab.link("Lab"));
+    await app.waitUntil(() => app.storage()["mewla:v1:current_server_id"] !== "s1", { timeout: 10_000 });
+    await app.wait(1_500);
+    expect(app.shows("id:mac-starting")).toBe(false);
+    await app.waitFor("text:Lab", { timeout: 10_000 });
+    expect(app.shows("id:composer")).toBe(true);
+  }, 45_000);
+
   test("first run: no onboarding; while this Mac's daemon does not answer, why, and Try Again", async () => {
     const host = phoneHost({}, { "app.pairing": () => { throw new Error("This computer's Mewla has no address yet."); } });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, host });
