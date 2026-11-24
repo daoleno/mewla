@@ -275,7 +275,13 @@ class ReleaseArtifactsWorkflowTests(unittest.TestCase):
                           between(RELEASE, f"  {job}:\n", f"  {end}:\n"), job)
         # Intermediates never match the published pattern; the merged names stay what they were.
         self.assertNotRegex(RELEASE, r"name: mewla-daemon-binaries-[^\n]*matrix")
-        self.assertIn("name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}\n          pattern: daemon-part-bin-*-", RELEASE)
+        daemon = between(RELEASE, "  daemon:\n", "\n  daemon-linux-arm64:")
+        self.assertIn("pattern: daemon-part-bin-*-${{ needs.validate.outputs.tag }}\n          merge-multiple: true", daemon)
+        self.assertIn("name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}\n          path: bin/*", daemon)
+        # The collected artifact is uploaded from the checked files and never downloaded by name in the job that makes it:
+        # the name lookup lags a fresh upload (five runs failed "Artifact not found" 0.2 s after finalizing).
+        self.assertNotIn("upload-artifact/merge", RELEASE)
+        self.assertEqual(daemon.count("download-artifact"), 1)
         self.assertIn("name: mewla-daemon-binaries-darwin-${{ needs.validate.outputs.tag }}", RELEASE)
         self.assertIn('== "./mewla-linux-amd64 ./mewla-linux-arm64 ./mewla-windows-amd64.exe " ]]', RELEASE)
 
