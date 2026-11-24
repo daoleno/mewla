@@ -69,6 +69,9 @@ type controlWatcher interface {
 }
 
 type controlApp struct {
+	// settleModels makes a model pick held during a Worker's turn before
+	// Brain's next message to it is sent.
+	settleModels      func(workerID string)
 	macLAN            *macLANControl
 	agentEvents       *agentEventService
 	browsers          *browser.Manager
@@ -1313,6 +1316,9 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 	}
 	if open := a.openPrompt(workerID, worker); open != nil {
 		return control.ErrorResponse("prompt_open", fmt.Sprintf("%s is waiting on prompt %s; answer it with: %s", workerID, open.ID, watcher.AnswerCommand(workerID, open)))
+	}
+	if a.settleModels != nil && req.Submit {
+		a.settleModels(workerID)
 	}
 	if strings.TrimSpace(req.WorkID) != "" {
 		if !req.Submit || strings.TrimSpace(payload) == "" {

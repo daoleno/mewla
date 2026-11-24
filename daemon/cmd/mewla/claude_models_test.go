@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 // 2.1.330 does: it opens on the current model, ↑/↓ wrap, ←/→ step the effort,
 // "s" takes the pick for this session only (or asks first, after a turn).
 type fakeClaude struct {
+	// mu: a pick held for the end of a turn is made from its own goroutine.
+	mu       sync.Mutex
 	labels   []string
 	names    []string
 	efforts  []string
@@ -35,6 +38,8 @@ type fakeClaude struct {
 }
 
 func (f *fakeClaude) CapturePaneContent(string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	var b strings.Builder
 	b.WriteString(strings.Join(f.history, "\n") + "\n")
 	if f.open {
@@ -56,6 +61,8 @@ func (f *fakeClaude) CapturePaneContent(string) (string, error) {
 }
 
 func (f *fakeClaude) SendInput(_ string, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if text != "/model" {
 		return fmt.Errorf("typed %q", text)
 	}
@@ -64,6 +71,8 @@ func (f *fakeClaude) SendInput(_ string, text string) error {
 }
 
 func (f *fakeClaude) SendKey(_ string, key string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.keys = append(f.keys, key)
 	switch key {
 	case "Enter":
@@ -225,11 +234,16 @@ func TestClaudeSwitchWhileWorkingIsMadeWhenTheTurnEnds(t *testing.T) {
 	}
 	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnFinished, TurnID: "t1", Status: agentevents.TurnCompleted, At: time.Now()})
 	deadline := time.Now().Add(5 * time.Second)
-	for screen.current != 2 && time.Now().Before(deadline) {
+	on := func() (int, string) {
+		screen.mu.Lock()
+		defer screen.mu.Unlock()
+		return screen.current, screen.efforts[screen.effort]
+	}
+	for current, _ := on(); current != 2 && time.Now().Before(deadline); current, _ = on() {
 		time.Sleep(20 * time.Millisecond)
 	}
-	if screen.current != 2 || screen.efforts[screen.effort] != "high" {
-		t.Fatalf("after the turn Claude is on %s", screen.labels[screen.current])
+	if current, effort := on(); current != 2 || effort != "high" {
+		t.Fatalf("after the turn Claude is on %s", screen.labels[current])
 	}
 	for models.later.of("w1") != nil && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)

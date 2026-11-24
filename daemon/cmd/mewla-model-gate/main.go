@@ -306,7 +306,11 @@ func run(args []string) error {
 	agents := fs.String("agents", "claude,codex,opencode,pi,cursor,grok,antigravity,dsh", "agents to walk")
 	restart := fs.String("restart", "", "shell command that restarts the isolated daemon (adds the after-restart moment)")
 	out := fs.String("out", "", "also write the table here")
+	ask := fs.Bool("ask", false, "start Claude asking before it runs a command, so its busy moment is a wait for an answer")
 	_ = fs.Parse(args)
+	if *ask {
+		defaultCommands["claude"] = "claude --model haiku --permission-mode default"
+	}
 	if *server == "" || *key == "" || *cwd == "" {
 		return errors.New("-server, -key and -cwd are required")
 	}

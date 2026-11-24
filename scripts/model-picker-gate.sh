@@ -4,12 +4,14 @@
 # signed in as they are, on an isolated daemon, and prints one row per cell
 # with the agent's own record of the turn that followed the pick.
 #
-#   scripts/model-picker-gate.sh [--agents claude,codex,...] [--routes] [--keep]
+#   scripts/model-picker-gate.sh [--agents claude,codex,...] [--routes] [--ask] [--keep]
 #
 # --routes copies this computer's default Claude and Codex Provider
 #   connections (~/.mewla/model-profiles.toml defaults) into the scratch state
 #   (0600, never printed), so routed Sessions are walked too: the owner's
 #   default. Without it the agents run on their own sign-ins.
+# --ask starts Claude asking before it runs a command: its busy moment is
+#   then a wait for an answer, which the gate gives after the pick.
 # --keep leaves the scratch daemon running and its folder in place.
 #
 # It never touches the live daemon: own state root, own port, env -i, and
@@ -26,12 +28,14 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 AGENTS="claude,codex,opencode,pi,cursor,grok,antigravity,dsh"
 ROUTES=0
 KEEP=0
+GATE_ARGS=()
 PORT=${MEWLA_GATE_PORT:-9979}
 while [ $# -gt 0 ]; do
   case "$1" in
     --agents) AGENTS=$2; shift 2 ;;
     --routes) ROUTES=1; shift ;;
     --keep) KEEP=1; shift ;;
+    --ask) GATE_ARGS+=(-ask); shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -196,4 +200,4 @@ up
 EOF
 chmod +x "$S/restart.sh"
 "$S/bin/mewla-model-gate" run -server "http://127.0.0.1:$PORT" -key "$S/key.json" -cwd "$S/work" \
-  -agents "$AGENTS" -restart "$S/restart.sh" -out "${MEWLA_GATE_OUT:-/dev/null}"
+  -agents "$AGENTS" -restart "$S/restart.sh" -out "${MEWLA_GATE_OUT:-/dev/null}" "${GATE_ARGS[@]}"

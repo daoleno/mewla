@@ -69,9 +69,10 @@ type SessionModelsSettle interface {
 	Settle(ctx context.Context, worker *classifier.Worker) error
 }
 
-// settleSessionModels makes a held pick before a message is sent to the
-// Session, so the message's turn runs on it.
-func (s *Server) settleSessionModels(workerID string) {
+// SettleSessionModels makes a held pick before a message is sent to the
+// Session (from the app, or Brain's `worker send`), so the message's turn
+// runs on it.
+func (s *Server) SettleSessionModels(workerID string) {
 	worker := s.lookupWorker(workerID)
 	_, models := s.sessionModelsProvider(worker)
 	settle, ok := models.(SessionModelsSettle)

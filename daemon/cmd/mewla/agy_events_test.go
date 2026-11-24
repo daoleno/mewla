@@ -132,11 +132,27 @@ func TestAgyMenuWaitsForAgyToSayItsModel(t *testing.T) {
 		models, _ := json.Marshal(map[string]string{"current": current})
 		_ = encoder.Encode(work.AntigravityLinkMessage{T: "reply", Req: asked.Req, Models: models})
 	}
-	go answer("")
+	settled := func() {
+		for time.Now().Before(deadline) {
+			a.conn("worker").mu.Lock()
+			probing := a.conn("worker").modelsProbing
+			a.conn("worker").mu.Unlock()
+			if !probing {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if a.Linked("worker") {
+		t.Fatal("the menu was offered before agy was asked")
+	}
+	answer("")
+	settled()
 	if a.Linked("worker") {
 		t.Fatal("the menu was offered before agy said its model")
 	}
-	go answer("gemini-4-carbon-low")
+	answer("gemini-4-carbon-low")
+	settled()
 	if !a.Linked("worker") {
 		t.Fatal("the menu was not offered once agy said its model")
 	}

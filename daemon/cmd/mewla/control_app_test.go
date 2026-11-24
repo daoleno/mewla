@@ -2456,3 +2456,18 @@ func TestControlAppWorkerSpawnNamesWhatABlockedSessionWaitsFor(t *testing.T) {
 		t.Fatalf("plain screen: response = %#v", resp.Error)
 	}
 }
+
+// Brain's message to a Worker runs on the model picked during the Worker's
+// last turn: the held pick is made before the message is sent.
+func TestControlAppWorkerSendMakesAHeldPickFirst(t *testing.T) {
+	fw := newFakeControlWatcher()
+	fw.workers["w1"] = &classifier.Worker{ID: "w1", State: classifier.StateRunning, Command: "claude --session-id 3311e9d4", Delegated: true}
+	order := []string{}
+	app := &controlApp{watcher: fw, settleModels: func(workerID string) {
+		order = append(order, "settle "+workerID+fmt.Sprintf(" after %d sends", len(fw.sent)+len(fw.submitted)))
+	}}
+	resp := app.HandleControlRequest(control.Request{Type: "worker_send", WorkerID: "w1", Text: "continue", Submit: true})
+	if !resp.OK || len(order) != 1 || order[0] != "settle w1 after 0 sends" || len(fw.sent)+len(fw.submitted) == 0 {
+		t.Fatalf("response %#v, order %v, sends %d", resp, order, len(fw.sent)+len(fw.submitted))
+	}
+}
