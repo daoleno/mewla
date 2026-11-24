@@ -448,12 +448,22 @@ func (g *gate) approveUntil(s *session, stop chan struct{}) {
 				_, _ = g.c.request(map[string]any{"type": "approval_decision", "worker_id": s.id, "id": id, "option_id": chosen}, 10*time.Second, "approval_decided")
 			}
 		}
+		// Claude's own question in the terminal ("Do you want to proceed?"):
+		// its first option is Yes.
+		if claudeAsks(g.screenText(s)) {
+			_, _ = g.c.request(map[string]any{"type": "send_key", "worker_id": s.id, "key": "Enter"}, 3*time.Second, "send_key_result")
+		}
 		select {
 		case <-stop:
 			return
 		case <-time.After(2 * time.Second):
 		}
 	}
+}
+
+// claudeAsks reads Claude's permission question on its screen.
+func claudeAsks(screen string) bool {
+	return strings.Contains(screen, "Do you want to proceed?")
 }
 
 type runtimeView struct {
@@ -649,7 +659,7 @@ func (g *gate) moment(s *session, name string, want choice, during string) {
 		// An agent that asks before it runs the command is waiting for an
 		// answer: the pick is made then, and the question answered after it,
 		// as a person would.
-		if len(g.approvals(s)) > 0 {
+		if len(g.approvals(s)) > 0 || claudeAsks(g.screenText(s)) {
 			cl.moment = "waiting for answer"
 		}
 		cl.reply, cl.pass = g.pick(s, want)
