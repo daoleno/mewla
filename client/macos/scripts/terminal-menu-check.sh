@@ -70,6 +70,10 @@ guard let menu = open else { print("no open menu"); exit(0) }
 let titles = (attr(menu, kAXChildrenAttribute) as? [AXUIElement] ?? []).map { (attr($0, kAXTitleAttribute) as? String) ?? "" }
 print(titles.map { $0.isEmpty ? "—" : $0 }.joined(separator: " | "))' "$owner" 2>&1 || true)
 
+if ! grep -q "Copy" <<<"$items"; then
+  # The same through System Events (what the workflow already reads the Dock with), should this process not see it.
+  items="$items; System Events: $(osascript -e "tell application \"System Events\" to tell process \"$owner\" to get name of every menu item of menu 1" 2>&1 || true)"
+fi
 osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
 echo "terminal menu (right click at $cx,$cy in $w x $h at $x,$y): $items"
 grep -q "Copy" <<<"$items" && grep -q "Paste" <<<"$items" && grep -q "Select All" <<<"$items" || { echo "terminal menu: Copy, Paste and Select All not all there"; exit 1; }
