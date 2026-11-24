@@ -38,7 +38,8 @@ const opencodeModelList = `{"data":[
   "variants":[{"id":"default"},{"id":"low"},{"id":"high"}]},
  {"id":"old-model","modelID":"old-model","providerID":"opencode","name":"Old","status":"deprecated","enabled":true},
  {"id":"off-model","modelID":"off-model","providerID":"opencode","name":"Off","status":"active","enabled":false},
- {"id":"no-provider","modelID":"no-provider","name":"Nowhere"}
+ {"id":"no-provider","modelID":"no-provider","name":"Nowhere"},
+ {"id":"tidepool-alpha-free","modelID":"tidepool-alpha-free","providerID":"opencode","name":"Tidepool Alpha Free (second sign-in)","status":"active","enabled":true,"variants":[]}
 ]}`
 
 func TestOpenCodeMenuKeepsUsableModelsAndItsVariants(t *testing.T) {
@@ -78,7 +79,10 @@ func TestPiMenuNamesModelsTheWayPiDoes(t *testing.T) {
 	}
 	got := piAgentModels(*msg.Models)
 	want := server.AgentModels{Label: "Pi", Current: "opencode-go/glm-5.3-flash", Effort: "low", Models: []server.AgentModel{
-		{ID: "opencode-go/glm-5.3-flash", Name: "GLM-5.3-Flash", Efforts: []string{"off", "minimal", "low", "medium", "high"}},
+		// Pi always thinks at one of its levels: no "Default" is offered
+		// (11-24: the sheet sent none, Pi kept its level, and the reply did
+		// not echo the choice: "invalid activation selection").
+		{ID: "opencode-go/glm-5.3-flash", Name: "GLM-5.3-Flash", Efforts: []string{"off", "minimal", "low", "medium", "high"}, EffortRequired: true},
 		// A model whose only level is "off" has no reasoning levels to show.
 		{ID: "opencode-go/tiny", Name: "Tiny"},
 	}}

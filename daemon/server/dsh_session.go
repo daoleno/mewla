@@ -62,7 +62,6 @@ func (d dshSessionModels) SetModel(ctx context.Context, worker *classifier.Worke
 	after, err := d.Models(ctx, worker)
 	// Native acknowledgement applies the selection; DSH saves its session log
 	// asynchronously, so no daemon fsync is claimed.
-	after.Unsaved = "DSH accepted the choice; its native session log saves asynchronously."
 	return after, err
 }
 

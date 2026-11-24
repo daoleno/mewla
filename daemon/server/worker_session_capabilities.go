@@ -53,8 +53,9 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 	}
 	managed, activeSwitch := s.modelProfileSessionCapabilities(worker.ID)
 	if _, own := s.sessionModelsProvider(worker); own != nil {
+		// The agent's own menu, offered while this Session can use it.
 		managed = true
-		activeSwitch = true
+		activeSwitch = sessionModelsAvailable(own, worker)
 	}
 	executorID, provider := s.workerExecutor(worker)
 	if executorID != worker.ExecutorID {

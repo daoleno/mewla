@@ -147,6 +147,26 @@ describe("the Model sheet's requests", () => {
     transport.close();
   });
 
+  test("a choice the agent takes after its turn is applied, not an invalid reply", async () => {
+    // 11-24: an agent that takes the pick when its turn ends echoes what it runs on now.
+    const { transport, answer } = await connected();
+    const done = setThreadRuntime(transport, "w1", { connectionId: "c1", modelId: "gpt-6-mini", effect: "low" });
+    answer("thread_runtime_set", {
+      runtime: runtime({ pending_model_id: "gpt-6-mini", pending_reasoning_effort: "low" }),
+      persistence_outcome: "applied", persistence_durable: true,
+    });
+    const result = await done;
+    expect(result.runtime.model_id).toBe("gpt-6");
+    expect(result.runtime.pending_model_id).toBe("gpt-6-mini");
+    const wrong = setThreadRuntime(transport, "w1", { connectionId: "c1", modelId: "gpt-6-mini", effect: "high" });
+    answer("thread_runtime_set", {
+      runtime: runtime({ pending_model_id: "gpt-6-mini", pending_reasoning_effort: "low" }),
+      persistence_outcome: "applied", persistence_durable: true,
+    });
+    await expect(wrong).rejects.toMatchObject({ kind: "invalid" });
+    transport.close();
+  });
+
   test("a busy Session fails as busy: try again without a refresh", async () => {
     const { transport, answer } = await connected();
     const done = setThreadRuntime(transport, "w1", { connectionId: "c1", modelId: "gpt-6" });

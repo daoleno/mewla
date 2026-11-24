@@ -4,7 +4,7 @@ import { Button } from "nsh/base";
 import { AppSheet } from "../shell/AppSheet";
 import type { Daemon } from "../../core/more/daemon";
 import { classifyMutationPersistence, durabilityWarningMessage } from "../../core/providers/persistence";
-import { ProviderError, providerMutationRequiresRefresh } from "../../core/providers/errors";
+import { PROVIDER_ERROR_CODES, ProviderError } from "../../core/providers/errors";
 import { ProviderRequestOwner } from "../../core/providers/reconcile";
 import type { ProvidersSnapshot, ThreadRuntimeChoice, ThreadRuntimeSelection } from "../../core/providers/types";
 import {
@@ -127,7 +127,12 @@ export function ModelPanel(props: {
     } catch (error) {
       if (!owner.isCurrent(token)) return;
       const typed = error instanceof ProviderError ? error : new ProviderError("unknown", messageOf(error, "Runtime switch failed"), "unknown", true);
-      owner.settleRuntimeSwitch(token, { refreshRequired: typed.kind !== "busy" && (providerMutationRequiresRefresh(typed) || typed.kind === "conflict") });
+      // Only an answer that never came, or one that did not say what happened,
+      // leaves the outcome unknown; a refusal is definite and the next pick
+      // is taken as it is (11-24: one refusal locked every later tap behind
+      // "Refresh required before switching runtime").
+      const unknownOutcome = typed.kind === "timeout" || typed.kind === "offline" || typed.code === PROVIDER_ERROR_CODES.invalidReply;
+      owner.settleRuntimeSwitch(token, { refreshRequired: unknownOutcome });
       problem.set({ title: "Could not switch model", message: typed.message });
     } finally {
       if (owner.isCurrent(token)) activating.set(false);
@@ -169,7 +174,8 @@ export function ModelPanel(props: {
                       <Text class="text-base line-clamp-1">{row.label}</Text>
                       <If when={row.unavailableCurrent}><Text testID="model-unavailable-current" class="text-xs text-muted-foreground">Current runtime is no longer selectable.</Text></If>
                     </View>
-                    <If when={row.current}><Icon name="check" size={18} color="primary" /></If>
+                    <If when={row.pending}><Icon name="hourglass" size={16} color="muted-foreground" /></If>
+                    <If when={row.current && !row.pending}><Icon name="check" size={18} color="primary" /></If>
                     <If when={row.effects.length > 0}><Icon name="chevron-right" size={18} /></If>
                   </Button>
                 ))}
@@ -185,7 +191,8 @@ export function ModelPanel(props: {
                       }}
                       class="flex-row items-center gap-2 border-b border-border px-3 py-3 active:bg-accent">
                       <Text class="flex-1 text-base">{reasoningEffortLabel(entry.effect)}</Text>
-                      <If when={entry.selected}><Icon name="check" size={18} color="primary" /></If>
+                      <If when={entry.pending}><Icon name="hourglass" size={16} color="muted-foreground" /></If>
+                      <If when={entry.selected && !entry.pending}><Icon name="check" size={18} color="primary" /></If>
                     </Button>
                   ))}
                 </View>

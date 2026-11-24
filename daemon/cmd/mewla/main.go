@@ -740,8 +740,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetSessionModels(work.WorkerProviderOpenCode, opencodeFollow)
 	srv.SetSessionModels(work.WorkerProviderPi, piFollow)
 	srv.SetSessionModels(work.WorkerProviderClaude, newClaudeModels(w, eventHub))
-	srv.SetSessionModels(work.WorkerProviderCursor, newTypedModels(work.WorkerProviderCursor, w))
-	srv.SetSessionModels(work.WorkerProviderGrok, newTypedModels(work.WorkerProviderGrok, w))
+	srv.SetSessionModels(work.WorkerProviderCursor, newTypedModels(work.WorkerProviderCursor, w, eventHub))
+	srv.SetSessionModels(work.WorkerProviderGrok, newTypedModels(work.WorkerProviderGrok, w, eventHub))
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
 		return fmt.Errorf("open answered requests: %w", err)
