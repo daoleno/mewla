@@ -12,6 +12,7 @@ import {
   getTerminalFontSize,
   setTerminalFontSize,
   terminalFontSize,
+  DESKTOP_TERMINAL_FONT,
 } from "./deviceState";
 import { makeSessionKey } from "./sessionKeys";
 
@@ -122,5 +123,15 @@ describe("Terminal text size", () => {
     expect(terminalFontSize(undefined)).toBe(10);
     expect(terminalFontSize(Infinity)).toBe(10);
     expect(terminalFontSize("9")).toBe(9);
+  });
+
+  test("on a Mac: 13 until ⌘+ or ⌘− sets one, kept whole within 9–24", async () => {
+    const storage = memoryStore({});
+    expect(await getTerminalFontSize(storage, DESKTOP_TERMINAL_FONT)).toBe(13);
+    expect(await setTerminalFontSize(storage, 18, DESKTOP_TERMINAL_FONT)).toBe(18);
+    expect(await getTerminalFontSize(storage, DESKTOP_TERMINAL_FONT)).toBe(18);
+    expect(await setTerminalFontSize(storage, 40, DESKTOP_TERMINAL_FONT)).toBe(24);
+    expect(await setTerminalFontSize(storage, 2, DESKTOP_TERMINAL_FONT)).toBe(9);
+    expect(terminalFontSize("abc", DESKTOP_TERMINAL_FONT)).toBe(13);
   });
 });

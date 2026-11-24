@@ -41,7 +41,7 @@ use serde_json::json;
 use super::fonts::Faces;
 use super::keys::{Mods, ghostty_key, ghostty_mods, is_special, key_bytes};
 use super::links::url_at;
-use super::vt::{self, Frame, Run, Vt, css_color, glyph_is_drawn, glyph_ops, glyph_thickness, layout, palette256};
+use super::vt::{self, Frame, Run, Vt, css_color, spans, glyph_is_drawn, glyph_ops, glyph_thickness, layout, palette256};
 
 /// History rows are rendered a page at a time through the scratch VT.
 const PAGE: usize = 64;
@@ -53,6 +53,20 @@ enum Item {
     Fitted { line: CFRetained<CTLine>, x: CGFloat, width: CGFloat, boxw: CGFloat },
     Glyph { cp: u32, x: CGFloat },
 }
+
+/// What a run's items depend on: its text, face and place in the row (and a flag's second half). Rows that only moved
+/// (scrolled output) find theirs made already.
+#[derive(Hash, PartialEq, Eq)]
+struct ItemKey {
+    col: usize,
+    cells: usize,
+    flags: i32,
+    units: Vec<u16>,
+    next: Vec<u16>,
+}
+
+/// Runs' items kept across rows; emptied when full (a few screens' worth) and when the face or the cell changes.
+const ITEM_CACHE_MAX: usize = 16_384;
 
 /// A run and its items, made on first draw.
 struct Cell {
@@ -108,10 +122,19 @@ pub struct State {
     cursor_style: i32,
     cursor_blinks: bool,
     blink_on: bool,
-    /// Bumped to drop a pending blink tick.
-    blink_gen: u64,
+    /// A blink tick is on its way (one at a time, however often output restarts the blink).
+    blink_pending: bool,
+    /// The last output or key: the cursor stays lit for a blink's length after it.
+    blink_held: std::time::Instant,
     needs_pull: bool,
     needs_full: bool,
+    /// Live rows the VT changed since they were last marked for drawing, and whether all of them did.
+    changed: Vec<usize>,
+    changed_all: bool,
+    /// A `refresh` is on its way.
+    refresh_queued: bool,
+    /// The content line the cursor was last drawn on (its old place is drawn again when it moves).
+    cursor_drawn: Option<isize>,
     focused: bool,
 
     // The font: cells are whole pixels and the text size is set so one advance is exactly one cell.
@@ -124,6 +147,7 @@ pub struct State {
     thickness: CGFloat,
     /// Whether bundled face `i` has each BMP character (then its advance is one cell).
     in_font: [HashMap<u16, bool>; 4],
+    item_cache: HashMap<ItemKey, Rc<Vec<Item>>>,
     glyphs: HashMap<u32, Rc<Vec<vt::GlyphOp>>>,
 
     background: u32,
@@ -162,13 +186,18 @@ pub struct State {
     over_link: bool,
 }
 
+/// A cursor blink's half period (seconds).
+const BLINK_S: f64 = 0.6;
+/// Points above and below a changed row drawn with it (`line_rects`).
+const OVERDRAW: CGFloat = 2.0;
+
 pub struct Ivars {
     state: RefCell<State>,
     /// What to tell the page once the state is let go (an event is never sent from inside a borrow).
     outbox: RefCell<Vec<(&'static str, serde_json::Value)>>,
     drawing: StdCell<bool>,
-    /// Draw times (ms) of full-view frames since the last report (DESIGN.md §4: frame time).
-    times: RefCell<Vec<f64>>,
+    /// Draw times (ms) of frames since the last report, and whether each drew the whole view (DESIGN.md §4).
+    times: RefCell<Vec<(f64, bool, usize)>>,
     /// How far this view got, once each in the app's log (a run on a machine nobody watches reads it there):
     /// bit 0 the grid, 1 the first output, 2 the first paint.
     told: StdCell<u8>,
@@ -323,11 +352,33 @@ define_class!(
             let cg = graphics.CGContext();
             self.ivars().drawing.set(true);
             let started = std::time::Instant::now();
-            self.paint(&cg, dirty);
-            self.timed(started.elapsed().as_secs_f64() * 1000.0, dirty);
+            let (drawn, visible) = self.paint(&cg, dirty);
+            self.timed(started.elapsed().as_secs_f64() * 1000.0, drawn, visible);
             self.tell_painted();
             self.ivars().drawing.set(false);
+            self.settle_changes(dirty);
             self.flush();
+        }
+
+        // VoiceOver: a text area named Terminal whose value is the screen's text.
+        #[unsafe(method(isAccessibilityElement))]
+        fn is_accessibility_element(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method_id(accessibilityRole))]
+        fn accessibility_role(&self) -> Retained<NSString> {
+            NSString::from_str("AXTextArea")
+        }
+
+        #[unsafe(method_id(accessibilityLabel))]
+        fn accessibility_label(&self) -> Retained<NSString> {
+            NSString::from_str("Terminal")
+        }
+
+        #[unsafe(method_id(accessibilityValue))]
+        fn accessibility_value(&self) -> Retained<NSString> {
+            NSString::from_str(&self.screen_text())
         }
 
         #[unsafe(method(copy:))]
@@ -351,15 +402,30 @@ define_class!(
         }
 
         #[unsafe(method(blinkTick:))]
-        fn blink_tick(&self, generation: &NSNumber) {
+        fn blink_tick(&self, _sender: Option<&AnyObject>) {
             let mut s = self.ivars().state.borrow_mut();
-            if generation.as_u64() != s.blink_gen || !s.cursor_blinks {
+            s.blink_pending = false;
+            if !s.cursor_blinks || self.window().is_none() {
+                s.blink_on = true;
+                return;
+            }
+            let held = s.blink_held.elapsed().as_secs_f64();
+            if held < BLINK_S {
+                // Output or a key since the last tick: lit until a blink's length after it.
+                drop(s);
+                self.schedule_blink(BLINK_S - held);
                 return;
             }
             s.blink_on = !s.blink_on;
             drop(s);
-            self.setNeedsDisplay(true);
-            self.schedule_blink();
+            self.invalidate_cursor();
+            self.schedule_blink(BLINK_S);
+        }
+
+        /// The changed rows marked for drawing, once per run loop pass however many writes came (`queue_refresh`).
+        #[unsafe(method(refreshChanged:))]
+        fn refresh_changed(&self, _sender: Option<&AnyObject>) {
+            self.refresh();
         }
     }
 
@@ -372,7 +438,7 @@ define_class!(
             let had = !self.ivars().state.borrow().marked.is_empty();
             if had {
                 self.ivars().state.borrow_mut().marked.clear();
-                self.setNeedsDisplay(true);
+                self.invalidate_cursor();
             }
             if !text.is_empty() {
                 self.send(&text.replace('\n', "\r"));
@@ -388,13 +454,13 @@ define_class!(
         #[unsafe(method(setMarkedText:selectedRange:replacementRange:))]
         unsafe fn set_marked_text(&self, string: &AnyObject, _selected: NSRange, _replacement: NSRange) {
             self.ivars().state.borrow_mut().marked = text_of(string);
-            self.setNeedsDisplay(true);
+            self.invalidate_cursor();
         }
 
         #[unsafe(method(unmarkText))]
         fn unmark_text(&self) {
             self.ivars().state.borrow_mut().marked.clear();
-            self.setNeedsDisplay(true);
+            self.invalidate_cursor();
         }
 
         #[unsafe(method(selectedRange))]
@@ -513,9 +579,14 @@ impl TermView {
             cursor_style: 1,
             cursor_blinks: false,
             blink_on: true,
-            blink_gen: 0,
+            blink_pending: false,
+            blink_held: std::time::Instant::now(),
             needs_pull: false,
             needs_full: false,
+            changed: Vec::new(),
+            changed_all: false,
+            refresh_queued: false,
+            cursor_drawn: None,
             focused: false,
             points: 13.0,
             pixel_scale: 2.0,
@@ -525,6 +596,7 @@ impl TermView {
             baseline: 12.0,
             thickness: 1.0,
             in_font: Default::default(),
+            item_cache: HashMap::new(),
             glyphs: HashMap::new(),
             background: 0x141210,
             foreground: 0xF4F0EA,
@@ -562,7 +634,8 @@ impl TermView {
         let told = self.ivars().told.get();
         if told & (1 << bit) == 0 {
             self.ivars().told.set(told | (1 << bit));
-            log::info!("{}", line());
+            // Warn: the release logger keeps info only for the app's own code (target `js`).
+            log::warn!("{}", line());
         }
     }
 
@@ -585,21 +658,28 @@ impl TermView {
         }
     }
 
-    /// Every 120 full-view frames, their median and p95 draw time in the log.
-    fn timed(&self, ms: f64, dirty: NSRect) {
-        let full = dirty.size.height >= self.bounds().size.height - 1.0;
-        if !full {
-            return;
-        }
+    /// Every 120 frames, their median and p95 draw time in the log, and how many drew the whole view.
+    /// `drawn` of the `visible` rows were drawn: a frame is whole when every visible row was.
+    fn timed(&self, ms: f64, drawn: usize, visible: usize) {
+        let full = visible > 0 && drawn >= visible;
         let mut times = self.ivars().times.borrow_mut();
-        times.push(ms);
+        times.push((ms, full, drawn));
         if times.len() < 120 {
             return;
         }
-        times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let at = |p: f64| times[((times.len() as f64 - 1.0) * p).round() as usize];
+        let sorted = |whole_only: bool| {
+            let mut ms: Vec<f64> = times.iter().filter(|t| !whole_only || t.1).map(|t| t.0).collect();
+            ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            ms
+        };
+        let at = |ms: &[f64], p: f64| if ms.is_empty() { 0.0 } else { ms[((ms.len() as f64 - 1.0) * p).round() as usize] };
+        let (all, whole) = (sorted(false), sorted(true));
+        let rows = times.iter().map(|t| t.2).sum::<usize>() as f64 / times.len() as f64;
         let s = self.ivars().state.borrow();
-        log::info!("terminal view: {} frames of {}x{} cells: median {:.2} ms, p95 {:.2} ms, max {:.2} ms", times.len(), s.cols, s.rows, at(0.5), at(0.95), at(1.0));
+        log::warn!(
+            "terminal view: {} frames of {}x{} cells ({:.1} rows drawn each): median {:.2} ms, p95 {:.2} ms, max {:.2} ms; {} whole: median {:.2} ms, p95 {:.2} ms",
+            all.len(), s.cols, s.rows, rows, at(&all, 0.5), at(&all, 0.95), at(&all, 1.0), whole.len(), at(&whole, 0.5), at(&whole, 0.95)
+        );
         times.clear();
     }
 
@@ -670,6 +750,7 @@ impl TermView {
         s.baseline = (((s.cell_h - ascent - descent) / 2.0 + ascent) * scale).round() / scale;
         s.thickness = glyph_thickness(cell_h_px as i32) as CGFloat / scale;
         s.in_font = Default::default();
+        s.item_cache.clear();
         s.glyphs.clear();
         for line in &s.grid {
             line.cells.iter().for_each(|c| *c.items.borrow_mut() = None);
@@ -725,7 +806,7 @@ impl TermView {
         if let Some(text) = copied {
             self.emit("copy", json!({ "text": text }));
         }
-        self.setNeedsDisplay(true);
+        self.queue_refresh();
         self.restart_blink();
     }
 
@@ -1037,6 +1118,9 @@ impl TermView {
         let Some(frame): Option<Frame> = s.vt.as_ref().and_then(|vt| vt.frame(s.needs_full)) else { return };
         s.needs_pull = false;
         s.needs_full = false;
+        if frame.full || frame.rows != s.grid.len() || frame.cols != s.cols {
+            s.changed_all = true;
+        }
         if frame.rows != s.grid.len() {
             s.grid.resize(frame.rows, Line::empty());
         }
@@ -1049,6 +1133,7 @@ impl TermView {
         s.cursor_blinks = frame.cursor_blinking;
         for row in frame.dirty {
             if row.row < s.grid.len() {
+                s.changed.push(row.row);
                 s.grid[row.row] = Line::of(row.runs, row.wrapped);
             }
         }
@@ -1089,6 +1174,26 @@ impl TermView {
             at = run.col + run.cells;
         }
         (utf16(&units), index)
+    }
+
+    /// The live screen as text, a line per row, without the blank end of each row or the blank rows below.
+    fn screen_text(&self) -> String {
+        let (text, changed) = {
+            let mut s = self.ivars().state.borrow_mut();
+            if s.needs_pull {
+                Self::pull(&mut s);
+            }
+            let mut lines: Vec<String> = s.grid.iter().map(|line| Self::row_text(line, 0).0.trim_end().to_string()).collect();
+            while lines.last().is_some_and(|l| l.is_empty()) {
+                lines.pop();
+            }
+            (lines.join("\n"), !s.changed.is_empty() || s.changed_all)
+        };
+        if changed {
+            // The rows this read took from the VT are drawn too.
+            self.queue_refresh();
+        }
+        text
     }
 
     /// The content line and column under a mouse event; None outside the grid.
@@ -1393,28 +1498,128 @@ impl TermView {
         NSRect::new(NSPoint::new(s.cursor_col as CGFloat * s.cell_w, y), NSSize::new(s.cell_w, s.cell_h))
     }
 
+    /// The cursor lit again (output, a key, focus); one tick in flight keeps it blinking after.
     fn restart_blink(&self) {
-        {
+        let schedule = {
             let mut s = self.ivars().state.borrow_mut();
-            s.blink_gen += 1;
+            s.blink_held = std::time::Instant::now();
             s.blink_on = true;
-            if !s.cursor_blinks {
-                return;
-            }
-        }
-        if self.window().is_some() {
-            self.schedule_blink();
+            let schedule = s.cursor_blinks && !s.blink_pending && self.window().is_some();
+            s.blink_pending |= schedule;
+            schedule
+        };
+        self.invalidate_cursor();
+        if schedule {
+            self.schedule_blink(BLINK_S);
         }
     }
 
-    fn schedule_blink(&self) {
-        let generation = NSNumber::new_u64(self.ivars().state.borrow().blink_gen);
-        let _: () = unsafe { msg_send![self, performSelector: sel!(blinkTick:), withObject: &*generation, afterDelay: 0.6f64] };
+    fn schedule_blink(&self, after: f64) {
+        self.ivars().state.borrow_mut().blink_pending = true;
+        let _: () = unsafe { msg_send![self, performSelector: sel!(blinkTick:), withObject: None::<&AnyObject>, afterDelay: after] };
+    }
+
+    /// One `refresh` on the next run loop pass, in every mode (a live resize's too).
+    fn queue_refresh(&self) {
+        {
+            let mut s = self.ivars().state.borrow_mut();
+            if s.refresh_queued {
+                return;
+            }
+            s.refresh_queued = true;
+        }
+        let modes = NSArray::from_slice(&[&*NSString::from_str("kCFRunLoopCommonModes")]);
+        let _: () = unsafe {
+            msg_send![self, performSelector: sel!(refreshChanged:), withObject: None::<&AnyObject>, afterDelay: 0.0f64, inModes: &*modes]
+        };
+    }
+
+    /// Takes the VT's changed rows and marks only them, and the cursor's old and new rows, for drawing: a full-screen
+    /// window under steady output redraws the rows that moved, not the whole view (DESIGN.md §4: frame time).
+    fn refresh(&self) {
+        let rects = {
+            let mut s = self.ivars().state.borrow_mut();
+            s.refresh_queued = false;
+            if s.needs_pull {
+                Self::pull(&mut s);
+            }
+            let all = std::mem::replace(&mut s.changed_all, false);
+            let mut rows = std::mem::take(&mut s.changed);
+            if all {
+                None
+            } else {
+                let h = s.history.len() as isize;
+                let mut lines: Vec<isize> = rows.drain(..).map(|r| h + r as isize).collect();
+                lines.extend(s.cursor_drawn);
+                if s.cursor_row < s.rows {
+                    lines.push(h + s.cursor_row as isize);
+                }
+                Some(self.line_rects(&s, &lines))
+            }
+        };
+        match rects {
+            None => self.setNeedsDisplay(true),
+            Some(rects) => {
+                for rect in rects {
+                    self.setNeedsDisplayInRect(rect);
+                }
+            }
+        }
+    }
+
+    /// After a paint: a whole view drawn has drawn every change; rows the paint itself took from the VT (output
+    /// that came between the last `refresh` and the paint) are marked for the next one.
+    fn settle_changes(&self, dirty: NSRect) {
+        let pending = {
+            let mut s = self.ivars().state.borrow_mut();
+            let bounds = self.bounds();
+            if dirty.size.height >= bounds.size.height - 1.0 && dirty.size.width >= bounds.size.width - 1.0 {
+                s.changed.clear();
+                s.changed_all = false;
+            }
+            !s.changed.is_empty() || s.changed_all
+        };
+        if pending {
+            self.queue_refresh();
+        }
+    }
+
+    /// The cursor's row, old and new, drawn again (a blink, the composition).
+    fn invalidate_cursor(&self) {
+        let rects = {
+            let s = self.ivars().state.borrow();
+            let h = s.history.len() as isize;
+            let mut lines: Vec<isize> = s.cursor_drawn.into_iter().collect();
+            if s.cursor_row < s.rows {
+                lines.push(h + s.cursor_row as isize);
+            }
+            self.line_rects(&s, &lines)
+        };
+        for rect in rects {
+            self.setNeedsDisplayInRect(rect);
+        }
+    }
+
+    /// The view's rects for content lines (merged where they touch), a little taller than their rows: a glyph that
+    /// reaches past its cell (an icon, an underline's curl) is drawn again with its row.
+    fn line_rects(&self, s: &State, lines: &[isize]) -> Vec<NSRect> {
+        let width = self.bounds().size.width;
+        let first = s.history.len() as isize - (snapped_scroll(s) / s.cell_h.max(1.0)).ceil() as isize - 1;
+        let last = first + s.rows as isize + 2;
+        let visible: Vec<isize> = lines.iter().copied().filter(|&i| i >= first && i <= last).collect();
+        spans(&visible)
+            .into_iter()
+            .map(|(a, b)| {
+                let y = line_y(s, a) - OVERDRAW;
+                NSRect::new(NSPoint::new(0.0, y), NSSize::new(width, (b - a + 1) as CGFloat * s.cell_h + 2.0 * OVERDRAW))
+            })
+            .collect()
     }
 
     // MARK: Drawing
 
-    fn paint(&self, cg: &CGContext, dirty: NSRect) {
+    /// Draws what `dirty` asks for; how many rows it drew, of how many the view shows.
+    fn paint(&self, cg: &CGContext, dirty: NSRect) -> (usize, usize) {
         let mut s = self.ivars().state.borrow_mut();
         if s.needs_pull {
             Self::pull(&mut s);
@@ -1422,17 +1627,30 @@ impl TermView {
         let bounds = self.bounds();
         Rgba::of(s.background, 1.0).fill(cg);
         CGContext::set_should_antialias(Some(cg), false);
-        CGContext::fill_rect(Some(cg), bounds);
+        // Only the rects being drawn: AppKit may clip to their union, and the rows between them keep what they show.
+        for rect in self.rects_being_drawn(dirty) {
+            CGContext::fill_rect(Some(cg), rect);
+        }
         if s.cell_h <= 0.0 {
-            return;
+            return (0, 0);
         }
         CGContext::set_text_matrix(Some(cg), CGAffineTransform { a: 1.0, b: 0.0, c: 0.0, d: -1.0, tx: 0.0, ty: 0.0 });
         let line_count = (s.history.len() + s.rows) as isize;
         let first = line_under(&s, dirty.origin.y.max(0.0)).max(0);
         let last = (line_count - 1).min(line_under(&s, (dirty.origin.y + dirty.size.height).min(bounds.size.height) - 0.001));
         let h = s.history.len() as isize;
+        let top = line_under(&s, 0.0).max(0);
+        let bottom = (line_count - 1).min(line_under(&s, bounds.size.height - 0.001));
+        let visible = (bottom - top + 1).max(0) as usize;
+        let mut drawn = 0usize;
         for i in first..=last {
             let y = line_y(&s, i);
+            // The union of the marked rows spans the rows between them: only the marked ones are drawn.
+            let row = NSRect::new(NSPoint::new(0.0, y), NSSize::new(bounds.size.width, s.cell_h));
+            if !self.needsToDrawRect(row) {
+                continue;
+            }
+            drawn += 1;
             let content = Self::line(&mut s, i);
             CGContext::set_should_antialias(Some(cg), false);
             for cell in content.cells.iter().filter(|c| c.run.bg != 0) {
@@ -1465,6 +1683,19 @@ impl TermView {
             }
         }
         Self::draw_cursor(&mut s, cg, bounds.size.height);
+        (drawn, visible)
+    }
+
+    /// The rects AppKit asks this draw for (`dirty` is their union).
+    fn rects_being_drawn(&self, dirty: NSRect) -> Vec<NSRect> {
+        let mut rects: *const NSRect = std::ptr::null();
+        let mut count: objc2_foundation::NSInteger = 0;
+        unsafe { self.getRectsBeingDrawn_count(&mut rects, &mut count) };
+        if rects.is_null() || count <= 0 {
+            return vec![dirty];
+        }
+        // SAFETY: AppKit owns `count` rects at `rects` for the rest of this drawRect:.
+        unsafe { std::slice::from_raw_parts(rects, count as usize) }.to_vec()
     }
 
     fn face_index(run: &Run) -> usize {
@@ -1578,7 +1809,22 @@ impl TermView {
         let items: Rc<Vec<Item>> = match cached {
             Some(items) => items,
             None => {
-                let made = Rc::new(Self::items(s, run, next));
+                let next_units = match next {
+                    Some(n) if run.flags & layout::FLAG_HEAD != 0 => n.units.clone(),
+                    _ => Vec::new(),
+                };
+                let key = ItemKey { col: run.col, cells: run.cells, flags: run.flags, units: run.units.clone(), next: next_units };
+                let made = match s.item_cache.get(&key) {
+                    Some(items) => items.clone(),
+                    None => {
+                        let made = Rc::new(Self::items(s, run, next));
+                        if s.item_cache.len() >= ITEM_CACHE_MAX {
+                            s.item_cache.clear();
+                        }
+                        s.item_cache.insert(key, made.clone());
+                        made
+                    }
+                };
                 *cell.items.borrow_mut() = Some(made.clone());
                 made
             }
@@ -1742,13 +1988,16 @@ impl TermView {
     }
 
     fn draw_cursor(s: &mut State, cg: &CGContext, height: CGFloat) {
+        s.cursor_drawn = None;
         if s.vt.is_none() || s.cursor_row >= s.rows {
             return;
         }
-        let y = line_y(s, (s.history.len() + s.cursor_row) as isize);
+        let line = (s.history.len() + s.cursor_row) as isize;
+        let y = line_y(s, line);
         if y >= height || y + s.cell_h <= 0.0 {
             return;
         }
+        s.cursor_drawn = Some(line);
         let x = s.cursor_col as CGFloat * s.cell_w;
         let rect = |x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat| CGRect::new(CGPoint::new(x, y), CGSize::new(w, h));
         if !s.marked.is_empty() {
