@@ -462,7 +462,7 @@ func (w *promptWatch) observe(sessionID string, prompt *classifier.Prompt, now t
 		w.open, w.left = map[string]watchedPrompt{}, map[string]watchedPrompt{}
 	}
 	previous, had := w.open[sessionID]
-	if prompt != nil && had && previous.prompt.ID == prompt.ID {
+	if prompt != nil && had && sameShowing(previous.prompt, *prompt) {
 		// The same showing, read again: the transcript may have named its tool
 		// call since it was first seen, and the record of its answer says it.
 		previous.prompt = *prompt
@@ -473,18 +473,34 @@ func (w *promptWatch) observe(sessionID string, prompt *classifier.Prompt, now t
 		w.left[sessionID] = previous
 	}
 	if prompt != nil {
-		w.open[sessionID] = watchedPrompt{prompt: *prompt, since: now}
+		// The watcher's stamp is the showing's time: a record of its answer
+		// and the card a phone draws for it name the same one.
+		since := now
+		if prompt.AskedAt != nil && !prompt.AskedAt.IsZero() {
+			since = prompt.AskedAt.UTC()
+		}
+		w.open[sessionID] = watchedPrompt{prompt: *prompt, since: since}
 	} else {
 		delete(w.open, sessionID)
 	}
 	return previous, had
 }
 
-func (w *promptWatch) isOpen(sessionID, promptID string) bool {
+// sameShowing: the same prompt, and the same time it was shown when both say
+// one (an agent that asks the same thing again shows the same ID).
+func sameShowing(a, b classifier.Prompt) bool {
+	if a.ID != b.ID {
+		return false
+	}
+	return a.AskedAt == nil || b.AskedAt == nil || a.AskedAt.Equal(*b.AskedAt)
+}
+
+// isOpen: the Session's screen still shows this showing of the prompt.
+func (w *promptWatch) isOpen(sessionID string, prompt classifier.Prompt) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	open, ok := w.open[sessionID]
-	return ok && open.prompt.ID == promptID
+	return ok && sameShowing(open.prompt, prompt)
 }
 
 func (w *promptWatch) forget(sessionID string) {
@@ -537,7 +553,7 @@ func (s *Server) observePromptLifecycle(ev watcher.SessionEvent) {
 		after = func(grace time.Duration, check func()) { time.AfterFunc(grace, check) }
 	}
 	after(promptLeftGrace, func() {
-		if s.prompts.isOpen(sessionID, left.prompt.ID) || s.lookupWorker(sessionID) == nil {
+		if s.prompts.isOpen(sessionID, left.prompt) || s.lookupWorker(sessionID) == nil {
 			return
 		}
 		ledger := s.answeredLedger()

@@ -24,7 +24,7 @@ const brainThread = { brain: true } as const;
 describe("the answered lines at a thread's foot", () => {
   test("a request Brain answered leaves no line: Brain's own step says it", () => {
     const shown = footSealed([seal(owner), seal(brain)], brainThread);
-    expect(shown.map((s) => s.key)).toEqual(["prompt:mh-a75e:eea585040c34"]);
+    expect(shown.map((s) => s.key)).toEqual([`prompt:mh-a75e:eea585040c34@${Date.parse("2026-11-17T01:48:54.320Z")}`]);
     expect(shown[0]).toMatchObject({ verb: "Approved", answer: command, mono: true });
   });
 

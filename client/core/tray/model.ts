@@ -10,6 +10,7 @@ import { agentKindFromProvider, typeLabel } from "../sessions/workerPresentation
 import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerApproval, WorkerPrompt } from "../sessions/workers";
 import type { WorkWorkerSession } from "../work/types";
+import { promptRequestKey } from "../timeline/types";
 import { liveWorkerIds } from "../work/workers";
 import { brainWorkSurface, foldMergedSlips, type BrainWorkSlip } from "../work/surface";
 import type { ProgressMark } from "../work/judgedProgress";
@@ -275,7 +276,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
   }
   const host = input.brainHost;
   if (host?.prompt && !(host.prompt.kind === "choice" && input.brainChoice && host.prompt.call_id === input.brainChoice.callId)) {
-    out.push({ key: `prompt:${host.id}:${host.prompt.id}`, kind: "prompt", where: "brain", title: promptTitle(host.prompt), ask: promptAsk(host.prompt), source: "Brain", workerId: host.id, oneTap: promptOneTap(host.id, host.prompt) });
+    out.push({ key: promptRequestKey(host.id, host.prompt), kind: "prompt", where: "brain", title: promptTitle(host.prompt), ask: promptAsk(host.prompt), source: "Brain", workerId: host.id, oneTap: promptOneTap(host.id, host.prompt) });
   }
   for (const worker of input.workers) {
     const where: RequestWhere = worker.delegated ? "brain" : "session";
@@ -285,7 +286,7 @@ export function requestsOf(input: Pick<TrayInput, "workers" | "brainHost" | "bra
     if (decisions.length > 0) {
       for (const approval of decisions) out.push({ ...base, key: `approval:${worker.id}:${approval.id}`, kind: "approval", title: approvalTitle(approval), ask: approvalAsk(approval), oneTap: approvalOneTap(worker.id, approval) });
     } else if (worker.prompt) {
-      out.push({ ...base, key: `prompt:${worker.id}:${worker.prompt.id}`, kind: "prompt", title: promptTitle(worker.prompt), ask: promptAsk(worker.prompt), oneTap: promptOneTap(worker.id, worker.prompt) });
+      out.push({ ...base, key: promptRequestKey(worker.id, worker.prompt), kind: "prompt", title: promptTitle(worker.prompt), ask: promptAsk(worker.prompt), oneTap: promptOneTap(worker.id, worker.prompt) });
     } else if (worker.needs_attention) {
       // Blocked on something the computer could not read: its card says "Open terminal".
       const said = readableSummary(worker.summary) || "Waiting for you";

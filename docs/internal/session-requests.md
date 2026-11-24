@@ -11,6 +11,20 @@ tool call Claude wrote to its transcript before it asked. Claude's own hints in
 the box (such as "Tip: auto mode handles these prompts") are left out of
 `request`. They are absent when the transcript has no such call yet.
 
+## A prompt's showing
+
+A screen prompt's `id` is drawn from what it shows, so an agent that asks the
+same thing again, word for word, shows the same `id`. Each time it is shown it
+carries `asked_at`, when that showing appeared; a prompt read again keeps it,
+and so does one that blinks off the screen for under 5 seconds, unless Mewla
+answered it or it names another tool call. A device keys the prompt's card and
+tray row by `id` and `asked_at` (`prompt:<session>:<id>@<ms>`), and the record
+of its answer (below) carries the same `asked_at`: the answer to one showing
+never hides the next. A prompt first read from the screen alone (a question's
+other tabs as headers only) and completed from the transcript a moment later
+keeps its `id` and `asked_at`, and is sent to devices again with its `call_id`
+and questions.
+
 ## Answered requests
 
 **An answered request stays answered.** The daemon keeps one record for each

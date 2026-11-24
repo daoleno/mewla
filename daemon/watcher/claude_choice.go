@@ -64,9 +64,9 @@ func (w *Watcher) AnswerClaudeChoice(sessionID string, questions []ClaudeChoiceQ
 		return refuseClaudeChoice("target provider could not be proven; no key was sent")
 	}
 	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
-	return w.sessionInputOwner().serialized(sessionID, func() error {
+	return w.promptAnswered(sessionID, w.sessionInputOwner().serialized(sessionID, func() error {
 		return driveClaudeChoice(pane, questions, answers, expected, claudeChoiceStepTimeout)
-	})
+	}))
 }
 
 // sessionClaudeChoicePane drives the prompt through the Session backend,
