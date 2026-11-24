@@ -19,6 +19,9 @@ client/macos/scripts/loop/mac-loop.sh shot name | log 40 | click X Y | type "tex
 client/macos/scripts/loop/mac-loop.sh stop             # as soon as the task is done
 ```
 
+`echo 1 > ~/mac-loop/native-terminal` on the runner (`ssh`) relaunches Mewla Dev with `MEWLA_APP_NATIVE_TERMINAL=1`:
+Terminal in the native view (client/macos/src/terminal/) instead of the WebView.
+
 State (the private key, the ssh config, the screenshots) lives in `$MAC_LOOP_DIR` (default `$TMPDIR/mac-loop`).
 `MAC_LOOP_REF` dispatches another branch's copy of the workflow. The workflow file has to be on main to be dispatched
 at all.

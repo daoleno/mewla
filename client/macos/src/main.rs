@@ -21,7 +21,8 @@
 //! `MEWLA_APP_STATE_ROOT` (the daemon's state root), `MEWLA_APP_ADDR` (`127.0.0.1:<port>`), `MEWLA_APP_DATA_DIR`
 //! (the app's storage and logs), `MEWLA_APP_PHONE_ADDRESS` (the address the phone QR names),
 //! `MEWLA_APP_QUICK_CHAT_SHORTCUT`, `MEWLA_APP_BRAIN_HOST_EXECUTOR` (Brain held to one agent),
-//! `MEWLA_APP_DEV_SCRIPT` (a JSON proof script the app runs once connected) and
+//! `MEWLA_APP_DEV_SCRIPT` (a JSON proof script the app runs once connected),
+//! `MEWLA_APP_NATIVE_TERMINAL=1` (Terminal in the native view, terminal/, while it is proven) and
 //! `MEWLA_APP_BACKGROUND=1` (never the active app).
 
 #[cfg(target_os = "macos")]
@@ -35,6 +36,7 @@ mod host;
 mod permissions;
 #[cfg(target_os = "macos")]
 mod secure;
+mod terminal;
 
 #[cfg(target_os = "macos")]
 fn main() -> std::process::ExitCode {
@@ -47,6 +49,8 @@ fn main() -> std::process::ExitCode {
     }
     // Every part of `nsh/base` the app's code imports (the stock host serves only its core part to a Rust app).
     nsh_platform_macos::set_ui_sets(vec![nsh_base::registry()]);
+    // The terminal's native view (`mewla.terminal`, terminal/), as client/ios and client/android register theirs.
+    nsh_platform_macos::set_components(terminal::register);
     let (dir, mut options) = setup();
     let contents = dir.parent().and_then(|p| p.parent()).map(std::path::Path::to_path_buf).unwrap_or_default();
     // SAFETY: the bytecode is a resource of this app's own bundle, which the code signature covers.
@@ -123,6 +127,10 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     }
     if let Some(script) = std::env::var("MEWLA_APP_DEV_SCRIPT").ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) {
         params.insert("devScript".into(), script);
+    }
+    // The terminal's native view (terminal/) while it is proven; the web view's page otherwise.
+    if std::env::var("MEWLA_APP_NATIVE_TERMINAL").is_ok_and(|v| v == "1") {
+        params.insert("nativeTerminal".into(), json!(true));
     }
     host.set_params(params);
 
