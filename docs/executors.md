@@ -41,21 +41,28 @@ Session's composer. Brain picks each Worker's agent and model itself; see
 
 ### A Session's models
 
-A Session on a [Model Provider](#model-providers) lists that connection's
-models. Any other Session lists what its agent offers with your sign-in, read
-from the agent itself, and switches the agent's own way:
+A Session lists what its agent offers with your sign-in, read from the agent
+itself, and switches the agent's own way. A Claude Session on a
+[Model Provider](#model-providers) does too: its route passes the model Claude
+asks for through. A Codex Session on a Provider connection lists that
+connection's models.
 
 | Agent | The list | A switch |
 | --- | --- | --- |
-| Claude Code | Its model picker (the `initialize` answer of `claude -p`), with each model's effort levels | Made in Claude's own picker with its "use this session only" key: the conversation goes on, and your default for new sessions stays as it is. After a turn Claude asks whether to switch (the next answer re-reads the conversation); that question shows in the Session for you |
-| Codex | `model/list` of the Session's own app-server, with each model's efforts | Applied to the running thread. Before the first message Codex has no thread yet: the sheet shows the configured model, and you switch after the first message |
-| OpenCode | The service's models of the providers you signed in to, with their variants as efforts | `session.switchModel`: the next turn uses it. OpenCode makes the session with its first message, so you switch after it |
-| Pi | The models Pi can use with your keys (your scoped ones when you scoped some), with Pi's thinking levels | `pi.setModel` and `pi.setThinkingLevel` through Mewla's extension: the conversation goes on, your default stays |
+| Claude Code | Its model picker (the `initialize` answer of `claude -p`), with each model's effort levels | Made in Claude's own picker with its "use this session only" key: the conversation goes on, and your default for new sessions stays as it is. After a turn Claude asks whether to switch (the next answer re-reads the conversation); your pick is that answer |
+| Codex | `model/list` of the Session's own app-server, with each model's efforts | Applied to the thread, before its first message too (its first turn runs on it) |
+| OpenCode | The service's models of the providers you signed in to, with their variants as efforts | `session.switchModel`: the next turn uses it. Until its first message OpenCode's own screen holds the model, so the choice appears once that message is sent |
+| Pi | The models Pi can use with your keys (your scoped ones when you scoped some), with the thinking levels Pi takes for each (no Default: Pi always thinks at one of them) | `pi.setModel` and `pi.setThinkingLevel` through Mewla's extension: the conversation goes on, your default stays |
 | Cursor Agent, Grok | `cursor-agent models`, `grok models` | Their own `/model <id>`, typed into the Session |
 | DSH, Antigravity | The agent's own models | Applied at once |
 
-When the agent cannot list (not signed in) or refuses a switch, the sheet shows
-the agent's own words.
+Claude, Cursor Agent and Grok take a switch between turns: a pick made while
+the agent works, or waits for your answer, shows with an hourglass and is
+made when the turn ends.
+
+A Session offers no model choice while its agent cannot give one: not signed
+in, a Codex still on a startup question or started by hand outside Mewla, a Pi
+that has not linked up yet.
 
 Listing an installed agent does not start its command or check its sign-in.
 The menu says "Sign-in not checked" until Mewla has used that agent. A verified
@@ -200,7 +207,9 @@ marked block in Codex's `config.toml`, backed up first) and Claude Code
 that gateway. So a CLI you start in a plain terminal or an IDE uses the
 selected connection too. The gateway swaps in the real key and forwards the
 request unchanged. Running Claude Sessions use a new connection from their next
-request.
+request. A second daemon run for a test beside your own
+(`MEWLA_NO_CONFIG_TAKEOVER=1`) leaves both files alone; with a `CODEX_HOME` of
+its own it points that copy's Codex config at its gateway instead.
 
 **Images and web search in Codex.** Codex's built-in `image_gen` and `web.run`
 tools call their own endpoints (`/v1/images/generations`, `/v1/images/edits`,

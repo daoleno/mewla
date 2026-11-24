@@ -74,6 +74,17 @@ func dshSocket(id string) (string, error) {
 	return platform.SocketPath(filepath.Join(DSHRoot(), fmt.Sprintf("%x.sock", sum[:8]))), nil
 }
 
+// DSHSessionReady reports a Session whose DSH listens on its socket.
+func DSHSessionReady(id string) bool {
+	socket, err := dshSocket(id)
+	if err != nil {
+		return false
+	}
+	// Windows' AF_UNIX sockets are files without the socket mode bit.
+	_, err = os.Lstat(socket)
+	return err == nil
+}
+
 // CallDSH only reaches the private socket of the explicitly owned Session.
 // dshInteractionWait bounds how long one snapshot request is held open.
 const dshInteractionWait = 10 * time.Second

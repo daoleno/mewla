@@ -18,6 +18,16 @@ type AgentModel struct {
 	Name          string
 	Efforts       []string
 	DefaultEffort string
+	// EffortRequired is set when the agent always runs one of Efforts and
+	// has no "model's default" to go back to (Pi): no Default is offered.
+	EffortRequired bool
+}
+
+// AgentChoice is a model and effort the person picked that the agent takes
+// at its next possible moment (the end of the turn it is working on).
+type AgentChoice struct {
+	Model  string
+	Effort string
 }
 
 // AgentModels is an agent's own model menu for one Session: what the agent
@@ -30,8 +40,9 @@ type AgentModels struct {
 	// Effort is the Session's reasoning level ("" = the model's default).
 	Effort string
 	Models []AgentModel
-	// Unsaved is set when the agent took a switch but keeps it later.
-	Unsaved string
+	// Pending is a choice the agent takes at its next possible moment;
+	// Current and Effort stay what it runs on until then.
+	Pending *AgentChoice
 }
 
 // SessionModels reaches the agent of a Session for its own models. Each agent
@@ -42,6 +53,44 @@ type SessionModels interface {
 	// SetModel switches the Session the agent's own way and answers the menu
 	// after it. A refusal carries the agent's reason.
 	SetModel(ctx context.Context, worker *classifier.Worker, model, effort string) (AgentModels, error)
+}
+
+// SessionModelsAvailability is implemented by an agent whose menu a Session
+// may not have (yet): a Codex whose thread is not loaded, an OpenCode before
+// its service has the session, a Pi before its extension links up, an agent
+// that is not signed in. Such a Session offers no model choice until it has.
+type SessionModelsAvailability interface {
+	ModelsAvailable(worker *classifier.Worker) bool
+}
+
+// SessionModelsSettle is implemented by an agent that holds a pick for the
+// end of a turn: Settle makes a held pick now when the turn is over.
+type SessionModelsSettle interface {
+	Settle(ctx context.Context, worker *classifier.Worker) error
+}
+
+// SettleSessionModels makes a held pick before a message is sent to the
+// Session (from the app, or Brain's `worker send`), so the message's turn
+// runs on it.
+func (s *Server) SettleSessionModels(workerID string) {
+	worker := s.lookupWorker(workerID)
+	_, models := s.sessionModelsProvider(worker)
+	settle, ok := models.(SessionModelsSettle)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	_ = settle.Settle(ctx, worker)
+}
+
+// sessionModelsAvailable reports whether the Session can be offered its
+// agent's menu now.
+func sessionModelsAvailable(models SessionModels, worker *classifier.Worker) bool {
+	if gate, ok := models.(SessionModelsAvailability); ok {
+		return gate.ModelsAvailable(worker)
+	}
+	return true
 }
 
 // SetSessionModels installs the model menu of one agent (a work.WorkerProvider*).
@@ -81,7 +130,11 @@ func (s *Server) sessionModelsProvider(worker *classifier.Worker) (string, Sessi
 	if models == nil {
 		return "", nil
 	}
-	if owner := s.modelProfiles(); owner != nil {
+	// A Session on a Provider route keeps the Provider path, except Claude:
+	// its route passes the model Claude asks for through, so Claude's own
+	// picker switches it, and the Provider path has no way to (it cannot
+	// reach the running Claude).
+	if owner := s.modelProfiles(); owner != nil && provider != work.WorkerProviderClaude {
 		if _, routed := owner.ThreadRuntime(worker.ID); routed {
 			return "", nil
 		}
@@ -138,11 +191,10 @@ func (s *Server) handleSessionModels(conn *websocket.Conn, raw clientMessage, mu
 	}
 	payload := map[string]any{"type": messageType, "request_id": raw.RequestID, "worker_id": workerID, "runtime": agentRuntimeSelection(workerID, provider, models)}
 	if mutation {
+		// The agent took the choice (now, or at its next possible moment,
+		// which the runtime's pending fields say).
 		payload["persistence_outcome"] = "applied"
-		payload["persistence_durable"] = models.Unsaved == ""
-		if models.Unsaved != "" {
-			payload["persistence_warning"] = models.Unsaved
-		}
+		payload["persistence_durable"] = true
 	}
 	s.sendJSON(conn, payload)
 	return true
@@ -164,6 +216,9 @@ func agentRuntimeSelection(workerID, provider string, models AgentModels) map[st
 	efforts, defaultEffort := []string{}, ""
 	for _, model := range models.Models {
 		choice := map[string]any{"id": model.ID, "available": true, "source": provider + "_native", "reasoning_efforts": nonNilStrings(model.Efforts)}
+		if model.EffortRequired {
+			choice["reasoning_effort_required"] = true
+		}
 		if name := strings.TrimSpace(model.Name); name != "" {
 			choice["display_name"] = name
 		}
@@ -175,12 +230,17 @@ func agentRuntimeSelection(workerID, provider string, models AgentModels) map[st
 			efforts, defaultEffort = nonNilStrings(model.Efforts), model.DefaultEffort
 		}
 	}
-	return map[string]any{
+	runtime := map[string]any{
 		"session_id": workerID, "client": provider, "connection_id": provider, "connection_name": label,
 		"provider_label": label, "model_id": models.Current, "reasoning_effort": models.Effort,
 		"reasoning_efforts": efforts, "reasoning_effort_default": defaultEffort,
 		"credential_ready": true, "hot_switchable": true, "native_models": choices,
 	}
+	if models.Pending != nil {
+		runtime["pending_model_id"] = models.Pending.Model
+		runtime["pending_reasoning_effort"] = models.Pending.Effort
+	}
+	return runtime
 }
 
 func nonNilStrings(values []string) []string {

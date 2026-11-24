@@ -144,6 +144,26 @@ type codexSession struct {
 	// as background terminals. turns orders the turns, oldest first.
 	commands map[string][]codexCommand
 	turns    []string
+	// firstTurn is the model and effort set on the thread before its first
+	// turn (Codex's status has no thread to report them from until then).
+	firstTurn *codexFirstTurn
+}
+
+type codexFirstTurn struct{ thread, model, effort string }
+
+func (s *codexSession) setFirstTurnSettings(thread, model, effort string) {
+	s.mu.Lock()
+	s.firstTurn = &codexFirstTurn{thread: thread, model: model, effort: effort}
+	s.mu.Unlock()
+}
+
+func (s *codexSession) firstTurnSettings(thread string) (codexFirstTurn, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.firstTurn == nil || s.firstTurn.thread != thread {
+		return codexFirstTurn{}, false
+	}
+	return *s.firstTurn, true
 }
 
 // codexCommand is one commandExecution item a turn started.

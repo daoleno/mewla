@@ -543,6 +543,11 @@ func workerCommandFromProcess(proc processInfo) string {
 	if lowerComm == "opencode" || processArgsExecutableBase(lowerArgs) == "opencode" ||
 		strings.Contains(lowerArgs, "/bin/opencode") || strings.Contains(lowerArgs, " opencode ") ||
 		strings.HasPrefix(lowerArgs, "opencode ") {
+		// The session it was launched on is its identity: a daemon that
+		// restarts finds the Session by it.
+		if session := opencodeSessionArg(proc.args); session != "" {
+			return "opencode --session " + shellquote.Word(session)
+		}
 		return "opencode"
 	}
 	return ""
@@ -707,4 +712,23 @@ func dropReusedParents(processes map[int]processInfo) {
 			processes[pid] = proc
 		}
 	}
+}
+
+// opencodeSessionArg is the value of an OpenCode command line's --session
+// (or -s) option.
+func opencodeSessionArg(args string) string {
+	fields := splitLaunchFields(args)
+	for i, field := range fields {
+		flag, value, inline := strings.Cut(field, "=")
+		if flag != "--session" && flag != "-s" {
+			continue
+		}
+		if !inline && i+1 < len(fields) {
+			value = fields[i+1]
+		}
+		if value != "" && !strings.HasPrefix(value, "-") {
+			return value
+		}
+	}
+	return ""
 }

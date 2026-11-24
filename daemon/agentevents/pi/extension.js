@@ -7,11 +7,20 @@ const crypto = require("crypto");
 
 const SOCKET = __MEWLA_SOCKET__;
 
-// Pi's own reading of the thinking levels a model takes.
+// Pi's own reading of the thinking levels a model takes: the levels Pi keeps
+// for that model (it clamps any other to the nearest it takes). Pi gives an
+// extension its models module by this name; the package root it gives is a
+// view without it.
 let supportedThinkingLevels = null;
-try {
-  supportedThinkingLevels = require("@earendil-works/pi-ai").getSupportedThinkingLevels;
-} catch (_) {}
+for (const name of ["@earendil-works/pi-ai/models", "@earendil-works/pi-ai"]) {
+  try {
+    const found = require(name).getSupportedThinkingLevels;
+    if (typeof found === "function") {
+      supportedThinkingLevels = found;
+      break;
+    }
+  } catch (_) {}
+}
 const RETRY_MS = 2000;
 
 module.exports = function (pi) {
@@ -81,7 +90,13 @@ module.exports = function (pi) {
         return supportedThinkingLevels(model);
       } catch (_) {}
     }
-    return model.reasoning ? ["off", "minimal", "low", "medium", "high"] : ["off"];
+    // Pi's own rule (pi-ai getSupportedThinkingLevels), for a Pi that does
+    // not hand its models module to extensions: a level the model maps to
+    // null is not taken, and xhigh and max only when the model maps them.
+    if (!model.reasoning) return ["off"];
+    const map = model.thinkingLevelMap || {};
+    return ["off", "minimal", "low", "medium", "high", "xhigh", "max"].filter((level) =>
+      map[level] === null ? false : level === "xhigh" || level === "max" ? map[level] !== undefined : true);
   };
   const models = () => {
     const current = ctx.model;

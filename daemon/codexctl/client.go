@@ -646,6 +646,24 @@ func (c *Client) ResumeThread(ctx context.Context, threadID string) (NativeSetti
 	}, nil
 }
 
+// UpdateSettings sends thread/settings/update without attaching or waiting
+// for the acknowledgement: the way to set a thread that has not run a turn
+// yet, which has no rollout for thread/resume to attach to (the
+// acknowledgement goes only to attached connections). The thread's first
+// turn then runs on it. A nil effort is the model's default.
+func (c *Client) UpdateSettings(ctx context.Context, threadID, model string, effort *string) error {
+	if strings.TrimSpace(threadID) == "" {
+		return fmt.Errorf("%w: thread id required", ErrApply)
+	}
+	return c.applySettingsOnly(ctx, threadID, model, effort)
+}
+
+// ThreadNotStarted reports a thread/resume refusal for a thread that has not
+// run a turn yet (Codex writes its rollout with the first one).
+func ThreadNotStarted(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no rollout found")
+}
+
 // applySettingsOnly sends thread/settings/update without waiting for the
 // applied-settings acknowledgement (used by best-effort rollback). A nil
 // effort maps to the native model-default value "none", exactly like

@@ -159,6 +159,7 @@ export function parseProviderModel(raw: unknown): ProviderModel | null {
     source,
     available: record.available,
     known: record.known === true ? true : undefined,
+    reasoning_effort_required: record.reasoning_effort_required === true ? true : undefined,
     reasoning_effort_default:
       asString(record.reasoning_effort_default) || undefined,
     reasoning_efforts: asStringArray(record.reasoning_efforts),
@@ -280,6 +281,8 @@ export function parseThreadRuntimeSelection(
     reasoning_efforts: asStringArray(record.reasoning_efforts),
     credential_ready: record.credential_ready === true,
     hot_switchable: record.hot_switchable === true,
+    pending_model_id: asString(record.pending_model_id) || undefined,
+    pending_reasoning_effort: asString(record.pending_reasoning_effort) || undefined,
   };
   const agentModels = Array.isArray(record.native_models);
   if (
@@ -370,15 +373,20 @@ export function assertThreadRuntimeMatches(
     };
   },
 ): boolean {
-  return (
-    selection.session_id === normalizeProviderId(input.workerId) &&
-    selection.connection_id ===
-      normalizeProviderId(input.runtime.connectionId) &&
-    selection.model_id === normalizeProviderId(input.runtime.modelId) &&
-    (input.runtime.useDefaultEffect
-      ? !selection.reasoning_effort
-      : !input.runtime.effect ||
-        selection.reasoning_effort ===
-          normalizeProviderId(input.runtime.effect))
-  );
+  const effortMatches = (effort: string | undefined) =>
+    input.runtime.useDefaultEffect
+      ? !effort
+      : !input.runtime.effect || effort === normalizeProviderId(input.runtime.effect);
+  if (
+    selection.session_id !== normalizeProviderId(input.workerId) ||
+    selection.connection_id !== normalizeProviderId(input.runtime.connectionId)
+  ) {
+    return false;
+  }
+  const modelId = normalizeProviderId(input.runtime.modelId);
+  // Taken now, or held for the agent's next possible moment.
+  if (selection.pending_model_id) {
+    return selection.pending_model_id === modelId && effortMatches(selection.pending_reasoning_effort);
+  }
+  return selection.model_id === modelId && effortMatches(selection.reasoning_effort);
 }
