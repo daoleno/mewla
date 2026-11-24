@@ -21,8 +21,7 @@
 //! `MEWLA_APP_STATE_ROOT` (the daemon's state root), `MEWLA_APP_ADDR` (`127.0.0.1:<port>`), `MEWLA_APP_DATA_DIR`
 //! (the app's storage and logs), `MEWLA_APP_PHONE_ADDRESS` (the address the phone QR names),
 //! `MEWLA_APP_QUICK_CHAT_SHORTCUT`, `MEWLA_APP_BRAIN_HOST_EXECUTOR` (Brain held to one agent),
-//! `MEWLA_APP_DEV_SCRIPT` (a JSON proof script the app runs once connected),
-//! `MEWLA_APP_NATIVE_TERMINAL=1` (Terminal in the native view, terminal/, while it is proven) and
+//! `MEWLA_APP_DEV_SCRIPT` (a JSON proof script the app runs once connected) and
 //! `MEWLA_APP_BACKGROUND=1` (never the active app).
 
 #[cfg(target_os = "macos")]
@@ -127,10 +126,6 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     }
     if let Some(script) = std::env::var("MEWLA_APP_DEV_SCRIPT").ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) {
         params.insert("devScript".into(), script);
-    }
-    // The terminal's native view (terminal/) while it is proven; the web view's page otherwise.
-    if std::env::var("MEWLA_APP_NATIVE_TERMINAL").is_ok_and(|v| v == "1") {
-        params.insert("nativeTerminal".into(), json!(true));
     }
     host.set_params(params);
 

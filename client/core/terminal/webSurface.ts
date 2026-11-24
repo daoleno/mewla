@@ -67,11 +67,7 @@ export type WebTerminalEvent =
   | { type: "tapCell"; col: number; row: number; text: string; index: number }
   | { type: "copy"; text: string }
   /** `text`: the screen's rows as the VT holds them; `drawn`: as the page drew them; `history`: the rows above; `grid`: what the page measured. */
-  | { type: "probe"; text: string; drawn: string; history: number; grid: string }
-  /** The page drew: `cells` not blank on screen. Sent for the first draw and the first one with text. */
-  | { type: "painted"; cells: number }
-  /** The page's `document.visibilityState`, at start and on each change (a covered window's page may not draw). */
-  | { type: "visibility"; state: string };
+  | { type: "probe"; text: string; drawn: string; history: number; grid: string };
 
 /** A program's copy (OSC 52) larger than this is not a copy. */
 export const MAX_COPY_CHARS = 1 << 20;
@@ -111,10 +107,6 @@ export function parseWebTerminalEvent(raw: unknown): WebTerminalEvent | null {
     case "probe":
       return str(value.text) && str(value.drawn) && int(value.history) && str(value.grid, 200)
         ? { type: "probe", text: value.text, drawn: value.drawn, history: value.history, grid: value.grid } : null;
-    case "painted":
-      return int(value.cells) && value.cells >= 0 ? { type: "painted", cells: value.cells } : null;
-    case "visibility":
-      return str(value.state, 20) ? { type: "visibility", state: value.state } : null;
     default:
       return null;
   }

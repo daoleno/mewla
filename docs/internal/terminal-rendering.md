@@ -1,9 +1,11 @@
 # Terminal rendering
 
-The terminal view (`client/ui/terminal/contract.ts`) has one contract and three
+The terminal view (`client/ui/terminal/contract.ts`) has one contract and four
 renderers. Android (Kotlin: Canvas text and an `InputConnection`,
-`client/android/app/src/main/java/com/daoleno/mewla/terminal`) and iOS (Swift:
-CoreText and `UITextInput`, `client/ios/Sources/Terminal`) are native components
+`client/android/app/src/main/java/com/daoleno/mewla/terminal`), iOS (Swift:
+CoreText and `UITextInput`, `client/ios/Sources/Terminal`) and Mewla for Mac (Rust
+over AppKit: CoreText and `NSTextInputClient`, `client/macos/src/terminal`, a port of
+the iOS view registered with NSH's macOS native components) are native components
 that hold libghostty-vt. The web runs the same libghostty-vt, with the phones'
 packer and glyphs (`client/native/terminal`), as WebAssembly in a web view page
 that draws on a canvas (`client/ui/terminal/web`, `client/ui/web/terminal`;
@@ -18,7 +20,7 @@ command that proves a drawing change: `web.ts` renders the corpus through that p
 Firefox and WebKit (`ENGINE`) at a real device scale, `check.py` fails on a missing or blank screen,
 a seam between block or line glyphs and an emoji in the wrong cell, and `--android` replays the same
 screens in the Dev app's TerminalView on the lane emulator (`phone.sh corpus`). CI runs it (with
-WebKit) when a path in `scripts/terminal-corpus/paths.txt` changes. All three draw the packer's runs on a grid of
+WebKit) when a path in `scripts/terminal-corpus/paths.txt` changes. All four draw the packer's runs on a grid of
 whole device pixels and draw box, block, braille and Powerline glyphs themselves, so
 rows of lines and blocks meet. Each keeps a character's width per face, measured
 once (whether it fills exactly one cell decides how a run is drawn), and sets the

@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, effect, host, keyboardFrame, openUrl, platform, Scroll, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, Scroll, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
 import { BackHandler } from "nsh/mobile";
 import { TerminalNavigator } from "../../core/terminal/navigation";
@@ -23,12 +23,10 @@ import { SlowLine, StateView, states, useWait } from "../kit/wait";
 import { current, resumeConnection } from "../session";
 
 /**
- * The phones' native view; the web's and the Mac's is libghostty-vt (WebAssembly) on a canvas in a web view, with the
- * same contract (on the Mac its page comes from this Mac's daemon, WebTerminalSurface). Mewla for Mac's own native
- * view (client/macos/src/terminal) takes over where its host says so (`MEWLA_APP_NATIVE_TERMINAL=1`) while it is proven.
+ * The native view on the phones and the Mac (client/macos/src/terminal); the web's is libghostty-vt (WebAssembly) on a
+ * canvas in a web view, with the same contract (WebTerminalSurface).
  */
-const nativeMac = platform.os === "macos" && (host.params as { nativeTerminal?: boolean }).nativeTerminal === true;
-const webSurface = platform.os === "web" || (platform.os === "macos" && !nativeMac);
+const webSurface = platform.os === "web";
 /**
  * Mewla for Mac's terminal fills the right pane under its header on the canvas: no group around it (no surface,
  * radius or inset), 10 20 inside the grid (RESULT-DESIGN-PAIRS #5). The phones and the web keep the group.
