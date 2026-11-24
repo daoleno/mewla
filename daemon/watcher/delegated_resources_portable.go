@@ -108,8 +108,14 @@ func (m *portableDelegatedResourceManager) Bind(target, unit string) {
 	}
 	m.mu.Lock()
 	delete(m.reserved, unit)
+	// Reconcile binds every Session on each poll; the ledger is written when
+	// a target's unit is new to this daemon (after a restart, once each).
+	changed := m.byTarget[target] != unit
 	m.byTarget[target] = unit
 	m.mu.Unlock()
+	if changed && m.tempRoot != "" {
+		gc.BindSession(m.stateRoot(), unit, target, m.clock())
+	}
 }
 
 // OwnsUnit reports whether unit was issued by this daemon (its owner).
@@ -219,6 +225,11 @@ func (m *portableDelegatedResourceManager) stopLease(unit, reason string) error 
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	if m.tempRoot != "" {
+		now := m.clock()
+		gc.EndSession(m.stateRoot(), unit, now)
+		gc.Record(m.stateRoot(), gc.Event{At: now, Action: gc.ActionSessionEnded, Subject: unit, Owner: unit, Detail: reason})
 	}
 	return nil
 }

@@ -77,9 +77,18 @@ type gcTrashItem struct {
 }
 
 type gcStatus struct {
-	Session *gcSession    `json:"session,omitempty"`
-	Kept    []gc.Keep     `json:"kept"`
-	Trash   []gcTrashItem `json:"trash"`
+	Session *gcSession         `json:"session,omitempty"`
+	Today   gcToday            `json:"collected_today"`
+	Held    []gc.LedgerSession `json:"held"`
+	Kept    []gc.Keep          `json:"kept"`
+	Trash   []gcTrashItem      `json:"trash"`
+}
+
+// gcToday is what the collector moved to the trash or deleted from the cache
+// since local midnight, from its ledger.
+type gcToday struct {
+	Items int   `json:"items"`
+	Bytes int64 `json:"bytes"`
 }
 
 const gcAtEnd = "processes stop; scratch goes to the trash for 3 days"
@@ -139,7 +148,28 @@ func runGCStatus(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	status := gcStatus{Session: session, Kept: []gc.Keep{}, Trash: []gcTrashItem{}}
+	status := gcStatus{Session: session, Held: []gc.LedgerSession{}, Kept: []gc.Keep{}, Trash: []gcTrashItem{}}
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	events, err := gc.Events(root, midnight)
+	if err != nil {
+		return err
+	}
+	for _, e := range events {
+		if (e.Action == gc.ActionTrashed || e.Action == gc.ActionEvicted) && (session == nil || *all || e.Owner == session.Unit) {
+			status.Today.Items++
+			status.Today.Bytes += e.Bytes
+		}
+	}
+	held, err := gc.HeldSessions(root)
+	if err != nil {
+		return err
+	}
+	for _, h := range held {
+		if session == nil || *all || h.Unit == session.Unit {
+			status.Held = append(status.Held, h)
+		}
+	}
 	keeps, err := gc.ListKeeps(root)
 	if err != nil {
 		return err
@@ -179,6 +209,17 @@ func writeGCStatus(out io.Writer, status gcStatus) {
 			fmt.Fprintf(tw, "  Processes\t%d\t\n", s.Processes)
 		}
 		fmt.Fprintf(tw, "  When it ends\t%s\t\n", s.AtEnd)
+		_ = tw.Flush()
+		fmt.Fprintln(out)
+	}
+	fmt.Fprintf(out, "Collected today: %d items, %s\n\n", status.Today.Items, gcBytes(status.Today.Bytes))
+	if len(status.Held) > 0 {
+		fmt.Fprintf(out, "Held: %d\n", len(status.Held))
+		tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(tw, "  SESSION\tSINCE\tWHY")
+		for _, h := range status.Held {
+			fmt.Fprintf(tw, "  %s\t%s\t%s\n", h.SessionID, h.HeldSince.Local().Format("01-02 15:04"), h.HeldBecause)
+		}
 		_ = tw.Flush()
 		fmt.Fprintln(out)
 	}

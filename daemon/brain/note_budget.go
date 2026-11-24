@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 )
 
@@ -109,6 +110,8 @@ func (s *Service) raiseNoteCompaction(note WorkspaceNote, now time.Time) error {
 	if err := os.WriteFile(archive, raw, 0o600); err != nil {
 		return err
 	}
+	gc.Record(filepath.Dir(s.store.Root), gc.Event{At: now, Action: gc.ActionNoteArchived, Kind: "note", Subject: note.Path,
+		Bytes: int64(len(raw)), Detail: "over its " + fmt.Sprint(note.BudgetBytes) + "-byte budget; archived as " + archive})
 	id := noteCompactionPrefix + note.Path + ":" + stamp
 	budget := note.BudgetBytes >> 10
 	if _, _, err := s.store.EnsureWork(Work{

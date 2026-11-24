@@ -166,6 +166,13 @@ or read for 48 hours goes to the trash too (a read shows in a file's access
 time; on a file system mounted `noatime` reads leave no trace, so an item
 holding any file stays and the daemon log names it), and `gc/cache` (`$MEWLA_CACHE_DIR`) over 64 GiB
 loses its least recently changed top-level entries, deleted, not trashed.
+Every one of these steps is written to the collector's ledger,
+`gc/ledger.db`. The ledger also records which Session each resource unit
+was, so `mewla gc why` still names a Session after it has ended. It records
+why a Session is held: its Work is closed but it is still busy, the same
+reason the daemon log gives after 10 minutes. And once a day it records the
+size of each kind of thing in `t/` and the collector's directories. `mewla gc
+status` shows what was collected today and which Sessions are held.
 What a Session can keep and how is in [Sessions](sessions.md#what-a-session-leaves-behind).
 No command-line arguments or environment variables are exposed by telemetry.
 Java is labelled `gradle` as a notable workload family, without claiming all Java

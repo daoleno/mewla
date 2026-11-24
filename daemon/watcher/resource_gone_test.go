@@ -438,4 +438,84 @@ func TestReleaseMovesWhatTheSessionKept(t *testing.T) {
 	if keeps, _ := gc.ListKeeps(m.stateRoot()); len(keeps) != 0 {
 		t.Fatalf("keep outlived its date: %+v", keeps)
 	}
+	// The ledger has it all: the keep, its move, the scratch in the trash, the
+	// Session's end, the keep's end (its file to the trash), and 73 h on the
+	// scratch's deletion.
+	events, err := gc.Events(m.stateRoot(), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actions []string
+	for _, e := range events {
+		actions = append(actions, e.Action)
+	}
+	want := []string{gc.ActionKept, gc.ActionKeptMoved, gc.ActionTrashed, gc.ActionSessionEnded, gc.ActionKeepEnded, gc.ActionTrashed, gc.ActionDeleted}
+	if strings.Join(actions, ",") != strings.Join(want, ",") {
+		t.Fatalf("ledger actions %v, want %v", actions, want)
+	}
+}
+
+func TestBindAndReleaseTellTheLedgerWhichSessionAUnitWas(t *testing.T) {
+	m, clock := newGoneTestManager(t)
+	unit, _ := addGoneTestUnit(t, m, "0123456789abcdef0123456789abcdef")
+	m.Bind("mh-ledger", unit)
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-ledger" || !s.EndedAt.IsZero() {
+		t.Fatalf("after Bind: %+v found=%v err=%v", s, found, err)
+	}
+	previous := stopSessionSlice
+	stopSessionSlice = func(string) ([]string, error) { return nil, nil }
+	t.Cleanup(func() { stopSessionSlice = previous })
+	clock.advance(time.Minute)
+	if err := m.Release("mh-ledger", unit); err != nil {
+		t.Fatal(err)
+	}
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || !s.EndedAt.Equal(clock.now()) {
+		t.Fatalf("after Release: %+v found=%v err=%v", s, found, err)
+	}
+}
+
+func TestReconcileWritesTheLedgerOncePerSessionAndAgainAfterARestart(t *testing.T) {
+	m, _ := newGoneTestManager(t)
+	unit, _ := addGoneTestUnit(t, m, "fedcba9876543210fedcba9876543210")
+	windows := []sessionPane{{target: "mh-polled", delegated: true, resourceUnit: unit}}
+	ledger := gc.LedgerPath(m.stateRoot())
+	m.Reconcile(windows)
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-polled" {
+		t.Fatalf("first poll: %+v found=%v err=%v", s, found, err)
+	}
+	removeLedger := func() {
+		for _, suffix := range []string{"", "-wal", "-shm"} {
+			if err := os.Remove(ledger + suffix); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+		}
+	}
+	removeLedger()
+	m.Reconcile(windows)
+	if _, err := os.Stat(ledger); !os.IsNotExist(err) {
+		t.Fatalf("a later poll of the same Session opened the ledger: %v", err)
+	}
+	// A new daemon starts with no bindings and re-adopts the Session.
+	m.mu.Lock()
+	m.byTarget = make(map[string]string)
+	m.mu.Unlock()
+	m.Reconcile(windows)
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-polled" {
+		t.Fatalf("after a restart: %+v found=%v err=%v", s, found, err)
+	}
+	// Release forgets the binding, so a window still listed afterwards (its
+	// Session is not gone) binds it again and the ledger reopens the row.
+	previous := stopSessionSlice
+	stopSessionSlice = func(string) ([]string, error) { return nil, nil }
+	t.Cleanup(func() { stopSessionSlice = previous })
+	if err := m.Release("mh-polled", unit); err != nil {
+		t.Fatal(err)
+	}
+	if s, _, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || s.EndedAt.IsZero() {
+		t.Fatalf("after Release: %+v err=%v", s, err)
+	}
+	m.Reconcile(windows)
+	if s, _, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !s.EndedAt.IsZero() || s.SessionID != "mh-polled" {
+		t.Fatalf("a window listed after its Release: %+v err=%v", s, err)
+	}
 }

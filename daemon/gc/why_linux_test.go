@@ -3,7 +3,6 @@
 package gc
 
 import (
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,35 +11,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/daoleno/mewla/daemon/workerproc"
 )
-
-const whyOwner = "0123456789abcdef0123456789abcdef"
-
-// whyFixture is a state root with one Session: its lease and its marked
-// scratch.
-func whyFixture(t *testing.T) (root, unit, scratch string) {
-	t.Helper()
-	root = t.TempDir()
-	unit = "mewla-worker-" + whyOwner + "-" + strings.Repeat("ab", 16) + ".scope"
-	scratch = filepath.Join(root, "t", ScratchName(unit))
-	if err := os.MkdirAll(scratch, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(scratch, scratchMarker), []byte(unit+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	leases := filepath.Join(root, "run", "worker-resources", whyOwner)
-	if err := os.MkdirAll(leases, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(workerproc.Lease{Version: 1, ResourceID: unit, StartedAt: time.Now()})
-	if err := os.WriteFile(filepath.Join(leases, unit+".json"), raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return root, unit, scratch
-}
 
 // startStripped starts a copy of this test binary that lives in dir, as
 // `setsid env -i` would: a new session and no environment at all. The copy

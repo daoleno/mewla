@@ -116,6 +116,7 @@ func Trash(stateRoot, kind, original, owner, reason string, now time.Time) (Item
 		return Item{}, fmt.Errorf("move %s to the trash: %w", original, err)
 	}
 	item.Path, item.Moved = target, true
+	Record(stateRoot, Event{At: now, Action: ActionTrashed, Kind: kind, Subject: original, Owner: owner, Bytes: Size(target), Detail: id + ": " + reason})
 	return item, nil
 }
 
@@ -217,6 +218,7 @@ func Restore(stateRoot, id string) (Item, error) {
 		return Item{}, fmt.Errorf("restore %s: %w", id, err)
 	}
 	_ = os.Remove(item.Path + ".json")
+	Record(stateRoot, Event{Action: ActionRestored, Kind: item.Kind, Subject: item.Original, Owner: item.Owner, Detail: id})
 	return item, nil
 }
 
@@ -240,11 +242,13 @@ func Finalize(stateRoot string, now time.Time) ([]Item, error) {
 		if now.Before(item.DeleteAfter()) {
 			continue
 		}
+		bytes := Size(item.Path)
 		if err := RemoveTree(item.Path); err != nil {
 			errs = append(errs, fmt.Errorf("delete %s: %w", item.ID, err))
 			continue
 		}
 		_ = os.Remove(record)
+		Record(stateRoot, Event{At: now, Action: ActionDeleted, Kind: item.Kind, Subject: item.Original, Owner: item.Owner, Bytes: bytes, Detail: item.ID})
 		deleted = append(deleted, item)
 	}
 	removeEmptyDays(TrashRoot(stateRoot))
