@@ -145,6 +145,7 @@ type Server struct {
 	work                       *work.Store
 	execs                      *work.ExecutorConfig
 	brain                      *brain.Service
+	holdsCache                 holdsCache
 	resourceSampler            *watcher.ResourceSampler
 	profiles                   *modelprofiles.Owner
 	calendar                   *calendar.Store
@@ -1350,6 +1351,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleDSHImage(conn, raw)
 	case "get_resource_telemetry":
 		s.handleGetResourceTelemetry(conn, raw)
+	case "gc_restore":
+		s.handleGCRestore(conn, raw)
 	case "whats_new_get", "whats_new_seen", "whats_new_note":
 		s.handleWhatsNew(conn, raw, msg)
 	default:

@@ -23,6 +23,9 @@ func (s *Server) resourceTelemetryPayload(requestID string) map[string]any {
 	raw, _ := json.Marshal(snap)
 	var payload map[string]any
 	_ = json.Unmarshal(raw, &payload)
+	if holds := s.holds(time.Now()); holds != nil {
+		payload["holds"] = holds
+	}
 	payload["type"] = "resource_telemetry"
 	if requestID != "" {
 		payload["request_id"] = requestID

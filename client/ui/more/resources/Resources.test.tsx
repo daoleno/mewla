@@ -207,4 +207,53 @@ describe("Resources", () => {
     await app.waitFor("text:Resources unavailable");
     expect(app.shows("id:tile-cpu")).toBe(false);
   });
+
+  test("what Mewla holds: kinds, owners, kept, and Restore on what was collected today", async () => {
+    const GB = 1_000_000_000;
+    const holds = {
+      day: "2026-11-24",
+      kinds: [{ kind: "scratch", count: 2, bytes: 3 * GB, oldest: new Date(Date.now() - 86_400_000).toISOString(), growth_7d: GB }],
+      owners: [{ unit: "u1", session_id: "mh-1", work_title: "Release", bytes: 2 * GB }],
+      kept: [{ id: "k1", path: "/s/t/x/notes", session_id: "mh-1", until: new Date(Date.now() + 86_400_000).toISOString(), why: "The gate reads it" }],
+      collected_today: { items: 1, bytes: GB, restorable: [{ id: "trash-1", kind: "scratch", original: "/s/t/Q2pLx0", bytes: GB, reason: "Session closed", at: new Date().toISOString() }] },
+    };
+    let reads = 0;
+    const restored: string[] = [];
+    const app = await open(HARNESS, {
+      clock: {},
+      host: {
+        params: { page: { name: "resources" }, state: "connected" },
+        handlers: {
+          "app.daemon": (msg: { type: string; body?: { id?: string } }) => {
+            if (msg.type === "get_resource_telemetry") {
+              reads++;
+              return { ...fresh(), holds: restored.length ? { ...holds, collected_today: { ...holds.collected_today, restorable: [] } } : holds };
+            }
+            if (msg.type === "gc_restore") {
+              restored.push(msg.body?.id ?? "");
+              return { type: "gc_restored", id: msg.body?.id };
+            }
+            return { error: `unexpected ${msg.type}` };
+          },
+        },
+      },
+    });
+    await app.waitFor("id:holds");
+    const texts = app.texts();
+    for (const text of ["Held by Mewla", "Session scratch", "Most held by", "Release", "Kept", "notes", "The gate reads it", "Collected today", "Q2pLx0", "Session closed"]) expect(texts).toContain(text);
+    expect(texts.some((t) => t.includes("in 7 days"))).toBe(true);
+    const before = reads;
+    await app.press("id:restore-trash-1");
+    await app.wait(200);
+    expect(restored).toEqual(["trash-1"]);
+    expect(reads).toBeGreaterThan(before);
+    expect(app.shows("id:collected-trash-1")).toBe(false);
+  });
+
+  test("a computer from before the collector's ledger shows no holds", async () => {
+    const c = computer(() => fresh());
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:consumers");
+    expect(app.shows("id:holds")).toBe(false);
+  });
 });

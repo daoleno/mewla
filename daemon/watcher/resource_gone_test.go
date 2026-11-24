@@ -155,8 +155,12 @@ func TestReleaseGoneReleasesTheLeaseOfASessionItsHostNoLongerHas(t *testing.T) {
 	if _, err := gc.Restore(m.stateRoot(), items[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	if marked, ok := readDelegatedTempMarker(tempDir); !ok || marked != unit {
-		t.Fatalf("restored scratch marker = %q, %v", marked, ok)
+	// Restored, it is an ordinary unmarked t/ item: its lease is gone.
+	if marked, ok := readDelegatedTempMarker(tempDir); ok {
+		t.Fatalf("restored scratch still names %q", marked)
+	}
+	if _, err := os.Stat(tempDir); err != nil {
+		t.Fatalf("restored scratch: %v", err)
 	}
 }
 

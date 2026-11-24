@@ -197,7 +197,8 @@ func find(stateRoot, id string) (Item, error) {
 }
 
 // Restore puts an item back at its original path and drops its record. It
-// refuses when something is already at that path.
+// refuses when something is already at that path. An item of the t/ root comes
+// back as an ordinary unmarked item: see restartInTRoot.
 func Restore(stateRoot, id string) (Item, error) {
 	item, err := find(stateRoot, id)
 	if err != nil {
@@ -218,7 +219,9 @@ func Restore(stateRoot, id string) (Item, error) {
 		return Item{}, fmt.Errorf("restore %s: %w", id, err)
 	}
 	_ = os.Remove(item.Path + ".json")
-	Record(stateRoot, Event{Action: ActionRestored, Kind: item.Kind, Subject: item.Original, Owner: item.Owner, Detail: id})
+	now := time.Now()
+	restartInTRoot(stateRoot, item.Original, now)
+	Record(stateRoot, Event{At: now, Action: ActionRestored, Kind: item.Kind, Subject: item.Original, Owner: item.Owner, Detail: id})
 	return item, nil
 }
 

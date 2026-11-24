@@ -217,9 +217,9 @@ mewla connections import-gh   # copy your current gh login into the daemon's vau
 
 mewla resources               # one resource sample as JSON
 mewla gc status [--all]       # what this Session holds and what happens to it when it ends; collected today; held Sessions; the trash
-mewla gc keep PATH --until DATE --why REASON   # keep a path in this Session's TMPDIR past it (30 days at most)
-mewla gc release PATH|<id>    # trash a path in this Session's TMPDIR now, or end one of its keeps
-mewla gc restore <id>         # put a trashed item back where it was
+mewla gc keep PATH --until DATE --why REASON   # keep a path in this Session's TMPDIR past it (30 days at most); from Brain's host: a path in t/, trashed when the keep ends
+mewla gc release PATH|<id>    # trash a path in this Session's TMPDIR (Brain: in t/) now, or end one of its keeps
+mewla gc restore <id>         # put a trashed item back where it was (in t/: unmarked, 48 h from now)
 mewla gc why PID|PATH         # what holds it: its scratch, Session and Work, or "not Mewla's"
 
 mewla watch status            # signals per source and project, last pass, errors

@@ -164,7 +164,10 @@ the `t/` root that was not there when this rule came, that no process uses
 (executable, working directory or open file) and in which nothing was changed
 or read for 48 hours goes to the trash too (a read shows in a file's access
 time; on a file system mounted `noatime` reads leave no trace, so an item
-holding any file stays and the daemon log names it), and `gc/cache` (`$MEWLA_CACHE_DIR`) over 64 GiB
+holding any file stays and the daemon log names it). A path a keep names
+there stays until the keep ends, then goes to the trash. An item restored to
+the `t/` root comes back as an ordinary unmarked item: its Session's marker is
+dropped and its 48 hours start at the restore. `gc/cache` (`$MEWLA_CACHE_DIR`) over 64 GiB
 loses its least recently changed top-level entries, deleted, not trashed.
 Every one of these steps is written to the collector's ledger,
 `gc/ledger.db`. The ledger also records which Session each resource unit
@@ -420,6 +423,28 @@ generation tokens**, not wall-clock start times. The `reported / total` label
 makes the daemon's bounded process list explicit; the UI does not claim these
 are every process. Disclosure stays attached to consumer identity across polling
 and sorting. Switching the canonical server still clears the previous snapshot.
+
+### Held by Mewla
+
+A snapshot from a daemon whose collector runs (Linux and macOS; Windows has none)
+carries `holds`. The daemon reads it from the ledger and the trash and keep records, and reuses one reading
+for 30 seconds. It holds:
+
+- `kinds`: one entry each for Session scratch, unclaimed scratch, the trash, kept
+  paths and the shared cache. Each gives count, bytes, the oldest item, and
+  `growth_7d` when the day 7 days earlier was measured. Sizes are measured once a
+  day.
+- `owners`: the five Sessions holding the most bytes (scratch, kept paths and
+  their items in the trash), with their Work.
+- `kept`: every keep, with its path, Session, date and reason.
+- `collected_today`: the items moved to the trash or evicted from the cache since
+  local midnight, and their bytes. `restorable` lists those still in the trash.
+
+Below **Using this machine**, the Resources page shows these under **Held by
+Mewla**, **Most held by**, **Kept** and **Collected today**. **Restore** on an item
+collected today sends `{ "type": "gc_restore", "id": "<trash id>" }`, the same as
+`mewla gc restore`. The daemon puts the item back where it was and answers
+`gc_restored`. Snapshots without `holds`, from older daemons, show none of this.
 
 ### Reproducible fixture inspection
 

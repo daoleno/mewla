@@ -80,6 +80,10 @@ func (m *jobDelegatedResourceManager) OwnsUnit(unit string) bool {
 	return validDelegatedResourceUnit(m.owner, unit)
 }
 
+// stateRoot is the state directory the scratch root is in: where mewla gc
+// why and the Resources page read the collector's records.
+func (m *jobDelegatedResourceManager) stateRoot() string { return filepath.Dir(m.tempRoot) }
+
 func (m *jobDelegatedResourceManager) UnitForTarget(target string) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
