@@ -21,11 +21,8 @@ describe("a viewer document's base URL", () => {
     expect(base).toMatch(/platform\.os === "web" \? undefined : "https:\/\/viewer\.mewla\.invalid\/"/);
     const offenders = sources(UI)
       .filter((path) => /baseUrl=/.test(readFileSync(path, "utf8")))
-      .filter((path) => /baseUrl=(?!\{viewerBaseUrl\}|\{macDaemonBase\})/.test(readFileSync(path, "utf8")))
+      .filter((path) => /baseUrl=(?!\{viewerBaseUrl\})/.test(readFileSync(path, "utf8")))
       .map((path) => relative(UI, path));
     expect(offenders).toEqual([]);
-    // The one other base: a Mac's web terminal page, from this Mac's own daemon, and only on a Mac.
-    const terminal = readFileSync(join(UI, "terminal/web/WebTerminalSurface.tsx"), "utf8");
-    expect(terminal).toMatch(/const macDaemonBase = platform\.os === "macos" \? localDaemonURL\(\) \|\| undefined : undefined;/);
   });
 });

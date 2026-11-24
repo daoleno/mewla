@@ -58,7 +58,6 @@ relaunch() {
   env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" SHELL=/bin/bash LANG=en_US.UTF-8 TMPDIR="$TMPDIR" PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     MEWLA_APP_STATE_ROOT="$D/state" MEWLA_APP_DATA_DIR="$D/data" MEWLA_APP_ADDR=127.0.0.1:19877 \
     MEWLA_APP_PHONE_ADDRESS=http://127.0.0.1:19877 MEWLA_APP_WINDOW_SIZE=1280x800 MEWLA_APP_DEV_SCRIPT='{}' \
-    MEWLA_APP_NATIVE_TERMINAL="$(cat "$L/native-terminal" 2>/dev/null || true)" \
     nohup "$app/Contents/MacOS/Mewla Dev" > "$D/app.out" 2>&1 &
   echo $! > "$D/app.pid"
   for i in $(seq 1 480); do

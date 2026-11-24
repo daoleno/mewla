@@ -702,20 +702,10 @@
     return a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]) ? [a, b] : [b, a];
   }
 
-  // The first draw, and the first with text on screen, are told to the app (a Mac logs them).
-  var paintedOnce = false, paintedText = false;
-  function painted(cells) {
-    if (paintedText || (paintedOnce && cells === 0)) return;
-    paintedOnce = true;
-    if (cells > 0) paintedText = true;
-    send({ type: "painted", cells: cells });
-  }
-
   function draw() {
     ctx.fillStyle = theme.background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (!x || cellH <= 0) return;
-    var cells = 0;
     var first = Math.max(0, lineUnder(0)), last = Math.min(lineCount() - 1, lineUnder(canvas.height - 1));
     var s = ordered();
     for (var i = first; i <= last; i++) {
@@ -734,11 +724,9 @@
       }
       for (j = 0; j < line.runs.length; j++) {
         drawRun(line.runs[j], y, argb(line.runs[j].fg), line.runs[j + 1]);
-        if (!paintedText) cells += line.runs[j].text.replace(/\s/g, "").length;
       }
     }
     drawCursor();
-    painted(cells);
   }
 
   function runAt(row, col) {
@@ -1294,6 +1282,4 @@
     run(held);
   });
   send({ type: "ready", touch: coarse ? coarse.matches : false });
-  send({ type: "visibility", state: document.visibilityState });
-  document.addEventListener("visibilitychange", function () { send({ type: "visibility", state: document.visibilityState }); });
 })();

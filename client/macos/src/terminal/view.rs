@@ -169,6 +169,9 @@ pub struct Ivars {
     drawing: StdCell<bool>,
     /// Draw times (ms) of full-view frames since the last report (DESIGN.md §4: frame time).
     times: RefCell<Vec<f64>>,
+    /// How far this view got, once each in the app's log (a run on a machine nobody watches reads it there):
+    /// bit 0 the grid, 1 the first output, 2 the first paint.
+    told: StdCell<u8>,
 }
 
 define_class!(
@@ -322,6 +325,7 @@ define_class!(
             let started = std::time::Instant::now();
             self.paint(&cg, dirty);
             self.timed(started.elapsed().as_secs_f64() * 1000.0, dirty);
+            self.tell_painted();
             self.ivars().drawing.set(false);
             self.flush();
         }
@@ -546,11 +550,39 @@ impl TermView {
             sel_mode: 0,
             over_link: false,
         };
-        let this = Self::alloc(mtm).set_ivars(Ivars { state: RefCell::new(state), outbox: RefCell::new(Vec::new()), drawing: StdCell::new(false), times: RefCell::new(Vec::new()) });
+        let this = Self::alloc(mtm).set_ivars(Ivars { state: RefCell::new(state), outbox: RefCell::new(Vec::new()), drawing: StdCell::new(false), times: RefCell::new(Vec::new()), told: StdCell::new(0) });
         let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(100.0, 100.0));
         let view: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
         view.apply_font(13.0);
         view
+    }
+
+    /// Logs a milestone the first time only (`told` bit).
+    fn tell_once(&self, bit: u8, line: impl FnOnce() -> String) {
+        let told = self.ivars().told.get();
+        if told & (1 << bit) == 0 {
+            self.ivars().told.set(told | (1 << bit));
+            log::info!("{}", line());
+        }
+    }
+
+    /// The first paint with text on it: how many cells carry it.
+    fn tell_painted(&self) {
+        if self.ivars().told.get() & 4 != 0 {
+            return;
+        }
+        let cells: usize = {
+            let s = self.ivars().state.borrow();
+            s.grid
+                .iter()
+                .flat_map(|line| line.cells.iter())
+                .filter(|cell| cell.run.units.iter().any(|&u| u != 0x20 && u != 0))
+                .map(|cell| cell.run.cells)
+                .sum()
+        };
+        if cells > 0 {
+            self.tell_once(2, || format!("terminal: first paint ({cells} non-blank cells)"));
+        }
     }
 
     /// Every 120 full-view frames, their median and p95 draw time in the log.
@@ -678,6 +710,7 @@ impl TermView {
     }
 
     pub fn write(&self, data: &str) {
+        self.tell_once(1, || format!("terminal: first output ({} chars)", data.chars().count()));
         let copied = {
             let mut s = self.ivars().state.borrow_mut();
             let Some(vt) = s.vt.as_ref() else {
@@ -992,6 +1025,9 @@ impl TermView {
             (s.cols, s.rows)
         };
         self.setNeedsDisplay(true);
+        if c > 0 && r > 0 {
+            self.tell_once(0, || format!("terminal: grid {c}x{r}"));
+        }
         self.emit("size", json!({ "cols": c, "rows": r }));
         self.report_viewport();
     }
@@ -1281,6 +1317,8 @@ impl TermView {
     fn context_menu(&self) -> Retained<NSMenu> {
         let mtm = MainThreadMarker::from(self);
         let menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(""));
+        // No plug-ins: macOS would add its AutoFill items (Contact…, Passwords…) to a text input view's menu.
+        menu.setAllowsContextMenuPlugIns(false);
         let item = |title: &str, action: Sel| {
             let item = unsafe {
                 NSMenuItem::initWithTitle_action_keyEquivalent(NSMenuItem::alloc(mtm), &NSString::from_str(title), Some(action), &NSString::from_str(""))

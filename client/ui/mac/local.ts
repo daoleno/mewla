@@ -1,6 +1,6 @@
 import { host, signal, untracked } from "nsh";
 import { titleBar, Window, type TitleBarOptions } from "nsh/desktop";
-import { httpOrigin, NOT_RUNNING, ownEntryPlan } from "../../core/mac/thisMac";
+import { NOT_RUNNING, ownEntryPlan } from "../../core/mac/thisMac";
 import { PairingUnreachableError } from "../../core/pairing";
 import { pairWith, readPairingLink } from "../../core/pairFlow";
 import { platform } from "../../core/platform";
@@ -58,9 +58,6 @@ export const localProblem = signal("");
 const LOCAL_KEY = "mewla:v1:mac_local_daemon_key";
 const localDaemonKey = signal("");
 
-/** This Mac's daemon's own (loopback) http origin, once it answered this launch. */
-const localOrigin = signal("");
-
 /** Whether this launch's join has given this Mac its entry. */
 export const localJoined = signal(false);
 
@@ -81,16 +78,6 @@ export function isThisMac(server: { daemonPublicKey: string } | null | undefined
 }
 
 const sameKey = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-/**
- * This Mac's own daemon's address (loopback), whichever computer is current: the terminal's page files are the app's
- * own (the daemon embeds them), so a Session's terminal on any computer loads them from here. It is the daemon's own
- * loopback address, never a stored computer's (owner 11-23: with this Mac's entry removed, or stored by the hosted
- * name, no terminal opened). Empty before the daemon answered.
- */
-export function localDaemonURL(): string {
-  return localOrigin();
-}
 
 let retry: ReturnType<typeof setTimeout> | null = null;
 
@@ -128,7 +115,6 @@ async function join(): Promise<void> {
       own = await saveServer({ id: own.id, name: own.name, url: payload.url, daemonId: own.daemonId, daemonPublicKey: own.daemonPublicKey, transportKind: "manual" });
     }
     if (plan.drop.length || plan.rewrite) servers.set(await getServers());
-    localOrigin.set(payload ? httpOrigin(payload.url) : own ? httpOrigin(own.url) : "");
     localProblem.set("");
     if (own) {
       localJoined.set(true);
