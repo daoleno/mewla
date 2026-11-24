@@ -222,19 +222,13 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 		return err
 	}
 	switches := strings.Count(flatScreen(before), claudeSwitchPrefix)
-	if err := c.screen.SendInput(sessionID, "/model"); err != nil {
-		return err
-	}
-	if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
-		return err
-	}
 	open := true
 	defer func() {
 		if err != nil && open {
 			_ = c.screen.SendKey(sessionID, "Escape")
 		}
 	}()
-	picker, err := c.waitPicker(ctx, sessionID, func(work.ClaudePicker) bool { return true })
+	picker, err := c.openPicker(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -292,7 +286,39 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 	return nil
 }
 
-const claudeScreenWait = 5 * time.Second
+const claudeScreenWait = 4 * time.Second
+
+// claudeOpenTries bounds how often /model is typed into a Claude that does
+// not open its picker yet (one just started takes input before its commands).
+const claudeOpenTries = 3
+
+// openPicker types /model until Claude's picker shows. A Claude that took
+// the text without opening the picker has it cleared from its input again,
+// so it never joins the person's next message.
+func (c *claudeModels) openPicker(ctx context.Context, sessionID string) (work.ClaudePicker, error) {
+	var lastErr error
+	for try := 0; try < claudeOpenTries; try++ {
+		if err := c.screen.SendInput(sessionID, "/model"); err != nil {
+			return work.ClaudePicker{}, err
+		}
+		if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
+			return work.ClaudePicker{}, err
+		}
+		picker, err := c.waitPicker(ctx, sessionID, func(work.ClaudePicker) bool { return true })
+		if err == nil {
+			return picker, nil
+		}
+		lastErr = err
+		for _, key := range []string{"Escape", "C-u", "BSpace", "C-u"} {
+			_ = c.screen.SendKey(sessionID, key)
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	return work.ClaudePicker{}, lastErr
+}
 
 func (c *claudeModels) waitPicker(ctx context.Context, sessionID string, ready func(work.ClaudePicker) bool) (work.ClaudePicker, error) {
 	deadline := time.Now().Add(claudeScreenWait)

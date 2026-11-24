@@ -26,8 +26,12 @@ type fakeClaude struct {
 	selected int
 	pending  int
 	asks     bool
-	history  []string
-	keys     []string
+	// deaf is how many /model Claude takes into its input without opening
+	// the picker (it has just started).
+	deaf    int
+	typed   string
+	history []string
+	keys    []string
 }
 
 func (f *fakeClaude) CapturePaneContent(string) (string, error) {
@@ -55,6 +59,7 @@ func (f *fakeClaude) SendInput(_ string, text string) error {
 	if text != "/model" {
 		return fmt.Errorf("typed %q", text)
 	}
+	f.typed += text
 	return nil
 }
 
@@ -68,6 +73,11 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 			f.history = append(f.history, "❯ /model", "  ⎿  Set model to "+f.names[f.current]+" for this", "  session only with "+f.efforts[f.effort]+" effort")
 			return nil
 		}
+		if f.deaf > 0 {
+			f.deaf--
+			return nil
+		}
+		f.typed = ""
 		f.open, f.selected, f.pending = true, f.current, -1
 	case "Down":
 		f.selected = (f.selected + 1) % len(f.labels)
@@ -83,6 +93,8 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 		}
 	case "Escape":
 		f.open = false
+	case "C-u":
+		f.typed = ""
 	case "s":
 		f.open = false
 		if f.asks {
@@ -266,5 +278,22 @@ func TestClaudeCurrentFollowsTheTranscript(t *testing.T) {
 		if got := claudeCurrent(models, tc.transcript, tc.launch); got != tc.want {
 			t.Errorf("%+v launch %q: %q, want %q", tc.transcript, tc.launch, got, tc.want)
 		}
+	}
+}
+
+// A Claude that has just started takes /model into its input without opening
+// its picker: Mewla clears it and types it again (11-24 gate: the first pick
+// on a new Session failed and left "/model" in Claude's input).
+func TestClaudeSwitchRetriesAClaudeNotReadyYet(t *testing.T) {
+	screen := newFakeClaude()
+	screen.deaf = 1
+	models := claudeModelsForTest(screen)
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	after, err := models.SetModel(context.Background(), worker, "fable", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Current != "fable" || screen.typed != "" {
+		t.Fatalf("current %q, input left %q", after.Current, screen.typed)
 	}
 }
