@@ -26,6 +26,11 @@ const (
 	ReasonKeepEnded = "its keep ended"
 	ReasonReleased  = "released by its Session"
 
+	// OwnerMewla owns the backups Mewla makes itself; BackupTerm is how long
+	// one is kept before it goes to the trash.
+	OwnerMewla = "mewla"
+	BackupTerm = 30 * 24 * time.Hour
+
 	// OwnerBrain owns what Brain's host keeps or releases in the t/ root.
 	OwnerBrain            = "brain"
 	ReasonReleasedByBrain = "released by Brain"
@@ -112,6 +117,13 @@ func ListKeeps(stateRoot string) ([]Keep, error) {
 	}
 	sort.Slice(keeps, func(a, b int) bool { return keeps[a].ID < keeps[b].ID })
 	return keeps, nil
+}
+
+// KeepBackup gives a backup Mewla just made its term at birth: kept for
+// BackupTerm, then trashed (restorable for TrashGrace more).
+func KeepBackup(stateRoot, path, why string, now time.Time) error {
+	_, err := AddKeep(stateRoot, path, OwnerMewla, now.Add(BackupTerm), why, now)
+	return err
 }
 
 func writeKeep(stateRoot string, k Keep) error {
