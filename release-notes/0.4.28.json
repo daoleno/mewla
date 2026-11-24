@@ -29,9 +29,22 @@
         "kind": "open",
         "target": "brain"
       }
+    },
+    {
+      "id": "0.4.28-html-pages",
+      "title": "Reports open as pages",
+      "line": "Tap an HTML report in Chat: it opens as a page, charts and all.",
+      "media": {
+        "scene": "chat-card"
+      },
+      "try": {
+        "kind": "open",
+        "target": "brain"
+      }
     }
   ],
   "fixes": [
-    "Closing a sheet no longer leaves the app blank."
+    "Closing a sheet no longer leaves the app blank.",
+    "A finished Session's chat, and the files it named, still open."
   ]
 }

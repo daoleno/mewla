@@ -87,8 +87,16 @@ export interface Worker {
   activity_tool?: string;
   activity_summary?: string;
   process_id?: number;
+  /** The run its files open through: the live run, or once it ended, its last one (the daemon's `file_run`). */
+  file_run?: WorkerFileRun;
   delegated?: boolean;
   capabilities?: WorkerCapabilities;
+}
+
+/** A run of a Session, as the file routes take it: its process and its start in milliseconds. */
+export interface WorkerFileRun {
+  process_id: number;
+  started_at: number;
 }
 
 /** A decision the agent is waiting on, as the daemon reports it. */
@@ -155,6 +163,7 @@ export type RawWorker = {
   activity_tool?: string;
   activity_summary?: string;
   process_id?: number;
+  file_run?: { process_id?: unknown; started_at?: unknown };
   delegated?: boolean;
   capabilities?: {
     structured_events?: unknown;
@@ -459,6 +468,8 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.activity_tool === right.activity_tool &&
       left.activity_summary === right.activity_summary &&
       left.process_id === right.process_id &&
+      left.file_run?.process_id === right.file_run?.process_id &&
+      left.file_run?.started_at === right.file_run?.started_at &&
       left.delegated === right.delegated &&
       left.capabilities?.structured_events ===
         right.capabilities?.structured_events &&
@@ -529,9 +540,18 @@ function normalizeWorker(
     process_id: typeof agent.process_id === 'number' && Number.isFinite(agent.process_id)
       ? agent.process_id
       : undefined,
+    file_run: normalizeFileRun(agent.file_run),
     delegated: agent.delegated === true,
     capabilities: normalizeWorkerCapabilities(agent.capabilities),
   };
+}
+
+function normalizeFileRun(raw: { process_id?: unknown; started_at?: unknown } | undefined): WorkerFileRun | undefined {
+  const pid = raw?.process_id;
+  const started = raw?.started_at;
+  return typeof pid === 'number' && Number.isSafeInteger(pid) && pid > 0 && typeof started === 'number' && Number.isSafeInteger(started) && started > 0
+    ? { process_id: pid, started_at: started }
+    : undefined;
 }
 
 export function normalizeApprovals(raw: unknown): WorkerApproval[] | undefined {

@@ -590,13 +590,24 @@ func TestSessionFileBinaryHandlerAuthenticatesRangesAndDisablesCache(t *testing.
 		t.Fatalf("stale generation status=%d body=%s", staleGeneration.Code, staleGeneration.Body.String())
 	}
 
-	worker.ProcessID++
-	staleSessionRequest := httptest.NewRequest(http.MethodGet, request.URL.String(), nil)
-	staleSessionRequest.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+	// A run of the Session that was never seen live is refused; the run that was (now ended) still reads.
+	neverLive := httptest.NewRequest(http.MethodGet, request.URL.String(), nil)
+	neverLiveQuery := neverLive.URL.Query()
+	neverLiveQuery.Set("process_id", strconv.Itoa(worker.ProcessID+7))
+	neverLive.URL.RawQuery = neverLiveQuery.Encode()
+	neverLive.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
 	staleSession := httptest.NewRecorder()
-	server.handleSessionFileBinary(staleSession, staleSessionRequest)
+	server.handleSessionFileBinary(staleSession, neverLive)
 	if staleSession.Code != http.StatusConflict {
 		t.Fatalf("stale Session status=%d body=%s", staleSession.Code, staleSession.Body.String())
+	}
+	worker.ProcessID++
+	endedRun := httptest.NewRequest(http.MethodGet, request.URL.String(), nil)
+	endedRun.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+	ended := httptest.NewRecorder()
+	server.handleSessionFileBinary(ended, endedRun)
+	if ended.Code != http.StatusOK && ended.Code != http.StatusPartialContent {
+		t.Fatalf("ended run status=%d body=%s", ended.Code, ended.Body.String())
 	}
 	worker.ProcessID--
 
