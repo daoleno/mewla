@@ -180,20 +180,23 @@ export async function setInterfaceRenderMode(
  * sets 8–14, remembered on this device. Its line height is 1.4 times it, in whole points (10/14, 9/13).
  */
 export const TERMINAL_FONT = { default: 10, min: 8, max: 14 } as const;
+/** Mewla for Mac's terminal text: 13 by default, ⌘+ and ⌘− step it within 9–24. */
+export const DESKTOP_TERMINAL_FONT = { default: 13, min: 9, max: 24 } as const;
+export type TerminalFontRange = { readonly default: number; readonly min: number; readonly max: number };
 
-/** A stored or pinched size as one the terminal draws at: whole, within 8–14; anything else the default. */
-export function terminalFontSize(value: unknown): number {
+/** A stored or pinched size as one the terminal draws at: whole, within `range` (the phones' 8–14); anything else its default. */
+export function terminalFontSize(value: unknown, range: TerminalFontRange = TERMINAL_FONT): number {
   const size = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
-  if (typeof size !== "number" || !Number.isFinite(size)) return TERMINAL_FONT.default;
-  return Math.min(TERMINAL_FONT.max, Math.max(TERMINAL_FONT.min, Math.round(size)));
+  if (typeof size !== "number" || !Number.isFinite(size)) return range.default;
+  return Math.min(range.max, Math.max(range.min, Math.round(size)));
 }
 
-export async function getTerminalFontSize(storage: KeyValueStore): Promise<number> {
-  return terminalFontSize(await storage.getItem(KEYS.terminalFontSize));
+export async function getTerminalFontSize(storage: KeyValueStore, range: TerminalFontRange = TERMINAL_FONT): Promise<number> {
+  return terminalFontSize(await storage.getItem(KEYS.terminalFontSize), range);
 }
 
-export async function setTerminalFontSize(storage: KeyValueStore, size: number): Promise<number> {
-  const next = terminalFontSize(size);
+export async function setTerminalFontSize(storage: KeyValueStore, size: number, range: TerminalFontRange = TERMINAL_FONT): Promise<number> {
+  const next = terminalFontSize(size, range);
   await storage.setItem(KEYS.terminalFontSize, String(next));
   return next;
 }

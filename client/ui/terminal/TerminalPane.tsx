@@ -16,8 +16,7 @@ import { keyboardLift } from "../../core/shell/belowStack";
 import { TerminalSurface, type TerminalTheme } from "./contract";
 import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from "./TerminalOverlays";
 import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
-import { loadTerminalTextSize, setTerminalTextSize, terminalTextSize } from "./fontSize";
-import { TERMINAL_FONT } from "../../core/sessions/deviceState";
+import { loadTerminalTextSize, setTerminalTextSize, TERMINAL_TEXT, terminalTextSize } from "./fontSize";
 import { motion } from "../../core/motion/tokens";
 import { SlowLine, StateView, states, useWait } from "../kit/wait";
 import { current, resumeConnection } from "../session";
@@ -284,7 +283,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       const held = heldGrid;
       heldGrid = null;
       if (!held) return;
-      if (size === TERMINAL_FONT.default) return takeGrid(held.cols, held.rows);
+      if (size === TERMINAL_TEXT.default) return takeGrid(held.cols, held.rows);
       // The view reports the grid of the new size; the held one stands only if that grid is the same.
       const seen = grids;
       heldTimer = setTimeout(() => grids === seen && takeGrid(held.cols, held.rows), 300);
@@ -307,7 +306,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
       {/* The terminal group (a surface, radius 20) and what floats over it, above the key bar (and so above the keyboard). */}
       <View testID="terminal-group" class={GROUP}
         style={NATIVE_PADDING ? undefined : { paddingTop: padding().top, paddingRight: padding().right, paddingBottom: padding().bottom, paddingLeft: padding().left }}>
-        <Surface class="flex-1" fontSize={terminalTextSize() ?? TERMINAL_FONT.default} theme={theme()} padding={NATIVE_PADDING ? padding() : undefined}
+        <Surface class="flex-1" fontSize={terminalTextSize() ?? TERMINAL_TEXT.default} theme={theme()} padding={NATIVE_PADDING ? padding() : undefined}
           ref={(node) => {
             surface = node;
             for (const [name, args] of pending.splice(0)) node.command(name, args);

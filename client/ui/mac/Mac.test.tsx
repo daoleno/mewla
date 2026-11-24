@@ -76,6 +76,15 @@ describe("Mewla for Mac", () => {
     await app.waitFor("id:sessions-empty", { timeout: 10_000 });
   }, 30_000);
 
+  test("the View menu's ⌘+ and ⌘− step the terminal's text size from 13, and the size is kept", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    await app.keyboard.press("mod+plus");
+    await app.keyboard.press("mod+plus");
+    await app.keyboard.press("mod+minus");
+    await app.waitUntil(() => app.storage()["mewla:terminal_font_size"] === "14");
+  }, 30_000);
+
   test("a fresh Mac enables trusted LAN only after consent", async () => {
     let enabled = false;
     const host = macHost({ pairPhone: true });

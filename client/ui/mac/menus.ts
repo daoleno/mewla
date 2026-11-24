@@ -2,6 +2,7 @@ import { effect } from "nsh";
 import { focusedWindow, Menu } from "nsh/desktop";
 import type { PlaceKey } from "../../core/web/places";
 import { runDesktopCommand } from "../shell/desktop/Overlays";
+import { stepTerminalTextSize } from "../terminal/fontSize";
 import { openMacSettings } from "./MacSettings";
 import { openPairPhone } from "./PairPhone";
 import { offerShortcutOnce } from "./QuickChatShortcut";
@@ -48,6 +49,10 @@ export function startMacMenus(perchShortcut: () => string | null): void {
         label: "View",
         submenu: [
           { label: "Brain's Terminal", shortcut: "mod+shift+t", onSelect: () => runDesktopCommand({ kind: "brain-terminal" }) },
+          { type: "separator" },
+          { label: "Bigger Terminal Text", shortcut: "mod+plus", onSelect: () => stepTerminalTextSize(1) },
+          { label: "Smaller Terminal Text", shortcut: "mod+minus", onSelect: () => stepTerminalTextSize(-1) },
+          { label: "Default Terminal Text Size", onSelect: () => stepTerminalTextSize(0) },
           { type: "separator" },
           { role: "toggleFullScreen" },
         ],
