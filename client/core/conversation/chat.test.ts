@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform, memoryStore } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
-import { Chat } from "./chat";
+import { Chat, chatTiming } from "./chat";
 import { createOutbox } from "./outboxRuntime";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
@@ -75,6 +75,34 @@ describe("Chat", () => {
     chat.close();
     expect(sent(socket, "codex_conversation_unsubscribe")).toHaveLength(1);
     transport.close();
+  });
+
+  // 0.4.28 gate: 2 of 17 web reloads drew the Session chat ~5 s late and nothing said where the time went. A first
+  // snapshot later than chatTiming.slowMs tells the computer's log: the wait to ask, the wait for the answer, how often.
+  test("a first snapshot that comes late is reported once, with where the time went; a quick one is not", async () => {
+    const before = chatTiming.slowMs;
+    try {
+      chatTiming.slowMs = 30;
+      const slow = await open();
+      await wait(40);
+      snapshot(slow.socket, 1, [event("u1", 1, "user_message", "hi", { role: "user" })]);
+      snapshot(slow.socket, 2, [event("u1", 1, "user_message", "hi", { role: "user" })]);
+      const reports = sent(slow.socket, "client_diagnostic").filter((frame) => frame.name === "chat_slow");
+      expect(reports).toHaveLength(1);
+      expect(reports[0].request_id).toBe("chat-brain-host");
+      expect(reports[0].body).toMatch(/^total=\d+ms connect=\d+ms answer=\d+ms asks=1/);
+      slow.chat.close();
+      slow.transport.close();
+
+      chatTiming.slowMs = 60_000;
+      const quick = await open();
+      snapshot(quick.socket, 1, [event("u1", 1, "user_message", "hi", { role: "user" })]);
+      expect(sent(quick.socket, "client_diagnostic")).toEqual([]);
+      quick.chat.close();
+      quick.transport.close();
+    } finally {
+      chatTiming.slowMs = before;
+    }
   });
 
   test("a revision gap asks for the conversation again under a new subscription", async () => {

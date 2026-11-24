@@ -771,7 +771,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			!s.auth.IsDeviceTrusted(owner.deviceID) {
 			break
 		}
+		handled := time.Now()
 		s.handleClientMessage(conn, msg)
+		if took := time.Since(handled); took >= slowClientMessageLog {
+			// This connection reads its next message only after this one: a
+			// conversation asked for behind it waits as long (a web reload's
+			// chat came ~5 s late, 0.4.28 gate). Says which message held it.
+			log.Printf("websocket: slow message type=%s device=%s took=%s", clientMessageType(msg), device.ID, took.Round(time.Millisecond))
+		}
 	}
 
 	debuglog.Printf("websocket: client disconnected remote=%s device=%s clients=%d", r.RemoteAddr, device.ID, s.clientCount())

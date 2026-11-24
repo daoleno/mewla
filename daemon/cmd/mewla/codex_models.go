@@ -7,6 +7,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/server"
 )
 
@@ -40,16 +41,43 @@ func (c *codexEvents) Models(ctx context.Context, worker *classifier.Worker) (se
 	if err != nil {
 		return server.AgentModels{}, err
 	}
-	current, effort := "", ""
+	current, effort, provider := "", "", ""
+	if status.Config != nil {
+		provider = status.Config.ModelProvider
+	}
 	if status.Thread != nil {
 		current, effort = status.Thread.Model, status.Thread.Effort
+		if status.Thread.ModelProvider != "" {
+			provider = status.Thread.ModelProvider
+		}
 	} else if chosen, ok := s.firstTurnSettings(thread); ok {
 		// Set before the first message: the thread's first turn runs on it.
 		current, effort = chosen.model, chosen.effort
 	} else if status.Config != nil {
 		current, effort = status.Config.Model, status.Config.Effort
 	}
-	return codexAgentModels(models, current, effort), nil
+	return codexAgentModels(c.servedModels(models, provider), current, effort), nil
+}
+
+// servedModels keeps the models a Session's turns can reach. A Codex on
+// Mewla's machine gateway lists Codex's own catalog, whatever the person's
+// connections offer; the gateway refuses the rest (0.4.28 gate: the sheet
+// offered gpt-6.2-astra, and the turn on it failed with a 404). A Codex on a
+// Session route is given that route's catalog at launch and lists only it.
+func (c *codexEvents) servedModels(models []codexctl.Model, provider string) []codexctl.Model {
+	c.mu.Lock()
+	serves := c.gatewayServes
+	c.mu.Unlock()
+	if serves == nil || !strings.EqualFold(strings.TrimSpace(provider), modelprofiles.GatewayProviderName) {
+		return models
+	}
+	out := make([]codexctl.Model, 0, len(models))
+	for _, model := range models {
+		if serves(model.ID) {
+			out = append(out, model)
+		}
+	}
+	return out
 }
 
 // ModelsAvailable: the Session's Codex is connected and its thread is known

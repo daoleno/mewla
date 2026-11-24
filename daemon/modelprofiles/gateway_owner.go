@@ -126,6 +126,15 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	return nil
 }
 
+// GatewayServesCodexModel reports whether the machine gateway answers a Codex
+// request for model: a ready connection offers it, one way. A Codex Session
+// on the gateway (model_provider "mewla-gateway") lists Codex's own catalog,
+// so its model menu keeps only these.
+func (o *Owner) GatewayServesCodexModel(model string) bool {
+	_, err := o.resolveGatewayRequest(GatewayProtocolResponses, model)
+	return err == nil
+}
+
 func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream, error) {
 	if o == nil || o.store == nil {
 		return GatewayUpstream{}, ErrNotFound

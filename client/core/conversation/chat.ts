@@ -18,6 +18,9 @@ import type { SendAttachment } from "./send";
 
 export { chatCacheKey };
 
+/** A chat's first snapshot later than `slowMs` after it opened is reported (chat_slow). Tests shorten it. */
+export const chatTiming = { slowMs: 2_000 };
+
 /** What the daemon is told about each file: where it keeps it (the phone's own URI stays here). */
 function sendAttachments(files: readonly ComposerAttachment[]): SendAttachment[] {
   return files.map((file) => ({ name: file.name, path: file.path, ...(file.mimeType ? { content_type: file.mimeType } : {}) }));
@@ -54,6 +57,12 @@ export class Chat {
   private generation = 0;
   private resyncToken = 0;
   private closed = false;
+  /** How its first snapshot came (chat_slow): when it opened, first and last asked for it, how many times. */
+  private readonly openedAt = Date.now();
+  private firstFollowAt = 0;
+  private lastFollowAt = 0;
+  private follows = 0;
+  private timed = false;
 
   constructor(private readonly options: ChatOptions) {
     const { serverId, target, transport, outbox } = options;
@@ -126,13 +135,39 @@ export class Chat {
     if (this.closed || this.options.transport.state !== "connected") return;
     this.stopFollowing();
     const generation = ++this.generation;
+    this.follows += 1;
+    this.lastFollowAt = Date.now();
+    this.firstFollowAt ||= this.lastFollowAt;
     this.dispatch({ type: "stream_start", generation });
     this.unsubscribe = subscribeConversation(this.options.transport, this.options.target, {
-      onSnapshot: (payload) => this.dispatch({ type: "snapshot", payload, generation }),
+      onSnapshot: (payload) => {
+        this.timeFirstSnapshot();
+        this.dispatch({ type: "snapshot", payload, generation });
+      },
       onDelta: (delta) => this.dispatch({ type: "delta", delta, generation }),
       onSyncStatus: (status) => this.dispatch({ type: "sync_status", status, generation }),
       onError: (error) => this.dispatch({ type: "stream_error", error: interfaceConversationStreamErrorMessage(error), generation }),
     }, { firstEvents: this.opensAtItsEnd() ? FIRST_EVENTS : undefined });
+  }
+
+  /**
+   * A chat whose first snapshot took over `chatTiming.slowMs` says where the time went, in the computer's log (0.4.28 gate:
+   * 2 of 17 web reloads drew the Session chat ~5 s late, a Windows user saw a 6 s skeleton; nothing said why):
+   * the wait for a connection, then for the computer's answer, and how often it was asked for.
+   */
+  private timeFirstSnapshot(): void {
+    if (this.timed) return;
+    this.timed = true;
+    const now = Date.now();
+    const total = now - this.openedAt;
+    if (total < chatTiming.slowMs) return;
+    const page = typeof performance !== "undefined" && typeof performance.now === "function" ? ` page=${Math.round(performance.now())}ms` : "";
+    const body = `total=${total}ms connect=${this.firstFollowAt - this.openedAt}ms answer=${now - this.lastFollowAt}ms asks=${this.follows}${page}`;
+    try {
+      this.options.transport.send({ type: "client_diagnostic", name: "chat_slow", request_id: `chat-${this.options.target.targetId}`.slice(0, 80), body });
+    } catch {
+      // Offline: nothing to tell it with.
+    }
   }
 
   /** Holds nothing yet and opens at its newest row: the newest events are what it shows first. */
