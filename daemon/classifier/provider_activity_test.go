@@ -153,6 +153,13 @@ func TestProviderAdapters_RetainPaneAndProcessEvidence(t *testing.T) {
 			wantSource: "claude_pane_choice",
 		},
 		{
+			// Claude Code 2.1.331 dropped "Ready to submit your answers?".
+			name:       "claude ask user question review 2.1.331",
+			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n←  ☒ Fruit  ☒ Colors  ✔ Submit  →\n\nReview your answers\n\n │ ● Which fruit?\n   → Apple\n │ ● Which colors?\n   → Red, Blue\n\n❯ 1. Submit answers\n  2. Cancel\n\n\n"},
+			wantState:  StateBlocked,
+			wantSource: "claude_pane_choice",
+		},
+		{
 			name:       "claude plan approval",
 			input:      ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code\n Ready to code?\n Here is Claude's plan:\n Steps\n Claude has written up a plan and is ready to execute. Would you like to proceed?\n ❯ 1. Yes, and use auto mode\n   2. Yes, manually approve edits\n   3. Tell Claude what to change\n      shift+tab to approve with this feedback\n ctrl+g to edit in VS Code\n"},
 			wantState:  StateBlocked,
