@@ -152,7 +152,7 @@ jobs:
           }
           # Three runs per appearance, one surface group each (a window that takes the focus closes the perch):
           # the perch and Pair a phone; Settings › General and the shortcut offer; Settings › Privacy & access; Brain's
-          # host's terminal (the web terminal in a web view, its page from the app's own daemon).
+          # host's terminal (the native terminal view; a real right click on it opens Copy, Paste, Select All, no AutoFill).
           # No agent on this Mac (m-noagent): the stub claude moved aside for that run, so Brain has no agent.
           # Terminal attach (w-attach): on Brain's terminal the header's Attach path with three files: one that goes up
           # (its path typed at the prompt), one whose name is too long to upload (a failed chip), one still uploading at the capture.
@@ -199,6 +199,11 @@ jobs:
             fi
             sleep 8
             client/macos/scripts/capture-windows.sh "Mewla Dev" "$D/captures/$theme-$name" "$theme-$name-" || true
+            if [ "$name" = terminal ]; then
+              # The terminal's right-click menu as a person gets it: a real right click, the screen with it open
+              # ($theme-terminal-menu.png), its items read through Accessibility.
+              client/macos/scripts/terminal-menu-check.sh "Mewla Dev" "$D/captures/$theme-terminal-" || menu_failed=1
+            fi
             # The menu bar here (a runner's, nobody's screen): who owns the status item windows, and the strip itself.
             swift -e 'import CoreGraphics; let l = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as! [[String: Any]]; for w in l where (w[kCGWindowLayer as String] as? Int) == 25 { print("layer25", w[kCGWindowOwnerName as String] ?? "", "|", w[kCGWindowName as String] ?? "", "|", w[kCGWindowBounds as String] ?? "") }' || true
             screencapture -x -R 0,0,1024,32 "$D/captures/$theme-$name-menubar.png" || true
@@ -207,6 +212,7 @@ jobs:
             stop
             test -n "$ok" || { echo "Mewla Dev did not join its daemon ($theme $name)"; cat "$D"/data/logs/* || true; exit 1; }
           done; done
+          [ -z "${menu_failed:-}" ] || { echo "the terminal's right-click menu check failed (above)"; exit 1; }
           # Mewla Dev leaves the computer-wide setup to the installed Mewla: no Chrome native host, no cloud CLIs.
           grep -q "beside the installed Mewla" "$D/state/logs/app-daemon.log"
           grep -q "agent use: your Chrome: off" "$D/state/logs/app-daemon.log"
