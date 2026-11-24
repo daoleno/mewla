@@ -75,7 +75,9 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	}
 	o.gateway = gateway
 	if stateDir != "" {
-		o.takeover = NewTakeover(cfg.CodexConfigPath, stateDir, gateway)
+		if path := strings.TrimSpace(cfg.CodexConfigPath); path != "" {
+			o.takeover = NewTakeover(path, stateDir, gateway)
+		}
 		if path := strings.TrimSpace(cfg.ClaudeSettingsPath); path != "" {
 			o.claudeTakeover = NewClaudeTakeover(path, stateDir)
 		}

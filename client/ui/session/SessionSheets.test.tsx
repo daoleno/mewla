@@ -128,13 +128,13 @@ describe("Model sheet", () => {
     const c = computer({ sheet: "model" }, {
       get_thread_runtime: () => ({ runtime: runtime(claude) }),
       list_providers: () => claudeCatalog,
-      set_thread_runtime: (body) => (broken ? { error: "connection reset" } : applied(body, claude)),
+      set_thread_runtime: (body) => (broken ? { error: "no answer from the computer", code: "providers_timeout" } : applied(body, claude)),
     });
     const app = await open(HARNESS, c);
     await app.press("id:harness-open");
     await app.waitFor("id:model-row-sonnet");
     await app.press("id:model-row-sonnet");
-    await app.waitFor("text:connection reset");
+    await app.waitFor("text:no answer from the computer");
     broken = false;
     await app.press("id:model-row-sonnet");
     await app.waitFor("text:Refresh required before switching runtime.");
@@ -143,5 +143,23 @@ describe("Model sheet", () => {
     await app.waitFor("id:model-row-sonnet");
     await app.press("id:model-row-sonnet");
     await app.waitFor("text:closes:1");
+  }, 20_000);
+
+  test("after a refusal the next pick is taken as it is", async () => {
+    let refused = true;
+    const c = computer({ sheet: "model" }, {
+      get_thread_runtime: () => ({ runtime: runtime(claude) }),
+      list_providers: () => claudeCatalog,
+      set_thread_runtime: (body) => (refused ? { error: "thread/resume failed: no rollout found" } : applied(body, claude)),
+    });
+    const app = await open(HARNESS, c);
+    await app.press("id:harness-open");
+    await app.waitFor("id:model-row-sonnet");
+    await app.press("id:model-row-sonnet");
+    await app.waitFor("text:thread/resume failed: no rollout found");
+    refused = false;
+    await app.press("id:model-row-sonnet");
+    await app.waitFor("text:closes:1");
+    expect(c.asked.filter((a) => a.type === "set_thread_runtime").length).toBe(2);
   }, 20_000);
 });

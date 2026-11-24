@@ -397,6 +397,58 @@ func (g *gate) offered(s *session, wait time.Duration) bool {
 	}
 }
 
+// approvals are the decisions the Session waits on now.
+func (g *gate) approvals(s *session) []map[string]any {
+	reply, err := g.c.request(map[string]any{"type": "list_worker_sessions"}, 10*time.Second, "worker_session_list")
+	if err != nil {
+		return nil
+	}
+	list, _ := reply["worker_sessions"].([]any)
+	for _, raw := range list {
+		w, _ := raw.(map[string]any)
+		if w["id"] != s.id {
+			continue
+		}
+		caps, _ := w["capabilities"].(map[string]any)
+		pending, _ := caps["approvals"].([]any)
+		out := []map[string]any{}
+		for _, p := range pending {
+			if m, ok := p.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// approveUntil allows, once, every command the Session asks about until stop.
+func (g *gate) approveUntil(s *session, stop chan struct{}) {
+	for {
+		for _, asked := range g.approvals(s) {
+			options, _ := asked["options"].([]any)
+			chosen := ""
+			for _, raw := range options {
+				o, _ := raw.(map[string]any)
+				id, _ := o["id"].(string)
+				label, _ := o["label"].(string)
+				scope, _ := o["scope"].(string)
+				if chosen == "" && (scope == "once" || strings.HasPrefix(strings.ToLower(label), "yes") || strings.HasPrefix(strings.ToLower(label), "allow")) {
+					chosen = id
+				}
+			}
+			if id, _ := asked["id"].(string); id != "" && chosen != "" {
+				_, _ = g.c.request(map[string]any{"type": "approval_decision", "worker_id": s.id, "id": id, "option_id": chosen}, 10*time.Second, "approval_decided")
+			}
+		}
+		select {
+		case <-stop:
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
 type runtimeView struct {
 	current, pending choice
 	models           map[string][]string
@@ -441,7 +493,11 @@ func (g *gate) pick(s *session, want choice) (string, bool) {
 	}
 	reply, err := g.c.request(map[string]any{"type": "set_thread_runtime", "worker_id": s.id, "runtime": runtime}, 60*time.Second, "thread_runtime_set")
 	if err != nil {
-		return "refused: " + err.Error(), false
+		command := s.command
+		if len(command) > 60 {
+			command = command[:60] + "…"
+		}
+		return "refused: " + err.Error() + " (Session command: " + command + ")", false
 	}
 	view := parseRuntime(reply)
 	switch {
@@ -574,12 +630,21 @@ func (g *gate) moment(s *session, name string, want choice, during string) {
 			return
 		}
 		time.Sleep(7 * time.Second)
+		// An agent that asks before it runs the command is waiting for an
+		// answer: the pick is made then, and the question answered after it,
+		// as a person would.
+		if len(g.approvals(s)) > 0 {
+			cl.moment = "waiting for answer"
+		}
 		cl.reply, cl.pass = g.pick(s, want)
+		stop := make(chan struct{})
+		go g.approveUntil(s, stop)
 		if hasRecord(s.agent) {
 			g.waitTurn(s, before.turns)
 		} else {
 			time.Sleep(30 * time.Second)
 		}
+		close(stop)
 		time.Sleep(5 * time.Second) // a held pick is made as the turn ends
 	} else {
 		cl.reply, cl.pass = g.pick(s, want)
@@ -686,6 +751,9 @@ func (g *gate) turn(s *session, prompt string) (ran, error) {
 	if _, err := g.c.request(map[string]any{"type": "send_input", "worker_id": s.id, "text": prompt}, 20*time.Second, "input_sent"); err != nil {
 		return ran{}, fmt.Errorf("send: %w", err)
 	}
+	stop := make(chan struct{})
+	defer close(stop)
+	go g.approveUntil(s, stop)
 	after, ok := g.waitTurn(s, before.turns)
 	if !ok {
 		return after.last, fmt.Errorf("no new turn in the agent's record within %s", g.turnWait)

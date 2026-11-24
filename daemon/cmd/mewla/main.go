@@ -633,6 +633,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize provider credentials: %w", err)
 	}
+	codexConfigPath, claudeSettingsPath := machineConfigPaths()
 	profileOwner, err := modelprofiles.StartOwner(modelprofiles.OwnerConfig{
 		ProfilesPath:       profilesPath,
 		RoutesPath:         routesPath,
@@ -672,11 +673,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 		// retargets the gateway without touching running Codex processes.
 		GatewayAddr:     modelprofiles.DefaultGatewayListenAddr,
 		GatewayStateDir: filepath.Join(authManager.StorageDir(), "codex-gateway"),
-		CodexConfigPath: modelprofiles.DefaultCodexConfigPath(),
+		CodexConfigPath: codexConfigPath,
 		// Every Claude on the machine (plain shells, IDEs) reaches the selected
 		// Claude Provider through the same gateway via the env block of the
 		// user's Claude Code settings; Mewla-launched Sessions keep their routes.
-		ClaudeSettingsPath: modelprofiles.DefaultClaudeSettingsPath(),
+		ClaudeSettingsPath: claudeSettingsPath,
 	})
 	if err != nil {
 		return fmt.Errorf("start model profiles owner: %w", err)
@@ -3801,4 +3802,15 @@ func currentLinkRoute(authManager *auth.Manager, linkConfigPath string) (server.
 		return server.LinkRoute{}, false
 	}
 	return server.LinkRoute{RouteID: identity.RouteID, TransportPin: identity.SPKISHA256, Candidates: link.RouteCandidates(config, identity)}, true
+}
+
+// machineConfigPaths are the person's own Codex config and Claude Code
+// settings, which the machine-level gateway is projected into. A daemon run
+// for a test beside the person's own (MEWLA_NO_CONFIG_TAKEOVER=1) leaves both
+// alone: they belong to the person's daemon.
+func machineConfigPaths() (codexConfig, claudeSettings string) {
+	if strings.TrimSpace(os.Getenv("MEWLA_NO_CONFIG_TAKEOVER")) != "" {
+		return "", ""
+	}
+	return modelprofiles.DefaultCodexConfigPath(), modelprofiles.DefaultClaudeSettingsPath()
 }
