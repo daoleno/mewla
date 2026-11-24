@@ -338,6 +338,21 @@ mod native {
     }
 }
 
+/// `lines` as sorted, merged runs of consecutive lines `(first, last)`, each line once.
+pub fn spans(lines: &[isize]) -> Vec<(isize, isize)> {
+    let mut sorted = lines.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let mut out: Vec<(isize, isize)> = Vec::new();
+    for line in sorted {
+        match out.last_mut() {
+            Some((_, last)) if *last + 1 == line => *last = line,
+            _ => out.push((line, line)),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,5 +403,12 @@ mod tests {
         assert_eq!(p[16], 0x000000);
         assert_eq!(p[231], 0xffffff);
         assert_eq!(p[255], 0xeeeeee);
+    }
+
+    #[test]
+    fn line_spans() {
+        assert_eq!(spans(&[]), vec![]);
+        assert_eq!(spans(&[5, 3, 4, 4, 9, 11, 10, 0]), vec![(0, 0), (3, 5), (9, 11)]);
+        assert_eq!(spans(&[-1, 0]), vec![(-1, 0)]);
     }
 }
