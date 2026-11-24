@@ -228,16 +228,24 @@ export function Composer(props: {
   // The field had the focus when "+" was pressed: it gets it back once the sheet or the picker is done.
   let refocus = false;
   const focusBack = (back: boolean) => back && setTimeout(() => input?.focus(), 0);
+  // A tile opens its picker from the tap, over the sheet, and the sheet closes once the pick is done: iOS presents a
+  // picker on the screen's top view, and a sheet already leaving is out of the window, where the picker never shows
+  // and never answers (and every later pick found one still going).
   const pick = (source: AttachSource) => {
     const attach = props.attach;
-    // Taken here, so the sheet closing under the picker does not bring the keyboard up over it.
+    // Taken here, so the sheet closing after the picker does not bring the keyboard up over a pick still going.
     const back = refocus;
     refocus = false;
-    sheetOpen.set(false);
-    if (!attach) return;
+    if (!attach) {
+      sheetOpen.set(false);
+      return;
+    }
     void attach.uploads.pickAndUpload(source)
       .catch((error) => attach.onError(error instanceof Error && error.message ? error.message : "Could not attach the file."))
-      .finally(() => focusBack(back));
+      .finally(() => {
+        sheetOpen.set(false);
+        focusBack(back);
+      });
   };
   const pressPlus = () => {
     if (untracked(offer).kind === "dialog") return pick("files");

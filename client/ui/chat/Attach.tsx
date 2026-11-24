@@ -30,7 +30,7 @@ export function AttachButton(props: { enabled: () => boolean; onPress: () => voi
 
 /**
  * The attach sheet (a phone or a tablet; docs/brain-and-work.md "Attachments"): one row of large tiles, a glyph and
- * one word each, Photos first. A tile closes the sheet and opens its system picker; the sheet closes on the scrim,
+ * one word each, Photos first. A tile opens its system picker over the sheet, which closes once the pick is done; it closes on the scrim,
  * Back and a swipe. On wide it is the centred dialog every Sheet is there.
  */
 export function AttachSheet(props: { open: () => boolean; sources: () => AttachSource[]; onPick: (source: AttachSource) => void; onClose: () => void }) {
