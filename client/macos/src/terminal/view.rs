@@ -54,6 +54,20 @@ enum Item {
     Glyph { cp: u32, x: CGFloat },
 }
 
+/// What a run's items depend on: its text, face and place in the row (and a flag's second half). Rows that only moved
+/// (scrolled output) find theirs made already.
+#[derive(Hash, PartialEq, Eq)]
+struct ItemKey {
+    col: usize,
+    cells: usize,
+    flags: i32,
+    units: Vec<u16>,
+    next: Vec<u16>,
+}
+
+/// Runs' items kept across rows; emptied when full (a few screens' worth) and when the face or the cell changes.
+const ITEM_CACHE_MAX: usize = 16_384;
+
 /// A run and its items, made on first draw.
 struct Cell {
     run: Run,
@@ -133,6 +147,7 @@ pub struct State {
     thickness: CGFloat,
     /// Whether bundled face `i` has each BMP character (then its advance is one cell).
     in_font: [HashMap<u16, bool>; 4],
+    item_cache: HashMap<ItemKey, Rc<Vec<Item>>>,
     glyphs: HashMap<u32, Rc<Vec<vt::GlyphOp>>>,
 
     background: u32,
@@ -560,6 +575,7 @@ impl TermView {
             baseline: 12.0,
             thickness: 1.0,
             in_font: Default::default(),
+            item_cache: HashMap::new(),
             glyphs: HashMap::new(),
             background: 0x141210,
             foreground: 0xF4F0EA,
@@ -712,6 +728,7 @@ impl TermView {
         s.baseline = (((s.cell_h - ascent - descent) / 2.0 + ascent) * scale).round() / scale;
         s.thickness = glyph_thickness(cell_h_px as i32) as CGFloat / scale;
         s.in_font = Default::default();
+        s.item_cache.clear();
         s.glyphs.clear();
         for line in &s.grid {
             line.cells.iter().for_each(|c| *c.items.borrow_mut() = None);
@@ -1750,7 +1767,22 @@ impl TermView {
         let items: Rc<Vec<Item>> = match cached {
             Some(items) => items,
             None => {
-                let made = Rc::new(Self::items(s, run, next));
+                let next_units = match next {
+                    Some(n) if run.flags & layout::FLAG_HEAD != 0 => n.units.clone(),
+                    _ => Vec::new(),
+                };
+                let key = ItemKey { col: run.col, cells: run.cells, flags: run.flags, units: run.units.clone(), next: next_units };
+                let made = match s.item_cache.get(&key) {
+                    Some(items) => items.clone(),
+                    None => {
+                        let made = Rc::new(Self::items(s, run, next));
+                        if s.item_cache.len() >= ITEM_CACHE_MAX {
+                            s.item_cache.clear();
+                        }
+                        s.item_cache.insert(key, made.clone());
+                        made
+                    }
+                };
                 *cell.items.borrow_mut() = Some(made.clone());
                 made
             }
