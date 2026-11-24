@@ -45,8 +45,10 @@ security-framework = "3.7.0"
 # NSH 0.6.1 plus what Mewla needs before NSH ships it (branch mewla/v0.6.1-file-contents of daoleno/nsh, proposed
 # upstream): a drop or a Finder paste hands the files over with their contents, so the app reads what the person gave
 # it without an fs grant; an image dragged out of a browser and the screenshot thumbnail (file promises, image data)
-# drop like files; a Finder copy pasted into a field that listens to pastes does not insert the files' names. Every
-# nsh crate comes from that commit (one nsh-core); the JS bundle is still built by the NSH 0.6.1 CLI.
+# drop like files; a Finder copy pasted into a field that listens to pastes does not insert the files' names; each
+# fetch starts in an autorelease pool, so an upload's body does not stay in memory. Every nsh crate comes from that
+# commit (one nsh-core); the JS bundle is still built by the NSH 0.6.1 CLI.
+# Goes once an NSH release has longbridge/nsh#2964 (merged), #3015, #3016 and #3017.
 [patch.crates-io]
 nsh-base = { git = "https://github.com/daoleno/nsh", rev = "871082bfdb585af3e47083ba3745ba8807f374c6" }
 nsh-core = { git = "https://github.com/daoleno/nsh", rev = "871082bfdb585af3e47083ba3745ba8807f374c6" }
