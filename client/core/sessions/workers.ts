@@ -626,6 +626,8 @@ export function normalizePrompt(raw: unknown): WorkerPrompt | undefined {
     request: optionalString(entry.request),
     call_id: optionalString(entry.call_id),
   };
+  const askedAt = optionalString(entry.asked_at)?.trim();
+  if (askedAt) prompt.asked_at = askedAt;
   const tool = optionalString(entry.tool)?.trim();
   const summary = optionalString(entry.summary)?.trim();
   if (tool) prompt.tool = tool;

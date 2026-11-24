@@ -206,6 +206,52 @@ func TestTheSamePromptAskedTwiceIsAnsweredTwice(t *testing.T) {
 	}
 }
 
+// The watcher stamps each showing of a prompt (Prompt.AskedAt); the record of
+// its answer carries that very time, which is how a phone's card for the
+// showing (keyed by it) knows the answer is its own. A question asked again
+// that the server never saw leave (no poll in between) is still a new showing.
+func TestAnAnswerNamesTheShowingTheWatcherStamped(t *testing.T) {
+	ledger, err := answered.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := map[string]*classifier.Worker{"%1": {ID: "%1"}}
+	timers := &promptTimers{}
+	s := &Server{afterPromptLeft: timers.after, getWorkerOverride: func(id string) *classifier.Worker { return live[id] }}
+	s.answered = ledger
+	first := time.Date(2026, 11, 25, 2, 10, 0, 123_000_000, time.UTC)
+	again := first.Add(9 * time.Second)
+	showing := func(at time.Time) *classifier.Prompt {
+		prompt := permissionPrompt()
+		prompt.AskedAt = &at
+		return prompt
+	}
+	blocked := func(p *classifier.Prompt) watcher.SessionEvent {
+		return watcher.SessionEvent{Type: "worker_metadata_change", Worker: &classifier.Worker{ID: "%1", State: classifier.StateBlocked, Prompt: p}}
+	}
+	s.observePromptLifecycle(blocked(showing(first)))
+	if got := s.PromptAskedAt("%1", "perm1"); got == nil || !got.Equal(first) {
+		t.Fatalf("asked at = %v, want the watcher's stamp %v", got, first)
+	}
+	record := PromptAnswerRecord("%1", *showing(first), PromptAnswer{PromptID: "perm1", Number: 1}, nil, answered.Answerer{Kind: answered.ByDevice}, s.PromptAskedAt("%1", "perm1"), first.Add(time.Second))
+	if record.AskedAt == nil || !record.AskedAt.Equal(first) {
+		t.Fatalf("the record names another showing: %+v", record.AskedAt)
+	}
+	s.observePromptLifecycle(blocked(showing(again)))
+	if got := s.PromptAskedAt("%1", "perm1"); got == nil || !got.Equal(again) {
+		t.Fatalf("the question asked again kept the first showing: %v", got)
+	}
+	// The first showing left (answered in the terminal, say) while the second
+	// opened: it is recorded, the open one is not taken for it.
+	timers.fire()
+	if _, ok := ledger.Get(promptRecordID("%1", "perm1", &first)); !ok {
+		t.Fatalf("the first showing that left was not recorded: %+v", ledger.List(answered.Filter{SessionID: "%1"}))
+	}
+	if _, ok := ledger.Get(promptRecordID("%1", "perm1", &again)); ok {
+		t.Fatalf("the open showing was sealed")
+	}
+}
+
 func TestAnswerRecordShapes(t *testing.T) {
 	now := time.Date(2026, 11, 12, 13, 40, 0, 0, time.UTC)
 	device := answered.Answerer{Kind: answered.ByDevice, DeviceID: "phone"}

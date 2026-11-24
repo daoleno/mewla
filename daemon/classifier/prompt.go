@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -78,6 +79,11 @@ type Prompt struct {
 	// Input names the text a sign-in prompt takes (it is answered with that
 	// text, not an option): the code the Link's page shows.
 	Input string `json:"input,omitempty"`
+	// AskedAt is when this showing of the prompt appeared (the watcher's
+	// stamp). ID is drawn from what the prompt shows, so an agent that asks
+	// the same thing again shows the same ID; AskedAt tells the two showings
+	// apart, and an answer's record carries the same time (WIRE §2).
+	AskedAt *time.Time `json:"asked_at,omitempty"`
 }
 
 // PromptOption is one row of a numbered menu. Number is the digit the
@@ -100,6 +106,43 @@ type PromptQuestion struct {
 	AllowsOther bool           `json:"allows_other,omitempty"`
 	Answered    bool           `json:"answered,omitempty"`
 	Options     []PromptOption `json:"options"`
+}
+
+// Shape names what a client draws of a prompt beyond its ID: the showing,
+// the tool call the transcript tied it to, and each question's options and
+// answered tab. A prompt first read from the pane alone (its questions only
+// headers) and completed from the transcript a moment later keeps its ID but
+// changes shape, and must reach the phones again. The cursor row is not part
+// of it.
+func (p *Prompt) Shape() string {
+	if p == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(p.ID)
+	b.WriteByte('|')
+	if p.AskedAt != nil {
+		b.WriteString(p.AskedAt.UTC().Format(time.RFC3339Nano))
+	}
+	b.WriteByte('|')
+	b.WriteString(p.CallID)
+	b.WriteByte('|')
+	b.WriteString(p.Tool)
+	b.WriteByte('|')
+	b.WriteString(p.Summary)
+	for _, question := range p.Questions {
+		b.WriteByte('|')
+		b.WriteString(question.Question)
+		b.WriteByte(0)
+		for _, option := range question.Options {
+			b.WriteString(option.Label)
+			b.WriteByte(0)
+		}
+		if question.Answered {
+			b.WriteString("answered")
+		}
+	}
+	return b.String()
 }
 
 // PromptID derives the stable identity of a prompt from what it shows.
