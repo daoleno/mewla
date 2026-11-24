@@ -2,7 +2,7 @@
   "releases": [
     {
       "version": "0.4.28",
-      "date": "2026-11-24",
+      "date": "2026-11-25",
       "highlights": [],
       "fixes": [
         "Hold a message's text, then Copy message: all of it, as plain text.",
