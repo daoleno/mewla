@@ -1,6 +1,8 @@
 package work
 
 import (
+	"context"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -37,5 +39,27 @@ func TestLaunchModelFlag(t *testing.T) {
 		if got := LaunchModelFlag(command); got != want {
 			t.Errorf("%q: %q", command, got)
 		}
+	}
+}
+
+// Signed out, Grok still prints its models; none can run, so it has no menu
+// (11-24: the Session offered grok-4.5 and typed /model into the sign-in
+// screen, reporting the switch as made).
+func TestReadCLIModelsRefusesSignedOutGrok(t *testing.T) {
+	dir := t.TempDir()
+	script := dir + "/grok"
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'You are not authenticated.\\n\\nDefault model: grok-4.6\\n\\nAvailable models:\\n  * grok-4.6 (default)\\n  - grok-4.5\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if models, err := ReadCLIModels(context.Background(), WorkerProviderGrok, script, dir); err == nil || len(models) != 0 {
+		t.Fatalf("signed-out Grok listed %v, err %v", models, err)
+	}
+}
+
+// The command a restarted daemon reads off an OpenCode process names its session.
+func TestOpenCodeSessionReadOffItsProcess(t *testing.T) {
+	token, present, err := ProviderResumeToken(WorkerProviderOpenCode, "opencode --session ses_df3d77817ffeKfRAo26OMA6s7w")
+	if err != nil || !present || token != "ses_df3d77817ffeKfRAo26OMA6s7w" {
+		t.Fatalf("session %q present %v err %v", token, present, err)
 	}
 }

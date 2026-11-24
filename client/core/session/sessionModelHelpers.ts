@@ -12,11 +12,17 @@ import { isAgentModelRuntime, normalizeProviderClient, normalizeProviderId } fro
 
 export type ComposerModelControlPresentation = {
   label: string;
+  /** The label is a choice the agent takes when its turn ends. */
+  pending: boolean;
   accessibilityLabel: string;
 };
 
 export type ProviderPickerModelRow = {
   key: string;
+  /** The person picked this model; the agent takes it at its next possible moment. */
+  pending: boolean;
+  /** The effort held with it ("" = the model's default). */
+  pendingEffect: string;
   connectionId: string;
   modelId: string;
   label: string;
@@ -29,12 +35,14 @@ export type ProviderPickerModelRow = {
   currentEffect: string;
 };
 
-/** An agent's own models carry their efforts; of the Providers' models only Codex's take one. */
-function modelEffectChoices(agentModels: boolean, client: string, effects: string[]): string[] {
+/**
+ * An agent's own models carry their efforts; of the Providers' models only Codex's take one. "" (the
+ * model's default) leads, unless the agent always runs one of them (`required`: Pi).
+ */
+function modelEffectChoices(agentModels: boolean, client: string, effects: string[], required = false): string[] {
   if (!agentModels && client !== "codex") return [];
-  return ["", ...effects.filter((effect, index) =>
-    effect.trim() !== "" && effects.indexOf(effect) === index
-  )];
+  const own = effects.filter((effect, index) => effect.trim() !== "" && effects.indexOf(effect) === index);
+  return required && own.length > 0 ? own : ["", ...own];
 }
 
 export function threadRuntimeRows(input: {
@@ -54,9 +62,14 @@ export function threadRuntimeRows(input: {
     if (connectionId !== currentConnectionId) continue;
     for (const model of snapshot.models[connectionId] ?? []) {
       if (!model.available) continue;
-      const effects = modelEffectChoices(agentModels, client, [...(model.reasoning_efforts ?? [])]);
+      const effects = modelEffectChoices(agentModels, client, [...(model.reasoning_efforts ?? [])], model.reasoning_effort_required === true);
       rows.push({
         key: `${connectionId}:${model.id}`,
+        pending: normalizeProviderId(model.id) === normalizeProviderId(selection.pending_model_id ?? ""),
+        pendingEffect:
+          normalizeProviderId(model.id) === normalizeProviderId(selection.pending_model_id ?? "")
+            ? selection.pending_reasoning_effort?.trim() || ""
+            : "",
         connectionId,
         modelId: model.id,
         label: model.display_name?.trim() || model.id,
@@ -84,6 +97,8 @@ export function threadRuntimeRows(input: {
     );
     rows.unshift({
       key: `${selection.connection_id}:${selection.model_id}:current`,
+      pending: false,
+      pendingEffect: "",
       connectionId: selection.connection_id,
       modelId: selection.model_id,
       label: selection.model_id,
@@ -120,7 +135,7 @@ export function runtimeChoiceForRow(
 
 /** The Session's model by its agent's own name for it ("Sonnet", "GPT-6-Luna"), else its id. */
 export function runtimeModelLabel(selection: ThreadRuntimeSelection): string {
-  const modelId = normalizeProviderId(selection.model_id);
+  const modelId = normalizeProviderId(selection.pending_model_id || selection.model_id);
   const own = selection.native_models?.find((model) => normalizeProviderId(model.id) === modelId);
   return own?.display_name?.trim() || modelId;
 }
@@ -139,7 +154,8 @@ export function resolveComposerModelControl(input: {
   if (!label) return null;
   return {
     label,
-    accessibilityLabel: `Open model and effect, ${label}`,
+    pending: Boolean(selection.pending_model_id),
+    accessibilityLabel: selection.pending_model_id ? `Open model and effect, ${label} after this turn` : `Open model and effect, ${label}`,
   };
 }
 
@@ -175,10 +191,11 @@ export function reasoningEffortLabel(value: string): string {
 }
 
 /** The Effect sub-list of a model row (Expo's sessionModelSheetModel.ts): "" is the model's default. */
-export function effectRowsForRuntime(row: ProviderPickerModelRow): { key: string; effect: string; selected: boolean }[] {
+export function effectRowsForRuntime(row: ProviderPickerModelRow): { key: string; effect: string; selected: boolean; pending: boolean }[] {
   return row.effects.map((effect) => ({
     key: effect || "default",
     effect,
     selected: row.current && row.currentEffect === effect,
+    pending: row.pending && row.pendingEffect === effect,
   }));
 }

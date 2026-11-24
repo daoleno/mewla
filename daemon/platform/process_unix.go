@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -72,4 +74,20 @@ func ProcessImagePath(pid int) (string, error) {
 // ParentImage is Windows only: Unix has no parent image to check.
 func ParentImage(pid int) (string, error) {
 	return "", fmt.Errorf("parent image of %d: not on this system", pid)
+}
+
+// ProcessCommandLine is pid's command line, its arguments joined by spaces
+// (Linux reads /proc; other systems ask ps).
+func ProcessCommandLine(pid int) (string, error) {
+	if pid <= 0 {
+		return "", fmt.Errorf("no process")
+	}
+	if raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err == nil {
+		return strings.TrimSpace(strings.Join(strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00"), " ")), nil
+	}
+	out, err := exec.Command("ps", "-o", "args=", "-p", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

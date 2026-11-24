@@ -65,6 +65,11 @@ func (c *piConn) request(ctx context.Context, message map[string]any) (*pi.Model
 	}
 }
 
+// ModelsAvailable: the Session's Pi is linked to Mewla through its extension.
+func (p *piEvents) ModelsAvailable(worker *classifier.Worker) bool {
+	return p.conn(worker.ID) != nil
+}
+
 // Models reads the Session's menu from its Pi.
 func (p *piEvents) Models(ctx context.Context, worker *classifier.Worker) (server.AgentModels, error) {
 	c := p.conn(worker.ID)
@@ -110,7 +115,9 @@ func piAgentModels(models pi.Models) server.AgentModels {
 		if len(efforts) == 1 && efforts[0] == "off" {
 			efforts = nil
 		}
-		out.Models = append(out.Models, server.AgentModel{ID: model.Provider + "/" + model.ID, Name: model.Name, Efforts: efforts})
+		// Pi always thinks at one of its levels: it has no "model's default"
+		// to go back to.
+		out.Models = append(out.Models, server.AgentModel{ID: model.Provider + "/" + model.ID, Name: model.Name, Efforts: efforts, EffortRequired: len(efforts) > 0})
 	}
 	return out
 }

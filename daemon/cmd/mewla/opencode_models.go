@@ -37,6 +37,19 @@ func (o *opencodeEvents) modelService(workerID string) (opencodeModelService, st
 	return service, w.session, nil
 }
 
+// ModelsAvailable: the service has the Session's session. OpenCode creates it
+// with the first message typed in its terminal UI, which until then holds the
+// model itself; a session created any other way would leave that UI behind.
+func (o *opencodeEvents) ModelsAvailable(worker *classifier.Worker) bool {
+	w := o.worker(worker.ID)
+	if w == nil || o.current() == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.connected
+}
+
 // Models reads the Session's menu from the service.
 func (o *opencodeEvents) Models(ctx context.Context, worker *classifier.Worker) (server.AgentModels, error) {
 	service, session, err := o.modelService(worker.ID)
@@ -95,6 +108,7 @@ func opencodeAgentModels(models []opencodeapi.ModelInfo, current opencodeapi.Mod
 	if current.ProviderID != "" && current.ID != "" {
 		out.Current = current.ProviderID + "/" + current.ID
 	}
+	seen := map[string]bool{}
 	for _, model := range models {
 		id := strings.TrimSpace(model.ModelID)
 		if id == "" {
@@ -103,6 +117,12 @@ func opencodeAgentModels(models []opencodeapi.ModelInfo, current opencodeapi.Mod
 		if id == "" || model.ProviderID == "" || (model.Enabled != nil && !*model.Enabled) || model.Status == "deprecated" {
 			continue
 		}
+		// OpenCode lists a model once per way it can reach it; the menu
+		// names it once, as OpenCode's own picker does.
+		if seen[model.ProviderID+"/"+id] {
+			continue
+		}
+		seen[model.ProviderID+"/"+id] = true
 		entry := server.AgentModel{ID: model.ProviderID + "/" + id, Name: model.Name}
 		for _, variant := range model.Variants {
 			if variant.ID != "" && variant.ID != opencodeDefaultVariant {

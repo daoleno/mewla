@@ -63,6 +63,8 @@ export type ProviderModel = {
    * Unknown gateway-only models remain selectable opaque identities.
    */
   known?: boolean;
+  /** The agent always runs one of `reasoning_efforts` (Pi): no "Default" is offered. */
+  reasoning_effort_required?: boolean;
 };
 
 export type ProvidersSnapshot = {
@@ -112,6 +114,13 @@ export type ThreadRuntimeSelection = {
   reasoning_efforts?: string[];
   credential_ready: boolean;
   hot_switchable: boolean;
+  /**
+   * A model (and effort) the person picked that the agent takes at its next
+   * possible moment (the end of the turn it is in); `model_id` stays what it
+   * runs on until then.
+   */
+  pending_model_id?: string;
+  pending_reasoning_effort?: string;
 };
 
 export type ProviderModelsResult = {

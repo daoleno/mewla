@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  effectRowsForRuntime,
   resolveComposerModelControl,
   runtimeChoiceForRow,
   threadRuntimeRows,
@@ -178,6 +179,39 @@ describe("an agent's own models", () => {
       selection: own,
       refreshRequired: false,
     })?.label).toBe("Sonnet");
+  });
+
+  test("an agent that always runs one of its levels offers no Default, and a held pick is marked", () => {
+    // 11-24: Pi's sheet offered "Default"; Pi kept its level, so the switch "failed".
+    const pi: ThreadRuntimeSelection = {
+      ...claudeProvider,
+      client: "pi",
+      connection_id: "pi",
+      connection_name: "Pi",
+      model_id: "opencode-go/flash",
+      reasoning_effort: "high",
+      pending_model_id: "opencode-go/flash",
+      pending_reasoning_effort: "low",
+      native_models: [
+        { id: "opencode-go/flash", available: true, source: "pi_native", reasoning_efforts: ["low", "high", "max"], reasoning_effort_required: true },
+      ],
+    };
+    const piSnapshot: ProvidersSnapshot = {
+      revision: 0, presets: [], defaults: {},
+      connections: [{ id: "pi", name: "Pi", clients: ["pi"], credential_ready: true, advanced: false }],
+      models: { pi: pi.native_models ?? [] },
+    };
+    const [row] = threadRuntimeRows({ snapshot: piSnapshot, selection: pi });
+    expect(row.effects).toEqual(["low", "high", "max"]);
+    expect(row.pending).toBe(true);
+    expect(effectRowsForRuntime(row).map((entry) => [entry.effect, entry.selected, entry.pending])).toEqual([
+      ["low", false, true], ["high", true, false], ["max", false, false],
+    ]);
+    const chip = resolveComposerModelControl({
+      capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true },
+      connectionConnected: true, selection: pi, refreshRequired: false,
+    });
+    expect(chip?.pending).toBe(true);
   });
 
   test("a Claude Session on a Provider connection still shows no efforts", () => {

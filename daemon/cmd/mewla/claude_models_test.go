@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/work"
 )
@@ -60,6 +62,12 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 	f.keys = append(f.keys, key)
 	switch key {
 	case "Enter":
+		if f.pending >= 0 {
+			// Claude's question: its first option, "Yes, switch to …".
+			f.current, f.pending = f.pending, -1
+			f.history = append(f.history, "❯ /model", "  ⎿  Set model to "+f.names[f.current]+" for this", "  session only with "+f.efforts[f.effort]+" effort")
+			return nil
+		}
 		f.open, f.selected, f.pending = true, f.current, -1
 	case "Down":
 		f.selected = (f.selected + 1) % len(f.labels)
@@ -134,21 +142,106 @@ func TestClaudeSwitchUsesThePickersSessionOnlyKey(t *testing.T) {
 	}
 }
 
-func TestClaudeSwitchLeavesClaudesQuestionToThePerson(t *testing.T) {
+// After a turn Claude asks to confirm a switch (the conversation is re-read).
+// The person's pick in the Model sheet is that answer: the switch is made and
+// no question is left open to swallow their next message (11-24: it was
+// reported as "Could not switch model" and left on screen).
+func TestClaudeSwitchAnswersClaudesQuestion(t *testing.T) {
 	screen := newFakeClaude()
 	screen.asks = true
 	models := claudeModelsForTest(screen)
 	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
-	_, err := models.SetModel(context.Background(), worker, "opus", "")
-	var asks errClaudeAsks
-	if !errors.As(err, &asks) || !strings.Contains(err.Error(), "Switch model? Your next response will be slower and use more tokens") || strings.Contains(err.Error(), "cached") {
-		t.Fatalf("err = %v", err)
+	after, err := models.SetModel(context.Background(), worker, "opus", "")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if screen.current != 3 || screen.pending != 1 {
-		t.Fatalf("current %d pending %d", screen.current, screen.pending)
+	if screen.current != 1 || screen.pending != -1 || screen.open {
+		t.Fatalf("current %d pending %d open %v", screen.current, screen.pending, screen.open)
 	}
-	if last := screen.keys[len(screen.keys)-1]; last != "s" {
-		t.Fatalf("Mewla answered Claude's question with %q", last)
+	if got := strings.Join(screen.keys, " "); got != "Enter Up Up s Enter" {
+		t.Fatalf("keys = %q", got)
+	}
+	if after.Current != "opus" {
+		t.Fatalf("menu after = %#v", after)
+	}
+}
+
+// A switch that fails after the picker opened leaves nothing open on screen.
+func TestClaudeSwitchFailureClosesThePicker(t *testing.T) {
+	screen := newFakeClaude()
+	screen.asks = true
+	screen.names[1] = "Opus 5.5"
+	models := claudeModelsForTest(screen)
+	models.screen = &noConfirmClaude{screen}
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	if _, err := models.SetModel(context.Background(), worker, "opus", ""); err == nil {
+		t.Fatal("a switch Claude never confirmed was reported as made")
+	}
+	if last := screen.keys[len(screen.keys)-1]; last != "Escape" {
+		t.Fatalf("left Claude's screen after %q", last)
+	}
+}
+
+// noConfirmClaude is a Claude whose question ignores Enter.
+type noConfirmClaude struct{ *fakeClaude }
+
+func (n *noConfirmClaude) SendKey(id, key string) error {
+	if key == "Enter" && n.pending >= 0 {
+		n.keys = append(n.keys, key)
+		return nil
+	}
+	return n.fakeClaude.SendKey(id, key)
+}
+
+// A choice made while Claude works (or waits for an answer in its turn) is
+// held, shown as pending, and made in Claude's picker when the turn ends.
+func TestClaudeSwitchWhileWorkingIsMadeWhenTheTurnEnds(t *testing.T) {
+	screen := newFakeClaude()
+	hub := agentevents.NewHub()
+	models := claudeModelsForTest(screen)
+	models.hub = hub
+	models.later = newTurnPending(hub)
+	models.later.poll = 10 * time.Millisecond
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnStarted, TurnID: "t1", At: time.Now()})
+	after, err := models.SetModel(context.Background(), worker, "fable", "high")
+	if err != nil {
+		t.Fatalf("a switch while Claude works was refused: %v", err)
+	}
+	if after.Pending == nil || after.Pending.Model != "fable" || after.Pending.Effort != "high" || len(screen.keys) != 0 {
+		t.Fatalf("pending %#v keys %v", after.Pending, screen.keys)
+	}
+	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnFinished, TurnID: "t1", Status: agentevents.TurnCompleted, At: time.Now()})
+	deadline := time.Now().Add(5 * time.Second)
+	for screen.current != 2 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if screen.current != 2 || screen.efforts[screen.effort] != "high" {
+		t.Fatalf("after the turn Claude is on %s", screen.labels[screen.current])
+	}
+	for models.later.of("w1") != nil && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if models.later.of("w1") != nil {
+		t.Fatal("the choice stayed pending after it was made")
+	}
+}
+
+// The Session's model before its first message is the one Claude was started
+// with: the Worker's recorded command keeps only --session-id.
+func TestClaudeCurrentReadsTheLaunchFlagsOfTheProcess(t *testing.T) {
+	screen := newFakeClaude()
+	models := claudeModelsForTest(screen)
+	models.launchArgs = func(*classifier.Worker) string {
+		return "claude --model sonnet --effort low --settings {} --session-id 3311e9d4"
+	}
+	worker := &classifier.Worker{ID: "w1", Command: "claude --session-id 3311e9d4", Cwd: t.TempDir(), ProcessID: 42}
+	got, err := models.Models(context.Background(), worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Current != "sonnet" || got.Effort != "low" {
+		t.Fatalf("current %q effort %q", got.Current, got.Effort)
 	}
 }
 
