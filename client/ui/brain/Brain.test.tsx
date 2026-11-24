@@ -185,7 +185,7 @@ describe("Brain's states (§1.3)", () => {
 });
 
 describe("Brain's composer (§1.4)", () => {
-  test("+ › Attach File: the picked file goes with the message", async () => {
+  test("+ › Files: the picked file goes with the message", async () => {
     const c = computer({ view: "composer" }, {}, {
       "secure.get": () => null,
       "secure.set": () => undefined,
@@ -195,9 +195,9 @@ describe("Brain's composer (§1.4)", () => {
       "files.cancel": () => null,
     });
     const app = await open(HARNESS, { platform: "android", host: c.host });
-    await pressUntil(app, "id:composer-plus", "id:attach-file");
+    await pressUntil(app, "id:composer-plus", "id:attach-files");
     // Under a full suite's load a press or the first keys after a sheet closes can be lost: each step waits for what it does.
-    await pressUntil(app, "id:attach-file", "text:Ready");
+    await pressUntil(app, "id:attach-files", "text:Ready");
     await typeUntil(app, "id:composer", "What is on this screen?", "id:send");
     await pressWhenEnabled(app, "id:send");
     await app.waitUntil(() => said(app) === "send:What is on this screen? +/state/uploads/shot.png");
@@ -221,19 +221,15 @@ describe("Brain's composer (§1.4)", () => {
     await app.waitUntil(() => app.value("id:composer") === "Ask @codex now");
   }, 20_000);
 
-  test("on Codex, / lists its slash commands and /status opens Codex's status instead of sending", async () => {
-    const c = computer({ view: "composer", brain: { ...brain, host_worker: { ...hostWorker, provider: "codex" }, host_executor: codex } }, {
-      codex_slash_commands: () => ({ commands: [{ value: "/status", name: "status", description: "Show status", category: "session", chat_supported: true }] }),
-      codex_status: () => ({ status: { thread: { id: "th-1", model: "gpt-6", effort: "high", cwd: "/home/me/brain" }, limits: [{ id: "codex", windows: [{ used_percent: 25, window_minutes: 300 }] }] } }),
-    });
+  test("on Codex, a typed / is plain text: no list, and /status goes out as typed", async () => {
+    const c = computer({ view: "composer", brain: { ...brain, host_worker: { ...hostWorker, provider: "codex" }, host_executor: codex } }, {});
     const app = await open(HARNESS, { platform: "android", host: c.host });
-    await app.type("id:composer", "/sta");
-    await app.waitFor("id:slash-status");
-    await app.type("id:composer", "tus");
-    await app.press("id:send");
-    await app.waitFor("id:status-meter");
-    expect(said(app)).toBe("");
-    expect(c.of("codex_status").at(-1)).toMatchObject({ target_id: "brain-host" });
+    await typeUntil(app, "id:composer", "/status", "id:send");
+    expect(app.texts()).not.toContain("Search commands");
+    await pressWhenEnabled(app, "id:send");
+    await app.waitUntil(() => said(app) === "send:/status");
+    expect(c.of("codex_slash_commands")).toHaveLength(0);
+    expect(c.of("codex_status")).toHaveLength(0);
   }, 20_000);
 
   test("a composer that cannot send says why and sends nothing", async () => {

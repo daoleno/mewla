@@ -6,7 +6,8 @@ import type { StoredServer } from "../../../core/storedServerContract";
 import { connection, current } from "../../session";
 import { uploadFile as uploadThrough, type UploadFile, type UploadOptions, type UploadResult } from "../../../core/files/upload";
 import { keepAppFiles, releaseAppFiles } from "./appFiles";
-import { pickFiles, uploadHost } from "./host";
+import { capturePhoto, pickFiles, pickPhotos, uploadHost } from "./host";
+import type { AttachSource } from "../../../core/files/attachSources";
 import { markShared, releaseShared } from "./shareIn";
 
 /** Chips that went: what the host or the app kept of their files goes too. */
@@ -49,8 +50,11 @@ export interface AttachmentUploads {
   picking(): boolean;
   /** Attach can be offered now: the computer is connected, no picker is open and there is room (reactive). */
   canAttach(): boolean;
-  /** Opens the picker for the room left, then uploads what was picked; throws what the person should read. */
-  pickAndUpload(): Promise<void>;
+  /**
+   * Opens the picker of `source` (the files picker by default; the photo picker; the camera) for the room left,
+   * then uploads what was picked; throws what the person should read.
+   */
+  pickAndUpload(source?: AttachSource): Promise<void>;
   /**
    * Uploads files pasted or dropped into the composer (its input's `onPaste` `files`), as
    * picked ones are; throws what the person should read (not connected, too many).
@@ -112,13 +116,14 @@ export function createAttachmentUploads(options: { server?: () => StoredServer |
     items: () => items(),
     picking: () => picking(),
     canAttach: () => !!server() && connection() === "connected" && !picking() && items().length < MAX_COMPOSER_ATTACHMENTS,
-    async pickAndUpload() {
+    async pickAndUpload(source = "files") {
       if (picking()) return;
       const room = pickLimit(MAX_COMPOSER_ATTACHMENTS - items().length);
       if (!server() || connection() !== "connected") throw new Error("Connect to a computer to attach files.");
       picking.set(true);
       try {
-        const assets = checkPickedCount(await pickFiles(room), room);
+        const picked = source === "photos" ? await pickPhotos(room) : source === "camera" ? await capturePhoto() : await pickFiles(room);
+        const assets = checkPickedCount(picked, room);
         queue.enqueue(assets.map((asset) => ({ id: `upload-${(sequence += 1)}`, asset })));
       } finally {
         picking.set(false);

@@ -471,7 +471,8 @@ open client/ios/Mewla.xcodeproj
 ```
 
 Build and run the Mewla scheme from Xcode. The app asks for local-network
-access (to reach your daemon) and camera access (to scan pairing codes).
+access (to reach your daemon) and camera access (to scan pairing codes and to
+take a photo you attach).
 
 ### Web UI
 

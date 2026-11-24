@@ -570,11 +570,14 @@ describe("Attachments", () => {
     await app.waitFor("id:attachment-viewer-image", { state: "gone" });
   });
 
+  // In a browser the File is the body (its bytes are read here); on a phone it streams, which the stand-in network
+  // does not read (its `body` is null), and the lane phone proves the bytes arrive (chat/ComposerAttach.test.tsx).
   test("a pasted picture uploads from the app itself, signed and named, and shows itself on its chip", async () => {
     const u = uploads([], () => done("unused", "unused"));
     let sent: { headers: Record<string, string>; size: number } | null = null;
     const app = await open(UPLOADS, {
       ...u.options,
+      platform: "web",
       network: {
         [`POST ${BASE}/upload`]: (request) => {
           sent = { headers: request.headers, size: request.body?.length ?? -1 };

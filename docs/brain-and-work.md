@@ -26,9 +26,10 @@ Brain records each part as Work, starts Workers, and names the goal. Workers
 run unattended, so read [Permission bypass risks](executors.md#permission-bypass-risks)
 before you let Brain work on a machine with secrets.
 
-The composer's **+** attaches a photo, a file, a screenshot of the computer or
-a file on the computer. Typing `@` lists your installed agents, and `/` at the
-start lists the slash commands of the agent Brain runs on.
+The composer's **+** puts something from your phone into the message (see
+[Attachments](sessions.md#attachments)). Typing `@` lists your installed agents.
+What you type is sent as typed: a message that starts with `/` is text for the
+agent, not a command Mewla runs.
 
 **Share to Brain (Android).** Mewla is in the phone's share sheet, for one file
 or several (pictures, video, audio, documents) and for text and links, and in

@@ -9,7 +9,10 @@ import { belowSections, bottomBarInset } from "../shell/below";
 import { keyboardLift } from "../../core/shell/belowStack";
 import { composerSize } from "../kit/density";
 import { pasteAttaches, withoutInserted } from "../../core/files/pastedFiles";
+import { attachOffer, type AttachOffer, type AttachSource } from "../../core/files/attachSources";
 import type { IncomingFiles } from "../more/files/incoming";
+import { canCapture } from "../more/files/host";
+import { AttachButton, AttachSheet, type ComposerAttach } from "./Attach";
 
 /** The composers that show a chat's draft now, by its cache key: text written from elsewhere goes into them. */
 const writers = new Map<string, Set<(text: string) => void>>();
@@ -97,8 +100,10 @@ export const composerEdits = new WeakMap<ComposerText, { open: () => boolean; ca
  * field. ↑ in the empty field edits the last message (`onRecall`) and Escape
  * leaves that edit, on every platform with a hardware keyboard.
  *
- * A picture or file pasted into the field becomes a chip (`onFiles`); files dropped on the conversation do too
- * (`FileDrop` around it and the composer).
+ * "+" (`attach`) puts something from the device into the message: on a phone or a tablet a sheet of Photos, Camera
+ * (when the host can take one) and Files, the keyboard going down for it and the field's focus coming back after;
+ * on a desktop or in a browser the file dialog at once. A picture or file pasted into the field becomes a chip
+ * (`onFiles`); files dropped on the conversation do too (`FileDrop` around it and the composer).
  *
  * Text put in from outside (a picked `@agent` or skill, a recalled message) leaves
  * the caret at its end. `disabled` (soft-final/SPEC.md §11): the field and Send at
@@ -120,14 +125,14 @@ export function Composer(props: {
   onStop: () => void;
   /** Whether the page is on screen: only then does it lift for the keyboard. */
   active?: () => boolean;
-  /** Left of the field (a Session's "+"); in the tools row while the composer is open. */
-  leading?: unknown;
+  /** "+" at the left of the field, in the tools row while the composer is open: what it attaches into. */
+  attach?: ComposerAttach;
   /**
    * A control beside Send (a Session's model): it shows only while the composer is open (the field focused,
    * or text or chips in it), when the composer is taller, the field on top and [+] … control, Send below.
    */
   beside?: { shown: () => boolean; render: () => unknown };
-  /** A slash-command list is open over the field: Return waits for a pick instead of sending. */
+  /** A list is open over the field (the `@` agents): Return waits for a pick instead of sending. */
   pickerOpen?: () => boolean;
   /** ↑ in the empty field: put the last message in it to edit. */
   onRecall?: () => void;
@@ -216,12 +221,37 @@ export function Composer(props: {
   // While a turn runs, an empty composer's button is Stop (SPEC §1.4); with text or chips it sends.
   const stops = () => props.running() && !value().trim() && !props.attached?.();
   const size = composerSize();
+  // "+": the sheet on a phone (Camera once the host says it can take one), the file dialog elsewhere.
+  const sheetOpen = signal(false);
+  const offer = signal<AttachOffer>(attachOffer({ os: platform.os, canCapture: false }));
+  if (props.attach && untracked(offer).kind === "sheet") void canCapture().then((yes) => yes && offer.set(attachOffer({ os: platform.os, canCapture: true })));
+  // The field had the focus when "+" was pressed: it gets it back once the sheet or the picker is done.
+  let refocus = false;
+  const focusBack = (back: boolean) => back && setTimeout(() => input?.focus(), 0);
+  const pick = (source: AttachSource) => {
+    const attach = props.attach;
+    // Taken here, so the sheet closing under the picker does not bring the keyboard up over it.
+    const back = refocus;
+    refocus = false;
+    sheetOpen.set(false);
+    if (!attach) return;
+    void attach.uploads.pickAndUpload(source)
+      .catch((error) => attach.onError(error instanceof Error && error.message ? error.message : "Could not attach the file."))
+      .finally(() => focusBack(back));
+  };
+  const pressPlus = () => {
+    if (untracked(offer).kind === "dialog") return pick("files");
+    // The keyboard goes down, so the sheet sits at the thumb.
+    refocus = untracked(focused);
+    if (refocus) input?.blur();
+    sheetOpen.set(true);
+  };
   // Open from focus until shortly after blur: a tap on the control beside Send blurs the field first, and
-  // the control must still be there for the tap to land.
+  // the control must still be there for the tap to land. The attach sheet keeps it open.
   const opened = signal(false);
   let closing: ReturnType<typeof setTimeout> | undefined;
   effect(() => {
-    if (focused()) {
+    if (focused() || sheetOpen()) {
       if (closing) clearTimeout(closing);
       closing = undefined;
       opened.set(true);
@@ -231,8 +261,8 @@ export function Composer(props: {
   });
   cleanup(() => closing && clearTimeout(closing));
   const expanded = () => Boolean(props.beside?.shown()) && (opened() || Boolean(value()) || Boolean(props.attached?.()));
-  // A function leading is made anew where it shows (the field's row, or the tools row while open).
-  const leading = () => (typeof props.leading === "function" ? (props.leading as () => unknown)() : props.leading);
+  // "+" is made anew where it shows (the field's row, or the tools row while open); the sheet is not, below.
+  const leading = () => <If when={props.attach}><AttachButton enabled={() => Boolean(props.attach?.enabled())} onPress={pressPlus} /></If>;
   const sendOrStop = () => (
     <If when={stops()} else={<SendButton testID="send" label="Send" onPress={send} disabled={disabled() || !props.canSend() || empty()} ready={!disabled() && props.canSend() && !empty()}>
         <Icon name="arrow-up" size={size.arrow} color={!disabled() && props.canSend() && !empty() ? "card" : "faint"} />
@@ -294,6 +324,12 @@ export function Composer(props: {
             {sendOrStop()}
           </View></If>
       </View>
+      <If when={props.attach && offer().kind === "sheet"}><AttachSheet open={sheetOpen} sources={() => { const current = offer(); return current.kind === "sheet" ? current.sources : []; }}
+          onPick={pick} onClose={() => {
+            sheetOpen.set(false);
+            focusBack(refocus);
+            refocus = false;
+          }} /></If>
     </View>
   );
 }

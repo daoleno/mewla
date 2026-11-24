@@ -2,8 +2,8 @@ import NativeShell
 import UIKit
 import UniformTypeIdentifiers
 
-/// `files.*` (client/ui/more/files/host.ts): the document picker for attachments and for the
-/// download folder, the streamed upload and download, a chat's picture saved to Photos or shared
+/// `files.*` (client/ui/more/files/host.ts): the document picker for attachments, a photo taken
+/// now (`files.canCapture`, `files.capture`: Camera), the document picker for the download folder, the streamed upload and download, a chat's picture saved to Photos or shared
 /// (`files.saveImage`, `files.shareImage`), and the `mewla.pdf` component.
 /// Picked files and folders stay security-scoped URLs here; JS holds only their tokens.
 /// The handlers keep this object alive (they capture it), as the scene keeps the app view.
@@ -16,6 +16,7 @@ final class FilesHost: NSObject, UIDocumentPickerDelegate {
   private var picking: (reply: NshHostReply, maxCount: Int)?
   private var choosingFolder: NshHostReply?
   private weak var filePicker: UIDocumentPickerViewController?
+  private let camera = Camera()
 
   init(_ app: NshAppView) {
     self.app = app
@@ -30,6 +31,9 @@ final class FilesHost: NSObject, UIDocumentPickerDelegate {
     app.handle("files.download") { [self] data, reply in download(data, reply) }
     app.handle("files.cancelDownload") { [self] data, reply in reply.resolve(transfers.cancel(id: Self.string(data, "downloadId"))) }
     app.handle("files.thumbnail") { [self] data, reply in thumbnail(data, reply) }
+    // This build takes photos for the composer: "+" shows Camera when the device has one.
+    app.handle("files.canCapture") { _, reply in reply.resolve(Camera.available) }
+    app.handle("files.capture") { [self] _, reply in capture(reply) }
     // This build saves and shares pictures: the UI shows Save and Share.
     app.handle("files.canSaveImage") { _, reply in reply.resolve(true) }
     app.handle("files.saveImage") { data, reply in Self.saveImage(data, reply) }
@@ -100,6 +104,19 @@ final class FilesHost: NSObject, UIDocumentPickerDelegate {
     picker.allowsMultipleSelection = true
     filePicker = picker
     present(picker) { reply.reject("Could not open the file picker.") }
+  }
+
+  /// A photo taken now, as a picked file (its token streams like one); nil when the camera was closed.
+  private func capture(_ reply: NshHostReply) {
+    guard var top = app.window?.rootViewController else { return reply.reject("Could not open the camera.") }
+    while let next = top.presentedViewController { top = next }
+    camera.capture(from: top) { [self] result in
+      switch result {
+      case .taken(let file): reply.resolve(describe(file))
+      case .cancelled: reply.resolve(nil)
+      case .failed(let message): reply.reject(message)
+      }
+    }
   }
 
   private func pickDirectory(_ reply: NshHostReply) {

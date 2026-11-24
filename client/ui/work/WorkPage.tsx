@@ -19,6 +19,7 @@ import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport, workers } from "../session";
 import { Composer, createComposerText, writeIntoDraft } from "../chat/Composer";
+import type { ComposerAttach } from "../chat/Attach";
 import { workFileOfWork, workSurface } from "./state";
 import { Icon, type IconName } from "../kit/Icon";
 import { delayed, RING, Spinner } from "../kit/wait";
@@ -436,13 +437,11 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
       props.nav.pop();
     },
   });
-  const attach = async () => {
-    attachFailure.set("");
-    try {
-      await files.pickAndUpload();
-    } catch (error) {
-      attachFailure.set(error instanceof Error ? error.message : "Could not attach that file.");
-    }
+  // "+": Photos, Camera, Files on a phone, the file dialog elsewhere (chat/Attach.tsx); not while an action runs.
+  const attach: ComposerAttach = {
+    uploads: files,
+    enabled: () => busy() === "" && connection() === "connected",
+    onError: (message) => attachFailure.set(message),
   };
   // Pasted into the field or dropped on the page while it has the composer: chips, as picked ones.
   const attachDropped = (incoming: IncomingFiles) => {
@@ -544,11 +543,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
               // Kept until Brain has it: the page closes then, and a failure leaves the words to send again.
               return false;
             }}
-            leading={
-              <Button testID="work-attach" accessibilityLabel="Attach file" disabled={busy() !== "" || files.picking()} onPress={() => void attach()} class="h-[52px] w-[44px] items-center justify-center disabled:opacity-40">
-                <Icon name="add" size={22} tone="soft" />
-              </Button>
-            }>
+            attach={attach}>
             <If when={files.items().length}><AttachmentTray uploads={files} /></If>
             <If when={attachFailure()}><View class="px-3 pb-1.5"><Text class="text-sub text-muted-foreground">{attachFailure()}</Text></View></If>
           </Composer></If>
