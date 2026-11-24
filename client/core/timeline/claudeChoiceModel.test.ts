@@ -25,6 +25,8 @@ import {
   toggleChoiceOption,
   toggleChoiceOther,
   questionAllowsOther,
+  keptChoiceDraft,
+  restoreChoiceDraft,
 } from "./claudeChoiceModel";
 import { buildTimeline } from "./model";
 
@@ -332,5 +334,26 @@ describe("a choice prompt the daemon read from the terminal", () => {
     expect(isPromptGoneError(Object.assign(new Error("x"), { code: "answer_prompt_refused" }))).toBe(false);
     expect(isPromptGoneError(Object.assign(new Error("x"), { code: "answer_choice_gone" }))).toBe(false);
     expect(isPromptGoneError(new Error(PROMPT_GONE_CODE))).toBe(false);
+  });
+});
+
+describe("a card's typed answers survive a reload (owner 2026-11-24)", () => {
+  const choice: ConversationChoice = { kind: "AskUserQuestion", state: "pending", questions: [
+    { question: "黄金方向？", multi_select: false, options: [{ label: "换信号源" }, { label: "先停在这里" }] },
+    { question: "价值因子？", multi_select: true, options: [{ label: "重跑" }, { label: "扩展" }, { label: "写成流程" }] },
+  ] } as ConversationChoice;
+
+  test("kept and restored as typed; nothing picked keeps nothing", () => {
+    const draft = setChoiceOtherText(toggleChoiceOther(choice, emptyChoiceDraft(choice), 0), 0, "把当前策略画成echarts框架的html给我看看");
+    const both = toggleChoiceOption(choice, draft, 1, 2);
+    expect(restoreChoiceDraft(choice, keptChoiceDraft(both))).toEqual(both);
+    expect(keptChoiceDraft(emptyChoiceDraft(choice))).toBe("");
+  });
+
+  test("answers kept for another shape of question are dropped", () => {
+    expect(restoreChoiceDraft(choice, JSON.stringify([{ selected: [0], other: "", otherActive: false }]))).toBeNull();
+    expect(restoreChoiceDraft(choice, JSON.stringify([{ selected: [5], other: "", otherActive: false }, { selected: [], other: "x", otherActive: true }]))).toBeNull();
+    expect(restoreChoiceDraft(choice, "not json")).toBeNull();
+    expect(restoreChoiceDraft(choice, "")).toBeNull();
   });
 });

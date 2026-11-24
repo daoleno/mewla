@@ -1,17 +1,18 @@
-import { computed, openUrl, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, openUrl, signal, Storage, Text, untracked, View } from "nsh";
 import { SELECTION } from "./TimelineRows";
 import type { Signal, ViewRef } from "nsh";
 import { clock } from "../calendar/clock";
 import { sealedOfAnswered } from "../../core/timeline/answered";
 import type { AnsweredTimelineItem } from "../../core/timeline/types";
 import { Button, Input } from "nsh/base";
-import type { Draft } from "../../core/conversation/draft";
+import { Draft } from "../../core/conversation/draft";
 import { writeIntoDraft } from "./Composer";
 import type { ConversationChoice } from "../../core/conversation/conversation";
 import { answerChoice, answerPrompt, decideApproval } from "../../core/conversation/turn";
 import {
   buildChoiceAnswers, choiceDraftAnswerText, choiceQuestionAnswered, choiceReviewStep, emptyChoiceDraft, isChoiceGoneError, isPromptGoneError,
-  latestPendingChoice, nextChoiceStep, questionAllowsOther, setChoiceOtherText, toggleChoiceOption, toggleChoiceOther, unansweredChoiceQuestions,
+  keptChoiceDraft, latestPendingChoice, nextChoiceStep, questionAllowsOther, restoreChoiceDraft, setChoiceOtherText, toggleChoiceOption, toggleChoiceOther,
+  unansweredChoiceQuestions,
   type ChoiceAnswer,
 } from "../../core/timeline/claudeChoiceModel";
 import type { CodexConversationEvent } from "../../core/conversation/conversation";
@@ -147,12 +148,25 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
   const S = requestCardSize();
   const choice = props.choice;
   const draft = signal(emptyChoiceDraft(choice));
+  // What is picked and typed is kept on this device for this card, so a reload or a crash does not lose it (owner
+  // 11-24: the card came back empty after a reload); answered or sealed, it is cleared.
+  const serverId = untracked(current)?.id;
+  const kept = serverId ? new Draft(Storage, `choice:${serverId}:${props.card.key}`) : null;
+  void kept?.load().then((saved) => {
+    const restored = restoreChoiceDraft(choice, saved);
+    if (restored && !keptChoiceDraft(untracked(draft))) draft.set(restored);
+  });
+  cleanup(() => kept?.flush());
+  const setDraft = (next: ReturnType<typeof emptyChoiceDraft>) => {
+    draft.set(next);
+    kept?.save(keptChoiceDraft(next));
+  };
   const step = signal(0);
   const sending = signal(false);
   const failure = signal("");
   const review = choiceReviewStep(choice);
   const pick = (q: number, o: number) => {
-    draft.set(toggleChoiceOption(choice, draft(), q, o));
+    setDraft(toggleChoiceOption(choice, draft(), q, o));
     if (!choice.questions[q]!.multi_select) step.set(nextChoiceStep(choice, q));
   };
   const submit = async () => {
@@ -162,10 +176,14 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
     failure.set("");
     try {
       await props.submit(answers);
+      kept?.save("");
       haptic.impact("light");
       props.onDone(choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!)).filter(Boolean).join(" · "));
     } catch (error) {
-      if (isChoiceGoneError(error) || isPromptGoneError(error)) return props.onGone(choiceAnswerMessage(choice.questions, choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!))));
+      if (isChoiceGoneError(error) || isPromptGoneError(error)) {
+        kept?.save("");
+        return props.onGone(choiceAnswerMessage(choice.questions, choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!))));
+      }
       failure.set(error instanceof Error && error.message ? error.message : "Couldn't send. Try again.");
     } finally {
       sending.set(false);
@@ -189,12 +207,12 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
               </View>
             </Button>
           ))}
-          <If when={questionAllowsOther(question)}><If when={answer().otherActive} else={<Button testID="choice-other-open" disabled={!props.connected()} onPress={() => draft.set(toggleChoiceOther(choice, draft(), q.index))}
+          <If when={questionAllowsOther(question)}><If when={answer().otherActive} else={<Button testID="choice-other-open" disabled={!props.connected()} onPress={() => setDraft(toggleChoiceOther(choice, draft(), q.index))}
                 class={`${S.option} justify-center border-t border-border px-4 active:bg-accent disabled:opacity-40`}>
                 <Text class="text-body text-muted-foreground">Other…</Text>
               </Button>}><View class="border-t border-border px-4 py-2">
                 <Input testID="choice-other" value={answer().other} placeholder="Your answer" autoFocus
-                  onChange={({ value }) => draft.set(setChoiceOtherText(draft(), q.index, value))}
+                  onChange={({ value }) => setDraft(setChoiceOtherText(draft(), q.index, value))}
                   class="min-h-[44px] rounded-(--radius-control) bg-muted px-3 text-body" />
               </View></If></If>
         </View>
