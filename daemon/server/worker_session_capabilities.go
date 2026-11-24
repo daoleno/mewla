@@ -157,6 +157,13 @@ func (s *Server) structuredProviderForWorker(worker *classifier.Worker) string {
 	// and may mention a provider without the shell actually running one.
 	provider := work.InferWorkerProvider(worker.Command)
 	if strings.TrimSpace(worker.Command) == "" {
+		// An ended run keeps no command; the executor it was launched from still
+		// names its agent, so its chat stays readable (and its files open from it).
+		if s != nil && s.execs != nil {
+			if executor, ok := s.execs.WorkerExecutor(worker.ExecutorID); ok && executor.Capabilities.StructuredEvents {
+				return executor.Provider
+			}
+		}
 		provider = work.InferWorkerProvider(worker.Name)
 	}
 	if provider != "" {
