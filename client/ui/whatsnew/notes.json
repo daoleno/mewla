@@ -2,7 +2,7 @@
   "releases": [
     {
       "version": "0.4.28",
-      "date": "2026-11-24",
+      "date": "2026-11-25",
       "highlights": [
         {
           "id": "0.4.28-model-picks-work",
@@ -80,21 +80,6 @@
           "try": {
             "kind": "open",
             "target": "computer"
-          },
-          "platforms": [
-            "macos"
-          ]
-        },
-        {
-          "id": "0.4.27-drag-pictures-from-browser",
-          "title": "Drag in browser pictures and screenshots",
-          "line": "Drag an image from a browser or a screenshot thumbnail into a message on your Mac.",
-          "media": {
-            "scene": "mac-app"
-          },
-          "try": {
-            "kind": "open",
-            "target": "brain"
           },
           "platforms": [
             "macos"
