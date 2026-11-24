@@ -1,7 +1,8 @@
-import { cleanup, Clipboard, effect, Image, openUrl, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { cleanup, Clipboard, effect, Image, openUrl, platform, safeArea, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
+import { GuardedDialog } from "../../shell/AppSheet";
 import { isSvgImage } from "../../../core/files/imageSource";
 import { dirnameOf, resolveMarkdownLink } from "../../../core/files/markdownLinks";
 import { loadSvgPreview, svgPreviewHtml, type SvgPreview } from "../../../core/files/svgPreview";
@@ -16,6 +17,7 @@ import {
   SESSION_FILE_NO_IDENTITY,
 } from "../../../core/files/presentation";
 import { getSessionFileMetadata, getSessionFileText } from "../../../core/files/requests";
+import { grantSessionPage, SESSION_PAGE_LINKS_SCRIPT, sessionPageLinkToOpen, type SessionPage } from "../../../core/files/sessionPage";
 import {
   bindSessionFileRequestToGeneration,
   buildSessionFileBinarySource,
@@ -63,6 +65,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   const metadata = signal<SessionFileMetadata | null>(null);
   const text = signal<SessionFileTextPreview | null>(null);
   const source = signal<SessionFileBinarySource | null>(null);
+  const page = signal<SessionPage | null>(null);
+  const full = signal(false);
   const loading = signal(true);
   const problem = signal<Problem | null>(null);
   const stale = signal(false);
@@ -81,6 +85,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
     metadata.set(null);
     text.set(null);
     source.set(null);
+    page.set(null);
+    full.set(false);
     problem.set(null);
     stale.set(false);
     loading.set(true);
@@ -100,7 +106,12 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       metadata.set(found);
       if (found.tooLarge) return fail(new Error(sessionFileTooLargeMessage(found)), true);
       const renderer = classifySessionFileRenderer(found.kind);
-      if (renderer === "markdown" || renderer === "text") {
+      if (renderer === "text" && isHtmlSessionFile(found)) {
+        // Served as a page by the computer, under a grant for its folder: never read in as text.
+        const granted = await grantSessionPage(d.server, bindSessionFileRequestToGeneration(request(), found));
+        if (mine !== epoch) return;
+        page.set(granted);
+      } else if (renderer === "markdown" || renderer === "text") {
         const read = await getSessionFileText(d, { ...request(), path: found.path, generation: found.generation });
         if (mine !== epoch) return;
         text.set(read);
@@ -138,12 +149,14 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
 
   const onCopy = () => {
     const found = metadata();
-    void resolveSessionFileCopyContent(text(), async () => {
+    const whole = async () => {
       const signed = await sign(found!);
       const response = await fetch(signed.uri, { headers: signed.headers });
       if (!response.ok) throw new Error(`Session file download failed (HTTP ${response.status}).`);
       return response.text();
-    })
+    };
+    // A page was never read in as text: its source copies through the stream.
+    void (page() ? whole() : resolveSessionFileCopyContent(text(), whole))
       .then((value) => (value === null ? undefined : copy.copy(value)))
       .catch(() => {});
   };
@@ -155,6 +168,19 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
       .start(() => downloadSessionFile({ host: downloadHost, metadata: found, sign: () => sign(found), onStart: (id) => (downloading = id) }))
       .catch(() => {})
       .finally(() => (downloading = ""));
+  };
+
+  /** The page in the system browser, under a grant signed at the press (a browser opens a tab for some seconds after one). */
+  const onOpenInBrowser = () => {
+    const d = daemon();
+    const found = metadata();
+    if (!d || !found) return;
+    void grantSessionPage(d.server, bindSessionFileRequestToGeneration(request(), found))
+      .then((granted) => openUrl(granted.url))
+      .then((result) => {
+        if (!result.opened) failInPlace("The browser blocked the new tab. Allow pop-ups for Mewla and try again.", false);
+      })
+      .catch((error: unknown) => failInPlace(failureText(error, "The page could not be opened."), isStaleSessionFileError(error)));
   };
 
   // A switch to another computer closes the file: it was that computer's.
@@ -175,8 +201,9 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   const title = () => sessionFileTitle(metadata(), props.reference);
   const canDownload = () => sessionFileCanDownload(metadata());
   // A cut text copies the whole file through the stream, so only while it can be read whole.
-  const canCopy = () => !!text() && (!text()!.truncated || canDownload());
+  const canCopy = () => (!!text() && (!text()!.truncated || canDownload())) || (!!page() && canDownload());
   const status = () => sessionFileDownloadStatus(download(), downloadError());
+  const shownPage = () => (loading() || problem() ? null : page());
 
   return (
     <NavPage
@@ -187,6 +214,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
         { id: "file-refresh", transient: true, icon: "refresh", label: "Refresh changed file", onPress: () => void load(), shown: () => stale() },
         { id: "file-download", icon: "download", label: sessionFileDownloadLabel({ busy: download() === "busy", can: canDownload() }), onPress: onDownload, disabled: () => !canDownload() || download() === "busy" },
         { id: "file-copy", icon: copied() ? "check" : "copy", label: copied() ? "Copied" : "Copy", onPress: onCopy, shown: () => canCopy() },
+        { id: "file-open-browser", icon: "open-external", label: "Open in browser", onPress: onOpenInBrowser, shown: () => !!shownPage() && OPEN_IN_BROWSER },
+        { id: "file-full-screen", icon: "expand", label: "Full screen", onPress: () => full.set(true), shown: () => !!shownPage() },
       ]}
       headerRight={
         <View class="flex-row items-center gap-1">
@@ -200,18 +229,36 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
             onPress={onDownload}
           />
           <If when={canCopy()}><Action testID="file-copy" label={copied() ? "Copied" : "Copy"} icon={copied() ? "check" : "copy"} onPress={onCopy} /></If>
+          <If when={shownPage() && OPEN_IN_BROWSER}><Action testID="file-open-browser" label="Open in browser" icon="open-external" onPress={onOpenInBrowser} /></If>
+          <If when={shownPage()}><Action testID="file-full-screen" label="Full screen" icon="expand" onPress={() => full.set(true)} /></If>
           <Action testID="file-close" label="Close file preview" icon="close" onPress={() => props.nav.pop()} />
         </View>
       }
     >
-      <View class="flex-1 bg-background">
-        <View class="px-5 pb-2 pt-1">
-          <Text testID="file-meta" class="font-mono text-caption text-muted-foreground line-clamp-1">{sessionFileMetaLine(metadata(), props.reference)}</Text>
-          <If when={status()}><Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="mt-0.5 text-caption">{status()!}</Text></If>
+      {/* An HTML page gets the whole width and height, as a browser shows it; the rest sits on a surface card. */}
+      <If when={shownPage()} else={<View class="flex-1 bg-background">
+          <View class="px-5 pb-2 pt-1">
+            <Text testID="file-meta" class="font-mono text-caption text-muted-foreground line-clamp-1">{sessionFileMetaLine(metadata(), props.reference)}</Text>
+            <If when={status()}><Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="mt-0.5 text-caption">{status()!}</Text></If>
+          </View>
+          {/* The content on a surface card (SPEC §15 File browser): text in mono, Markdown, pictures, PDF and media alike. */}
+          <View class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card">{body()}</View>
+        </View>}>
+        <View class="flex-1 bg-white">
+          <If when={!full()}><HtmlPage testID="file-html" page={shownPage()!} /></If>
+          <If when={status()}><Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="bg-background px-5 py-1 text-caption">{status()!}</Text></If>
         </View>
-        {/* The content on a surface card (SPEC §15 File browser): text in mono, Markdown, pictures, PDF and media alike. */}
-        <View class="mx-4 mb-4 flex-1 overflow-hidden rounded-(--radius-group) bg-card">{body()}</View>
-      </View>
+      </If>
+      <GuardedDialog testID="file-page-full" open={full() && !!shownPage()} onOpenChange={({ open }) => !open && full.set(false)}
+        presentation="fullScreen" animation="fade" accessibilityLabel={title()} class="flex-1 bg-white" statusBar={{ hidden: true }}>
+        <View class="flex-1 bg-white">
+          <If when={full() && shownPage()}><HtmlPage testID="file-html-full" page={shownPage()!} /></If>
+          <Button testID="file-full-screen-close" accessibilityLabel="Exit full screen" onPress={() => full.set(false)}
+            class="absolute right-3 size-11 items-center justify-center rounded-full bg-black/55 active:opacity-70" style={{ top: safeArea().top + 8 }}>
+            <Icon name="close" size={20} tone="onBlack" />
+          </Button>
+        </View>
+      </GuardedDialog>
     </NavPage>
   );
 
@@ -223,7 +270,6 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
     if (!found) return <EmptyState title="Could not open file" detail="The file is unavailable." />;
     const renderer = classifySessionFileRenderer(found.kind);
     const read = text();
-    if (renderer === "text" && read && isHtmlSessionFile(found)) return <HtmlBody text={read} />;
     if (renderer === "markdown" && read) return <MarkdownBody text={read} onLink={(href) => openLink(href, found)} />;
     if (renderer === "text" && read) return <TextBody text={read} />;
     const signed = source();
@@ -279,15 +325,35 @@ function MarkdownBody(props: { text: SessionFileTextPreview; onLink: (href: stri
   );
 }
 
-/** An HTML file, drawn as a page in a web view of its own: nothing of the app's is reachable from it. */
-function HtmlBody(props: { text: SessionFileTextPreview }) {
-  const note = sessionFileTruncationNote(props.text);
+/**
+ * An HTML page, loaded by URL from the computer (core/files/sessionPage.ts): its scripts, its CDN libraries and
+ * the files beside it load as in a browser, in a sandbox of its own origin. A link out of the page opens in the
+ * system browser; a browser's frame opens it in a tab itself.
+ */
+function HtmlPage(props: { page: SessionPage; testID: string }) {
+  let lastOpen = 0;
+  const openOutside = (url: string | null) => {
+    const now = Date.now();
+    if (!url || now - lastOpen < 1000) return;
+    lastOpen = now;
+    void openUrl(url).catch(() => {});
+  };
   return (
     // A page without a background of its own is drawn on white, as a browser draws it, in the dark appearance too.
-    <View class="flex-1 bg-white">
-      <WebView testID="file-html" class="flex-1" html={props.text.content} baseUrl={viewerBaseUrl} incognito accessibilityLabel="HTML preview" />
-      <If when={note}>{(note) => <View class="px-4 py-2"><Text testID="file-truncated" class="text-caption text-muted-foreground">{note()}</Text></View>}</If>
-    </View>
+    <WebView
+      testID={props.testID}
+      class="flex-1 bg-white"
+      src={props.page.url}
+      incognito
+      injectedJavaScript={SESSION_PAGE_LINKS_SCRIPT}
+      onMessage={(e) => openOutside(sessionPageLinkToOpen(e.data))}
+      // A navigation the web view refuses (a link out of the page the script did not catch) goes to the browser.
+      onError={(e) => {
+        const refused = (e as { code?: string; url?: unknown }).code === "ERR_ACCESS_DENIED" ? (e as { url?: unknown }).url : undefined;
+        if (typeof refused === "string") openOutside(sessionPageLinkToOpen(JSON.stringify({ open: refused })));
+      }}
+      accessibilityLabel="HTML page"
+    />
   );
 }
 
@@ -376,6 +442,9 @@ function SvgBody(props: { source: SessionFileBinarySource; onFail: (message: str
 
 /** `mewla.pdf` is the phones' (PdfRenderer, PDFKit); a browser has no such view and the daemon's page frames nothing: there it opens in a tab. */
 const PDF_PAGES = platform.os !== "web";
+
+/** A page opens in the system browser where one reaches the computer's URL: the desktops and the web, not a phone's in-app tunnel. */
+const OPEN_IN_BROWSER = platform.os !== "android" && platform.os !== "ios";
 
 /** The PDF's pages; the host refuses a file whose size is not the one inspected (it changed). */
 function PdfBody(props: { source: SessionFileBinarySource; expectedBytes: number; onFail: (message: string) => void }) {

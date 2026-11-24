@@ -592,6 +592,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)
+	mux.HandleFunc("/session-page-grant", s.handleSessionPageGrant)
+	mux.HandleFunc(sessionPagePrefix, s.handleSessionPage)
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.Handle("/", webUI)
 	return withCORS(mux)
