@@ -153,6 +153,11 @@ cleanup() {
         kill "$host_pid" 2>/dev/null || true
       done
   fi
+  # An agent's helper the host does not list (Codex's app-server) still runs
+  # from the scratch folder: end it by pid too.
+  for pid in $(pgrep -f -- "$S/" || true); do
+    [ "$pid" != "$$" ] && kill "$pid" 2>/dev/null || true
+  done
   [ -f "$S/pair.log" ] && sed -E "s/(p%3D|p=)[A-Za-z0-9_%-]+/\1<redacted>/g" "$S/pair.log" | tail -5 >&2
   case "$S" in /tmp/mpg.??????) rm -rf -- "$S" ;; esac
 }
