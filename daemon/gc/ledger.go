@@ -30,6 +30,7 @@ const (
 	ActionEvicted      = "evicted"
 	ActionSessionEnded = "session_ended"
 	ActionNoteArchived = "note_archived"
+	ActionReviewed     = "reviewed"
 )
 
 // Event is one thing the collector did.
@@ -110,6 +111,19 @@ var ledgerSteps = []string{
 		unit  TEXT NOT NULL,
 		bytes INTEGER NOT NULL,
 		PRIMARY KEY (day, unit)
+	) WITHOUT ROWID;`,
+	// An unmarked t/ item that cannot be proven unread (see review.go).
+	`CREATE TABLE review (
+		path       TEXT PRIMARY KEY,
+		bytes      INTEGER NOT NULL DEFAULT 0,
+		last_write TEXT NOT NULL DEFAULT '',
+		creator    TEXT NOT NULL DEFAULT '',
+		looks      TEXT NOT NULL DEFAULT '',
+		pre_rule   INTEGER NOT NULL DEFAULT 0,
+		first_seen TEXT NOT NULL,
+		asked_at   TEXT NOT NULL DEFAULT '',
+		answer     TEXT NOT NULL DEFAULT '',
+		answered_at TEXT NOT NULL DEFAULT ''
 	) WITHOUT ROWID;`,
 }
 
@@ -276,7 +290,7 @@ func RecordSizes(stateRoot string, now time.Time) (bool, error) {
 	measured := false
 	err := withLedger(stateRoot, func(db *sql.DB) error {
 		var n int
-		if err := db.QueryRow(`SELECT count(*) FROM size WHERE day = ?`, day).Scan(&n); err != nil || n > 0 {
+		if err := db.QueryRow(`SELECT count(*) FROM size WHERE day = ? AND kind != ?`, day, SizeReview).Scan(&n); err != nil || n > 0 {
 			return err
 		}
 		samples, owners := measureKinds(stateRoot, day)
@@ -352,6 +366,7 @@ const (
 	SizeTrash    = "trash"
 	SizeKept     = "kept"
 	SizeCache    = "cache"
+	SizeReview   = "review" // unmarked t/ items waiting for Brain's answer (review.go)
 )
 
 func measureKinds(stateRoot, day string) ([]SizeSample, []OwnerSize) {
