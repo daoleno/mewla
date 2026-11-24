@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -691,7 +692,8 @@ func projectAcceptedAdmission(database *presentationDatabase, st *lifecycle.Stat
 		if turn.SessionID != admission.SessionID || turn.TurnID != resultTurnID {
 			continue
 		}
-		turn.ActivityID, turn.Admission, turn.UpdatedAt = resolution.ActivityID, resolution.Admission, now
+		before := *turn
+		turn.ActivityID, turn.Admission = resolution.ActivityID, resolution.Admission
 		turn.QueuedBehindActivityID = admission.BaselineActivityID
 		if admission.ResultTurnToken == admission.TurnToken {
 			turn.WorkID = string(st.ID)
@@ -708,6 +710,13 @@ func projectAcceptedAdmission(database *presentationDatabase, st *lifecycle.Stat
 		lease := leaseFrom.Add(turnLeaseGrace).UTC()
 		if lease.After(turn.LeaseDeadline) {
 			turn.LeaseDeadline = lease
+		}
+		// updated_at is when the turn last changed. Re-projecting the same
+		// admission, as every daemon start does for every accepted turn, leaves
+		// the row as it was: stamping it rewrote every turn row in one
+		// transaction on each start.
+		if !reflect.DeepEqual(before, *turn) {
+			turn.UpdatedAt = now
 		}
 		return nil
 	}
