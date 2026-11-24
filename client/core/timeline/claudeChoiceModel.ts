@@ -128,6 +128,31 @@ export function emptyChoiceDraft(choice: ConversationChoice): ChoiceDraftAnswer[
   return choice.questions.map(() => ({ selected: [], other: "", otherActive: false }));
 }
 
+/** What a card's answers are worth keeping as: "" when nothing is picked or typed (owner 11-24: a reload lost them). */
+export function keptChoiceDraft(draft: readonly ChoiceDraftAnswer[]): string {
+  return draft.some((answer) => answer.selected.length > 0 || answer.other !== "") ? JSON.stringify(draft) : "";
+}
+
+/** Answers kept for this question, when they still fit it (as many questions, options that exist); else null. */
+export function restoreChoiceDraft(choice: ConversationChoice, kept: string): ChoiceDraftAnswer[] | null {
+  if (!kept) return null;
+  try {
+    const parsed = JSON.parse(kept) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== choice.questions.length) return null;
+    const draft = parsed.map((answer, i): ChoiceDraftAnswer | null => {
+      const options = choice.questions[i]!.options.length;
+      if (!answer || typeof answer !== "object") return null;
+      const { selected, other, otherActive } = answer as Record<string, unknown>;
+      if (!Array.isArray(selected) || !selected.every((o) => Number.isInteger(o) && o >= 0 && o < options)) return null;
+      if (typeof other !== "string" || other.length > MAX_OTHER_LENGTH) return null;
+      return { selected: selected as number[], other, otherActive: Boolean(otherActive) || other !== "" };
+    });
+    return draft.every(Boolean) ? (draft as ChoiceDraftAnswer[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function toggleChoiceOption(
   choice: ConversationChoice,
   draft: ChoiceDraftAnswer[],

@@ -39,6 +39,9 @@ describe("a typed answer is never lost (owner 2026-11-24, Windows user's video)"
     expect(app.texts()).not.toContain("Not answered");
     expect(app.texts()).toContain("The question closed. Your answer is in the message box.");
     expect(app.texts()).not.toContain("This request has already passed.");
+    // Sealed: nothing of the card is kept for a later start; the answer lives in the message box.
+    await app.wait(600);
+    expect(Object.keys(app.storage()).filter((key) => key.includes("choice:"))).toEqual([]);
   }, 25_000);
 
   test("a refusal keeps the card and what was typed, with the daemon's words", async () => {
@@ -48,5 +51,10 @@ describe("a typed answer is never lost (owner 2026-11-24, Windows user's video)"
     expect(app.shows("id:request-card")).toBe(true);
     expect(app.texts()).toContain("把当前策略画成echarts框架的html给我看看");
     expect(app.enabled("id:choice-submit")).toBe(true);
-  }, 25_000);
+    // A reload keeps what was typed (the user's instinct in the video): the same card opens with the answers in it.
+    await app.wait(600);
+    const again = await open(APP, { platform: "android", storage: app.storage(), host: phoneHost({ brain, conversations: { "brain-host": [asked] } }) });
+    await again.waitFor("id:request-card", { timeout: 10_000 });
+    await again.waitUntil(() => again.value("id:choice-other") === "把当前策略画成echarts框架的html给我看看", { timeout: 3_000 });
+  }, 30_000);
 });
