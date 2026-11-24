@@ -163,8 +163,16 @@ goes to the trash when its keep ends. Hourly, on Linux, an unmarked item of
 the `t/` root that was not there when this rule came, that no process uses
 (executable, working directory or open file) and in which nothing was changed
 or read for 48 hours goes to the trash too (a read shows in a file's access
-time; on a file system mounted `noatime` reads leave no trace, so an item
-holding any file stays and the daemon log names it). A path a keep names
+time). On a file system mounted `noatime` reads leave no trace, so an item
+holding any file cannot be proven unread and is taken by no rule: it goes to
+review instead, whether it is new or was there before the rule. Brain is asked
+about the new ones in one Work, "Review what t/ holds" (the biggest first, with
+who made each and what it looks like), when something is new to review and a
+day has passed since the last asking; the whole list is a file under the
+worklog's `t-review/`. Brain answers with `mewla gc keep` (30 days at most,
+then the trash) or `mewla gc release` (the trash now); nothing is taken without
+an answer, and `mewla gc why` says an item is in review or asked about. An item
+that changes or is used leaves review. A path a keep names
 there stays until the keep ends, then goes to the trash. An item restored to
 the `t/` root comes back as an ordinary unmarked item: its Session's marker is
 dropped and its 48 hours start at the restore. `gc/cache` (`$MEWLA_CACHE_DIR`) over 64 GiB
@@ -431,7 +439,7 @@ carries `holds`. The daemon reads it from the ledger and the trash and keep reco
 for 30 seconds. It holds:
 
 - `kinds`: one entry each for Session scratch, unclaimed scratch, the trash, kept
-  paths and the shared cache. Each gives count, bytes, the oldest item, and
+  paths and the shared cache, and "To review" while items wait for Brain's answer. Each gives count, bytes, the oldest item, and
   `growth_7d` when the day 7 days earlier was measured. Sizes are measured once a
   day.
 - `owners`: the five Sessions holding the most bytes (scratch, kept paths and

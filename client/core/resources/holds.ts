@@ -91,6 +91,7 @@ export function normalizeHolds(value: unknown): ResourceHolds | undefined {
 const KIND_LABEL: Record<string, string> = {
   scratch: "Session scratch",
   unmarked: "Unclaimed scratch",
+  review: "To review",
   trash: "Trash",
   kept: "Kept",
   cache: "Shared cache",
