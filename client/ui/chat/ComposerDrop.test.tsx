@@ -78,6 +78,16 @@ describe("pasting files into the composer (Mewla for Mac)", () => {
     await app.waitUntil(() => app.value("id:composer") === "");
   });
 
+  test("a file copied in Finder and deleted before the paste is a chip that says so, its name not in the field", async () => {
+    // Finder copies a file reference; once the file is gone the Mac cannot turn it into a path or read it.
+    const app = await open(COMPOSER, { ...computer(), platform: "macos" });
+    await app.type("id:composer", "look at ");
+    await app.paste("id:composer", { text: "gone.png", uris: ["file:///.file/id=6571367.8601"] });
+    await app.waitFor("text:Mewla can't read this file.");
+    await app.waitUntil(() => shows(app, "File"));
+    await app.waitUntil(() => app.value("id:composer") === "look at ");
+  });
+
   test("a spreadsheet cell stays text: the picture of it is not attached", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.paste("id:composer", { text: "Q3 revenue 4,210", html: "<table><tr><td>Q3 revenue 4,210</td></tr></table>", files: ["assets/pets/p13/working.webp"] });

@@ -1,5 +1,6 @@
 // Puts what a person copies on the general pasteboard, as the app that copies it does (macos-image-input.yml):
 //   swift pasteboard.swift file <path>             a file copied in Finder: its file URL and its name as text
+//   swift pasteboard.swift reference <path>        the same as Finder writes it: a file reference URL (file:///.file/id=…)
 //   swift pasteboard.swift image <png>             "Copy Image" in Preview: PNG and TIFF data
 //   swift pasteboard.swift rich <text> <png>       a spreadsheet cell or a web page selection: text, HTML and a picture of it
 //   swift pasteboard.swift types                   what the pasteboard holds now, one type a line
@@ -16,6 +17,15 @@ case "file":
   let url = URL(fileURLWithPath: args[2])
   let item = NSPasteboardItem()
   item.setString(url.absoluteString, forType: .fileURL)
+  item.setString(url.lastPathComponent, forType: .string)
+  board.writeObjects([item])
+case "reference":
+  board.clearContents()
+  let url = URL(fileURLWithPath: args[2])
+  // CoreFoundation's: Swift's URL turns a reference back into a path.
+  guard let reference = CFURLCreateFileReferenceURL(nil, url as CFURL, nil)?.takeRetainedValue() else { exit(1) }
+  let item = NSPasteboardItem()
+  item.setString(CFURLGetString(reference) as String, forType: .fileURL)
   item.setString(url.lastPathComponent, forType: .string)
   board.writeObjects([item])
 case "image":
