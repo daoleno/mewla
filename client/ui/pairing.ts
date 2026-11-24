@@ -26,7 +26,7 @@ export const justPaired = signal<StoredServer | null>(null);
 export const linkPairing = signal<{ problem: PairingProblem | null } | null>(null);
 /** Counts finished pairings, on every platform: a pairing page closes when it moves. */
 export const pairings = signal(0);
-const device = () => (platform.os === "web" ? "browser" : "phone");
+const device = () => (platform.os === "web" ? "browser" : platform.os === "macos" ? "mac" : "phone");
 /** What the confirmation calls this device. */
 const deviceWord = () => (platform.os === "web" ? "browser" : platform.os === "macos" ? "Mac" : "phone");
 

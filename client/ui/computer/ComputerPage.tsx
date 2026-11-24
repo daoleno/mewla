@@ -17,15 +17,15 @@ import { followFriends, friendsEnabled, unread } from "../more/friends/state";
 import { flowState } from "../more/extensions/plugins";
 import type { MorePage, PageNav } from "../more/routes";
 import type { Route } from "../shell/routes";
-import { currentPathMark, forgetConnectionIssue, probeComputers, removedNotice, statusWord } from "../more/settings/computers";
+import { checks, currentPathMark, forgetConnectionIssue, probeComputers, removedNotice, statusWord } from "../more/settings/computers";
 import { otherState } from "./computers";
 import { pet } from "../pets/pets";
 import { tray } from "../tray/state";
 import { connection, current, resumeConnection, servers, shownConnection, switchTo, transportPath } from "../session";
 import { goHome, nav } from "../shell/nav";
 import { wide } from "../shell/layout";
-import { isMacApp, isThisMac, joinLocalDaemon, localJoined, localProblem, thisMacChosen, thisMacName } from "../mac/local";
-import { thisMacRowWords } from "../../core/mac/thisMac";
+import { isMacApp, isThisMac, joinLocalDaemon, localProblem, thisMacChosen, thisMacName } from "../mac/local";
+import { thisMacSays } from "../../core/mac/thisMac";
 import { openMacSettings } from "../mac/MacSettings";
 import { openPairPhone } from "../mac/PairPhone";
 import { markComputerUpdateSeen } from "../update/hint";
@@ -288,14 +288,14 @@ export function ComputerPage(props: {
             testID="computer-this-mac"
             lead={tile("desktop")}
             title={thisMacName()}
-            subtitle={thisMacRowWords({ problem: localProblem(), joined: false, word: "" })}
+            subtitle={thisMacSays({ problem: localProblem(), state: { entry: "none" }, words: "" })}
             onPress={() => {
               thisMacChosen.set(true);
               void joinLocalDaemon();
             }}
           /></If>
         {others().map((server) => {
-          const state = () => (isThisMac(server) ? { ...otherState(server), word: thisMacRowWords({ problem: localProblem(), joined: localJoined(), word: otherState(server).word }) } : otherState(server));
+          const state = () => (isThisMac(server) ? { ...otherState(server), word: thisMacSays({ problem: localProblem(), state: { entry: "other", check: checks()[server.id]?.state }, words: otherState(server).word }) } : otherState(server));
           return (
             <View class={state().dim ? "opacity-[0.55]" : ""}>
               <Row

@@ -40,6 +40,8 @@ export type DaemonPairing = {
   wifi_link?: string;
   wifi_qr?: { size: number; rows: string[] };
   local_link?: string;
+  /** Why launchd will not start this Mac's daemon, when the app found it cannot (client/macos agent.rs). */
+  launch_problem?: string;
 };
 
 /** A fresh one-time pairing of this computer's daemon (15 minutes): the phone QR and the app's own link. */
@@ -60,9 +62,6 @@ const localDaemonKey = signal("");
 
 /** This Mac's daemon's own (loopback) http origin, once it answered this launch. */
 const localOrigin = signal("");
-
-/** Whether this launch's join has given this Mac its entry. */
-export const localJoined = signal(false);
 
 /**
  * The person chose This Mac in the computers list before it has an entry: the window shows it starting, or why not,
@@ -114,8 +113,10 @@ async function join(): Promise<void> {
     const known = await platform().storage.getItem(LOCAL_KEY).catch(() => null);
     if (known && !untracked(localDaemonKey)) localDaemonKey.set(known);
   }
+  let refused = "";
   try {
     const pairing = await daemonPairing();
+    refused = pairing.launch_problem ?? "";
     localDaemonKey.set(pairing.daemon_public_key);
     void platform().storage.setItem(LOCAL_KEY, pairing.daemon_public_key).catch(() => {});
     const payload = pairing.local_link ? readPairingLink(pairing.local_link) : null;
@@ -129,11 +130,14 @@ async function join(): Promise<void> {
     }
     if (plan.drop.length || plan.rewrite) servers.set(await getServers());
     localOrigin.set(payload ? httpOrigin(payload.url) : own ? httpOrigin(own.url) : "");
-    localProblem.set("");
+    // Its daemon's job refused by macOS: said until the join finds it can start (`mewla pair` answers without it).
+    localProblem.set(refused);
     if (own) {
-      localJoined.set(true);
       thisMacChosen.set(false);
-      if (untracked(current)?.id !== own.id) switchTo(own);
+      // Made current, or connected again where it now is: an entry moved to loopback in place keeps its id, and the
+      // connection that was current kept dialing the old address (the 0.4.27 gate: Offline after the update, Try
+      // again dialing the hosted name again, Online only on the next launch).
+      if (untracked(current)?.id !== own.id || plan.rewrite) switchTo(own);
       // A daemon that revoked this app (the entry removed while it answered) is paired again, in place.
       const entry = own;
       if (payload && (await checkComputer(entry)).state === "unpaired") {
@@ -146,11 +150,11 @@ async function join(): Promise<void> {
     if (!payload) throw new Error("This Mac's Mewla gave no address.");
     const params = host.params as { computerName?: string };
     await addPairedServer(await pairWith({ ...payload, name: params.computerName || payload.name }));
-    localJoined.set(true);
     thisMacChosen.set(false);
   } catch (error) {
-    // Nothing answered at its own loopback address: its Mewla is not running (never the phone's adb-reverse advice).
-    localProblem.set(error instanceof PairingUnreachableError ? NOT_RUNNING : error instanceof Error ? error.message : String(error));
+    // Nothing answered at its own loopback address: its Mewla is not running (never the phone's adb-reverse advice),
+    // or macOS would not start it, which says why.
+    localProblem.set(refused || (error instanceof PairingUnreachableError ? NOT_RUNNING : error instanceof Error ? error.message : String(error)));
     retry = setTimeout(() => void joinLocalDaemon(), 20_000);
   }
 }
