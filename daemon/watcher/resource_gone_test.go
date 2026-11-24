@@ -503,4 +503,19 @@ func TestReconcileWritesTheLedgerOncePerSessionAndAgainAfterARestart(t *testing.
 	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-polled" {
 		t.Fatalf("after a restart: %+v found=%v err=%v", s, found, err)
 	}
+	// Release forgets the binding, so a window still listed afterwards (its
+	// Session is not gone) binds it again and the ledger reopens the row.
+	previous := stopSessionSlice
+	stopSessionSlice = func(string) ([]string, error) { return nil, nil }
+	t.Cleanup(func() { stopSessionSlice = previous })
+	if err := m.Release("mh-polled", unit); err != nil {
+		t.Fatal(err)
+	}
+	if s, _, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || s.EndedAt.IsZero() {
+		t.Fatalf("after Release: %+v err=%v", s, err)
+	}
+	m.Reconcile(windows)
+	if s, _, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !s.EndedAt.IsZero() || s.SessionID != "mh-polled" {
+		t.Fatalf("a window listed after its Release: %+v err=%v", s, err)
+	}
 }
