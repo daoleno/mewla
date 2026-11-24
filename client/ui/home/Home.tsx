@@ -445,7 +445,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
                 {/* A model provider refusing requests holds work; one line says so and clears by itself. */}
                 <ProviderOutageRow />
                 <ChatUpdateRow />
-                <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+                <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} draft={brainDraft}
                   onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                   openLabel="Open" onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
               </View>
