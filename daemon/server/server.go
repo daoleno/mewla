@@ -751,7 +751,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			out := s.outboxStats(conn)
-			if cause := link.endCause(err, out); cause != "peer-closed" || !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) || out.sent >= wsQuietCloseLogBytes {
+			if cause := link.endCause(err, out); cause != "peer-closed" || out.peerWrite != "" || !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) || out.sent >= wsQuietCloseLogBytes {
 				// Without this line a phone that lost its connection leaves no
 				// trace here: connect and disconnect are verbose-only. The
 				// cause says which end hung up. Only a close frame that says

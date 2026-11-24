@@ -475,7 +475,8 @@ To keep something on purpose:
 Do not make directories next to TMPDIR in `~/.mewla/t`. An unmarked item
 there goes to the trash once nothing uses it and nothing in it has been
 changed or read for 48 hours. On a file system mounted `noatime`, reads leave
-no trace, so an item there holding any file stays.
+no trace, so an item there holding any file is never taken on a guess: Brain is
+asked once to keep or release it (`mewla gc keep`, `mewla gc release`).
 
 A helper that must outlast its Session, such as a script a Trigger runs or a
 tool Brain runs again, does not belong in `~/.mewla/t`. Brain keeps its own in
