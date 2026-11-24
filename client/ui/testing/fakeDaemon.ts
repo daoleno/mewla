@@ -70,6 +70,13 @@ export class FakeDaemon {
     for (const socket of [...this.sockets]) socket.close(1006, "gone");
   }
 
+  /** A connection refused before it opens: nothing listens at that address (FakeDaemonApp's `refuseSockets`). */
+  refused(): SocketLike {
+    const socket = new FakeSocket(this);
+    setTimeout(() => socket.close(1006, "Connection refused"), 3);
+    return socket;
+  }
+
   open(): SocketLike {
     const socket = new FakeSocket(this);
     if (this.down) {

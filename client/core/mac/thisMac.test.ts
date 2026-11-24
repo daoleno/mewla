@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
-import { httpOrigin, ownEntryPlan, phonesAndBrowsers, seenWords, thisMacRowWords, thisMacWords } from "./thisMac";
+import { httpOrigin, ownEntryPlan, phonesAndBrowsers, seenWords, NOT_RUNNING, thisMacSays } from "./thisMac";
 
 const now = new Date(2026, 10, 20, 14, 5);
 const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).toISOString();
@@ -71,33 +71,32 @@ describe("This Mac's own entry", () => {
   });
 });
 
-describe("thisMacWords", () => {
-  test("the join's own problem first", () => {
-    expect(thisMacWords({ kind: "offline", diagnosis: "Server unreachable", problem: "The port 9876 is taken.", words: "Offline · Server unreachable" })).toBe("The port 9876 is taken.");
+describe("thisMacSays: one rule for the pane, the row and the starting window", () => {
+  const REFUSED = "macOS is not letting Mewla start";
+  test("the join's own reason first, in every state", () => {
+    expect(thisMacSays({ problem: REFUSED, state: { entry: "none" }, words: "" })).toBe(REFUSED);
+    expect(thisMacSays({ problem: REFUSED, state: { entry: "current", kind: "offline", diagnosis: "Server unreachable" }, words: "Offline · Server unreachable" })).toBe(REFUSED);
+    expect(thisMacSays({ problem: REFUSED, state: { entry: "other", check: "offline" }, words: "Offline · last seen 00:34" })).toBe(REFUSED);
   });
-  test("nothing answers at loopback: Mewla is not running, not Offline", () => {
-    expect(thisMacWords({ kind: "offline", diagnosis: "Server unreachable", problem: "", words: "Offline · Server unreachable" })).toBe("Mewla is not running");
-    expect(thisMacWords({ kind: "offline", diagnosis: "Daemon refused connection", problem: "", words: "Offline · Daemon refused connection" })).toBe("Mewla is not running");
-    expect(thisMacWords({ kind: "offline", problem: "", words: "Offline" })).toBe("Mewla is not running");
+  test("its daemon not answering reads the same in the three states", () => {
+    expect(thisMacSays({ problem: NOT_RUNNING, state: { entry: "none" }, words: "" })).toBe(NOT_RUNNING);
+    expect(thisMacSays({ problem: "", state: { entry: "current", kind: "offline", diagnosis: "Server unreachable" }, words: "Offline · Server unreachable" })).toBe(NOT_RUNNING);
+    expect(thisMacSays({ problem: "", state: { entry: "current", kind: "offline", diagnosis: "Daemon refused connection" }, words: "Offline" })).toBe(NOT_RUNNING);
+    expect(thisMacSays({ problem: "", state: { entry: "current", kind: "offline" }, words: "Offline" })).toBe(NOT_RUNNING);
+    // The 0.4.27 gate (h1): its entry beside the current computer, its daemon stopped: not "Offline · last seen".
+    expect(thisMacSays({ problem: "", state: { entry: "other", check: "offline" }, words: "Offline · last seen 00:34" })).toBe(NOT_RUNNING);
+    expect(thisMacSays({ problem: "", state: { entry: "other" }, words: "Offline · last seen 00:34" })).toBe(NOT_RUNNING);
+    expect(thisMacSays({ problem: "", state: { entry: "other" }, words: "Offline" })).toBe(NOT_RUNNING);
   });
-  test("another cause keeps its words; online and connecting stay", () => {
-    expect(thisMacWords({ kind: "offline", diagnosis: "Daemon rejected handshake", problem: "", words: "Offline · Daemon rejected handshake" })).toBe("Offline · Daemon rejected handshake");
-    expect(thisMacWords({ kind: "online", problem: "", words: "Online" })).toBe("Online");
-    expect(thisMacWords({ kind: "connecting", problem: "", words: "Connecting…" })).toBe("Connecting…");
+  test("its own check outranks the current computer's view of it", () => {
+    expect(thisMacSays({ problem: "", state: { entry: "other", check: "online" }, words: "Offline · last seen 00:34" })).toBe("Online");
+    expect(thisMacSays({ problem: "", state: { entry: "other", check: "online" }, words: "Online · 1 needs you" })).toBe("Online · 1 needs you");
   });
-});
-
-describe("thisMacRowWords", () => {
-  test("the join's error first, also before any entry", () => {
-    expect(thisMacRowWords({ problem: "Mewla is not running", joined: false, word: "" })).toBe("Mewla is not running");
-    expect(thisMacRowWords({ problem: "mewla pair: state is locked", joined: true, word: "Online" })).toBe("mewla pair: state is locked");
-  });
-  test("no entry yet and no error: starting", () => {
-    expect(thisMacRowWords({ problem: "", joined: false, word: "" })).toBe("Starting…");
-  });
-  test("joined: the probe's word, offline said as not running", () => {
-    expect(thisMacRowWords({ problem: "", joined: true, word: "Offline" })).toBe("Mewla is not running");
-    expect(thisMacRowWords({ problem: "", joined: true, word: "Online" })).toBe("Online");
-    expect(thisMacRowWords({ problem: "", joined: true, word: "" })).toBe("");
+  test("no entry and no reason: starting; other causes and live states keep their words", () => {
+    expect(thisMacSays({ problem: "", state: { entry: "none" }, words: "" })).toBe("Starting…");
+    expect(thisMacSays({ problem: "", state: { entry: "current", kind: "offline", diagnosis: "Daemon rejected handshake" }, words: "Offline · Daemon rejected handshake" })).toBe("Offline · Daemon rejected handshake");
+    expect(thisMacSays({ problem: "", state: { entry: "current", kind: "online" }, words: "Online" })).toBe("Online");
+    expect(thisMacSays({ problem: "", state: { entry: "current", kind: "connecting" }, words: "Connecting…" })).toBe("Connecting…");
+    expect(thisMacSays({ problem: "", state: { entry: "other", check: "unpaired" }, words: "Pair again" })).toBe("Pair again");
   });
 });

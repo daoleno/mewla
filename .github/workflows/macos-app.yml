@@ -381,9 +381,14 @@ jobs:
           - { old: v0.4.22, mode: --rollback }
           - { old: v0.4.22, mode: --reopen }
           - { old: v0.4.22, mode: --external }
+          # The owner's Mac (11-24): the CLI taken over by a public app before 0.4.26, whose installed job ran the bare
+          # helper (signed com.daoleno.mewla.daemon), then this app over it. launchd kept the helper's launch
+          # constraint and refused every spawn (EX_CONFIG) until the job was registered anew (agent.rs).
+          - { old: v0.4.22, mode: --after-older-app, via: v0.4.25 }
     env:
       MEWLA_VERSION: ${{ matrix.old }}
       TAKEOVER_MODE: ${{ matrix.mode }}
+      VIA_APP: ${{ matrix.via }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -429,6 +434,29 @@ jobs:
           label=com.daoleno.mewla.daemon
           if [[ "$TAKEOVER_MODE" == --external ]]; then label=org.example.mewla; fi
           launchctl print "gui/$(id -u)/$label" | grep -E "program|state"
+      - name: An older public app takes the CLI over first
+        if: matrix.via != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$VIA_APP" --repo "$GITHUB_REPOSITORY" --pattern Mewla-macos-arm64.dmg --dir "$RUNNER_TEMP/via"
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/via-image" "$RUNNER_TEMP/via/Mewla-macos-arm64.dmg"
+          ditto "$RUNNER_TEMP/via-image/Mewla.app" /Applications/Mewla.app
+          hdiutil detach "$RUNNER_TEMP/via-image"
+          open -g /Applications/Mewla.app
+          job="gui/$(id -u)/com.daoleno.mewla.installed-daemon"
+          for i in $(seq 1 180); do
+            if [[ -e "$HOME/.mewla/mac-app-takeover.complete" ]] && launchctl print "$job" 2>/dev/null | grep -q $'^\tstate = running'; then break; fi
+            sleep 1
+          done
+          test -e "$HOME/.mewla/mac-app-takeover.complete"
+          launchctl print "$job" | grep -E $'^\t(program|state) =|signing-identifier'
+          curl -fsS http://127.0.0.1:9876/health | jq -r '"Daemon after the " + env.VIA_APP + " takeover: " + .version'
+          # The person quits it and puts this build in its place; its daemon runs on meanwhile (KeepAlive).
+          osascript -e 'quit app "Mewla"' || true
+          for i in $(seq 1 30); do pgrep -f "/Applications/Mewla.app/Contents/MacOS/Mewla$" >/dev/null || break; sleep 1; done
+          rm -rf /Applications/Mewla.app
       - name: Install and open Mewla
         run: |
           set -euo pipefail
@@ -460,6 +488,25 @@ jobs:
             codesign -dv --verbose=2 /Applications/Mewla.app/Contents/Helpers/mewla 2>&1 | head -12 || true
             tail -30 "$HOME/.mewla/logs/launchd.log" 2>/dev/null || true
           fi
+      - name: This build heals the older app's job, with no step by the person
+        if: matrix.mode == '--after-older-app'
+        run: |
+          set -euo pipefail
+          open -g /Applications/Mewla.app
+          job="gui/$(id -u)/com.daoleno.mewla.installed-daemon"
+          version=$(/Applications/Mewla.app/Contents/Helpers/mewla version --json | jq -r .version)
+          for i in $(seq 1 180); do
+            listing=$(launchctl print "$job" 2>/dev/null || true)
+            if grep -q $'^\tstate = running' <<<"$listing" && grep -q $'^\tprogram = /Applications/Mewla.app/Contents/MacOS/Mewla$' <<<"$listing" \
+              && [[ "$(curl -fsS --max-time 1 http://127.0.0.1:9876/health 2>/dev/null | jq -r .version 2>/dev/null)" == "$version" ]]; then
+              echo "healed after ${i}s"; break
+            fi
+            sleep 1
+          done
+          launchctl print "$job" | grep -E $'^\t(program|state|runs|last exit code) =|signing-identifier'
+          grep -q $'^\tstate = running' <<<"$(launchctl print "$job")"
+          [[ "$(curl -fsS http://127.0.0.1:9876/health | jq -r .version)" == "$version" ]]
+          find "$HOME/Library" -path '*com.daoleno.mewla*' -name 'app.log' -exec grep -h "takeover:" {} + | tail -20
       - name: One daemon, the app's, with the same identity and device
         if: matrix.mode == '--across-takeover'
         run: |
