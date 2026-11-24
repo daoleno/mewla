@@ -22,6 +22,10 @@ rustls-webpki = { version = "0.103.17", default-features = false, features = ["r
 ring = "0.17"
 libc = "0.2"
 
+# The terminal view's C++ half (build.rs): the packer and glyphs the phones share, over libghostty-vt.
+[build-dependencies]
+cc = "1"
+
 # Pinned to the NSH the bundle is built with (client/scripts/fetch-nsh.sh, client/README.md): the bytecode and the
 # runtime must be the same version. The features are those of NSH's release runner (nsh-macos-app): the app uses
 # zlib, crypto, WebSocket, the terminal, SVG and the rest.
@@ -34,11 +38,15 @@ nsh-core = "=0.6.1"
 nsh-base = "=0.6.1"
 dispatch2 = "0.3.1"
 core-foundation = "0.10.1"
-objc2-foundation = { version = "0.3.2", features = ["NSString", "NSError", "NSArray", "NSBundle", "NSDictionary", "NSValue", "NSURL", "NSGeometry", "NSObject", "NSEnumerator"] }
+objc2-foundation = { version = "0.3.2", features = ["NSString", "NSError", "NSArray", "NSBundle", "NSDictionary", "NSValue", "NSURL", "NSGeometry", "NSObject", "NSEnumerator", "NSAttributedString", "NSRange"] }
 objc2-service-management = { version = "0.3.2", features = ["SMAppService", "objc2-foundation"] }
 # The permission panel beside System Settings (permissions.rs); already in the lock through NSH.
 objc2 = "0.6.5"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "libc", "objc2-core-foundation", "NSFontDescriptor", "NSApplication", "NSResponder", "NSView", "NSControl", "NSImageView", "NSImage", "NSPanel", "NSWindow", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSFont", "NSRunningApplication", "NSScreen", "NSText", "NSTextField", "NSWorkspace", "NSPasteboard", "NSGraphics", "NSAccessibility", "NSAccessibilityProtocols"] }
+# The terminal view (terminal/): CoreText runs on CoreGraphics; already in the lock through NSH.
+objc2-core-foundation = { version = "0.3.2", features = ["CFAttributedString", "CFCGTypes", "CFData", "CFString"] }
+objc2-core-graphics = { version = "0.3.2", features = ["CGContext", "CGBitmapContext", "CGColorSpace", "CGImage", "CGPath"] }
+objc2-core-text = { version = "0.3.2", features = ["CTLine", "CTFont", "CTFontDescriptor", "CTFontManager", "CTStringAttributes", "objc2-core-graphics"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "libc", "objc2-core-foundation", "NSFontDescriptor", "NSApplication", "NSResponder", "NSView", "NSControl", "NSImageView", "NSImage", "NSPanel", "NSWindow", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSEvent", "NSFont", "NSRunningApplication", "NSScreen", "NSText", "NSTextField", "NSWorkspace", "NSPasteboard", "NSGraphics", "NSAccessibility", "NSAccessibilityProtocols", "NSGraphicsContext", "NSTextInputClient", "NSTextInputContext", "NSAttributedString", "NSMenu", "NSMenuItem", "NSCursor", "NSTrackingArea", "objc2-core-graphics"] }
 # The release's secrets in the Keychain (secure.rs); already in the lock through NSH's networking.
 security-framework = "3.7.0"
 
