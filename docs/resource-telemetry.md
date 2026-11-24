@@ -421,6 +421,28 @@ makes the daemon's bounded process list explicit; the UI does not claim these
 are every process. Disclosure stays attached to consumer identity across polling
 and sorting. Switching the canonical server still clears the previous snapshot.
 
+### Held by Mewla
+
+A snapshot from a daemon with the collector's ledger carries `holds`. The daemon
+reads it from the ledger and the trash and keep records, and reuses one reading
+for 30 seconds. It holds:
+
+- `kinds`: one entry each for Session scratch, unclaimed scratch, the trash, kept
+  paths and the shared cache. Each gives count, bytes, the oldest item, and
+  `growth_7d` when the day 7 days earlier was measured. Sizes are measured once a
+  day.
+- `owners`: the five Sessions holding the most bytes (scratch, kept paths and
+  their items in the trash), with their Work.
+- `kept`: every keep, with its path, Session, date and reason.
+- `collected_today`: the items moved to the trash or evicted from the cache since
+  local midnight, and their bytes. `restorable` lists those still in the trash.
+
+Below **Using this machine**, the Resources page shows these under **Held by
+Mewla**, **Most held by**, **Kept** and **Collected today**. **Restore** on an item
+collected today sends `{ "type": "gc_restore", "id": "<trash id>" }`, the same as
+`mewla gc restore`. The daemon puts the item back where it was and answers
+`gc_restored`. Snapshots without `holds`, from older daemons, show none of this.
+
 ### Reproducible fixture inspection
 
 `client/core/resources/fixtures/dashboard-v2.json` is synthetic, with all five

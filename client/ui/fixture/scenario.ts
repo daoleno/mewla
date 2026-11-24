@@ -275,8 +275,40 @@ export function scenario(): FakeDaemonState & { assets: Record<string, string> }
         return {
           type: "resource_telemetry", ...dashboard, sampled_at: at(dashboard.sampled_at),
           history: dashboard.history.map((sample) => ({ ...sample, sampled_at: at(sample.sampled_at) })),
+          holds: fixtureHolds(),
         };
       },
+      gc_restore: { type: "gc_restored" },
     } as NonNullable<FakeDaemonState["replies"]>,
+  };
+}
+
+/** What Mewla holds on the fixture computer: invented sizes, times relative to now. */
+function fixtureHolds() {
+  const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+  const GB = 1_000_000_000;
+  return {
+    day: new Date().toISOString().slice(0, 10),
+    kinds: [
+      { kind: "scratch", count: 6, bytes: 18.4 * GB, oldest: ago(70), growth_7d: 2.1 * GB },
+      { kind: "cache", count: 3, bytes: 12.8 * GB, oldest: ago(480), growth_7d: 0.9 * GB },
+      { kind: "trash", count: 4, bytes: 5.6 * GB, oldest: ago(50), growth_7d: 0 },
+      { kind: "unmarked", count: 2, bytes: 3.2 * GB, oldest: ago(220), growth_7d: -1.5 * GB },
+      { kind: "kept", count: 1, bytes: 0.4 * GB, oldest: ago(20) },
+    ],
+    owners: [
+      { unit: "mewla-worker-fixture-docs.scope", session_id: "quickstart", work_id: IDS.docsWork, work_title: "Docs refresh", bytes: 9.2 * GB },
+      { unit: "mewla-worker-fixture-pricing.scope", session_id: "pricing", work_id: IDS.pricingWork, work_title: "Pricing page rework", bytes: 6.1 * GB },
+      { unit: "mewla-worker-fixture-ended.scope", session_id: "search", bytes: 1.4 * GB },
+    ],
+    kept: [{ id: "kept-notes", path: "/home/me/.mewla/t/Hi3zkw/release-notes", session_id: "quickstart", until: ago(-48), why: "The release gate reads it" }],
+    collected_today: {
+      items: 3,
+      bytes: 4.1 * GB,
+      restorable: [
+        { id: "trash-search", kind: "scratch", original: "/home/me/.mewla/t/Q2pLx0", bytes: 3.9 * GB, reason: "Session closed", at: ago(2) },
+        { id: "trash-loose", kind: "unmarked", original: "/home/me/.mewla/t/build-cache-x", bytes: 0.2 * GB, reason: "unmarked in t/; unused, unread and unchanged for 48 h", at: ago(1) },
+      ],
+    },
   };
 }
