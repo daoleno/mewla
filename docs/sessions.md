@@ -162,8 +162,9 @@ the agent directly, and a request that was already answered, or that belongs to
 another conversation, is refused.
 
 A prompt that passed without your answer (answered in the Terminal, replaced
-by another, or timed out) reads **Not answered**. If Mewla cannot send your
-answer, it says so and the card stays, so you can try again.
+by another, or timed out) reads **Not answered**; an answer you had already
+typed reads **Not sent** and waits in the message box. If Mewla cannot send
+your answer, it says so and the card stays, so you can try again.
 
 The line an answered card leaves at the bottom of a chat is only there until
 the chat moves on: once anything newer arrives, the answer is history (the

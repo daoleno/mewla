@@ -185,7 +185,9 @@ Answer in any one of them and all three close at once: the card shrinks to one
 line with your answer, the tray row goes and the count drops. A plain yes/no
 gets **Approve** right on the tray row; anything else takes you to the card.
 Several open requests in a row stack, oldest first. A request that passed
-without an answer reads **Not answered**.
+without an answer reads **Not answered**. If you had typed an answer to a
+question that closed before it arrived, the line reads **Not sent** and your
+answer waits in the message box, ready to send.
 
 A Work is a request only when Brain asks you something on it. Its tray row
 opens Work detail, where the question and its answers come first, Brain's pick
