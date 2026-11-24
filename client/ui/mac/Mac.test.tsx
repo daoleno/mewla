@@ -483,7 +483,10 @@ describe("Mewla for Mac", () => {
   const local = `mewla://pair?u=${encodeURIComponent("ws://127.0.0.1:1/ws")}&n=Desk&d=${"a".repeat(64)}&k=${"b".repeat(64)}&t=${"7".repeat(64)}`;
   const hostedCurrent = {
     ...paired,
-    "mewla:v3:servers": JSON.stringify([{ id: "s1", name: "MacBook Pro", url: "wss://quiet-otter.m.mewla.ai/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) }]),
+    "mewla:v3:servers": JSON.stringify([{
+      id: "s1", name: "MacBook Pro", url: "wss://quiet-otter.m.mewla.ai/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64),
+      transportKind: "link", transportPin: "e".repeat(64), linkRouteId: "f".repeat(32),
+    }]),
     "mewla:v1:current_server_id": "s1",
   };
   const restarting = () => phoneHost({ brain, conversations: { "brain-host": [] } }, { "app.pairing": () => ({ ...pairing, local_link: local }) });
@@ -492,9 +495,14 @@ describe("Mewla for Mac", () => {
     const host = restarting();
     (host.params as Record<string, unknown>).refuseSockets = ["quiet-otter", "127.0.0.1:1/"];
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: hostedCurrent, host });
-    const stored = () => JSON.parse(app.storage()["mewla:v3:servers"] ?? "[]") as Array<{ id: string; url: string }>;
+    const stored = () => JSON.parse(app.storage()["mewla:v3:servers"] ?? "[]") as Array<{ id: string; url: string; transportKind?: string; transportPin?: string; linkRouteId?: string }>;
     await app.waitUntil(() => stored()[0]?.url === "ws://127.0.0.1:1/ws", { timeout: 15_000 });
-    await app.wait(3_000);
+    expect([stored()[0].transportKind, stored()[0].transportPin, stored()[0].linkRouteId]).toEqual(["manual", undefined, undefined]);
+    // Down for a while: the connection backs off at loopback, never a reconnect loop (each join would switch again).
+    const sockets = () => Number(app.storage()["fake:sockets"] ?? "0");
+    const before = sockets();
+    await app.wait(10_000);
+    expect(sockets() - before).toBeLessThan(8);
     expect(app.shows("text:This Mac · Online")).toBe(false);
     // The restart is over: its daemon answers at loopback (the hosted name never does here).
     await app.host.send("app.refuseSockets", ["quiet-otter"]);
@@ -506,11 +514,12 @@ describe("Mewla for Mac", () => {
     const host = restarting();
     (host.params as Record<string, unknown>).refuseSockets = ["quiet-otter", "127.0.0.1:1/"];
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: hostedCurrent, host });
-    // Down long enough that the pane says Offline and the next retry is many seconds away.
+    // Down long enough that the pane says Offline and the next retry is many seconds away (1, 2, 4, 8, 16 s).
     await app.waitFor("id:wait-reconnect", { timeout: 30_000 });
+    await app.wait(14_000);
     await app.host.send("app.refuseSockets", ["quiet-otter"]);
     await app.press("id:wait-reconnect");
-    await app.waitFor("text:This Mac · Online", { timeout: 4_000 });
+    await app.waitFor("text:This Mac · Online", { timeout: 2_000 });
   }, 60_000);
 
   // The 0.4.27 gate (h1): this Mac's entry beside the current computer, its daemon stopped; the row read "Offline · last

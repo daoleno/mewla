@@ -241,7 +241,9 @@ pub const LOGIN_ITEM_OFF: &str = "Mewla is off in Login Items";
 
 /// Why the daemon's job cannot start, when this launch found that it cannot.
 pub fn launch_problem() -> Option<String> {
-    LAUNCH_PROBLEM.lock().ok().map(|p| p.clone()).filter(|p| !p.is_empty())
+    let problem = LAUNCH_PROBLEM.lock().ok().map(|p| p.clone()).filter(|p| !p.is_empty())?;
+    // A job that started since (launchd's next try, the person's switch in Login Items) has no problem.
+    (!installed_running()).then_some(problem)
 }
 
 fn installed_target() -> String {
@@ -279,7 +281,8 @@ fn register_installed(said: &mut Vec<String>) -> Result<(), String> {
                     let out = launchctl(&["bootout", &installed_target()]);
                     said.push(format!("still loaded after unregister; bootout: {out:?}"));
                     if !wait(15, || installed_job().is_none()) {
-                        return Err(fail(REFUSED, said, "the older daemon job did not unload"));
+                        // Registered anyway: smd replaces a job it holds as it registers (the owner's Mac, 23:21).
+                        said.push("still loaded after bootout; registering over it".into());
                     }
                 }
             }
