@@ -5,6 +5,7 @@ import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWor
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
 import { brain, brainChat, connection, current, ready, workers } from "../session";
+import { linkHooks } from "../kit/wait";
 import { nav, openBrainTerminal, openPage, openSession, openWorkDetail } from "../shell/nav";
 import { focusComposer } from "../shell/desktop/keys";
 import { newestUploads } from "../more/files/newestUploads";
@@ -105,6 +106,13 @@ export function startMac(): void {
     if (!joined || connection() !== "waiting" || !isThisMac(current())) return;
     void untracked(joinLocalDaemon);
   });
+  // Try again on This Mac asks its daemon again too (its entry made or moved, the connection rebound), not only the
+  // connection that failed.
+  const reconnect = linkHooks.reconnect;
+  linkHooks.reconnect = () => {
+    reconnect();
+    if (isThisMac(untracked(current))) void joinLocalDaemon();
+  };
   // And once it answers again, the reason goes with it, without waiting for the next ask.
   effect(() => {
     if (connection() === "connected" && isThisMac(current())) untracked(() => localProblem.set(""));

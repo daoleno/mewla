@@ -19,8 +19,13 @@ setScrollTraceSink((entry) => host.post("app.scrollTrace", entry));
 const daemon = new FakeDaemon(((host.params as { daemon?: FakeDaemonState }).daemon ?? {}) as FakeDaemonState);
 // How many connections the app opened, in storage as `fake:sockets` (`app.storage()`).
 let opened = 0;
-installPlatform({ ...platform(), openSocket: () => {
+// `host: { params: { refuseSockets: ["quiet-otter", "127.0.0.1:1/"] } }`: a socket to an address containing one of these
+// is refused (nothing listens there); `app.host.send("app.refuseSockets", [...])` changes the list (a daemon that came up).
+let refuse = (host.params as { refuseSockets?: string[] }).refuseSockets ?? [];
+host.on<string[]>("app.refuseSockets", (list) => void (refuse = list ?? []));
+installPlatform({ ...platform(), openSocket: (url: string) => {
   void Storage.setItem("fake:sockets", String(++opened));
+  if (refuse.some((part) => url.includes(part))) return daemon.refused();
   return daemon.open();
 } });
 // `host: { params: { appUpdate: {...} } }`: this app's update stands so (the event `app.appUpdate` moves it); presses post `app.appUpdatePressed`.
