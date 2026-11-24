@@ -49,24 +49,33 @@ import ApplicationServices
 import AppKit
 let owner = CommandLine.arguments[1]
 guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == owner }) else { print("no app"); exit(0) }
-if !AXIsProcessTrusted() { print("not trusted for Accessibility"); exit(0) }
 func attr(_ e: AXUIElement, _ name: String) -> AnyObject? {
   var v: AnyObject?
   return AXUIElementCopyAttributeValue(e, name as CFString, &v) == .success ? v : nil
 }
+let root = AXUIElementCreateApplication(app.processIdentifier)
+// What a failed read says: trust, and the app top-level elements (did the click open anything?).
+func explain(_ why: String) -> Never {
+  let kids = (attr(root, kAXChildrenAttribute) as? [AXUIElement] ?? []).map { k -> String in
+    "\((attr(k, kAXRoleAttribute) as? String) ?? "?"):\((attr(k, kAXTitleAttribute) as? String) ?? "")"
+  }
+  print("\(why) (trusted \(AXIsProcessTrusted()); top level: \(kids.joined(separator: ", ")))")
+  exit(0)
+}
+if !AXIsProcessTrusted() { explain("not trusted for Accessibility") }
 func menus(_ e: AXUIElement, _ depth: Int) -> [AXUIElement] {
   if (attr(e, kAXRoleAttribute) as? String) == kAXMenuRole { return [e] }
   guard depth > 0, let kids = attr(e, kAXChildrenAttribute) as? [AXUIElement] else { return [] }
   return kids.flatMap { menus($0, depth - 1) }
 }
 // Not the menu bar menus: the one a click opened.
-var open: AXUIElement? = nil
-for m in menus(AXUIElementCreateApplication(app.processIdentifier), 4) {
+var shown: AXUIElement? = nil
+for m in menus(root, 4) {
   var parentRole: String? = nil
   if let p = attr(m, kAXParentAttribute) { parentRole = attr(p as! AXUIElement, kAXRoleAttribute) as? String }
-  if parentRole != kAXMenuBarItemRole { open = m; break }
+  if parentRole != kAXMenuBarItemRole { shown = m; break }
 }
-guard let menu = open else { print("no open menu"); exit(0) }
+guard let menu = shown else { explain("no open menu") }
 let titles = (attr(menu, kAXChildrenAttribute) as? [AXUIElement] ?? []).map { (attr($0, kAXTitleAttribute) as? String) ?? "" }
 print(titles.map { $0.isEmpty ? "—" : $0 }.joined(separator: " | "))' "$owner" 2>&1 || true)
 
@@ -76,6 +85,11 @@ if ! grep -q "Copy" <<<"$items"; then
 fi
 osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
 echo "terminal menu (right click at $cx,$cy in $w x $h at $x,$y): $items"
-grep -q "Copy" <<<"$items" && grep -q "Paste" <<<"$items" && grep -q "Select All" <<<"$items" || { echo "terminal menu: Copy, Paste and Select All not all there"; exit 1; }
 if grep -qi "autofill" <<<"$items"; then echo "terminal menu: macOS's AutoFill item is in it"; exit 1; fi
-echo "terminal menu: Copy, Paste, Select All; no AutoFill"
+# Exactly the terminal's menu (the Edit menu has Copy, Paste and Select All too, with Cut, Undo and Redo).
+if grep -qE "(^|; System Events: )Copy \| Paste \| — \| Select All$" <<<"$items" || grep -qE "System Events: Copy, Paste, missing value, Select All$" <<<"$items"; then
+  echo "terminal menu: Copy, Paste, Select All; no AutoFill"
+else
+  echo "terminal menu: not exactly Copy, Paste, Select All"
+  exit 1
+fi
