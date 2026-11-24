@@ -45,18 +45,6 @@
             "kind": "open",
             "target": "sessions"
           }
-        },
-        {
-          "id": "0.4.27-copy-message",
-          "title": "Copy a whole message",
-          "line": "Hold any message's text, then Copy message: all of it, as plain text.",
-          "media": {
-            "scene": "chat-copy"
-          },
-          "try": {
-            "kind": "open",
-            "target": "brain"
-          }
         }
       ],
       "fixes": [
