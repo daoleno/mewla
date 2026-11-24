@@ -25,6 +25,10 @@ const (
 
 	ReasonKeepEnded = "its keep ended"
 	ReasonReleased  = "released by its Session"
+
+	// OwnerBrain owns what Brain's host keeps or releases in the t/ root.
+	OwnerBrain            = "brain"
+	ReasonReleasedByBrain = "released by Brain"
 )
 
 // Keep is one keep record (gc/keep/<id>.json).
@@ -214,7 +218,11 @@ func ReleaseKeep(stateRoot, id, owner string, now time.Time) (Keep, error) {
 		if k.Owner != owner {
 			return Keep{}, fmt.Errorf("keep %s is another Session's", id)
 		}
-		return k, dropKeep(stateRoot, k, ReasonReleased, now)
+		reason := ReasonReleased
+		if owner == OwnerBrain {
+			reason = ReasonReleasedByBrain
+		}
+		return k, dropKeep(stateRoot, k, reason, now)
 	}
 	return Keep{}, fmt.Errorf("no keep %s", id)
 }
