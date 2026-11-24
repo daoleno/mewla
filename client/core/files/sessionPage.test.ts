@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { sessionPageLinkToOpen, sessionPageUrl } from "./sessionPage";
+import { sessionPageLinkToOpen, sessionPageShowsInApp, sessionPageUrl } from "./sessionPage";
 
 describe("Session page", () => {
   test("its URL is the grant's path on the computer as this client reaches it", () => {
@@ -22,5 +22,19 @@ describe("Session page", () => {
     }
     expect(sessionPageLinkToOpen("not json")).toBeNull();
     expect(sessionPageLinkToOpen(JSON.stringify({ open: "https://x.example/" + "a".repeat(5000) }))).toBeNull();
+  });
+});
+
+describe("where a Session page shows", () => {
+  test("in the app's web view at 127.0.0.1 (Mewla Relay's tunnel, Mewla for Mac's own computer) and always in a browser", () => {
+    expect(sessionPageShowsInApp("http://127.0.0.1:41234/session-page/a.b/r.html", "android")).toBe(true);
+    expect(sessionPageShowsInApp("http://127.0.0.1:9876/session-page/a.b/r.html", "ios")).toBe(true);
+    expect(sessionPageShowsInApp("https://desk.example.net/session-page/a.b/r.html", "web")).toBe(true);
+  });
+
+  test("a computer paired by its address opens the page in the system browser", () => {
+    for (const url of ["http://192.168.1.20:9876/session-page/a.b/r.html", "http://100.64.0.3:9876/session-page/a.b/r.html", "https://desk.example.net/session-page/a.b/r.html", "http://localhost:9876/session-page/a.b/r.html", "not a url"]) {
+      expect(sessionPageShowsInApp(url, "android")).toBe(false);
+    }
   });
 });

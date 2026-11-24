@@ -59,6 +59,27 @@ func TestWorkerSessionWireUsesConfiguredExecutorCapabilityForGenericCommand(t *t
 	}
 }
 
+// An ended run keeps no command and its name is the person's title; the executor it was launched
+// from still names the agent, so its chat (and the files named there) stay readable.
+func TestStructuredProviderOfEndedRunComesFromItsExecutor(t *testing.T) {
+	srv := &Server{execs: &work.ExecutorConfig{ByName: map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude --model x"},
+	}}}
+	ended := &classifier.Worker{ID: "w-1", Name: "Q3 reports", ExecutorID: "claude", Cwd: "/work"}
+	if provider := srv.structuredProviderForWorker(ended); provider != work.WorkerProviderClaude {
+		t.Fatalf("ended run provider = %q, want claude", provider)
+	}
+	if wire := srv.workerSessionWire(ended); wire == nil || !wire.Capabilities.StructuredEvents {
+		t.Fatalf("ended run capabilities = %#v", wire)
+	}
+	if provider := srv.structuredProviderForWorker(&classifier.Worker{ID: "w-2", Name: "Q3 reports", Cwd: "/work"}); provider != "" {
+		t.Fatalf("no executor, no command: provider = %q, want none", provider)
+	}
+	if provider := srv.structuredProviderForWorker(&classifier.Worker{ID: "w-3", Name: "Q3 reports", ExecutorID: "gone", Cwd: "/work"}); provider != "" {
+		t.Fatalf("unknown executor: provider = %q, want none", provider)
+	}
+}
+
 func TestWorkerSessionWireDoesNotAdvertisePlainShell(t *testing.T) {
 	srv := &Server{execs: &work.ExecutorConfig{ByName: map[string]work.Executor{
 		"future": {

@@ -231,9 +231,15 @@ func TestSessionPageGrantLapsesAndOutlivesTheSession(t *testing.T) {
 	if response := f.get(page); response.Code != http.StatusOK {
 		t.Fatalf("after the Session: status=%d", response.Code)
 	}
-	if response := f.grant(t, "report.html"); response.Code != http.StatusConflict {
-		t.Fatalf("a grant without a live Session: status=%d", response.Code)
+	// The ended run still grants its own files (session_runs.go); a run never seen live does not.
+	if response := f.grant(t, "report.html"); response.Code != http.StatusOK {
+		t.Fatalf("a grant for the ended run: status=%d", response.Code)
 	}
+	f.worker.ProcessID += 9
+	if response := f.grant(t, "report.html"); response.Code != http.StatusConflict {
+		t.Fatalf("a grant for a run never seen live: status=%d", response.Code)
+	}
+	f.worker.ProcessID -= 9
 	f.live = true
 
 	// A changed signature, or a grant moved to another folder, is refused.

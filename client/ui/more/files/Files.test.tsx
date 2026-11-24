@@ -61,22 +61,26 @@ describe("File preview", () => {
   const pageGrant = () => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ version: 1, path: "/session-page/abc.def/report.html", expires_at_ms: Date.now() + 1_800_000 }) });
 
   test("an HTML file opens as a page the computer serves, whole: never read in as text, full width, full screen", async () => {
+    // Reached at 127.0.0.1, as a computer paired through Mewla Relay is: the app's web view shows it.
+    const LOOP = "http://127.0.0.1:9877";
     const c = preview(htmlMeta(), {
       network: {
-        [`POST ${BASE}/session-page-grant`]: pageGrant(),
-        [`POST ${BASE}/session-file-capability`]: capability(),
-        "GET http://desk.test:9877/session-file?*": { status: 200, headers: { "content-type": "text/html" }, body: "<h1>Quarterly</h1>" },
+        [`POST ${LOOP}/session-page-grant`]: pageGrant(),
+        [`POST ${LOOP}/session-file-capability`]: capability(),
+        [`GET ${LOOP}/session-file?*`]: { status: 200, headers: { "content-type": "text/html" }, body: "<h1>Quarterly</h1>" },
       },
     });
+    (c.options.host.params as Record<string, unknown>).server = { url: "ws://127.0.0.1:9877/ws" };
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:file-html");
+    expect(app.openedUrls()).toEqual([]);
     // A 4.6 MB page is not cut at the text preview's 512 KB: it is not read as text at all.
     expect(c.asked.map((a) => a.type)).toEqual(["session_file_metadata"]);
     expect(app.shows("id:file-text")).toBe(false);
     expect(app.shows("id:file-truncated")).toBe(false);
     // Full bleed: no meta line, no card.
     expect(app.shows("id:file-meta")).toBe(false);
-    const granted = app.requests().filter((r) => r.url === `${BASE}/session-page-grant`);
+    const granted = app.requests().filter((r) => r.url === `${LOOP}/session-page-grant`);
     expect(granted).toHaveLength(1);
     expect(JSON.parse(String(granted[0]!.body))).toEqual({ worker_id: "w1", process_id: 42, started_at: 1_700_000_000, path: "/work/out/report.html", generation: "g1" });
     expect(granted[0]!.headers.authorization ?? granted[0]!.headers.Authorization).toMatch(/v1:/);
@@ -95,14 +99,39 @@ describe("File preview", () => {
     await app.waitUntil(() => app.clipboard() === "<h1>Quarterly</h1>");
   });
 
-  test("on a desktop a page also opens in the browser, under a grant signed at the press", async () => {
+  test("on a phone paired by its address, a tap opens the page in the browser at once, and again on Open again", async () => {
     const c = preview(htmlMeta(), { network: { [`POST ${BASE}/session-page-grant`]: pageGrant() } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-page-outside");
+    await app.waitUntil(() => app.openedUrls().length === 1);
+    expect(app.openedUrls()).toEqual(["http://desk.test:9877/session-page/abc.def/report.html"]);
+    expect(app.texts()).toContain("Opened in browser");
+    expect(app.shows("id:file-html")).toBe(false);
+    await app.press("text:Open again");
+    await app.waitUntil(() => app.openedUrls().length === 2);
+    expect(app.requests().filter((r) => r.url === `${BASE}/session-page-grant`)).toHaveLength(2);
+  });
+
+  test("a file deleted or moved since the Session wrote it says it is gone", async () => {
+    const c = preview(meta());
+    c.options.host.handlers["app.daemon"] = () => ({ error: "Session file is missing", code: "session_file_missing" });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-problem");
+    expect(app.texts()).toContain("File is gone");
+    expect(app.texts()).not.toContain("Session file is missing");
+  });
+
+  test("on a desktop a page also opens in the browser, under a grant signed at the press", async () => {
+    // Mewla for Mac reaches its own computer at 127.0.0.1.
+    const LOOP = "http://127.0.0.1:9877";
+    const c = preview(htmlMeta(), { network: { [`POST ${LOOP}/session-page-grant`]: pageGrant() } });
+    (c.options.host.params as Record<string, unknown>).server = { url: "ws://127.0.0.1:9877/ws" };
     const app = await open(HARNESS, { ...c.options, platform: "macos", width: 1280, height: 800 });
     await app.waitFor("id:file-html");
     await app.press("id:file-open-browser");
     await app.waitUntil(() => app.openedUrls().length > 0);
-    expect(app.openedUrls()).toEqual(["http://desk.test:9877/session-page/abc.def/report.html"]);
-    expect(app.requests().filter((r) => r.url === `${BASE}/session-page-grant`)).toHaveLength(2);
+    expect(app.openedUrls()).toEqual(["http://127.0.0.1:9877/session-page/abc.def/report.html"]);
+    expect(app.requests().filter((r) => r.url === `${LOOP}/session-page-grant`)).toHaveLength(2);
   });
 
   test("a computer without page grants says to update it", async () => {
