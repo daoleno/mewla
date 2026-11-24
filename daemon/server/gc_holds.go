@@ -34,8 +34,11 @@ func (s *Server) gcLookup() (gc.WhyLookup, bool) {
 }
 
 // holds is what the collector holds and did, for the Resources page; nil
-// before the daemon has a state root.
+// before the daemon has a state root, and where no collector runs (Windows).
 func (s *Server) holds(now time.Time) *gc.Holds {
+	if s.watcher == nil || !s.watcher.GCCollects() {
+		return nil
+	}
 	s.holdsCache.mu.Lock()
 	defer s.holdsCache.mu.Unlock()
 	if s.holdsCache.holds != nil && now.Sub(s.holdsCache.at) < holdsFresh {
