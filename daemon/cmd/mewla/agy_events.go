@@ -56,7 +56,8 @@ type agyConn struct {
 	// cancel of the wait on a person or Brain.
 	asking map[string]context.CancelFunc
 	// modelsReady: agy has said which model the Session runs on.
-	modelsReady bool
+	modelsReady   bool
+	modelsProbing bool
 	// questions are the questions agy asked with its ask_question tool. agy
 	// ends its turn while one waits (the answer is the next message), and the
 	// hub settles a decision whenever the agent moves, so these are stated
@@ -493,24 +494,29 @@ func (a *agyEvents) Linked(workerID string) bool {
 		return false
 	}
 	c.mu.Lock()
-	ready := c.modelsReady
+	ready, probing := c.modelsReady, c.modelsProbing
+	if !ready && !probing {
+		c.modelsProbing = true
+	}
 	c.mu.Unlock()
-	if ready {
-		return true
+	if ready || probing {
+		return ready
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	reply, err := c.request(ctx, map[string]any{"t": "models"})
-	var models struct {
-		Current string `json:"current"`
-	}
-	if err != nil || json.Unmarshal(reply.Models, &models) != nil || models.Current == "" {
-		return false
-	}
-	c.mu.Lock()
-	c.modelsReady = true
-	c.mu.Unlock()
-	return true
+	// Asked in the background: the Session list is built on this answer and
+	// must not wait on agy.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		reply, err := c.request(ctx, map[string]any{"t": "models"})
+		var models struct {
+			Current string `json:"current"`
+		}
+		said := err == nil && json.Unmarshal(reply.Models, &models) == nil && models.Current != ""
+		c.mu.Lock()
+		c.modelsReady, c.modelsProbing = said, false
+		c.mu.Unlock()
+	}()
+	return false
 }
 
 // Models asks a Session what agy offers and uses now.
