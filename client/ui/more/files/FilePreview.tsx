@@ -248,7 +248,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
         </View>}>
         <View class="flex-1 bg-white">
           <If when={!full()}><HtmlPage testID="file-html" page={shownPage()!} /></If>
-          <If when={status()}><Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="bg-background px-5 py-1 text-caption">{status()!}</Text></If>
+          <If when={status()}><View class="bg-background px-5 py-1"><Text testID="file-download-status" android={{ accessibilityLiveRegion: "polite" }} class="text-caption">{status()!}</Text></View></If>
         </View>
       </If>
       <GuardedDialog testID="file-page-full" open={full() && !!shownPage()} onOpenChange={({ open }) => !open && full.set(false)}
