@@ -48,6 +48,10 @@ mkdir -p "$state/home" "$state/bin"
 printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-flows; exit 0; }\nexec sleep 86400\n' > "$state/bin/cursor-agent"
 printf '#!/bin/sh\necho "systemd-run is off for the release flows daemon" >&2\nexit 1\n' > "$state/bin/systemd-run"
 chmod +x "$state/bin/cursor-agent" "$state/bin/systemd-run"
+# The Brain host runs the stub by its absolute path: by name, a login shell's PATH can find the owner's real
+# cursor-agent first (0.4.28 gate: it ran signed out and wrote ~/.cursor/projects/<scratch state>).
+mkdir -p "$state/mewla"
+printf '[[executors]]\nname = "agent"\ncommand = "%s"\nkind = "cursor"\n' "$state/bin/cursor-agent" > "$state/mewla/executors.toml"
 env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent MEWLA_NO_AUTOUPDATE=1 \
   "$MEWLA" serve -addr "127.0.0.1:$PORT" -loopback-only -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!

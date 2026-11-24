@@ -24,6 +24,15 @@ cleanup() {
 }
 trap cleanup EXIT
 shot() { if [[ -n "${SHOTS:-}" ]]; then "$PHONE" shot "$SHOTS/$1.png" >/dev/null; fi; }
+# A wait that fails says which, with what the screen held: under `set -e` a bare `shows` ended the flow with an
+# empty log (0.4.28 gate, API 35, the run right after a reset).
+need() {
+  "$PHONE" shows "$1" "${2:-10}" && return 0
+  echo "attach-sheet: '$1' not shown within ${2:-10} s" >&2
+  "$PHONE" dump >&2 || true
+  shot "failed-$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '-')"
+  return 1
+}
 chips() { "$PHONE" dump | grep -c '^attachment-upload-[0-9]* | .*, Ready$' || true; }
 until_chips() { for _ in $(seq 1 40); do [[ "$(chips)" == "$1" ]] && return 0; sleep 0.5; done; echo "expected $1 ready chips, saw $(chips)" >&2; return 1; }
 
@@ -31,29 +40,31 @@ msg="attach$RANDOM"
 "$PHONE" type "$msg"
 shot 1-keyboard
 "$PHONE" tap '^Attach$'
-"$PHONE" shows 'attach-photos' 5
+# Right after a reset the first tap can land while the keyboard still moves the composer: tap again, once.
+if ! "$PHONE" shows 'attach-photos' 5; then "$PHONE" tap '^Attach$'; need 'attach-photos' 10; fi
 shot 2-sheet
 "$PHONE" tap '^Photos$'
-"$PHONE" shows 'Photo taken on' 15
+need 'Photo taken on' 15
 shot 3-photo-picker
 "$PHONE" tap 'Photo taken on'
-"$PHONE" tap '^Add \(1\)$'
+# The photo picker's confirm: "Add (1)" up to Android 15, "Done" on Android 16.
+"$PHONE" tap '^(Add \(1\)|Done)$'
 until_chips 1
 shot 4-photo
 
 "$PHONE" tap '^Attach$'
 "$PHONE" tap '^Camera$'
 if "$PHONE" shows 'While using the app' 4; then shot 5-camera-prompt; "$PHONE" tap '^While using the app$'; fi
-"$PHONE" shows 'Shutter' 15
+need 'Shutter' 15
 "$PHONE" tap '^Shutter$'
-"$PHONE" shows 'done_button' 15
+need 'done_button' 15
 shot 6-camera
 "$PHONE" tap '^Done$'
 until_chips 2
 
 "$PHONE" tap '^Attach$'
 "$PHONE" tap '^Files$'
-"$PHONE" shows 'trip-plan.pdf' 15
+need 'trip-plan.pdf' 15
 shot 7-files
 "$PHONE" tap '^trip-plan.pdf$'
 until_chips 3
@@ -63,6 +74,6 @@ shot 8-three
 until_chips 2
 shot 9-removed
 "$PHONE" tap '^send$'
-"$PHONE" shows "$msg" 15
+need "$msg" 15
 ! "$PHONE" shows 'attachment-upload-' 2
 shot 10-sent

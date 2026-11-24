@@ -91,6 +91,10 @@ printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-upgrade; exit 0; }\nexec
 # No systemd-run: the daemon's session host is then its own child, never a mewla-session-host-* user unit.
 printf '#!/bin/sh\necho "systemd-run is off for the release upgrade daemon" >&2\nexit 1\n' > "$state/bin/systemd-run"
 chmod +x "$state/bin/cursor-agent" "$state/bin/systemd-run"
+# The Brain host runs the stub by its absolute path: by name, a login shell's PATH can find the owner's real
+# cursor-agent first (0.4.28 gate: it ran signed out and wrote ~/.cursor/projects/<scratch state>).
+mkdir -p "$state/mewla"
+printf '[[executors]]\nname = "agent"\ncommand = "%s"\nkind = "cursor"\n' "$state/bin/cursor-agent" > "$state/mewla/executors.toml"
 # On loopback: the emulator reaches it as 10.0.2.2. MEWLA_NO_AUTOUPDATE: a released daemon older than
 # Latest would update itself and restart in the middle of the check.
 env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent MEWLA_NO_AUTOUPDATE=1 \
