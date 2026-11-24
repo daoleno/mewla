@@ -283,6 +283,9 @@ type cell struct {
 type session struct {
 	agent, id, command, cwd string
 	created                 time.Time
+	// connection is the runtime's own connection id: the agent's, or the
+	// Provider connection of a Session on a route.
+	connection string
 }
 
 type gate struct {
@@ -450,6 +453,7 @@ func (g *gate) approveUntil(s *session, stop chan struct{}) {
 }
 
 type runtimeView struct {
+	connection       string
 	current, pending choice
 	models           map[string][]string
 	order            []string
@@ -460,13 +464,17 @@ func (g *gate) runtime(s *session) (runtimeView, error) {
 	if err != nil {
 		return runtimeView{}, err
 	}
-	return parseRuntime(reply), nil
+	view := parseRuntime(reply)
+	if view.connection != "" {
+		s.connection = view.connection
+	}
+	return view, nil
 }
 
 func parseRuntime(reply map[string]any) runtimeView {
 	r, _ := reply["runtime"].(map[string]any)
 	str := func(key string) string { v, _ := r[key].(string); return v }
-	view := runtimeView{current: choice{str("model_id"), str("reasoning_effort")}, pending: choice{str("pending_model_id"), str("pending_reasoning_effort")}, models: map[string][]string{}}
+	view := runtimeView{connection: str("connection_id"), current: choice{str("model_id"), str("reasoning_effort")}, pending: choice{str("pending_model_id"), str("pending_reasoning_effort")}, models: map[string][]string{}}
 	models, _ := r["native_models"].([]any)
 	for _, raw := range models {
 		m, _ := raw.(map[string]any)
@@ -487,7 +495,11 @@ func parseRuntime(reply map[string]any) runtimeView {
 // pick sends set_thread_runtime the way the Model sheet does and says what
 // came back: "applied", "pending" or the refusal.
 func (g *gate) pick(s *session, want choice) (string, bool) {
-	runtime := map[string]any{"connection_id": providerOf(s.agent), "model_id": want.model}
+	connection := s.connection
+	if connection == "" {
+		connection = providerOf(s.agent)
+	}
+	runtime := map[string]any{"connection_id": connection, "model_id": want.model}
 	if want.effort != "" {
 		runtime["effect"] = want.effort
 	}
@@ -829,8 +841,9 @@ func claudeRecord(s *session) record {
 		var line struct {
 			Type    string `json:"type"`
 			Message struct {
-				Model   string          `json:"model"`
-				Content json.RawMessage `json:"content"`
+				Model      string          `json:"model"`
+				StopReason string          `json:"stop_reason"`
+				Content    json.RawMessage `json:"content"`
 			} `json:"message"`
 		}
 		if json.Unmarshal(scanner.Bytes(), &line) != nil {
@@ -838,7 +851,8 @@ func claudeRecord(s *session) record {
 		}
 		switch line.Type {
 		case "assistant":
-			if line.Message.Model != "" && line.Message.Model != "<synthetic>" {
+			// A turn is counted at its end: a tool call is the middle of one.
+			if line.Message.Model != "" && line.Message.Model != "<synthetic>" && line.Message.StopReason != "tool_use" {
 				r.turns++
 				r.last = ran{line.Message.Model, effort}
 			}
@@ -857,9 +871,13 @@ func claudeRecord(s *session) record {
 // codexRecord reads the newest Codex rollout of the Session's folder: each
 // turn's turn_context model and effort.
 func codexRecord(s *session) record {
-	home, _ := os.UserHomeDir()
+	codexHome := os.Getenv("CODEX_HOME")
+	if codexHome == "" {
+		home, _ := os.UserHomeDir()
+		codexHome = filepath.Join(home, ".codex")
+	}
 	var files []string
-	_ = filepath.Walk(filepath.Join(home, ".codex", "sessions"), func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(filepath.Join(codexHome, "sessions"), func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() && strings.HasSuffix(path, ".jsonl") && info.ModTime().After(s.created) {
 			files = append(files, path)
 		}
