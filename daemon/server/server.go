@@ -123,23 +123,25 @@ type Server struct {
 	screenLoopbackOnly bool
 	// videoReady says whether this computer can encode agents' displays as
 	// video (screencast.EncoderReady); tests replace it.
-	videoReady                 func() error
-	phone                      *phone.Manager
-	phonePing                  time.Duration // the phone's ping interval; zero is the default
-	connections                *connections.Manager
-	auth                       *auth.Manager
-	watcher                    *watcher.Watcher
-	watchSwitch                WatchSwitch
-	terminal                   *terminal.Manager
-	hostTerminal               *terminal.HostBackend // opens session host Sessions; SetVersion names the daemon to the host
-	terminalTarget             func(id string) (watcher.TerminalTarget, error)
-	pusher                     notificationPusher
-	deviceHook                 func(timeZone, locale string)
-	notifications              notificationRecorder
-	appStates                  map[*websocket.Conn]string
-	doneNotified               map[string]bool        // Work ID -> its done push already went out this run
-	workerPushed               map[string]*workerPush // Worker -> its last blocked or failed push; see worker_push_dedupe.go
-	workerPushPath             string
+	videoReady     func() error
+	phone          *phone.Manager
+	phonePing      time.Duration // the phone's ping interval; zero is the default
+	connections    *connections.Manager
+	auth           *auth.Manager
+	watcher        *watcher.Watcher
+	watchSwitch    WatchSwitch
+	terminal       *terminal.Manager
+	hostTerminal   *terminal.HostBackend // opens session host Sessions; SetVersion names the daemon to the host
+	terminalTarget func(id string) (watcher.TerminalTarget, error)
+	pusher         notificationPusher
+	deviceHook     func(timeZone, locale string)
+	notifications  notificationRecorder
+	appStates      map[*websocket.Conn]string
+	doneNotified   map[string]bool        // Work ID -> its done push already went out this run
+	workerPushed   map[string]*workerPush // Worker -> its last blocked or failed push; see worker_push_dedupe.go
+	workerPushPath string
+	// sessionRuns: each Session run's folder, so an ended run's files still open (session_runs.go).
+	sessionRuns                *sessionRuns
 	workerPushNow              func() time.Time
 	stats                      *stats.Collector
 	work                       *work.Store
@@ -400,6 +402,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		resourceSampler:    watcher.NewResourceSampler(),
 		uploadDir:          uploadDir,
 		workerPushPath:     workerPushPath(authManager),
+		sessionRuns:        newSessionRuns(authManager),
 		uploadStore:        &attachment.Store{Dir: uploadDir},
 		clients:            make(map[*websocket.Conn]*authenticatedClient),
 		active:             make(map[*websocket.Conn]string),

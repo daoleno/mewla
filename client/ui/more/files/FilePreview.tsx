@@ -17,11 +17,12 @@ import {
   SESSION_FILE_NO_IDENTITY,
 } from "../../../core/files/presentation";
 import { getSessionFileMetadata, getSessionFileText } from "../../../core/files/requests";
-import { grantSessionPage, SESSION_PAGE_LINKS_SCRIPT, sessionPageLinkToOpen, type SessionPage } from "../../../core/files/sessionPage";
+import { grantSessionPage, SESSION_PAGE_LINKS_SCRIPT, sessionPageLinkToOpen, sessionPageShowsInApp, type SessionPage } from "../../../core/files/sessionPage";
 import {
   bindSessionFileRequestToGeneration,
   buildSessionFileBinarySource,
   classifySessionFileRenderer,
+  isMissingSessionFileError,
   isStaleSessionFileError,
   sessionFileTooLargeMessage,
   type SessionFileBinarySource,
@@ -66,6 +67,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   const text = signal<SessionFileTextPreview | null>(null);
   const source = signal<SessionFileBinarySource | null>(null);
   const page = signal<SessionPage | null>(null);
+  const outside = signal<SessionPage | null>(null);
   const full = signal(false);
   const loading = signal(true);
   const problem = signal<Problem | null>(null);
@@ -86,6 +88,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
     text.set(null);
     source.set(null);
     page.set(null);
+    outside.set(null);
     full.set(false);
     problem.set(null);
     stale.set(false);
@@ -95,7 +98,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
     const fail = (error: unknown, tooLarge = false) => {
       if (mine !== epoch) return;
       stale.set(isStaleSessionFileError(error));
-      problem.set({ title: sessionFileProblemTitle({ stale: stale(), tooLarge }), detail: failureText(error, "The file is unavailable.") });
+      const gone = isMissingSessionFileError(error);
+      problem.set({ title: sessionFileProblemTitle({ stale: stale(), tooLarge, gone }), detail: gone ? "" : failureText(error, "The file is unavailable.") });
       loading.set(false);
     };
     if (!d) return fail(new Error("Connect to this computer to open the file."));
@@ -110,7 +114,13 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
         // Served as a page by the computer, under a grant for its folder: never read in as text.
         const granted = await grantSessionPage(d.server, bindSessionFileRequestToGeneration(request(), found));
         if (mine !== epoch) return;
-        page.set(granted);
+        if (sessionPageShowsInApp(granted.url, platform.os)) page.set(granted);
+        else {
+          // A computer paired by its address (Wi-Fi/LAN, an https address): the app's web view may not show its
+          // pages yet, the phone's browser reaches them. The tap opens the page there, at once.
+          outside.set(granted);
+          void openUrl(granted.url).catch(() => {});
+        }
       } else if (renderer === "markdown" || renderer === "text") {
         const read = await getSessionFileText(d, { ...request(), path: found.path, generation: found.generation });
         if (mine !== epoch) return;
@@ -267,10 +277,11 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   function body(): JSX.Element {
     if (loading()) return <EmptyState testID="file-opening" busy title="Opening file" />;
     const failed = problem();
-    if (failed) return <EmptyState testID="file-problem" icon="alert-circle" title={failed.title} detail={failed.detail} action="Refresh" onAction={() => void load()} />;
+    if (failed) return <EmptyState testID="file-problem" icon="alert-circle" title={failed.title} detail={failed.detail || undefined} action="Refresh" onAction={() => void load()} />;
     const found = metadata();
     if (!found) return <EmptyState title="Could not open file" detail="The file is unavailable." />;
     const renderer = classifySessionFileRenderer(found.kind);
+    if (outside()) return <EmptyState testID="file-page-outside" icon="open-external" title="Opened in browser" action="Open again" onAction={onOpenInBrowser} />;
     const read = text();
     if (renderer === "markdown" && read) return <MarkdownBody text={read} onLink={(href) => openLink(href, found)} />;
     if (renderer === "text" && read) return <TextBody text={read} />;

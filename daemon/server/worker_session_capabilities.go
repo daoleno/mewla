@@ -42,6 +42,9 @@ type workerSessionWire struct {
 	ActivityTool    string                        `json:"activity_tool,omitempty"`
 	ActivitySummary string                        `json:"activity_summary,omitempty"`
 	Capabilities    workerSessionWireCapabilities `json:"capabilities"`
+	// FileRun is the run the Session's files open through: its live run, or once that ended, its last one
+	// (session_runs.go), so a Done Session's chat still opens what its agent wrote.
+	FileRun *sessionFileRunWire `json:"file_run,omitempty"`
 }
 
 func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire {
@@ -71,6 +74,7 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 	}
 	return &workerSessionWire{
 		Worker:          worker,
+		FileRun:         s.sessionFileRun(worker),
 		Provider:        provider,
 		Approvals:       approvalsOf(worker, s),
 		Activity:        activity.Line,

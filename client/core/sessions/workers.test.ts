@@ -401,3 +401,16 @@ describe("who a Session's attention is for (owner 2026-11-13, shot 11)", () => {
     expect(worker.prompt?.id).toBe("p1");
   });
 });
+
+describe("the run a Session's files open through", () => {
+  test("file_run is kept as the daemon names it, and dropped when it is not a run", () => {
+    const upsert = (file_run: unknown) => workerReducer(initialWorkerState, {
+      type: "UPSERT_WORKER", serverId: "server", serverName: "Server", serverUrl: "https://server.test",
+      worker: { ...agent("done"), file_run } as never,
+    }).workersByServer.server?.[0]?.file_run;
+    expect(upsert({ process_id: 4023215, started_at: 1_795_000_000_123 })).toEqual({ process_id: 4023215, started_at: 1_795_000_000_123 });
+    for (const bad of [undefined, null, {}, { process_id: 0, started_at: 1 }, { process_id: 5, started_at: "x" }, { process_id: 1.5, started_at: 2 }]) {
+      expect(upsert(bad)).toBeUndefined();
+    }
+  });
+});

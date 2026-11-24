@@ -30,6 +30,22 @@ export function sessionPageUrl(serverUrl: string, path: string): string | null {
   }
 }
 
+/**
+ * Whether the app's own web view shows the page: in a browser always (a frame of the page's own computer), elsewhere
+ * when the page is on a host the app's `webview.hosts` grants (nsh.json): `127.0.0.1`, where a computer paired through
+ * Mewla Relay (and Mewla for Mac's own) is reached. A computer paired by its address (Wi-Fi/LAN, Tailscale, an https
+ * address) is not, until the web view can be granted the current computer's origin at run time: there the page opens
+ * in the system browser, which reaches that address.
+ */
+export function sessionPageShowsInApp(url: string, os: string): boolean {
+  if (os === "web") return true;
+  try {
+    return new URL(url).hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 /** Asks the computer for the page's grant (device-signed) and returns its URL. */
 export async function grantSessionPage(server: StoredServer, request: SessionFileBinaryRequest): Promise<SessionPage> {
   const response = await signedFetch(server, "POST", "/session-page-grant", "mewla-session-file", {
