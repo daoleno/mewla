@@ -4182,7 +4182,9 @@ func hostBlockSignature(worker *classifier.Worker) string {
 	if worker.Prompt == nil {
 		return "blocked"
 	}
-	return "blocked|" + worker.Prompt.ID
+	// The whole shape: a question completed from the transcript after it was
+	// first read, or asked again, is news for the Brain chat.
+	return "blocked|" + worker.Prompt.Shape()
 }
 
 // noteHostBlockSignature records what the brain_snapshot about to be sent

@@ -367,6 +367,7 @@ func providerActivitySignalFor(observation ProviderActivityObservation) provider
 type Watcher struct {
 	idle              idleTracker
 	promptEnrich      promptEnrichment
+	showings          promptShowings
 	quickTunnels      *serviceTunnels
 	tunnelResolveHost func(context.Context, string) ([]net.IPAddr, error)
 	pollInterval      time.Duration
@@ -2117,6 +2118,7 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 				worker.PromptUnidentified = activity.Unidentified
 			}
 		}
+		worker.Prompt = w.showings.stamp(r.id, worker.Prompt, r.now)
 		providerChanged := false
 		if worker.Hidden {
 			nextProvider := providerActivitySignalFor(r.provider)
@@ -3076,23 +3078,17 @@ type workerMetadataSnapshot struct {
 	expectedNextCheckAt int64
 	leaseSeconds        int
 	delegated           bool
-	promptID            string
-	promptTool          string
-	promptSummary       string
+	// prompt is the prompt's Shape: its ID, its showing, and what the
+	// transcript completed it with since.
+	prompt string
 }
 
 func workerMetadataSnapshotFor(worker *classifier.Worker) workerMetadataSnapshot {
 	if worker == nil {
 		return workerMetadataSnapshot{}
 	}
-	promptID, promptTool, promptSummary := "", "", ""
-	if worker.Prompt != nil {
-		promptID, promptTool, promptSummary = worker.Prompt.ID, worker.Prompt.Tool, worker.Prompt.Summary
-	}
 	return workerMetadataSnapshot{
-		promptID:            promptID,
-		promptTool:          promptTool,
-		promptSummary:       promptSummary,
+		prompt:              worker.Prompt.Shape(),
 		name:                worker.Name,
 		project:             worker.Project,
 		cwd:                 worker.Cwd,

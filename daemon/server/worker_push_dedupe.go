@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"github.com/daoleno/mewla/daemon/answered"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,7 +115,8 @@ func (s *Server) workerPushSuppression(ev watcher.SessionEvent, kind string) (re
 	now := s.workerPushTime()
 	key := workerPushKey(ev)
 	if record := pushed[ev.WorkerID]; record != nil && record.Kind == kind && record.Key == key &&
-		(record.LeftAt.IsZero() || now.Sub(record.LeftAt) < workerPushMovedOn) {
+		(record.LeftAt.IsZero() || now.Sub(record.LeftAt) < workerPushMovedOn) &&
+		!answeredSince(s.answered, ev.WorkerID, record.SentAt) {
 		record.LeftAt = time.Time{}
 		first := !record.noted
 		record.noted = true
@@ -145,4 +147,16 @@ func (s *Server) forgetWorkerPush(workerID string) {
 		delete(s.workerPushed, workerID)
 		s.saveWorkerPushesLocked()
 	}
+}
+
+// answeredSince reports whether an answer for the Session was recorded after
+// at: the question asked again, word for word, after its answer is a new ask
+// however soon it comes (0.4.28 gate: Claude asked the same question again).
+// A blink or a daemon restart records no answer and stays one ask.
+func answeredSince(ledger *answered.Ledger, sessionID string, at time.Time) bool {
+	if ledger == nil {
+		return false
+	}
+	newest := ledger.List(answered.Filter{SessionID: sessionID, Limit: 1})
+	return len(newest) == 1 && newest[0].AnsweredAt.After(at)
 }

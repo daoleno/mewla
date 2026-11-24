@@ -11,6 +11,7 @@ import type { AgentKind, TerminalFlavor } from "../sessions/workerPresentation";
 import type { Worker, WorkerPrompt } from "../sessions/workers";
 import type { TrayRequest } from "../tray/model";
 import { choiceFromPrompt } from "./claudeChoiceModel";
+import { promptRequestKey } from "./types";
 
 /** How a question's answers go back: Brain's chat question (`answer_choice`), or a terminal's choice prompt (`answer_prompt`). */
 export type ChoiceRoute = { via: "choice"; workerId: string; callId: string } | { via: "prompt"; workerId: string; promptId: string };
@@ -111,7 +112,7 @@ function cardOf(request: TrayRequest, input: RequestCardsInput): RequestCard | n
   }
   if (request.kind === "prompt") {
     const prompt = isHost ? input.brainHost?.prompt : worker?.prompt;
-    if (!prompt || request.key !== `prompt:${workerId}:${prompt.id}`) return null;
+    if (!prompt || request.key !== promptRequestKey(workerId, prompt)) return null;
     const label = promptLabel(prompt, isHost);
     if (prompt.kind === "choice") {
       const transcript = input.transcriptChoice?.workerId === workerId ? input.transcriptChoice : null;

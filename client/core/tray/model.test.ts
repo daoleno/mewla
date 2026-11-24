@@ -6,6 +6,7 @@ import { catState } from "../pets/cat";
 import { workWorkerLines } from "../work/workers";
 import { backMark, filterTray, projectsOf, requestsOf, stateShortWords, trayModel, type TrayInput } from "./model";
 import { workDetailWorkerRow } from "../work/workers";
+import { answeredKeys, parseAnsweredRequest } from "../timeline/answered";
 
 const NOW = Date.parse("2026-11-12T10:00:00Z");
 
@@ -363,6 +364,21 @@ describe("tray model", () => {
     const m = trayModel(input({ workers: [asking], answered: new Set(["prompt:b:p1"]) }));
     expect(m.needs).toEqual([]);
     expect(m.state.kind).not.toBe("needs");
+  });
+
+  // 0.4.28 gate (lane A f25): Claude asked again, word for word, a question answered a moment earlier on another
+  // device. Same screen, same prompt id: the tray said "All quiet" and the Session "Blocked" with no card, until a reload.
+  test("the same question asked again needs you again", () => {
+    const asked = (at: string) => worker("b", { status: "blocked", prompt: { id: "p1", kind: "permission", provider: "claude", title: "Allow?", request: "git push", options: [{ number: 1, label: "Yes" }, { number: 2, label: "No" }], asked_at: at } });
+    const record = parseAnsweredRequest({
+      id: "prompt:b:p1:1", kind: "permission", session_id: "b", asked: "git push", answer: "Yes", outcome: "approved", by: { kind: "device", device_name: "Web" },
+      asked_at: "2026-11-25T02:10:00.123Z", answered_at: "2026-11-25T02:10:04Z", anchor: { prompt_id: "p1" },
+    })!;
+    const answered = new Set(answeredKeys(record));
+    expect(trayModel(input({ workers: [asked("2026-11-25T02:10:00.123Z")], answered })).needs).toEqual([]);
+    const again = trayModel(input({ workers: [asked("2026-11-25T02:10:09.456Z")], answered }));
+    expect(again.needs.map((r) => r.key)).toEqual([`prompt:b:p1@${Date.parse("2026-11-25T02:10:09.456Z")}`]);
+    expect(again.state.words).toBe("1 needs you");
   });
 
   test("no computer: no state control", () => {
