@@ -101,3 +101,27 @@ func TestSessionRunsAreBoundedAndKeepTheNewest(t *testing.T) {
 		t.Fatal("a Worker with no process was recorded")
 	}
 }
+
+// An ended Worker keeps no command; its chat binds by its last run's launch command (the conversation it
+// names), never by whichever conversation is newest in a folder other Sessions share. A Worker running
+// something now, or one never recorded, is left as it is.
+func TestEndedRunWorkerTakesItsLastRunsCommand(t *testing.T) {
+	srv := &Server{sessionRuns: &sessionRuns{loaded: true}}
+	started := time.UnixMilli(1_700_000_000_000)
+	srv.sessionRuns.note(&classifier.Worker{ID: "w-1", ProcessID: 41, StartedAt: started, Cwd: "/repo", Command: "claude --session-id aaa"})
+	srv.sessionRuns.note(&classifier.Worker{ID: "w-1", ProcessID: 42, StartedAt: started.Add(time.Minute), Cwd: "/repo", Command: "claude --resume aaa"})
+
+	ended := srv.endedRunWorker(classifier.Worker{ID: "w-1", Name: "Q3 reports", Cwd: "/repo"})
+	if ended.Command != "claude --resume aaa" || !ended.StartedAt.Equal(started.Add(time.Minute)) {
+		t.Fatalf("ended worker = %#v", ended)
+	}
+	if got := srv.structuredProviderForWorker(&ended); got != "claude" {
+		t.Fatalf("ended provider = %q", got)
+	}
+	if shell := srv.endedRunWorker(classifier.Worker{ID: "w-1", Cwd: "/repo", Command: "zsh"}); shell.Command != "zsh" {
+		t.Fatalf("a Worker running something kept %q", shell.Command)
+	}
+	if never := srv.endedRunWorker(classifier.Worker{ID: "w-2", Cwd: "/repo"}); never.Command != "" {
+		t.Fatalf("an unrecorded Worker got %q", never.Command)
+	}
+}
