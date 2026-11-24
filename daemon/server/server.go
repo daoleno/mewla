@@ -1998,6 +1998,9 @@ func (s *Server) resolveCodexConversationWorker(raw clientMessage) resolvedCodex
 			reason:   "worker_not_found",
 		}
 	}
+	if workerFromWatcher {
+		worker = s.endedRunWorker(worker)
+	}
 	return resolvedCodexConversationWorker{
 		targetID:    targetID,
 		worker:      worker,

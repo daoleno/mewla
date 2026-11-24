@@ -20,11 +20,14 @@ import (
 const maxSessionRuns = 512
 
 type sessionRun struct {
-	WorkerID    string    `json:"worker_id"`
-	ProcessID   int       `json:"process_id"`
-	StartedAtMS int64     `json:"started_at_ms"`
-	Cwd         string    `json:"cwd"`
-	SeenAt      time.Time `json:"seen_at"`
+	WorkerID    string `json:"worker_id"`
+	ProcessID   int    `json:"process_id"`
+	StartedAtMS int64  `json:"started_at_ms"`
+	Cwd         string `json:"cwd"`
+	// Command is the run's launch command. Once the run ended the Worker keeps none, and its chat is
+	// found by the conversation the command names (Claude's --session-id or --resume).
+	Command string    `json:"command,omitempty"`
+	SeenAt  time.Time `json:"seen_at"`
 }
 
 type sessionRuns struct {
@@ -47,7 +50,7 @@ func liveRun(worker *classifier.Worker) (sessionRun, bool) {
 	if worker == nil || strings.TrimSpace(worker.ID) == "" || worker.ProcessID <= 0 || worker.StartedAt.IsZero() || strings.TrimSpace(worker.Cwd) == "" {
 		return sessionRun{}, false
 	}
-	return sessionRun{WorkerID: strings.TrimSpace(worker.ID), ProcessID: worker.ProcessID, StartedAtMS: worker.StartedAt.UnixMilli(), Cwd: worker.Cwd}, true
+	return sessionRun{WorkerID: strings.TrimSpace(worker.ID), ProcessID: worker.ProcessID, StartedAtMS: worker.StartedAt.UnixMilli(), Cwd: worker.Cwd, Command: strings.TrimSpace(worker.Command)}, true
 }
 
 // note records the Worker's live run, written only when the run or its folder is new.
@@ -61,7 +64,7 @@ func (r *sessionRuns) note(worker *classifier.Worker) {
 	r.loadLocked()
 	for i, known := range r.runs {
 		if known.WorkerID == run.WorkerID && known.ProcessID == run.ProcessID && known.StartedAtMS == run.StartedAtMS {
-			if known.Cwd == run.Cwd {
+			if known.Cwd == run.Cwd && (known.Command == run.Command || run.Command == "") {
 				return
 			}
 			r.runs = append(r.runs[:i], r.runs[i+1:]...)
@@ -164,6 +167,27 @@ func (s *Server) sessionFileRun(worker *classifier.Worker) *sessionFileRunWire {
 		return &sessionFileRunWire{ProcessID: run.ProcessID, StartedAt: run.StartedAtMS}
 	}
 	return nil
+}
+
+// endedRunWorker gives an ended Worker (no process, no command) what its last run was: its launch
+// command and identity, so its chat binds to that run's own conversation, not to whichever
+// conversation is newest in a folder other Sessions share.
+func (s *Server) endedRunWorker(worker classifier.Worker) classifier.Worker {
+	if s == nil || strings.TrimSpace(worker.Command) != "" || worker.ProcessID > 0 {
+		return worker
+	}
+	run, ok := s.sessionRuns.last(worker.ID)
+	if !ok || run.Command == "" {
+		return worker
+	}
+	worker.Command = run.Command
+	if worker.StartedAt.IsZero() {
+		worker.StartedAt = time.UnixMilli(run.StartedAtMS)
+	}
+	if strings.TrimSpace(worker.Cwd) == "" {
+		worker.Cwd = run.Cwd
+	}
+	return worker
 }
 
 // sessionFileWorker: the Session a file request names, as the run it names: the live run when it matches,
