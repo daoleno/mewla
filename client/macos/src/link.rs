@@ -679,10 +679,13 @@ mod tests {
         tunnels.stop("server:a:0");
         let mut gone = TcpStream::connect(("127.0.0.1", port));
         if let Ok(stream) = gone.as_mut() {
-            stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-            let _ = stream.write_all(b"x");
-            let mut buffer = [0u8; 1];
-            assert!(matches!(stream.read(&mut buffer), Ok(0) | Err(_)));
+            // A stopped tunnel may have reset this connection already: macOS then refuses the option (EINVAL), which
+            // is the same answer as a read of nothing (a gate on a runner saw it, 11-24).
+            if stream.set_read_timeout(Some(Duration::from_secs(2))).is_ok() {
+                let _ = stream.write_all(b"x");
+                let mut buffer = [0u8; 1];
+                assert!(matches!(stream.read(&mut buffer), Ok(0) | Err(_)));
+            }
         }
     }
 
