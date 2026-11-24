@@ -64,7 +64,10 @@ sign-in checks for every configured agent when detailed diagnosis is needed.
 
 ## executors.toml
 
-`~/.mewla/executors.toml` is optional. `mewla setup` writes one with prompts:
+`~/.mewla/executors.toml` is optional. `mewla setup` writes one with prompts.
+Each write (setup, `mewla brain executors add`) saves the file it replaces as
+`executors.toml.bak.<UTC time>` and removes the older backups of that name, so
+only the newest is kept.
 
 ```sh
 mewla setup
