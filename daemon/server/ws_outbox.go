@@ -117,6 +117,7 @@ type clientOutbox struct {
 	lastSendSize int
 	lastSendTook time.Duration
 	failure      string // why the writer gave up on this client, if it did
+	peerWrite    string // the write error that showed the client had already hung up
 
 	// frameDeflate: the client offered frameDeflateSubprotocol, so the writer
 	// sends JSON text of frameDeflateMin bytes or more as one binary message
@@ -207,12 +208,13 @@ type outboxStats struct {
 	lastSendSize int
 	lastSendTook time.Duration
 	failure      string
+	peerWrite    string
 }
 
 func (o *clientOutbox) stats() outboxStats {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return outboxStats{sent: o.sent, wire: o.wire, frameDeflate: o.frameDeflate, byType: sortedTally(o.byType), pending: o.bytes, lastSendAt: o.lastSendAt, lastSendSize: o.lastSendSize, lastSendTook: o.lastSendTook, failure: o.failure}
+	return outboxStats{sent: o.sent, wire: o.wire, frameDeflate: o.frameDeflate, byType: sortedTally(o.byType), pending: o.bytes, lastSendAt: o.lastSendAt, lastSendSize: o.lastSendSize, lastSendTook: o.lastSendTook, failure: o.failure, peerWrite: o.peerWrite}
 }
 
 func newClientOutbox(conn *websocket.Conn) *clientOutbox {
@@ -379,13 +381,20 @@ func (o *clientOutbox) close() {
 	o.closeLocked(errOutboxClosed)
 }
 
-// failLocked drops a client that cannot keep up. Closing the socket unblocks a
+// failLocked drops a client that cannot keep up, or that the writer found gone. Closing the socket unblocks a
 // write in progress and ends the client's read loop, which detaches it.
 func (o *clientOutbox) failLocked(err error) {
 	if o.closed {
 		return
 	}
-	o.failure = err.Error()
+	// A write that fails because the client is already gone is the client
+	// hanging up, found by the writer before the reader. Only the daemon's
+	// own reasons (overflow, a stalled write, its own close) are a failure.
+	if isPeerGone(err) {
+		o.peerWrite = err.Error()
+	} else {
+		o.failure = err.Error()
+	}
 	diag.Report("server.websocket.dropped", diag.SeverityWarn, "", fmt.Sprintf("client %s dropped with %d bytes pending: %v", o.conn.RemoteAddr(), o.bytes, err))
 	o.closeLocked(fmt.Errorf("%w: %v", errOutboxClosed, err))
 	_ = o.conn.Close()
@@ -456,6 +465,8 @@ func (l *wsLink) endCause(readErr error, out outboxStats) string {
 	switch {
 	case out.failure != "":
 		return "daemon-closed(outbox: " + out.failure + ")"
+	// out.peerWrite is deliberately not a case: a write that failed because
+	// the peer was gone is the peer closing, whichever side noticed first.
 	case closedBy != "":
 		return "daemon-closed(" + closedBy + ")"
 	case isTemporaryNetError(readErr):
@@ -481,6 +492,9 @@ func (l *wsLink) describe(out outboxStats) string {
 	frames := ""
 	if out.frameDeflate {
 		frames = fmt.Sprintf(" frames=deflate-raw wire=%dB", out.wire)
+	}
+	if out.peerWrite != "" {
+		frames += " writeErr=" + strconv.Quote(out.peerWrite)
 	}
 	return fmt.Sprintf("sent=%dB pending=%dB lastSend=%dB/%s took %s pongs=%d/%d lastPong=%s deflate=%t%s types=%s",
 		out.sent, out.pending, out.lastSendSize, since(out.lastSendAt), out.lastSendTook.Round(time.Millisecond), pongs, pings, since(lastPongAt), l.deflate, frames, describeTally(out.byType, out.sent))

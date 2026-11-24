@@ -71,7 +71,9 @@ The cause says which end hung up:
 
 - `peer-closed`: the phone, or something between it and the daemon (a tunnel,
   the phone's operating system closing the app's sockets), closed the
-  connection without a goodbye.
+  connection without a goodbye. When the daemon had a write queued and the
+  write failed first (broken pipe, connection reset), the line also carries
+  `writeErr=` with that error: the phone was already gone.
 - `client-silent`: the phone did not answer the daemon's pings for 60 seconds,
   as when the app is frozen in the background.
 - `daemon-closed(...)`: the daemon ended it, and the brackets say why (a ping
