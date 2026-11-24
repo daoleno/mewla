@@ -34,7 +34,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	// footer region proves one is open now.
 	tail := claudePromptTail(pane, 8)
 	switch {
-	case claudeTailHasPrefix(tail, "Enter to select") || claudeTailHasPrefix(tail, "Ready to submit your answers?"):
+	case claudeTailHasPrefix(tail, "Enter to select") || claudeTailHasPrefix(tail, "Ready to submit your answers?") || claudeChoiceReviewTail(tail):
 		return ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Waiting for your choice",
@@ -180,6 +180,16 @@ func claudePromptTail(pane string, n int) []string {
 		}
 	}
 	return tail
+}
+
+// claudeChoiceReviewTail is AskUserQuestion's review step as Claude Code
+// 2.1.331 draws it, without "Ready to submit your answers?": its last two
+// lines are the "1. Submit answers" and "2. Cancel" rows.
+func claudeChoiceReviewTail(tail []string) bool {
+	row := func(line, want string) bool {
+		return strings.TrimSpace(strings.TrimPrefix(line, "❯")) == want
+	}
+	return len(tail) >= 2 && row(tail[0], "2. Cancel") && row(tail[1], "1. Submit answers")
 }
 
 func claudeTailHasPrefix(tail []string, prefix string) bool {

@@ -105,6 +105,39 @@ func TestParseClaudeChoiceScreen_ReviewScreens(t *testing.T) {
 	}
 }
 
+// Claude Code 2.1.331 draws the review step without "Ready to submit your
+// answers?": the "1. Submit answers" row under "Review your answers" marks it.
+func TestParseClaudeChoiceScreen_Review2331WithoutReadyLine(t *testing.T) {
+	screen := readClaudeChoiceFixture(t, "wide_review_2_1_331_cjk_other.txt")
+	if screen.Kind != claudeChoiceScreenReview || len(screen.Review) != 2 || len(screen.Tabs) != 2 {
+		t.Fatalf("screen = %+v", screen)
+	}
+	value := "华泰价值因子在 Lance 的 GitHub 项目里已经部分复现：5 个基础因子的 RankIC 和原文接近，但 Top50 组合的超额收益只有原文的一半左右，而且成本参数解析有 bug，被记成了 0 成本。你电脑上的 API 清单里有 Tushare 密钥。接下来做什么？"
+	if claudeChoiceCompact(screen.Review[1].Question) != claudeChoiceCompact(value) {
+		t.Fatalf("question = %q", screen.Review[1].Question)
+	}
+	if screen.Review[0].Answer != "把当前策略画成echarts框架的html给我看看" || screen.Review[1].Answer != "先展示当前研究进展" {
+		t.Fatalf("answers = %+v", screen.Review)
+	}
+	if len(screen.ReviewRows) != 2 || screen.ReviewRows[0].Text != "Submit answers" || !screen.ReviewRows[0].Cursor || screen.ReviewRows[1].Text != "Cancel" {
+		t.Fatalf("review rows = %+v", screen.ReviewRows)
+	}
+}
+
+// The same card's first question at 80 columns, as 2.1.331 draws it (its
+// footer now reads "Tab/Arrow keys to navigate").
+func TestParseClaudeChoiceScreen_Narrow2331CJKQuestion(t *testing.T) {
+	screen := readClaudeChoiceFixture(t, "narrow_q1_2_1_331_cjk.txt")
+	gold := ClaudeChoiceQuestion{
+		Question:    "黄金策略的本地复现已经和原报告对上了（2010–2026 全样本夏普 1.01，2023 年后明显更好）。Lance 的验证结论是 fail：试过约 2066 组参数，DSR 只有 0.084，他建议别再调参。接下来往哪个方向改进？",
+		Options:     []string{"换信号源（推荐）", "做稳健性检验", "先停在这里"},
+		AllowsOther: true,
+	}
+	if !isClaudeChoiceQuestion(screen, gold) || screen.cursorRow() != 1 || len(screen.Tabs) != 2 {
+		t.Fatalf("screen = %+v", screen)
+	}
+}
+
 func TestParseClaudeChoiceScreen_OtherPromptsAreNotChoices(t *testing.T) {
 	for _, name := range []string{"permission_bash.txt", "exitplanmode.txt"} {
 		if screen := readClaudeChoiceFixture(t, name); screen.Kind != claudeChoiceScreenNone {
