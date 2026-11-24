@@ -12,9 +12,9 @@ const DROPS = platform.os === "web" || platform.desktop;
  * show "Drop to attach" over it, and dropped they become the composer's chips as picked ones do (`onFiles`, the
  * composer's attach). Text dragged in is the field's, as before. `testID` names the place (one per page).
  *
- * The Mac hears the drop from NSH (`onFileDrop`): the files with their contents (`files`, as a pick's: the daoleno/nsh
- * build of NSH 0.6.1, client/macos/Cargo.toml) beside their `file:` URLs, so the app reads nothing from disk itself.
- * An image dragged out of a browser and the screenshot thumbnail come as files too. NSH 0.6.1's web build delivers no
+ * The Mac hears the drop from NSH (`onFileDrop`): in NSH 0.6.1 the files' `file:` URLs, which `attachIncoming` reads
+ * (nsh.json `fs.read`); an NSH that also hands over their contents (`files`, as a pick's) is taken as it comes. An
+ * image dragged out of a browser and the screenshot thumbnail drop only with such an NSH. NSH 0.6.1's web build delivers no
  * drops (NSH #2867 adds them later), so in a browser the page host catches files dragged over the page and says which
  * place they are over by its `testID` (`files.dragOver`, `files.dropped`, with the files kept as picked ones are).
  * Only one of the two ever listens here: the web never sets `onFileDrop`, so a later NSH cannot deliver a drop twice.
