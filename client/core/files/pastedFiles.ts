@@ -28,10 +28,10 @@ export function pastedFileName(name: string, type: string, now: Date = new Date(
 export type PastedContent = { text: string; html: string; files: number; uris: readonly string[] };
 
 /**
- * What of a paste becomes chips; its text always goes into the field as typed (the field inserts it itself; a Finder
- * copy's names it leaves out on the Mac):
- * - a file copied in a file manager (`uris`, the desktops): the file, whose contents come in `files` on the Mac
- *   (`localFileContents` sorts them from icons);
+ * What of a paste becomes chips; its text always goes into the field as typed (the field inserts it itself; the names
+ * a Finder copy puts in come out again, `withoutInserted`):
+ * - a file copied in a file manager (`uris`, the desktops): the file, read from disk (NSH 0.6.1), or its contents in
+ *   `files` with an NSH that hands them over (`localFileContents` sorts them from icons);
  * - pictures (`files`: a screenshot to the clipboard, Copy Image): the pictures, unless the paste is formatted
  *   text with a picture of itself, as a spreadsheet cell or a selection on a web page copies: then only its
  *   text. Text that is only a link is the picture's address (a browser's Copy Image), not text of its own.
@@ -69,7 +69,7 @@ export function localFileName(uri: string): string | null {
  * - `keep`, for each delivered file by its name (`names`): with no local files named, every one (a screenshot, an
  *   image from a page, a promised file); else only the named files' contents (an icon a file manager puts beside
  *   them is not one);
- * - `unread`: the named files that came without contents, which could not be read (the system refused, gone);
+ * - `unread`: the named files that came without contents, for the app to read itself (NSH 0.6.1 hands none over);
  * - `folders`: how many folders were named, which never come (a folder's URL ends in "/").
  */
 export function localFileContents(names: readonly string[], uris: readonly string[]): { keep: boolean[]; unread: { uri: string; name: string }[]; folders: number } {
