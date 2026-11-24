@@ -28,21 +28,21 @@ function computer(state: "connected" | "waiting" = "connected", handlers: Record
 }
 
 describe("dropping files on a conversation (Mewla for Mac)", () => {
-  // The Mac's NSH hands a drop's files over with their contents beside their URLs (FileDrop.tsx); the headless
-  // `dropFiles` gives the URLs only, as a drop whose files could not be read: the app never reads a path itself.
-  test("a dropped file that came without its contents is a chip that says it can't be read", async () => {
+  // NSH 0.6.1 hands a drop over as the files' URLs alone, as the headless `dropFiles` does: the app reads them.
+  test("a file dropped on the conversation becomes a chip under its own name, and Send sends it", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.dropFiles("id:composer", [PICTURE]);
-    await app.waitFor("text:Mewla can't read this file.");
+    await app.waitFor("text:Ready");
     await app.waitUntil(() => shows(app, "working.webp"));
-    expect(app.shows("text:Ready")).toBe(false);
-    expect(app.requests().some((request) => request.url.endsWith("/upload"))).toBe(false);
+    await app.type("id:composer", "what is this?");
+    await app.press("id:send");
+    await app.waitUntil(() => app.texts().includes("what is this? /state/uploads/1.webp"));
   });
 
   test("several files dropped at once on the conversation above are several chips", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.dropFiles("id:sent", [PICTURE, PICTURE]);
-    await app.waitUntil(() => app.count("text:Mewla can't read this file.") === 2);
+    await app.waitUntil(() => app.count("text:Ready") === 2);
   });
 
   test("a folder is not attached, and says so", async () => {
@@ -71,11 +71,13 @@ describe("pasting files into the composer (Mewla for Mac)", () => {
     await app.waitUntil(() => app.texts().includes("look at  /state/uploads/1.webp"));
   });
 
-  test("a file copied in Finder that could not be read is a chip that says so", async () => {
+  test("a file copied in Finder that came without its contents (NSH 0.6.1) is read and is a chip", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
+    await app.type("id:composer", "look at ");
     await app.paste("id:composer", { text: "working.webp", uris: [PICTURE] });
-    await app.waitFor("text:Mewla can't read this file.");
-    await app.waitUntil(() => app.value("id:composer") === "");
+    await app.waitFor("text:Ready");
+    await app.waitUntil(() => shows(app, "working.webp"));
+    await app.waitUntil(() => app.value("id:composer") === "look at ");
   });
 
   test("a file copied in Finder and deleted before the paste is a chip that says so, its name not in the field", async () => {
