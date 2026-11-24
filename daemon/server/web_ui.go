@@ -146,7 +146,8 @@ func webUIPolicy(origin, host string) string {
 		"media-src 'self' data: blob: https:",
 		"connect-src 'self' " + origin + " ws://" + host + " wss://" + host,
 		"worker-src 'self' blob:",
-		"frame-src 'none'",
+		// Only an HTML file a Session wrote, served sandboxed under its own grant (session_page.go).
+		"frame-src " + origin + sessionPagePrefix,
 		"object-src 'none'",
 		// The page names its files from the root (nsh.json web.base "/") and needs no <base>.
 		"base-uri 'self'",
