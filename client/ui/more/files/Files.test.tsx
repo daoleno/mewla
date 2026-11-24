@@ -57,19 +57,60 @@ function preview(metadata: Record<string, unknown>, extra: { handlers?: Record<s
 }
 
 describe("File preview", () => {
-  test("an HTML file shows as a page in a web view, its source still copied as text", async () => {
-    const c = preview(meta({ name: "report.html", path: "/work/report.html", relative_path: "report.html", content_type: "text/html; charset=utf-8", size: 22 }));
-    c.options.host.handlers["app.daemon"] = ({ type, body }: Asked) => {
-      if (type.startsWith("session_file")) c.asked.push({ type, body });
-      if (type === "session_file_metadata") return { reply: "session_file_metadata", metadata: meta({ name: "report.html", path: "/work/report.html", relative_path: "report.html", content_type: "text/html; charset=utf-8", size: 22 }) };
-      return { reply: "session_file_text", text: { content: "<h1>Quarterly</h1>", bytes_read: 22, truncated: false, generation: "g1" } };
-    };
+  const htmlMeta = () => meta({ name: "report.html", path: "/work/out/report.html", relative_path: "out/report.html", content_type: "text/html; charset=utf-8", size: 4_600_000 });
+  const pageGrant = () => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify({ version: 1, path: "/session-page/abc.def/report.html", expires_at_ms: Date.now() + 1_800_000 }) });
+
+  test("an HTML file opens as a page the computer serves, whole: never read in as text, full width, full screen", async () => {
+    const c = preview(htmlMeta(), {
+      network: {
+        [`POST ${BASE}/session-page-grant`]: pageGrant(),
+        [`POST ${BASE}/session-file-capability`]: capability(),
+        "GET http://desk.test:9877/session-file?*": { status: 200, headers: { "content-type": "text/html" }, body: "<h1>Quarterly</h1>" },
+      },
+    });
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:file-html");
+    // A 4.6 MB page is not cut at the text preview's 512 KB: it is not read as text at all.
+    expect(c.asked.map((a) => a.type)).toEqual(["session_file_metadata"]);
     expect(app.shows("id:file-text")).toBe(false);
-    expect(c.asked.map((a) => a.type)).toEqual(["session_file_metadata", "session_file_text"]);
+    expect(app.shows("id:file-truncated")).toBe(false);
+    // Full bleed: no meta line, no card.
+    expect(app.shows("id:file-meta")).toBe(false);
+    const granted = app.requests().filter((r) => r.url === `${BASE}/session-page-grant`);
+    expect(granted).toHaveLength(1);
+    expect(JSON.parse(String(granted[0]!.body))).toEqual({ worker_id: "w1", process_id: 42, started_at: 1_700_000_000, path: "/work/out/report.html", generation: "g1" });
+    expect(granted[0]!.headers.authorization ?? granted[0]!.headers.Authorization).toMatch(/v1:/);
+    // A phone's browser cannot reach the in-app tunnel: no Open in browser there.
+    expect(app.shows("id:file-open-browser")).toBe(false);
+
+    await app.press("id:file-full-screen");
+    await app.waitFor("id:file-html-full");
+    expect(app.shows("id:file-html")).toBe(false);
+    await app.press("id:file-full-screen-close");
+    await app.waitFor("id:file-html");
+    expect(app.shows("id:file-html-full")).toBe(false);
+
+    // The source still copies, through the file stream.
     await app.press("id:file-copy");
     await app.waitUntil(() => app.clipboard() === "<h1>Quarterly</h1>");
+  });
+
+  test("on a desktop a page also opens in the browser, under a grant signed at the press", async () => {
+    const c = preview(htmlMeta(), { network: { [`POST ${BASE}/session-page-grant`]: pageGrant() } });
+    const app = await open(HARNESS, { ...c.options, platform: "macos", width: 1280, height: 800 });
+    await app.waitFor("id:file-html");
+    await app.press("id:file-open-browser");
+    await app.waitUntil(() => app.openedUrls().length > 0);
+    expect(app.openedUrls()).toEqual(["http://desk.test:9877/session-page/abc.def/report.html"]);
+    expect(app.requests().filter((r) => r.url === `${BASE}/session-page-grant`)).toHaveLength(2);
+  });
+
+  test("a computer without page grants says to update it", async () => {
+    const c = preview(htmlMeta(), { network: { [`POST ${BASE}/session-page-grant`]: { status: 404, body: "404 page not found" } } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:file-problem");
+    expect(app.texts()).toContain("This computer runs an older Mewla that cannot show HTML pages. Update it, then refresh.");
+    expect(app.shows("id:file-full-screen")).toBe(false);
   });
 
   test("a text file shows as text, says its preview was cut, and asked the live Session for this generation", async () => {

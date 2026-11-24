@@ -899,6 +899,41 @@ func linkPairingSignaturePayload(payload []byte) []byte {
 	return signed
 }
 
+// CreateSessionPageSignature signs a Session page grant (server/session_page.go): a page's
+// URL names its folder, device and expiry under this daemon's key, so it needs no state here.
+func (m *Manager) CreateSessionPageSignature(payload []byte) string {
+	return hex.EncodeToString(ed25519.Sign(m.privateKey, sessionPageSignaturePayload(payload)))
+}
+
+// VerifySessionPageSignature verifies the daemon's signature of a page grant and that the
+// device it was issued to is still paired.
+func (m *Manager) VerifySessionPageSignature(deviceID string, payload []byte, signatureHex string) error {
+	signature, err := decodeFixedHex(signatureHex, ed25519.SignatureSize)
+	if err != nil {
+		return ErrUnauthorized
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.loadDevicesLocked(); err != nil {
+		return err
+	}
+	if _, exists := m.devices[strings.TrimSpace(deviceID)]; !exists {
+		return ErrUnknownDevice
+	}
+	if !ed25519.Verify(m.publicKey, sessionPageSignaturePayload(payload), signature) {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
+func sessionPageSignaturePayload(payload []byte) []byte {
+	const domain = "mewla-session-page-grant-v1\x00"
+	signed := make([]byte, 0, len(domain)+len(payload))
+	signed = append(signed, domain...)
+	signed = append(signed, payload...)
+	return signed
+}
+
 func sessionFileCapabilitySignaturePayload(payload []byte) []byte {
 	const domain = "mewla-session-file-capability-v1\x00"
 	signed := make([]byte, 0, len(domain)+len(payload))

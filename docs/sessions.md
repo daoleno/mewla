@@ -224,7 +224,7 @@ and **Delete**.
 
 Tap a file path in a reply, a tool row or a changed-files list to preview it
 without leaving the chat: Markdown rendered, text and code as text, HTML as a
-page (in a view of its own that reaches nothing else of the app's), images you
+page (see below), images you
 can zoom, PDFs page by page (pinch or double tap to zoom on the phone; in a
 browser the PDF opens in a tab of its own), video (mp4, m4v, mov, webm) and
 audio (mp3, m4a, wav, ogg, opus, flac). A full path to a file in your home
@@ -239,6 +239,21 @@ Playback streams from the computer, so a long recording starts at once and
 seeking does not download the whole file. Every file has **Download**; text
 files (Markdown, code, txt, JSON) also have **Copy**, which copies the whole
 file.
+
+An HTML file opens as a browser shows it, across the whole screen: its scripts
+run, charts draw and respond (zoom, hover, tabs), libraries load from a CDN,
+and the files beside it (`./data.json`, `./style.css`, `./img/chart.png`) load
+too, however large the page. **Full screen** gives it the whole display (turn
+the phone for landscape); on a Mac and in a browser **Open in browser** opens
+it in a tab. A link out of the page opens in your browser. A folder named
+with its slash in code, such as `reports/q3/`, opens its `index.html`. An open
+page keeps working after the Session that wrote it has ended; a path in
+Brain's thread opens again whenever Brain runs. It runs in a sandbox of its own: it cannot reach the app, your
+sign-in or the daemon, and it reads only its own folder and what is below it,
+never hidden files, nothing above the folder and nothing through a link that
+leaves it. A page directly in your home folder, or in Mewla's own state folder
+(other than Brain's workspace, worktrees and scratch), reads only itself. The
+link the app opens lasts 30 minutes; opening the file again gives a fresh one.
 
 Web addresses, with or without `[text](…)`, open in your browser, including one
 that sits right beside Chinese text or punctuation, and email addresses open
