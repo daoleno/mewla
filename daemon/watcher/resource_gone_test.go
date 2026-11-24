@@ -473,3 +473,34 @@ func TestBindAndReleaseTellTheLedgerWhichSessionAUnitWas(t *testing.T) {
 		t.Fatalf("after Release: %+v found=%v err=%v", s, found, err)
 	}
 }
+
+func TestReconcileWritesTheLedgerOncePerSessionAndAgainAfterARestart(t *testing.T) {
+	m, _ := newGoneTestManager(t)
+	unit, _ := addGoneTestUnit(t, m, "fedcba9876543210fedcba9876543210")
+	windows := []sessionPane{{target: "mh-polled", delegated: true, resourceUnit: unit}}
+	ledger := gc.LedgerPath(m.stateRoot())
+	m.Reconcile(windows)
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-polled" {
+		t.Fatalf("first poll: %+v found=%v err=%v", s, found, err)
+	}
+	removeLedger := func() {
+		for _, suffix := range []string{"", "-wal", "-shm"} {
+			if err := os.Remove(ledger + suffix); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+		}
+	}
+	removeLedger()
+	m.Reconcile(windows)
+	if _, err := os.Stat(ledger); !os.IsNotExist(err) {
+		t.Fatalf("a later poll of the same Session opened the ledger: %v", err)
+	}
+	// A new daemon starts with no bindings and re-adopts the Session.
+	m.mu.Lock()
+	m.byTarget = make(map[string]string)
+	m.mu.Unlock()
+	m.Reconcile(windows)
+	if s, found, err := gc.SessionOfUnit(m.stateRoot(), unit); err != nil || !found || s.SessionID != "mh-polled" {
+		t.Fatalf("after a restart: %+v found=%v err=%v", s, found, err)
+	}
+}

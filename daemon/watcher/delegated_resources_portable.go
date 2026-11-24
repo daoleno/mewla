@@ -108,9 +108,12 @@ func (m *portableDelegatedResourceManager) Bind(target, unit string) {
 	}
 	m.mu.Lock()
 	delete(m.reserved, unit)
+	// Reconcile binds every Session on each poll; the ledger is written when
+	// a target's unit is new to this daemon (after a restart, once each).
+	changed := m.byTarget[target] != unit
 	m.byTarget[target] = unit
 	m.mu.Unlock()
-	if m.tempRoot != "" {
+	if changed && m.tempRoot != "" {
 		gc.BindSession(m.stateRoot(), unit, target, m.clock())
 	}
 }
