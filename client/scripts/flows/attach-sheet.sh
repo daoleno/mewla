@@ -12,6 +12,17 @@ adb push -q "$dir/Screenshot_lane.png" /sdcard/Pictures/Screenshots/Screenshot_l
 adb push -q "$dir/trip-plan.pdf" /sdcard/Download/trip-plan.pdf
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/Screenshots/Screenshot_lane.png >/dev/null
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/trip-plan.pdf >/dev/null
+# A failed run leaves its words and chips in the composer, and the next reset waits for an empty one: clear them.
+cleanup() {
+  [[ $? -eq 0 ]] && return
+  adb shell input keyevent KEYCODE_BACK
+  for _ in 1 2 3; do "$PHONE" tap '^Remove ' 2 >/dev/null 2>&1 || break; done
+  "$PHONE" tap '^composer$' 5 >/dev/null 2>&1 || return 0
+  adb shell input keyevent KEYCODE_MOVE_END
+  for _ in $(seq 1 16); do adb shell input keyevent KEYCODE_DEL; done
+  adb shell input keyevent KEYCODE_BACK
+}
+trap cleanup EXIT
 shot() { if [[ -n "${SHOTS:-}" ]]; then "$PHONE" shot "$SHOTS/$1.png" >/dev/null; fi; }
 chips() { "$PHONE" dump | grep -c '^attachment-upload-[0-9]* | .*, Ready$' || true; }
 until_chips() { for _ in $(seq 1 40); do [[ "$(chips)" == "$1" ]] && return 0; sleep 0.5; done; echo "expected $1 ready chips, saw $(chips)" >&2; return 1; }
