@@ -16,9 +16,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	_ "modernc.org/sqlite"
 )
+
+// walSizeLimit is what the write-ahead log is cut back to once a checkpoint
+// has emptied it. Without it the file keeps the size of its largest burst
+// (brain.db's stayed at 766 MB for a 3.8 MB log).
+const walSizeLimit = 64 << 20
 
 // Open opens (creating, mode 0600) the database at path.
 func Open(path string) (*sql.DB, error) {
@@ -27,7 +33,8 @@ func Open(path string) (*sql.DB, error) {
 	}
 	dsn := "file:" + (&url.URL{Path: path}).EscapedPath() +
 		"?_txlock=immediate&_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)" +
-		"&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)"
+		"&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)" +
+		"&_pragma=journal_size_limit(" + strconv.Itoa(walSizeLimit) + ")"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
