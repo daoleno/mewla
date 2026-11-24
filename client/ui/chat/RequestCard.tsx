@@ -1,15 +1,18 @@
-import { computed, openUrl, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, openUrl, signal, Storage, Text, untracked, View } from "nsh";
 import { SELECTION } from "./TimelineRows";
 import type { Signal, ViewRef } from "nsh";
 import { clock } from "../calendar/clock";
 import { sealedOfAnswered } from "../../core/timeline/answered";
 import type { AnsweredTimelineItem } from "../../core/timeline/types";
 import { Button, Input } from "nsh/base";
+import { Draft } from "../../core/conversation/draft";
+import { writeIntoDraft } from "./Composer";
 import type { ConversationChoice } from "../../core/conversation/conversation";
 import { answerChoice, answerPrompt, decideApproval } from "../../core/conversation/turn";
 import {
   buildChoiceAnswers, choiceDraftAnswerText, choiceQuestionAnswered, choiceReviewStep, emptyChoiceDraft, isChoiceGoneError, isPromptGoneError,
-  latestPendingChoice, nextChoiceStep, questionAllowsOther, setChoiceOtherText, toggleChoiceOption, toggleChoiceOther, unansweredChoiceQuestions,
+  keptChoiceDraft, latestPendingChoice, nextChoiceStep, questionAllowsOther, restoreChoiceDraft, setChoiceOtherText, toggleChoiceOption, toggleChoiceOther,
+  unansweredChoiceQuestions,
   type ChoiceAnswer,
 } from "../../core/timeline/claudeChoiceModel";
 import type { CodexConversationEvent } from "../../core/conversation/conversation";
@@ -95,6 +98,14 @@ export function threadNewest(items: () => readonly { timestamp?: string }[]) {
 export type RequestNotice = (text: string) => void;
 
 const PASSED = "This request has already passed.";
+/** A typed answer whose question closed first: it waits in the message box, never lost (owner 11-24). */
+const KEPT = "The question closed. Your answer is in the message box.";
+
+/** A choice card's answers as a message: one line per question, its header (or the question) and the answer. */
+export function choiceAnswerMessage(questions: readonly { header?: string; question: string }[], answers: readonly string[]): string {
+  const lines = questions.map((question, i) => ({ asked: question.header || question.question, answer: answers[i] ?? "" })).filter((line) => line.answer);
+  return lines.length === 1 && questions.length === 1 ? lines[0]!.answer : lines.map((line) => `${line.asked}: ${line.answer}`).join("\n");
+}
 
 function sealedOf(card: Card, verb: string, answer: string, mono?: boolean): SealedRequest {
   return { key: card.key, verb, answer, mono, title: card.title, source: card.source, brain: card.inBrain, workerId: card.sourceWorkerId };
@@ -133,16 +144,29 @@ function OptionWords(props: { label: string; description?: string; brainAsks?: b
 }
 
 /** A question: one step per question (54 pt rows with a ring), then the review and Submit. Made once per card key. */
-function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: () => boolean; submit: (answers: ChoiceAnswer[]) => Promise<void>; onDone: (answer: string) => void; onGone: () => void }) {
+function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: () => boolean; submit: (answers: ChoiceAnswer[]) => Promise<void>; onDone: (answer: string) => void; onGone: (message: string) => void }) {
   const S = requestCardSize();
   const choice = props.choice;
   const draft = signal(emptyChoiceDraft(choice));
+  // What is picked and typed is kept on this device for this card, so a reload or a crash does not lose it (owner
+  // 11-24: the card came back empty after a reload); answered or sealed, it is cleared.
+  const serverId = untracked(current)?.id;
+  const kept = serverId ? new Draft(Storage, `choice:${serverId}:${props.card.key}`) : null;
+  void kept?.load().then((saved) => {
+    const restored = restoreChoiceDraft(choice, saved);
+    if (restored && !keptChoiceDraft(untracked(draft))) draft.set(restored);
+  });
+  cleanup(() => kept?.flush());
+  const setDraft = (next: ReturnType<typeof emptyChoiceDraft>) => {
+    draft.set(next);
+    kept?.save(keptChoiceDraft(next));
+  };
   const step = signal(0);
   const sending = signal(false);
   const failure = signal("");
   const review = choiceReviewStep(choice);
   const pick = (q: number, o: number) => {
-    draft.set(toggleChoiceOption(choice, draft(), q, o));
+    setDraft(toggleChoiceOption(choice, draft(), q, o));
     if (!choice.questions[q]!.multi_select) step.set(nextChoiceStep(choice, q));
   };
   const submit = async () => {
@@ -152,10 +176,14 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
     failure.set("");
     try {
       await props.submit(answers);
+      kept?.save("");
       haptic.impact("light");
       props.onDone(choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!)).filter(Boolean).join(" · "));
     } catch (error) {
-      if (isChoiceGoneError(error) || isPromptGoneError(error)) return props.onGone();
+      if (isChoiceGoneError(error) || isPromptGoneError(error)) {
+        kept?.save("");
+        return props.onGone(choiceAnswerMessage(choice.questions, choice.questions.map((question, i) => choiceDraftAnswerText(question, draft()[i]!))));
+      }
       failure.set(error instanceof Error && error.message ? error.message : "Couldn't send. Try again.");
     } finally {
       sending.set(false);
@@ -179,12 +207,12 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
               </View>
             </Button>
           ))}
-          <If when={questionAllowsOther(question)}><If when={answer().otherActive} else={<Button testID="choice-other-open" disabled={!props.connected()} onPress={() => draft.set(toggleChoiceOther(choice, draft(), q.index))}
+          <If when={questionAllowsOther(question)}><If when={answer().otherActive} else={<Button testID="choice-other-open" disabled={!props.connected()} onPress={() => setDraft(toggleChoiceOther(choice, draft(), q.index))}
                 class={`${S.option} justify-center border-t border-border px-4 active:bg-accent disabled:opacity-40`}>
                 <Text class="text-body text-muted-foreground">Other…</Text>
               </Button>}><View class="border-t border-border px-4 py-2">
                 <Input testID="choice-other" value={answer().other} placeholder="Your answer" autoFocus
-                  onChange={({ value }) => draft.set(setChoiceOtherText(draft(), q.index, value))}
+                  onChange={({ value }) => setDraft(setChoiceOtherText(draft(), q.index, value))}
                   class="min-h-[44px] rounded-(--radius-control) bg-muted px-3 text-body" />
               </View></If></If>
         </View>
@@ -377,13 +405,22 @@ function SignInBody(props: { card: Card; connected: () => boolean; onDone: (verb
 }
 
 /** One open request: the card the person answers here. */
-function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; openLabel: string; notice: RequestNotice; anchor?: (node: ViewRef) => void; onLater: () => void }) {
+function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (card: Card) => void; onOpenTerminal: (workerId: string) => void; openLabel: string; notice: RequestNotice; draft?: () => Draft | null; anchor?: (node: ViewRef) => void; onLater: () => void }) {
   const S = requestCardSize();
   const card = props.card;
   const gone = () => {
     const command = card.body.kind === "action" ? promptParts(card.body.prompt.requestText ?? "", card.body.prompt.commandText).command : "";
     sealRequest(sealedOf(card, "Not answered", command || card.title, Boolean(command)));
     props.notice(PASSED);
+  };
+  // What the person typed for a question that closed first goes to the thread's message box, ready to send;
+  // the line says it was not sent, with the answer (a thread with no message box keeps it on that line).
+  const goneWithAnswer = (message: string) => {
+    const draft = props.draft?.();
+    if (!message) return gone();
+    if (draft) writeIntoDraft(draft, message);
+    sealRequest(sealedOf(card, "Not sent", message));
+    props.notice(draft ? KEPT : PASSED);
   };
   const submit = (answers: ChoiceAnswer[]) => {
     const transport = currentTransport();
@@ -407,7 +444,7 @@ function OpenCard(props: { card: Card; connected: () => boolean; onSource?: (car
             const words = sealAction(card, option.label, Boolean(option.destructive));
             sealRequest(sealedOf(card, words.verb, words.answer, words.mono));
           }} /></If>}>{(body) => <ChoiceBody card={card} choice={body().choice} connected={props.connected} submit={submit}
-          onDone={(answer) => sealRequest(sealedOf(card, "You chose", answer))} onGone={gone} />}</If>
+          onDone={(answer) => sealRequest(sealedOf(card, "You chose", answer))} onGone={goneWithAnswer} />}</If>
       {/* Put aside: it leaves the thread's foot, the tray keeps it. */}
       <Button testID="request-later" onPress={props.onLater} class={`${S.later} items-center justify-center self-end px-2 active:opacity-70`}>
         <Text class={`${S.laterText} text-muted-foreground`}>Later</Text>
@@ -432,14 +469,17 @@ function StackedRow(props: { card: () => Card; onPress: () => void }) {
   );
 }
 
-/** The answered line's 20 pt mark: a check for yes, an x-circle for Denied, a dash-circle for Not answered. */
+/** Verbs of a request that did not reach the agent: no check, which means yes. */
+const UNDONE = new Set(["Not answered", "Not sent"]);
+
+/** The answered line's 20 pt mark: a check for yes, an x-circle for Denied, a dash-circle for Not answered or Not sent. */
 export function sealedIcon(verb: string): "check-circle-fill" | "close-circle-fill" | "remove-circle" {
-  return verb === "Not answered" ? "remove-circle" : verb === "Denied" ? "close-circle-fill" : "check-circle-fill";
+  return UNDONE.has(verb) ? "remove-circle" : verb === "Denied" ? "close-circle-fill" : "check-circle-fill";
 }
 
 /** The Mac's answered mark (mac.css `.sealed`): the outline check, or an outline x for Denied, a dash for Not answered. */
 function macSealedIcon(verb: string): "check-circle" | "close-circle" | "remove-circle" {
-  return verb === "Not answered" ? "remove-circle" : verb === "Denied" ? "close-circle" : "check-circle";
+  return UNDONE.has(verb) ? "remove-circle" : verb === "Denied" ? "close-circle" : "check-circle";
 }
 
 /** An answered request's quiet line: a check, what was done, the answer. Tap shows the question again. */
@@ -500,6 +540,8 @@ export function RequestStack(props: {
   /** The blocked card's one button: "Open" where it opens the Session, "Open terminal" in the Session's own chat. */
   openLabel?: string;
   notice: RequestNotice;
+  /** The thread's message box draft: a typed answer whose question closed first goes there. */
+  draft?: () => Draft | null;
   /** Keys the thread holds as answered rows: their sealed lines are in the thread, not the foot. */
   durable?: () => ReadonlySet<string>;
   /** When the thread's newest row happened: an answer before it is history, not the foot's. */
@@ -529,7 +571,7 @@ export function RequestStack(props: {
       {/* Rows are kept by key while the list is made again (every update, each second): a row made anew flashed
           on the web and lost a tap under the finger (lead 11-13, RESULT-web-flicker; Tray a80b9b26). */}
       <Each of={sealed()} key={(s) => s.key}>{(s) => <SealedLine sealed={s} open={() => shown().has(s().key)} onToggle={() => toggle(untracked(s).key)} />}</Each>
-      <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{(key) => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} openLabel={props.openLabel ?? "Open terminal"} notice={props.notice} anchor={props.anchor} onLater={() => later(untracked(key))} />}</Each>
+      <Each of={openKey() ? [openKey()!] : []} key={(key) => key}>{(key) => <OpenCard card={untracked(openCard)!} connected={connected} onSource={props.onSource} onOpenTerminal={props.onOpenTerminal} openLabel={props.openLabel ?? "Open terminal"} notice={props.notice} draft={props.draft} anchor={props.anchor} onLater={() => later(untracked(key))} />}</Each>
       <Each of={cards().filter((card) => card.key !== openKey())} key={(card) => card.key}>{(card) => <StackedRow card={card} onPress={() => props.picked.set(untracked(card).key)} />}</Each>
     </View>
   );

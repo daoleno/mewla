@@ -765,7 +765,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
                   shown: () => requestsHere().length > 0 || sealedHere().length > 0,
-                  render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} onOpenTerminal={() => chooseMode("terminal")} />,
+                  render: (anchor) => <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ workerId: props.workerId }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} draft={() => draft} onOpenTerminal={() => chooseMode("terminal")} />,
                 }}
                 requests={() => requestsHere().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}

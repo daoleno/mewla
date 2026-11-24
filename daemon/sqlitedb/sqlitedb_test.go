@@ -106,3 +106,24 @@ func TestTxRollsBackOnErrorAndWritersQueueInsteadOfFailing(t *testing.T) {
 		t.Fatalf("count=%d distinct=%d", count, distinct)
 	}
 }
+
+func TestTheLogIsCutBackAfterACheckpoint(t *testing.T) {
+	db, _ := open(t)
+	db.SetMaxOpenConns(3)
+	conns := make([]*sql.Conn, 3) // every pooled connection carries the limit
+	for i := range conns {
+		conn, err := db.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		conns[i] = conn
+		var limit int
+		if err := conn.QueryRowContext(t.Context(), `PRAGMA journal_size_limit`).Scan(&limit); err != nil {
+			t.Fatal(err)
+		}
+		if limit != walSizeLimit {
+			t.Fatalf("connection %d: journal_size_limit = %d, want %d", i, limit, walSizeLimit)
+		}
+	}
+}

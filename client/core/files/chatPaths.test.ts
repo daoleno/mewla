@@ -146,4 +146,9 @@ describe("paths that are not a home's link once the computer said they are files
     const many = Array.from({ length: 200 }, (_, i) => `docs/f${i}.md`).join(" ");
     expect(chatFileCandidates(many)).toHaveLength(MAX_CHAT_FILE_CANDIDATES);
   });
+  test("a folder named in code is asked about with its slash (a folder report opens with its index.html); in text it is not", () => {
+    expect(chatFileCandidates("| (c) | `reports/q3-folder/` |\n\nsee reports/q3-folder/ and `./out/` and `a/../b/` and `https://x.example/a/`")).toEqual(["reports/q3-folder/", "./out/"]);
+    expect(linkFilePaths("open `reports/q3-folder/`", new Set(["reports/q3-folder/"]))).not.toBe("open `reports/q3-folder/`");
+    expect(linkFilePaths("open `reports/q3-folder/`", new Set())).toBe("open `reports/q3-folder/`");
+  });
 });

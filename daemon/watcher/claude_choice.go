@@ -212,6 +212,11 @@ func driveClaudeChoice(pane claudeChoicePane, questions []ClaudeChoiceQuestion, 
 			return refuseClaudeChoice(claudeChoiceClippedReason)
 		}
 	}
+	if screen.Kind == claudeChoiceScreenReview && screenShowsChoice(screen, questions) {
+		// An earlier drive stopped on the review step: the answers are in, only
+		// Submit is left. It submits only when they are exactly these answers.
+		return d.submitReview(questions, expected)
+	}
 	if err := verifyPristineClaudeChoice(screen, questions); err != nil {
 		return err
 	}

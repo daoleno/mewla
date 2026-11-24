@@ -21,6 +21,7 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -237,6 +238,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return control.Response{OK: true}
 	case "worker_close":
 		return a.handleWorkerClose(req)
+	case "gc_why":
+		return a.handleGCWhy(req)
 	case "service_tunnel":
 		return a.handleServiceTunnel(req)
 	case "service_list":
@@ -2387,4 +2390,31 @@ func (a *controlApp) sendProviderCommand(workerID string, worker *classifier.Wor
 		return control.ErrorResponse(code, err.Error())
 	}
 	return control.Response{OK: true, Confirmation: "sent " + command}
+}
+
+// handleGCWhy answers mewla gc why from this daemon's records: its state
+// root, its live Sessions and their Work.
+func (a *controlApp) handleGCWhy(req control.Request) control.Response {
+	finder, ok := a.watcher.(interface{ GCWhyLookup() (gc.WhyLookup, bool) })
+	if !ok {
+		return control.ErrorResponse("gc_why_unavailable", "Sessions are not running.")
+	}
+	lookup, ok := finder.GCWhyLookup()
+	if !ok {
+		return control.ErrorResponse("gc_why_unavailable", "Mewla is still starting")
+	}
+	if a.brainService != nil {
+		lookup.Work = a.brainService.SessionWork
+	}
+	var why gc.Why
+	var err error
+	if req.ProcessID > 0 {
+		why, err = gc.WhyProcess(lookup, req.ProcessID)
+	} else {
+		why, err = gc.WhyPath(lookup, req.Path)
+	}
+	if err != nil {
+		return control.ErrorResponse("gc_why_failed", err.Error())
+	}
+	return control.Response{OK: true, Why: &why}
 }

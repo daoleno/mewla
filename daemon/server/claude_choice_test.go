@@ -104,3 +104,29 @@ func TestAnswerChoice_RefusesStaleCallsAndReportsMismatches(t *testing.T) {
 		t.Fatalf("mismatch err = %v", err)
 	}
 }
+
+// The transcript, not the screen, says a question passed (owner 11-24: Claude
+// sat on its review step with the answers typed while the card said "passed").
+func TestAnswerChoice_ScreenGoneButTranscriptPendingIsNotGone(t *testing.T) {
+	srv := &Server{answerClaudeChoiceOverride: func(string, []watcher.ClaudeChoiceQuestion, []watcher.ClaudeChoiceAnswer) error {
+		return watcher.ErrClaudeChoiceGone
+	}}
+	pending := func() (work.CodexConversation, error) {
+		return choiceConversation(work.ConversationChoicePending), nil
+	}
+	_, err := srv.answerChoice("%7", answerRequest("toolu_1"), pending)
+	if !errors.Is(err, watcher.ErrClaudeChoiceRefused) || errors.Is(err, watcher.ErrClaudeChoiceGone) || !strings.Contains(err.Error(), "Terminal") {
+		t.Fatalf("pending in the transcript: err = %v", err)
+	}
+	loads := 0
+	settles := func() (work.CodexConversation, error) {
+		loads++
+		if loads <= 2 {
+			return choiceConversation(work.ConversationChoicePending), nil
+		}
+		return choiceConversation(work.ConversationChoiceAnswered, "Apple", "Red"), nil
+	}
+	if _, err := srv.answerChoice("%7", answerRequest("toolu_1"), settles); !errors.Is(err, watcher.ErrClaudeChoiceGone) {
+		t.Fatalf("answered in the Terminal meanwhile: err = %v", err)
+	}
+}

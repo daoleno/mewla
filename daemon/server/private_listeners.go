@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -44,6 +45,7 @@ var privateAllowedPaths = map[string]bool{
 	"/upload":                  true,
 	"/session-file-capability": true,
 	"/session-file":            true,
+	"/session-page-grant":      true,
 }
 
 // privateListeners is the set of TLS-only listeners on this computer's private
@@ -199,10 +201,15 @@ func closePrivate(listener *privateListener) {
 func (s *Server) privateHandler() http.Handler {
 	inner := s.Handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !privateAllowedPaths[r.URL.Path] {
+		if !privateAllowedPath(r.URL.Path) {
 			http.NotFound(w, r)
 			return
 		}
 		inner.ServeHTTP(w, r)
 	})
+}
+
+// privateAllowedPath: a route of privateAllowedPaths, or a page under a signed Session page grant.
+func privateAllowedPath(path string) bool {
+	return privateAllowedPaths[path] || strings.HasPrefix(path, sessionPagePrefix)
 }

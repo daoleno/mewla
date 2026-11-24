@@ -161,6 +161,7 @@ func existingSessionFiles(cwd string, references []string) []string {
 		if err != nil {
 			continue
 		}
+		canonicalPath = sessionFolderPage(canonicalPath, reference)
 		if info, err := os.Stat(canonicalPath); err == nil && info.Mode().IsRegular() {
 			existing = append(existing, reference)
 		}
@@ -233,6 +234,7 @@ func openSessionFile(cwd, reference string) (*resolvedSessionFile, error) {
 	if err != nil {
 		return nil, err
 	}
+	canonicalPath = sessionFolderPage(canonicalPath, reference)
 
 	// Check before Open so known directories and special files (notably FIFOs)
 	// are rejected without attempting a potentially blocking read. The post-open
@@ -322,6 +324,22 @@ func resolveSessionFilePath(cwd, reference string) (string, string, error) {
 	}
 
 	return canonicalCWD, canonicalPath, nil
+}
+
+// sessionFolderPage: for a reference that names a folder ("reports/q3/", with its slash), the folder's
+// index.html, the page a folder report opens with (through any symlink); otherwise canonicalPath as it is.
+func sessionFolderPage(canonicalPath, reference string) string {
+	if !strings.HasSuffix(reference, "/") {
+		return canonicalPath
+	}
+	if info, err := os.Stat(canonicalPath); err != nil || !info.IsDir() {
+		return canonicalPath
+	}
+	page, err := filepath.EvalSymlinks(filepath.Join(canonicalPath, "index.html"))
+	if err != nil {
+		return canonicalPath
+	}
+	return page
 }
 
 // finishOpenSessionFile: an opened regular file classified from its first bytes, rewound.

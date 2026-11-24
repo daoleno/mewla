@@ -15,6 +15,7 @@ import (
 	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/gc"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/memorysearch"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -42,8 +43,10 @@ type Request struct {
 	PhoneAction       *phone.AgentAction            `json:"phone_action,omitempty"`
 	// IPhoneAction is one action on the iPhone, through iPhone Mirroring (type "iphone"); its
 	// answer is PhoneResult.
-	IPhoneAction       *phone.AgentAction                     `json:"iphone_action,omitempty"`
-	ProcessID          int                                    `json:"process_id,omitempty"`
+	IPhoneAction *phone.AgentAction `json:"iphone_action,omitempty"`
+	ProcessID    int                `json:"process_id,omitempty"`
+	// Path is what mewla gc why asks about (type "gc_why", when ProcessID is 0).
+	Path               string                                 `json:"path,omitempty"`
 	ProcessStart       string                                 `json:"process_start,omitempty"`
 	Type               string                                 `json:"type"`
 	Name               string                                 `json:"name,omitempty"`
@@ -227,6 +230,8 @@ type Response struct {
 	// After runs once the response has been written to the caller (the
 	// daemon restarting only after it said it will).
 	After func() `json:"-"`
+	// Why is mewla gc why's answer (type "gc_why").
+	Why *gc.Why `json:"why,omitempty"`
 }
 
 // DaemonStatus is a running daemon's identity as the daemon itself reports it
