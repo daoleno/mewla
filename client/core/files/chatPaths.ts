@@ -28,6 +28,8 @@ const HOME_HINT = /(?:~\/|\/home\/|\/Users\/|\/root\/|[A-Za-z]:[\\/]Users)/;
  * extension has a letter (`127.0.0.1:8317` and `v0.3.0` are not files).
  */
 const OTHER_FILE = /^(?![a-z][a-z0-9+.-]*:\/\/)(?!.*(?:\.\.\.|…))[^\s`<>|"'()[\]{}*?,;=\\]*[^\\/\s.]\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,10}(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)?$/i;
+/** A relative folder named with its closing slash, as an agent names a folder report: no space, quote, bracket, glob or dots-only part. */
+const FOLDER = /^(?![a-z][a-z0-9+.-]*:)(?!.*(?:\.\.\.|…))(?:\.\/)?(?:[^\s`<>|"'()[\]{}*?,;=\\/.][^\s`<>|"'()[\]{}*?,;=\\/]*\/)+$/i;
 const LINE_SUFFIX = /(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)$/i;
 /** At most this many paths of one reply are asked about. */
 export const MAX_CHAT_FILE_CANDIDATES = 64;
@@ -50,7 +52,10 @@ export function fileKey(path: string): string {
 
 /** A path that is not a home's, when it could name a file: in text only one with a folder (`a/b.md`, `./x.sh`). */
 function otherFile(path: string, inCode: boolean): string | null {
-  if (!path || path.length > 4096 || HOME_PATH.test(path) || !OTHER_FILE.test(path)) return null;
+  if (!path || path.length > 4096 || HOME_PATH.test(path)) return null;
+  // A folder in code (`reports/q3/`): linked when the computer says it holds an index.html, which it opens.
+  if (inCode && FOLDER.test(path)) return path;
+  if (!OTHER_FILE.test(path)) return null;
   return inCode || path.includes("/") ? path : null;
 }
 

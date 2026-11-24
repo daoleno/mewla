@@ -41,6 +41,16 @@ over your computer as those Sessions. File preview is read-only, but it is not
 a sandbox: it can open files anywhere the daemon's user can read. **Pair only
 devices you trust with a terminal on that computer.**
 
+An HTML file a Session wrote is treated as untrusted when it is shown as a
+page. The daemon serves it under a link it signs for the device, for 30
+minutes, naming the page's folder; every answer on that link is sandboxed to
+an origin of its own (no storage, cookies or sign-in of Mewla's, no reach into
+the app's window, no navigation of it), its requests go only to its own folder
+and to `https:` addresses, and it reads no hidden file, nothing above its
+folder and nothing a symlink takes outside it. A page can read the other files
+of its folder and send them to the web, as any page you open in a browser can
+with what it is given: open pages from agents you trust with those files.
+
 [Screen](screen.md) lets a paired device see and control the computer's
 screen, but only after someone at the computer allows that device. The daemon
 captures the screen itself and sends it as video over WebRTC, set up over the
