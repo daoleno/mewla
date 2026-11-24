@@ -5,8 +5,9 @@
       "date": "2026-11-24",
       "highlights": [],
       "fixes": [
-        "Closing a sheet no longer leaves the app blank.",
-        "A finished Session's chat, and the files it named, still open."
+        "Hold a message's text, then Copy message: all of it, as plain text.",
+        "A finished Session's chat, and the files it named, still open.",
+        "Closing a sheet no longer leaves the app blank."
       ]
     },
     {

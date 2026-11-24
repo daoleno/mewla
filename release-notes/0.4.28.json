@@ -3,6 +3,30 @@
   "date": "2026-11-24",
   "highlights": [
     {
+      "id": "0.4.28-model-picks-work",
+      "title": "Model picks that work",
+      "line": "Pick a model for Claude, Codex, OpenCode or Pi; mid-turn, it waits for the turn to end.",
+      "media": {
+        "scene": "work-menu"
+      },
+      "try": {
+        "kind": "open",
+        "target": "sessions"
+      }
+    },
+    {
+      "id": "0.4.28-html-pages",
+      "title": "Reports open as pages",
+      "line": "Tap an HTML report in Chat: it opens as a page, charts and all.",
+      "media": {
+        "scene": "chat-card"
+      },
+      "try": {
+        "kind": "open",
+        "target": "brain"
+      }
+    },
+    {
       "id": "0.4.28-attach-sheet",
       "title": "Photos, camera and files from +",
       "line": "Tap + and pick a screenshot, take a photo or choose a file: it goes with your message.",
@@ -19,32 +43,24 @@
       ]
     },
     {
-      "id": "0.4.28-copy-message",
-      "title": "Copy a whole message",
-      "line": "Hold any message's text, then Copy message: all of it, as plain text.",
+      "id": "0.4.28-mac-native-terminal",
+      "title": "A native terminal on the Mac",
+      "line": "Your input method at the cursor; ⌘C, ⌘V, ⌘+, ⌘− and right-click as in any Mac app.",
       "media": {
-        "scene": "chat-copy"
+        "scene": "mac-app"
       },
       "try": {
         "kind": "open",
-        "target": "brain"
-      }
-    },
-    {
-      "id": "0.4.28-html-pages",
-      "title": "Reports open as pages",
-      "line": "Tap an HTML report in Chat: it opens as a page, charts and all.",
-      "media": {
-        "scene": "chat-card"
+        "target": "sessions"
       },
-      "try": {
-        "kind": "open",
-        "target": "brain"
-      }
+      "platforms": [
+        "macos"
+      ]
     }
   ],
   "fixes": [
-    "Closing a sheet no longer leaves the app blank.",
-    "A finished Session's chat, and the files it named, still open."
+    "Hold a message's text, then Copy message: all of it, as plain text.",
+    "A finished Session's chat, and the files it named, still open.",
+    "Closing a sheet no longer leaves the app blank."
   ]
 }
