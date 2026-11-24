@@ -27,6 +27,9 @@
         "*"
       ]
     },
+    "fs": {
+      "read": ["${homeDir}", "/Volumes", "/Users/Shared", "/private/var/folders", "/private/tmp", "/tmp"]
+    },
     "openUrl": true,
     "clipboard": true,
     "share": true,

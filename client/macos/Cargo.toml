@@ -50,29 +50,6 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"
 # The release's secrets in the Keychain (secure.rs); already in the lock through NSH's networking.
 security-framework = "3.7.0"
 
-# NSH 0.6.1 plus what Mewla needs before NSH ships it (branch mewla/v0.6.1-file-contents of daoleno/nsh, proposed
-# upstream): a drop or a Finder paste hands the files over with their contents, so the app reads what the person gave
-# it without an fs grant; an image dragged out of a browser and the screenshot thumbnail (file promises, image data)
-# drop like files; a Finder copy pasted into a field that listens to pastes does not insert the files' names; each
-# fetch starts in an autorelease pool, so an upload's body does not stay in memory. Every nsh crate comes from that
-# commit (one nsh-core); the JS bundle is still built by the NSH 0.6.1 CLI.
-# A closed sheet's late dismissal no longer reaches the page under it (#3014); Android text selection follows the
-# text as drawn, survives a scroll, ends on Back, shows the magnifier, lists the app's menu items first and retints
-# its handles (#3018-#3023). The same commit is the one every host embeds: client/scripts/fetch-nsh.sh installs
-# the Android and iOS runtimes built from it.
-# Goes once an NSH release has longbridge/nsh#2964 (merged), #3014, #3015, #3016, #3017 and #3018-#3023.
-[patch.crates-io]
-nsh-base = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-core = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-engine = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-i18n = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-js = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-macros = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-package = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-platform-apple = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-platform-macos = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-nsh-updater = { git = "https://github.com/daoleno/nsh", rev = "77f4496c8d1daa38e417c9ac2cf83c1be1bdb199" }
-
 [profile.release]
 lto = "thin"
 codegen-units = 4
