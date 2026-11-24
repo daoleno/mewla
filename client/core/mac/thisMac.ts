@@ -61,28 +61,36 @@ export function ownEntryPlan(
   };
 }
 
-/**
- * This Mac's state words in the pane (after "This Mac · "): why the app could not join its own Mewla, else, when its
- * loopback socket finds nothing to answer, that Mewla is not running here, never a bare "Offline" (owner 11-23). A
- * loopback address has no network, DNS or relay in the way, so unreachable or refused can only mean that.
- */
-export function thisMacWords(input: { kind: string; diagnosis?: string; problem: string; words: string }): string {
-  if (input.problem) return input.problem;
-  const unreachable = !input.diagnosis || input.diagnosis === "Server unreachable" || input.diagnosis === "Daemon refused connection";
-  return input.kind === "offline" && unreachable ? NOT_RUNNING : input.words;
-}
-
 /** What the Mac app says when nothing answers at this Mac's own loopback address. */
 export const NOT_RUNNING = "Mewla is not running";
 
 /**
- * This Mac's row in the computers list while another computer is current, also before its entry exists (owner
- * 11-23: with this Mac removed and manjaro current, nothing said that this Mac's Mewla did not answer). The join's
- * own error first; before the join has given it an entry, it is starting; then the probe's word, where a loopback
- * computer that is offline can only be one whose Mewla is not running.
+ * Where This Mac stands, as each surface knows it: no entry yet (the join has not made it); its entry the current
+ * computer (its connection's state and diagnosis); or its entry beside another current computer (what its own
+ * loopback check answered, and the row's word from the current computer's view of it).
  */
-export function thisMacRowWords(input: { problem: string; joined: boolean; word: string }): string {
+export type ThisMacState =
+  | { entry: "none" }
+  | { entry: "current"; kind: string; diagnosis?: string }
+  | { entry: "other"; check?: "online" | "offline" | "unpaired" };
+
+/**
+ * This Mac's words wherever it shows (owner 11-23: never a bare "Offline"; the 0.4.27 gate: the row said "Offline ·
+ * last seen" with its daemon stopped): the pane after "This Mac · ", its row in the computers list, the window while
+ * it starts. One rule for all of them. The join's own reason first (`problem`: the system refusing to start Mewla,
+ * `mewla pair`'s error); then, where its loopback address finds nothing to answer, that Mewla is not running (a
+ * loopback address has no network, DNS or relay in the way, so unreachable or refused can only mean that); else the
+ * surface's own words. Its own check outranks the current computer's view of it, which only says when it last saw it.
+ */
+export function thisMacSays(input: { problem: string; state: ThisMacState; words: string }): string {
   if (input.problem) return input.problem;
-  if (!input.joined) return "Starting…";
-  return input.word === "Offline" || input.word === "Can't connect" ? NOT_RUNNING : input.word;
+  const state = input.state;
+  if (state.entry === "none") return "Starting…";
+  if (state.entry === "current") {
+    const unreachable = !state.diagnosis || state.diagnosis === "Server unreachable" || state.diagnosis === "Daemon refused connection";
+    return state.kind === "offline" && unreachable ? NOT_RUNNING : input.words;
+  }
+  if (state.check === "offline") return NOT_RUNNING;
+  if (state.check === "online") return input.words.startsWith("Online") ? input.words : "Online";
+  return /^(Offline|Can't connect)\b/.test(input.words) ? NOT_RUNNING : input.words;
 }

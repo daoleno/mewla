@@ -34,6 +34,7 @@ import { Sheet } from "../kit/Sheet";
 import { PillButton } from "../kit/kit";
 import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
+import { linkHooks } from "../kit/wait";
 import { HomeCat } from "./Cat";
 import { isMacApp } from "../mac/app";
 import { MacNoAgent } from "../mac/NoAgent";
@@ -433,7 +434,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
             // SPEC §16.4: nothing under 150 ms, the bottom-held placeholder, the slow line at 3 s, Try again at
             // 15 s; "What should Brain do?" only after a read that succeeded.
             <ThreadWait waiting={() => chatState() === "loading"} hasRows={() => rows().length > 0} empty={() => <If when={isMacApp()} else={<Notice title="What should Brain do?" />}><MacReady /></If>}
-              reload={() => brainChat()?.reload()} reconnect={() => currentTransport()?.resume()} computer={() => current()?.name}
+              reload={() => brainChat()?.reload()} reconnect={() => linkHooks.reconnect()} computer={() => current()?.name}
               failedAction={{ title: "Open terminal", onPress: () => openTerminal(brain()?.host_worker?.id ?? ""), testID: "brain-chat-open-terminal" }} />
           )}
           foot={{
@@ -460,7 +461,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
       {/* A start before the computer answers: connecting is a wait (the placeholder), Offline only at `link.away`. */}
       <If when={shows() === "offline"}>
         <ThreadWait testID="brain-offline" waiting={() => true} empty={() => <View />} reload={() => {}}
-          reconnect={() => currentTransport()?.resume()} computer={() => current()?.name} />
+          reconnect={() => linkHooks.reconnect()} computer={() => current()?.name} />
       </If>
     </View>
   );

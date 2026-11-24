@@ -26,6 +26,8 @@
 
 #[cfg(target_os = "macos")]
 mod agent;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod launchjob;
 mod link;
 #[cfg(target_os = "macos")]
 mod daemon;
@@ -262,7 +264,22 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
         let Some(reply) = call.into_reply() else { return };
         let config = config.clone();
         // `mewla pair` waits for the daemon (up to a minute while it starts): off the engine's thread.
-        std::thread::spawn(move || reply.reply(daemon::pairing(&config)));
+        // Why the daemon's job cannot start, when the takeover found that it cannot (agent.rs): This Mac says it
+        // before "Mewla is not running" (ui/mac/local.ts), as `launch_problem`, or in place of `mewla pair`'s error.
+        std::thread::spawn(move || {
+            let pairing = daemon::pairing(&config);
+            // Read after: the takeover may still be deciding while `mewla pair` waits.
+            let problem = if release { agent::launch_problem() } else { None };
+            reply.reply(match pairing {
+                Ok(mut pairing) => {
+                    if let (Some(problem), Some(fields)) = (problem, pairing.as_object_mut()) {
+                        fields.insert("launch_problem".into(), problem.into());
+                    }
+                    Ok(pairing)
+                }
+                Err(err) => Err(problem.unwrap_or(err)),
+            })
+        });
     });
 }
 
