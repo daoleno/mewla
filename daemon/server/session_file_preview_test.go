@@ -1096,3 +1096,28 @@ func TestSessionFolderNamedWithItsSlashOpensItsIndexPage(t *testing.T) {
 		t.Fatal("a folder named without its slash opened")
 	}
 }
+
+// Brain names its folder report by its absolute or its ~/ path (0.4.28 gate,
+// b-mac-chat2): both open its index page, wherever Brain's own cwd is.
+func TestSessionFolderNamedByItsHomeOrAbsolutePathOpensItsIndexPage(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	writeFiles(t, home, map[string]string{"g28/pages/team-report/index.html": "<p>team</p>", "g28/pages/team-report/data.json": "{}"})
+	absolute := filepath.Join(home, "g28", "pages", "team-report") + string(filepath.Separator)
+	cwd := t.TempDir()
+	got := existingSessionFiles(cwd, []string{"~/g28/pages/team-report/", absolute, "~/g28/pages/"})
+	if !reflect.DeepEqual(got, []string{"~/g28/pages/team-report/", absolute}) {
+		t.Fatalf("existing = %q", got)
+	}
+	for _, path := range []string{"~/g28/pages/team-report/", absolute} {
+		resolved, err := openSessionFile(cwd, path)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		resolved.file.Close()
+		if filepath.Base(resolved.canonicalPath) != "index.html" || resolved.kind != "text" {
+			t.Fatalf("%s resolved = %s (%s)", path, resolved.canonicalPath, resolved.kind)
+		}
+	}
+}

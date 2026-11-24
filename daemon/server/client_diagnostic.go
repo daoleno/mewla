@@ -1,13 +1,30 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 const maxClientDiagnosticDetail = 300
+
+// slowClientMessageLog is how long one client message may hold its
+// connection's read loop before a line says so.
+const slowClientMessageLog = time.Second
+
+// clientMessageType is a raw client message's type, for a log line.
+func clientMessageType(msg []byte) string {
+	var head struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(msg, &head) != nil {
+		return "unreadable"
+	}
+	return sanitizeDiagnosticToken(head.Type)
+}
 
 // handleClientDiagnostic writes one line a paired app reports about its own
 // state (a stream gap, a snapshot that never arrived, a send that timed out).

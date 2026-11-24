@@ -747,3 +747,31 @@ func TestGatewayRejectsDeclaredBodyOverSafetyCap(t *testing.T) {
 		t.Fatalf("upstream hits = %d, want 0", hits)
 	}
 }
+
+// A Codex Session on the machine gateway lists Codex's own catalog; its model
+// menu keeps the models the gateway answers, which is what this says (0.4.28
+// gate: the sheet offered gpt-6.2-astra, which no connection offered).
+func TestGatewayServesCodexModelIsWhatTheGatewayAnswers(t *testing.T) {
+	owner := startBuiltinVerifierOwner(t)
+	creds := NewMemoryCredentialStore()
+	owner.creds = creds
+	owner.router.creds = creds
+	if _, err := owner.UpsertProviderConnection(ProviderConnectionInput{
+		ID: "conn-xcode", Name: "xcode", Client: ClientCodex, PresetID: ProviderPresetCustom,
+		BaseURL: "https://xcode.example/v1", ModelID: "gpt-6-luna", Advanced: true,
+	}, "secret", 0, true); err != nil {
+		t.Fatal(err)
+	}
+	owner.mu.Lock()
+	owner.discovery.put("conn-xcode", []string{"gpt-6-luna", "gpt-5.6-sol"}, nil)
+	owner.mu.Unlock()
+	for model, want := range map[string]bool{"gpt-6-luna": true, "gpt-5.6-sol": true, "gpt-6.2-astra": false, "": false} {
+		if got := owner.GatewayServesCodexModel(model); got != want {
+			t.Errorf("serves %q = %v, want %v", model, got, want)
+		}
+		_, err := owner.resolveGatewayRequest(GatewayProtocolResponses, model)
+		if (err == nil) != want {
+			t.Errorf("the gateway's own answer for %q disagrees: %v", model, err)
+		}
+	}
+}

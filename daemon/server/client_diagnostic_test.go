@@ -21,3 +21,17 @@ func TestClientDiagnosticLineIsOneBoundedLine(t *testing.T) {
 		t.Fatalf("diagnostic line is not bounded: %d bytes", len(line))
 	}
 }
+
+// A message that held a connection's read loop is named in its slow line by
+// its type alone, never its body.
+func TestClientMessageTypeNamesOnlyTheType(t *testing.T) {
+	for raw, want := range map[string]string{
+		`{"type":"terminal_open","worker_id":"mh-1","cols":82}`: "terminal_open",
+		`{"type":"codex conversation\nsubscribe"}`:              "codex_conversation_subscribe",
+		`not json`: "unreadable",
+	} {
+		if got := clientMessageType([]byte(raw)); got != want {
+			t.Errorf("type of %q = %q, want %q", raw, got, want)
+		}
+	}
+}

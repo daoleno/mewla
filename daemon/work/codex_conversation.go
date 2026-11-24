@@ -530,6 +530,9 @@ func seekCodexConversationTail(file *os.File) error {
 }
 
 type codexConversationBuilder struct {
+	// turnError is the error the current turn's chat already shows: Codex
+	// can say it twice (an error event, then the turn's own end).
+	turnError            string
 	sourceID             string
 	sessionID            string
 	cwd                  string
@@ -789,6 +792,9 @@ func (b *codexConversationBuilder) consumeEvent(lineNumber int, timestamp string
 		CodexErrorInfo    json.RawMessage `json:"codex_error_info"`
 		NumTurns          *int            `json:"num_turns"`
 		RateLimits        json.RawMessage `json:"rate_limits"`
+		// Error is a turn's failure as its end records it (task_complete):
+		// what the provider refused, e.g. a model the route does not offer.
+		Error json.RawMessage `json:"error"`
 	}
 	if json.Unmarshal(raw, &payload) != nil {
 		return
@@ -806,9 +812,24 @@ func (b *codexConversationBuilder) consumeEvent(lineNumber int, timestamp string
 		// Activity identity; only a later turn terminal settles it.
 		b.startActivity(payload.TurnID, timestamp, lineNumber)
 		if payload.Type == "task_started" || payload.Type == "turn_started" {
+			b.turnError = ""
 			b.addStatus(lineNumber, timestamp, "Task started", "")
 		}
 	case "task_complete", "turn_complete":
+		// A turn the provider refused ends here with its error and no reply
+		// (Codex 0.4.28 gate: a model the route does not offer answered 404):
+		// the chat says so, never nothing.
+		if message, info, failed := codexTurnEndError(payload.Error); failed {
+			b.settleActivity(payload.TurnID, ProviderActivityFailed, timestamp, lineNumber)
+			b.activityLifecycle.recordError(timestamp, ProviderActivityError{
+				Code:       codexErrorInfoCode(info),
+				HTTPStatus: codexErrorInfoStatus(info),
+				Message:    firstLine(message),
+			}, false)
+			b.finishPendingReasoning()
+			b.addTurnError(lineNumber, timestamp, message)
+			break
+		}
 		b.settleActivity(payload.TurnID, ProviderActivityCompleted, timestamp, lineNumber)
 	case "turn_aborted":
 		b.settleActivity(payload.TurnID, codexAbortedActivityStatus(payload.Reason), timestamp, lineNumber)
@@ -825,11 +846,7 @@ func (b *codexConversationBuilder) consumeEvent(lineNumber int, timestamp string
 			}, false)
 			b.finishPendingReasoning()
 		}
-		message := cleanConversationText(payload.Message)
-		if message == "" {
-			message = "Codex reported an error."
-		}
-		b.addStatusWithState(lineNumber, timestamp, "Codex error", message, "failed")
+		b.addTurnError(lineNumber, timestamp, payload.Message)
 	case "stream_error":
 		b.startActivity(payload.TurnID, timestamp, lineNumber)
 		title := cleanConversationText(payload.Message)
@@ -1593,6 +1610,54 @@ func (b *codexConversationBuilder) addPlanUpdate(lineNumber int, timestamp, call
 
 func (b *codexConversationBuilder) addStatus(lineNumber int, timestamp, title, body string) {
 	b.addStatusWithState(lineNumber, timestamp, title, body, "")
+}
+
+// addTurnError shows a turn's error in the chat once per turn: the same
+// message on a later turn is that turn's error and shows again.
+func (b *codexConversationBuilder) addTurnError(lineNumber int, timestamp, message string) {
+	message = cleanConversationText(message)
+	if message == "" {
+		message = "Codex reported an error."
+	}
+	if b.turnError == message {
+		return
+	}
+	b.turnError = message
+	b.addEvent(CodexConversationEvent{
+		ID:        b.eventID(lineNumber),
+		Timestamp: timestamp,
+		Kind:      "status",
+		Title:     "Codex error",
+		Body:      message,
+		Status:    "failed",
+		Source:    "codex_rollout",
+	})
+}
+
+// codexTurnEndError reads the error a turn's end carries: an object with its
+// message (and Codex's error info), or a bare message.
+func codexTurnEndError(raw json.RawMessage) (message string, info json.RawMessage, failed bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return "", nil, false
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		text = strings.TrimSpace(text)
+		return text, nil, text != ""
+	}
+	var object struct {
+		Message        string          `json:"message"`
+		CodexErrorInfo json.RawMessage `json:"codex_error_info"`
+	}
+	if json.Unmarshal(raw, &object) != nil {
+		return "", nil, false
+	}
+	message = strings.TrimSpace(object.Message)
+	if message == "" && len(bytes.TrimSpace(object.CodexErrorInfo)) == 0 {
+		return "", nil, false
+	}
+	return message, object.CodexErrorInfo, true
 }
 
 func (b *codexConversationBuilder) addStatusWithState(lineNumber int, timestamp, title, body, status string) {

@@ -9,8 +9,8 @@ const brain = { chat_thread_id: "t-now", host_worker };
 const at = (s: number) => `2026-11-12T07:00:${String(s).padStart(2, "0")}.000Z`;
 const reply = (id: string, seq: number, body: string) => ({ id, seq, timestamp: at(seq), kind: "assistant_message", role: "assistant", body });
 
-async function brainWith(events: Record<string, unknown>[], daemon: Record<string, unknown> = {}) {
-  const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, conversations: { "brain-host": events }, ...daemon }) });
+async function brainWith(events: Record<string, unknown>[], daemon: Record<string, unknown> = {}, platform: "android" | "ios" = "android") {
+  const app = await open(APP, { platform, storage: paired, host: phoneHost({ brain, conversations: { "brain-host": events }, ...daemon }) });
   await app.waitFor("id:composer", { timeout: 10_000 });
   return app;
 }
@@ -90,6 +90,21 @@ describe("a path relative to Brain's workspace (owner 11-16: Brain's DESIGN-v2.m
     await app.waitUntil(() => framesOf(app.host.posts(), "session_file_metadata").length > 0);
     expect(framesOf(app.host.posts(), "session_file_metadata")[0]).toMatchObject({ worker_id: "brain-host", path: DESIGN });
   }, 20_000);
+
+  // 0.4.28 gate (Mac b-mac-chat2, iOS ios-3-chat): Brain's folder report by its ~/ and absolute path stayed text.
+  for (const platform of ["ios", "android"] as const) {
+    test(`${platform}: a ~/ or absolute folder Brain names in code is asked about, links, and opens its page`, async () => {
+      const home = "~/g28/pages/team-report/", absolute = "/home/me/g28/pages/team-report/";
+      const app = await brainWith([reply("a1", 1, `Folder report, two ways:\n- \`${home}\`\n- \`${absolute}\``)], exists([home, absolute]), platform);
+      await app.waitUntil(() => framesOf(app.host.posts(), "session_file_exists").length > 0, { timeout: 10_000 });
+      expect(framesOf(app.host.posts(), "session_file_exists")[0]).toMatchObject({ worker_id: "brain-host", paths: [home, absolute] });
+      await app.wait(300);
+      await app.press(`text:${home}`);
+      await app.waitFor("id:file-preview", { timeout: 10_000 });
+      await app.waitUntil(() => framesOf(app.host.posts(), "session_file_metadata").length > 0);
+      expect(framesOf(app.host.posts(), "session_file_metadata")[0]).toMatchObject({ worker_id: "brain-host", path: home });
+    }, 20_000);
+  }
 
   test("a reply drawn before Brain's host run is known asks once it is", async () => {
     const early = { ...host_worker, process_id: 0 };

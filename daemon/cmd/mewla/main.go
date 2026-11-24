@@ -686,6 +686,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		// A Codex Worker launched on a model Provider's route has its own
 		// app-server; the route table knows its socket.
 		codexFollow.SetSocketSource(profileOwner.CodexControlSocket)
+		codexFollow.SetGatewayModels(profileOwner.GatewayServesCodexModel)
 	}
 	// Every relay listener the previous daemon handed on is taken back by
 	// now; one no listener took back is closed, so it refuses rather than hangs.

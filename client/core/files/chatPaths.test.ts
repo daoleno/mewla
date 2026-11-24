@@ -151,4 +151,16 @@ describe("paths that are not a home's link once the computer said they are files
     expect(linkFilePaths("open `reports/q3-folder/`", new Set(["reports/q3-folder/"]))).not.toBe("open `reports/q3-folder/`");
     expect(linkFilePaths("open `reports/q3-folder/`", new Set())).toBe("open `reports/q3-folder/`");
   });
+
+  // 0.4.28 gate (Mac b-mac-chat2, iOS ios-3-chat): Brain named its folder report by its absolute and its ~/ path, in
+  // code with the slash; both stayed plain text while the relative one in a Session opened.
+  test("an absolute or home folder in code is asked about like a relative one, and opens once the computer has it", () => {
+    const reply = "Folder report, two ways:\n- `~/g28/pages/team-report/`\n- `/Users/runner/g28/pages/team-report/`\n\nand `/home/me/.mewla/brain/workspace/worklog/x/`";
+    expect(chatFileCandidates(reply)).toEqual(["~/g28/pages/team-report/", "/Users/runner/g28/pages/team-report/", "/home/me/.mewla/brain/workspace/worklog/x/"]);
+    const linked = linkFilePaths(reply, new Set(["~/g28/pages/team-report/", "/Users/runner/g28/pages/team-report/"]));
+    expect(destinations(linked)).toEqual(["~/g28/pages/team-report/", "/Users/runner/g28/pages/team-report/"]);
+    expect(linkFilePaths(reply, new Set())).toBe(reply);
+    // Not a folder named by the agent: prose, no closing slash, `..`, an elision, a lone root.
+    expect(chatFileCandidates("see /home/me/reports/ and `/home/me/workspace` and `/home/me/../x/` and `~/a/…/b/` and `/` and `~/`")).toEqual([]);
+  });
 });

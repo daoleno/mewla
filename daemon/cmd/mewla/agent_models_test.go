@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -88,5 +89,29 @@ func TestPiMenuNamesModelsTheWayPiDoes(t *testing.T) {
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("menu = %#v, want %#v", got, want)
+	}
+}
+
+// A Codex on Mewla's machine gateway lists Codex's whole catalog; the menu
+// offers only what the gateway answers. A Codex on another provider (its own
+// sign-in, a Session route with its catalog) keeps its list.
+func TestCodexMenuOnTheGatewayOffersOnlyWhatItAnswers(t *testing.T) {
+	models := []codexctl.Model{{ID: "gpt-6.2-astra"}, {ID: "gpt-6-luna"}, {ID: "gpt-6-sol"}, {ID: "gpt-5.6-sol"}}
+	events := newCodexEvents(context.Background(), nil)
+	events.SetGatewayModels(func(model string) bool { return model == "gpt-6-luna" || model == "gpt-5.6-sol" })
+	ids := func(list []codexctl.Model) []string {
+		out := []string{}
+		for _, model := range list {
+			out = append(out, model.ID)
+		}
+		return out
+	}
+	if got := ids(events.servedModels(models, "mewla-gateway")); !reflect.DeepEqual(got, []string{"gpt-6-luna", "gpt-5.6-sol"}) {
+		t.Fatalf("gateway menu = %v", got)
+	}
+	for _, provider := range []string{"openai", "", "custom"} {
+		if got := ids(events.servedModels(models, provider)); len(got) != 4 {
+			t.Fatalf("provider %q menu = %v, want Codex's list", provider, got)
+		}
 	}
 }
