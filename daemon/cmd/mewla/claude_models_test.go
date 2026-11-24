@@ -335,4 +335,24 @@ func TestClaudeMenuWaitsForClaudeToRun(t *testing.T) {
 	if !models.ModelsAvailable(&classifier.Worker{ID: "w1", Command: "claude --session-id 3311e9d4"}) {
 		t.Fatal("a running Claude was offered no models")
 	}
+	// A Session starts as its login shell running the launch command; the
+	// recorded command stays the shell's a while after it became Claude.
+	wrapped := &classifier.Worker{ID: "w1", Command: "/bin/zsh -i -l -c claude --model haiku --settings {}", ProcessID: 42}
+	program := "/bin/zsh -i -l -c claude --model haiku --settings {}"
+	models.launchArgs = func(*classifier.Worker) string { return program }
+	if models.ModelsAvailable(wrapped) {
+		t.Fatal("the login shell was offered Claude's models before it started Claude")
+	}
+	program = "claude --model haiku --settings {}"
+	read := ""
+	models.read = func(_ context.Context, command, _ string) ([]work.ClaudeModel, error) {
+		read = command
+		return []work.ClaudeModel{{Value: "haiku", DisplayName: "Haiku", Resolved: "claude-haiku-5-5", Efforts: []string{"low"}}}, nil
+	}
+	if !models.ModelsAvailable(wrapped) {
+		t.Fatal("the shell became Claude, and no models were offered")
+	}
+	if _, err := models.Models(context.Background(), wrapped); err != nil || read != program {
+		t.Fatalf("Claude's list was read with %q: %v", read, err)
+	}
 }

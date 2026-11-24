@@ -68,15 +68,38 @@ func newClaudeModels(screen claudeScreen, hub *agentevents.Hub) *claudeModels {
 		later:      newTurnPending(hub)}
 }
 
+// claudeCommand is the command line of the Claude the Session runs: its
+// recorded command when that starts Claude, else the program's own (a
+// Session starts as `zsh -i -l -c '<command>'`, and its recorded command
+// stays the shell's a while after the shell became Claude). "" while no Claude
+// runs yet.
+func (c *claudeModels) claudeCommand(worker *classifier.Worker) string {
+	if work.LaunchProgramProvider(worker.Command) == work.WorkerProviderClaude {
+		return worker.Command
+	}
+	if c.launchArgs != nil {
+		if args := c.launchArgs(worker); work.LaunchProgramProvider(args) == work.WorkerProviderClaude {
+			return args
+		}
+	}
+	return ""
+}
+
+var errClaudeNotRunning = errors.New("Claude has not started in this Session yet")
+
 func (c *claudeModels) list(ctx context.Context, worker *classifier.Worker) ([]work.ClaudeModel, error) {
-	key := strings.Join(strings.Fields(worker.Command), " ")
+	command := c.claudeCommand(worker)
+	if command == "" {
+		return nil, errClaudeNotRunning
+	}
+	key := strings.Join(strings.Fields(command), " ")
 	c.mu.Lock()
 	cached, ok := c.lists[key]
 	c.mu.Unlock()
 	if ok && time.Since(cached.at) < claudeListFresh {
 		return cached.models, nil
 	}
-	models, err := c.read(ctx, worker.Command, worker.Cwd)
+	models, err := c.read(ctx, command, worker.Cwd)
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +110,10 @@ func (c *claudeModels) list(ctx context.Context, worker *classifier.Worker) ([]w
 }
 
 // ModelsAvailable: Claude runs in the Session. A Session Mewla just made
-// runs its shell for a moment before Claude starts (its command is the
-// shell's then), and Claude's list is read with Claude's own command line.
+// runs its shell before Claude starts, and Claude's list is read with
+// Claude's own command line.
 func (c *claudeModels) ModelsAvailable(worker *classifier.Worker) bool {
-	return work.InferWorkerProvider(worker.Command) == work.WorkerProviderClaude
+	return c.claudeCommand(worker) != ""
 }
 
 // Models reads the Session's menu.
