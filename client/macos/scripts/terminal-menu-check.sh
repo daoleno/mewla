@@ -11,6 +11,9 @@ owner="$1"
 out="$2"
 
 osascript -e "tell application \"System Events\" to set frontmost of process \"$owner\" to true" >/dev/null 2>&1 || true
+# An Accessibility client before the menu opens: AppKit gives a menu its element only if one was listening when it
+# opened (in a run's first pass the menu showed on screen and the app's tree had none: 15 elements, no menu).
+osascript -e "tell application \"System Events\" to get name of every window of process \"$owner\"" >/dev/null 2>&1 || true
 sleep 1
 
 # The app's largest normal window; the terminal fills its right pane under the header.
@@ -30,6 +33,10 @@ print(best.0, best.1, best.2, best.3)' "$owner")
 cx=$((x + w * 65 / 100))
 cy=$((y + h * 60 / 100))
 
+# A right click and the read of the menu it opened. Twice at most: the run that saw the menu on screen and an app tree
+# of 15 elements with no menu was each job's first right click (11-24, two gate runs, both in light), so the second
+# opens the menu again with an Accessibility client already there.
+right_click_and_read() {
 swift -e '
 import CoreGraphics
 import Foundation
@@ -65,20 +72,25 @@ func explain(_ why: String) -> Never {
 if !AXIsProcessTrusted() { explain("not trusted for Accessibility") }
 // The menu a click opened, wherever it hangs in the tree (off the application, or under the window and the view
 // that showed it: in a 720 x 560 window it was deeper than four levels); the menu bar and its menus are not it.
-// Level by level, so a menu off the application is found before the many elements of the window are read.
-var level: [AXUIElement] = [root]
+// Level by level, so a menu off the application is found before the many elements of the window are read; three
+// looks, 0.7 s apart, as the menu element may come a moment after the menu.
 var seen = 0
 var found: AXUIElement? = nil
-while found == nil && !level.isEmpty && seen < 20000 {
-  var next: [AXUIElement] = []
-  for e in level {
-    seen += 1
-    let role = attr(e, kAXRoleAttribute) as? String
-    if role == kAXMenuRole { found = e; break }
-    if role == kAXMenuBarRole { continue }
-    next += attr(e, kAXChildrenAttribute) as? [AXUIElement] ?? []
+for look in 0..<3 where found == nil {
+  if look > 0 { usleep(700_000) }
+  var level: [AXUIElement] = [root]
+  seen = 0
+  while found == nil && !level.isEmpty && seen < 20000 {
+    var next: [AXUIElement] = []
+    for e in level {
+      seen += 1
+      let role = attr(e, kAXRoleAttribute) as? String
+      if role == kAXMenuRole { found = e; break }
+      if role == kAXMenuBarRole { continue }
+      next += attr(e, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    }
+    level = next
   }
-  level = next
 }
 guard let menu = found else { explain("no open menu (\(seen) elements searched)") }
 let titles = (attr(menu, kAXChildrenAttribute) as? [AXUIElement] ?? []).map { (attr($0, kAXTitleAttribute) as? String) ?? "" }
@@ -87,6 +99,14 @@ print(titles.map { $0.isEmpty ? "—" : $0 }.joined(separator: " | "))' "$owner"
 if ! grep -q "Copy" <<<"$items"; then
   # The same through System Events (what the workflow already reads the Dock with), should this process not see it.
   items="$items; System Events: $(osascript -e "tell application \"System Events\" to tell process \"$owner\" to get name of every menu item of menu 1" 2>&1 || true)"
+fi
+}
+right_click_and_read
+if ! grep -q "Copy" <<<"$items"; then
+  echo "terminal menu, first right click: $items"
+  osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
+  sleep 1
+  right_click_and_read
 fi
 osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1 || true
 echo "terminal menu (right click at $cx,$cy in $w x $h at $x,$y): $items"
