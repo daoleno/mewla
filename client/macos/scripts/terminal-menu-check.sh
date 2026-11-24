@@ -63,19 +63,24 @@ func explain(_ why: String) -> Never {
   exit(0)
 }
 if !AXIsProcessTrusted() { explain("not trusted for Accessibility") }
-func menus(_ e: AXUIElement, _ depth: Int) -> [AXUIElement] {
-  if (attr(e, kAXRoleAttribute) as? String) == kAXMenuRole { return [e] }
-  guard depth > 0, let kids = attr(e, kAXChildrenAttribute) as? [AXUIElement] else { return [] }
-  return kids.flatMap { menus($0, depth - 1) }
+// The menu a click opened, wherever it hangs in the tree (off the application, or under the window and the view
+// that showed it: in a 720 x 560 window it was deeper than four levels); the menu bar and its menus are not it.
+// Level by level, so a menu off the application is found before the many elements of the window are read.
+var level: [AXUIElement] = [root]
+var seen = 0
+var found: AXUIElement? = nil
+while found == nil && !level.isEmpty && seen < 20000 {
+  var next: [AXUIElement] = []
+  for e in level {
+    seen += 1
+    let role = attr(e, kAXRoleAttribute) as? String
+    if role == kAXMenuRole { found = e; break }
+    if role == kAXMenuBarRole { continue }
+    next += attr(e, kAXChildrenAttribute) as? [AXUIElement] ?? []
+  }
+  level = next
 }
-// Not the menu bar menus: the one a click opened.
-var shown: AXUIElement? = nil
-for m in menus(root, 4) {
-  var parentRole: String? = nil
-  if let p = attr(m, kAXParentAttribute) { parentRole = attr(p as! AXUIElement, kAXRoleAttribute) as? String }
-  if parentRole != kAXMenuBarItemRole { shown = m; break }
-}
-guard let menu = shown else { explain("no open menu") }
+guard let menu = found else { explain("no open menu (\(seen) elements searched)") }
 let titles = (attr(menu, kAXChildrenAttribute) as? [AXUIElement] ?? []).map { (attr($0, kAXTitleAttribute) as? String) ?? "" }
 print(titles.map { $0.isEmpty ? "—" : $0 }.joined(separator: " | "))' "$owner" 2>&1 || true)
 
