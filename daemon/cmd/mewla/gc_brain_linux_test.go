@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build linux
 
 package main
 
@@ -16,7 +16,7 @@ import (
 
 // Brain's host has no Session scratch: once the daemon places the caller in
 // it, keep and release act for Brain on the t/ root, outside every Session's
-// scratch.
+// scratch. Linux only: release needs to read which processes use a path.
 func TestBrainsHostKeepsAndReleasesInTheTRoot(t *testing.T) {
 	root := t.TempDir()
 	tdir := filepath.Join(root, "t")
