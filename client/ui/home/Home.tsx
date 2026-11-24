@@ -23,7 +23,7 @@ import { markWorkRead } from "../../core/work/brainWork";
 import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
-import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, workers } from "../session";
+import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, shownConnection, workers } from "../session";
 import { ResultActions, type WorkCardHandlers } from "../chat/TimelineRows";
 import type { BrainOpenWork, ResultAction } from "../../core/work/types";
 import type { WorkCardModel } from "../../core/timeline/workCardModel";
@@ -445,7 +445,7 @@ function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"];
                 {/* A model provider refusing requests holds work; one line says so and clears by itself. */}
                 <ProviderOutageRow />
                 <ChatUpdateRow />
-                <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)}
+                <RequestStack anchor={anchor} durable={durableHere} newest={newestHere} thread={{ brain: true }} cards={requests} picked={pickedRequest} notice={(text) => notice.set(text)} draft={brainDraft}
                   onSource={(card) => (card.terminal ? openBrainTerminal(card.sourceWorkerId!) : openSession(card.sourceWorkerId!))}
                   openLabel="Open" onOpenTerminal={(workerId) => (workerId === hostId() ? openBrainTerminal(workerId) : openSession(workerId))} />
               </View>
@@ -477,7 +477,7 @@ function Composer(props: { text: ReturnType<typeof createComposerText>; editor: 
   const block = () => brainComposerBlock({ surface: surface(), snapshot: brain(), chat: chatState() });
   const pairAgain = () => tray().state.kind === "pair";
   // While Brain wakes on the Mac the composer says so (`m-waking`: "Connecting…").
-  const placeholder = () => (isMacApp() && surface() === "waking" ? "Connecting…" : connection() === "connected" ? "Tell Brain" : "Sends when back online");
+  const placeholder = () => brainComposerPlaceholder({ waking: isMacApp() && surface() === "waking", connection: connection(), shown: shownConnection() });
   return (
     <>
       <ChatComposer text={props.text} placeholder={placeholder} canSend={tools.canSend} attached={() => tools.uploads.ready().length > 0}
@@ -590,4 +590,14 @@ export function Home(props: { perch?: PerchHome } = {}) {
       </CapsulePage>
     </NavPage>
   );
+}
+
+/**
+ * The Brain composer's words: "Sends when back online" only once the computer is away (after the first 10 s,
+ * `shownConnection`); a page still opening its socket is connecting, not offline (owner 11-24, a Windows user's reload).
+ */
+export function brainComposerPlaceholder(state: { waking: boolean; connection: string; shown: string }): string {
+  if (state.waking) return "Connecting…";
+  if (state.connection === "connected") return "Tell Brain";
+  return state.shown === "waiting" ? "Sends when back online" : "Connecting…";
 }

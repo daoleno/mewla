@@ -1064,3 +1064,24 @@ func TestSessionFileExistsAnswersOnlyRegularFilesAsGiven(t *testing.T) {
 		t.Fatalf("answered %d paths, want the first %d", n, maxSessionFileExistsPaths)
 	}
 }
+
+func TestSessionFolderNamedWithItsSlashOpensItsIndexPage(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	cwd := t.TempDir()
+	writeFiles(t, cwd, map[string]string{"reports/q3/index.html": "<p>q3</p>", "reports/q3/data.json": "{}", "reports/empty/notes.txt": "n"})
+	got := existingSessionFiles(cwd, []string{"reports/q3/", "reports/q3", "reports/empty/", "reports/missing/"})
+	if !reflect.DeepEqual(got, []string{"reports/q3/"}) {
+		t.Fatalf("existing = %q", got)
+	}
+	resolved, err := openSessionFile(cwd, "reports/q3/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resolved.file.Close()
+	if filepath.Base(resolved.canonicalPath) != "index.html" || resolved.relativePath != "reports/q3/index.html" || resolved.kind != "text" {
+		t.Fatalf("resolved = %s (%s, %s)", resolved.canonicalPath, resolved.relativePath, resolved.kind)
+	}
+	if _, err := openSessionFile(cwd, "reports/q3"); err == nil {
+		t.Fatal("a folder named without its slash opened")
+	}
+}

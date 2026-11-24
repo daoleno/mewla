@@ -11,7 +11,9 @@ import (
 )
 
 // fakeClaudeChoiceTUI models the AskUserQuestion keyboard contract observed
-// in Claude Code 2.1.296 and renders the same plain-text layout.
+// in Claude Code 2.1.296 and renders the same plain-text layout; its review
+// step is drawn as 2.1.331 draws it (no "Ready to submit your answers?" line)
+// unless review2296 asks for the older one.
 type fakeClaudeChoiceTUI struct {
 	questions []ClaudeChoiceQuestion
 	tab       int // len(questions) means the review screen
@@ -28,6 +30,8 @@ type fakeClaudeChoiceTUI struct {
 	renameAfter int
 	// frozen simulates a Terminal that stops reacting to Enter.
 	frozen bool
+	// review2296 draws the review step as Claude Code 2.1.296 did.
+	review2296 bool
 }
 
 func newFakeClaudeChoiceTUI(questions ...ClaudeChoiceQuestion) *fakeClaudeChoiceTUI {
@@ -75,7 +79,10 @@ func (t *fakeClaudeChoiceTUI) capture() (string, error) {
 		for index, q := range t.questions {
 			b.WriteString(" ● " + q.Question + "\n   → " + t.answers[index] + "\n")
 		}
-		b.WriteString("\nReady to submit your answers?\n\n")
+		if t.review2296 {
+			b.WriteString("\nReady to submit your answers?\n")
+		}
+		b.WriteString("\n")
 		b.WriteString(cursorPrefix(t.cursor == 1) + "1. Submit answers\n" + cursorPrefix(t.cursor == 2) + "2. Cancel\n")
 		return b.String(), nil
 	}
@@ -238,6 +245,55 @@ func TestDriveClaudeChoice_TwoQuestionsWithMultiSelectAndOther(t *testing.T) {
 	}
 }
 
+func TestDriveClaudeChoice_ReviewDrawnByClaude2296StillSubmits(t *testing.T) {
+	tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
+	tui.review2296 = true
+	if err := driveFake(t, tui, ClaudeChoiceAnswer{Selected: []int{0}}, ClaudeChoiceAnswer{Selected: []int{1}}); err != nil {
+		t.Fatal(err)
+	}
+	if !tui.done || !reflect.DeepEqual(tui.answers, []string{"Apple", "Green"}) {
+		t.Fatalf("done=%v answers=%#v", tui.done, tui.answers)
+	}
+}
+
+// The owner's 11-24 report: two questions, each answered with typed CJK text
+// through Other, on a Claude whose review step has no "Ready to submit" line.
+func TestDriveClaudeChoice_TwoQuestionsBothOtherCJK(t *testing.T) {
+	gold := ClaudeChoiceQuestion{Question: "黄金策略接下来往哪个方向改进？", Options: []string{"换信号源（推荐）", "做稳健性检验", "先停在这里"}, AllowsOther: true}
+	value := ClaudeChoiceQuestion{Question: "华泰价值因子接下来做什么？", Options: []string{"本地重跑并补齐（推荐）", "扩展到改进型因子", "写成研报流程"}, AllowsOther: true}
+	tui := newFakeClaudeChoiceTUI(gold, value)
+	err := driveFake(t, tui, ClaudeChoiceAnswer{Other: "把当前策略画成echarts框架的html给我看看"}, ClaudeChoiceAnswer{Other: "先展示当前研究进展"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tui.done || len(tui.stray) != 0 || !reflect.DeepEqual(tui.answers, []string{"把当前策略画成echarts框架的html给我看看", "先展示当前研究进展"}) {
+		t.Fatalf("done=%v stray=%#v answers=%#v", tui.done, tui.stray, tui.answers)
+	}
+}
+
+// A second press after a drive that stopped on the review step (the answers
+// are typed, Submit is not pressed) submits them; it never says "passed".
+func TestDriveClaudeChoice_RetryOnTheReviewStep(t *testing.T) {
+	stoppedOnReview := func() *fakeClaudeChoiceTUI {
+		tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
+		tui.answers = []string{"Banana", "Red, Blue"}
+		tui.tab = 2
+		return tui
+	}
+	tui := stoppedOnReview()
+	if err := driveFake(t, tui, ClaudeChoiceAnswer{Selected: []int{1}}, ClaudeChoiceAnswer{Selected: []int{0, 2}}); err != nil {
+		t.Fatal(err)
+	}
+	if !tui.done || !reflect.DeepEqual(tui.keys, []string{"Enter"}) {
+		t.Fatalf("done=%v keys=%#v", tui.done, tui.keys)
+	}
+	other := stoppedOnReview()
+	err := driveFake(t, other, ClaudeChoiceAnswer{Selected: []int{0}}, ClaudeChoiceAnswer{Selected: []int{0, 2}})
+	if !errors.Is(err, ErrClaudeChoiceRefused) || errors.Is(err, ErrClaudeChoiceGone) || other.done || len(other.keys) != 0 {
+		t.Fatalf("err=%v done=%v keys=%#v", err, other.done, other.keys)
+	}
+}
+
 func TestDriveClaudeChoice_SingleQuestionOtherSubmitsWithoutReview(t *testing.T) {
 	tui := newFakeClaudeChoiceTUI(ClaudeChoiceQuestion{Question: "Pick a size?", Options: []string{"Small", "Large"}, AllowsOther: true})
 	if err := driveFake(t, tui, ClaudeChoiceAnswer{Other: `Medium "M" 中`}); err != nil {
@@ -336,10 +392,10 @@ func TestDriveClaudeChoice_GoneOnlyWhenThePromptIsNotOnScreen(t *testing.T) {
 			t.Fatalf("err=%v keys=%#v", err, tui.keys)
 		}
 	})
-	t.Run("same prompt on its review step is not gone", func(t *testing.T) {
+	t.Run("same prompt on its review step with other answers is not gone", func(t *testing.T) {
 		tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
 		tui.tab = 2
-		tui.answers = []string{"Apple", "Red"}
+		tui.answers = []string{"Banana", "Red"}
 		err := driveFake(t, tui, answers...)
 		if !errors.Is(err, ErrClaudeChoiceRefused) || errors.Is(err, ErrClaudeChoiceGone) || len(tui.keys) != 0 {
 			t.Fatalf("err=%v keys=%#v", err, tui.keys)
