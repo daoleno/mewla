@@ -1606,6 +1606,9 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 				break
 			}
 		}
+		// A model picked during the turn that just ended is made before this
+		// message reaches the agent, so the message runs on it.
+		s.settleSessionModels(raw.WorkerID)
 		err := s.sendInputWithReceipt(raw.WorkerID, message+"\n", raw.RequestID)
 		if err != nil {
 			inputOutcome := watcher.InputOutcomeFromError(err)

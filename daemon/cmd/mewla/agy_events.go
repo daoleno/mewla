@@ -481,6 +481,9 @@ func (a *agyEvents) interrupt(sessionID string) (handled bool, err error) {
 	return true, c.write(map[string]string{"t": "abort"})
 }
 
+// Linked reports a Session whose program is connected to Mewla.
+func (a *agyEvents) Linked(workerID string) bool { return a.conn(workerID) != nil }
+
 // Models asks a Session what agy offers and uses now.
 func (a *agyEvents) Models(ctx context.Context, workerID string) (json.RawMessage, error) {
 	c := a.conn(workerID)

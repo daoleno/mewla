@@ -239,6 +239,32 @@ func TestClaudeSwitchWhileWorkingIsMadeWhenTheTurnEnds(t *testing.T) {
 	}
 }
 
+// A message sent right after the turn ends runs on the model picked during
+// that turn: the send makes the held pick first instead of racing it.
+func TestClaudeHeldPickIsMadeBeforeTheNextMessage(t *testing.T) {
+	screen := newFakeClaude()
+	hub := agentevents.NewHub()
+	models := claudeModelsForTest(screen)
+	models.hub = hub
+	models.later = newTurnPending(hub)
+	models.later.poll = time.Hour // the background wait never gets there first
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnStarted, TurnID: "t1", At: time.Now()})
+	if _, err := models.SetModel(context.Background(), worker, "fable", "high"); err != nil {
+		t.Fatal(err)
+	}
+	if err := models.Settle(context.Background(), worker); err != nil || len(screen.keys) != 0 {
+		t.Fatalf("a pick was made while Claude works: %v keys %v", err, screen.keys)
+	}
+	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnFinished, TurnID: "t1", Status: agentevents.TurnCompleted, At: time.Now()})
+	if err := models.Settle(context.Background(), worker); err != nil {
+		t.Fatal(err)
+	}
+	if screen.current != 2 || screen.efforts[screen.effort] != "high" || models.later.of("w1") != nil {
+		t.Fatalf("before the next message Claude is on %s, pending %#v", screen.labels[screen.current], models.later.of("w1"))
+	}
+}
+
 // The Session's model before its first message is the one Claude was started
 // with: the Worker's recorded command keeps only --session-id.
 func TestClaudeCurrentReadsTheLaunchFlagsOfTheProcess(t *testing.T) {
@@ -295,5 +321,18 @@ func TestClaudeSwitchRetriesAClaudeNotReadyYet(t *testing.T) {
 	}
 	if after.Current != "fable" || screen.typed != "" {
 		t.Fatalf("current %q, input left %q", after.Current, screen.typed)
+	}
+}
+
+// A Session Mewla just made runs its shell before Claude starts: no menu is
+// offered until Claude runs (11-24 gate: Claude's list was read with the
+// shell's command line, "zsh: no such option: input_format").
+func TestClaudeMenuWaitsForClaudeToRun(t *testing.T) {
+	models := claudeModelsForTest(newFakeClaude())
+	if models.ModelsAvailable(&classifier.Worker{ID: "w1", Command: "zsh"}) {
+		t.Fatal("a shell was offered Claude's models")
+	}
+	if !models.ModelsAvailable(&classifier.Worker{ID: "w1", Command: "claude --session-id 3311e9d4"}) {
+		t.Fatal("a running Claude was offered no models")
 	}
 }
