@@ -49,6 +49,9 @@ type Migration struct {
 	// Tombstone returns the file written after the old files are set aside, if
 	// any: its path relative to Dir and its content.
 	Tombstone func() (rel string, content []byte)
+	// SetAside, if set, is told the backup directory once the old files are
+	// in it, so the owner gives that backup its term.
+	SetAside func(backupDir string, at time.Time)
 }
 
 // Record is what a migrated database remembers about the move.
@@ -123,6 +126,7 @@ func (m Migration) Run() (*sql.DB, error) {
 			_ = db.Close()
 			return nil, err
 		}
+		m.setAsideDone(record.BackupDir)
 		return db, nil
 	case !errors.Is(statErr, os.ErrNotExist):
 		return nil, statErr
@@ -150,7 +154,17 @@ func (m Migration) migrate(path string) (*sql.DB, error) {
 	if err := m.setAside(record.BackupDir); err != nil {
 		return nil, err
 	}
+	m.setAsideDone(record.BackupDir)
 	return m.Open(path)
+}
+
+func (m Migration) setAsideDone(backupDir string) {
+	if m.SetAside == nil {
+		return
+	}
+	if _, err := os.Stat(backupDir); err == nil {
+		m.SetAside(backupDir, time.Now())
+	}
 }
 
 func removeDatabase(path string) {
