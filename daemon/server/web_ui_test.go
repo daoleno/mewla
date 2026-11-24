@@ -60,7 +60,7 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 		policy := response.Header().Get("Content-Security-Policy")
 		if !strings.Contains(policy, "connect-src 'self' http://"+host+" ws://"+host+" wss://"+host) ||
 			!strings.Contains(policy, "frame-ancestors 'none'") ||
-			!strings.Contains(policy, "frame-src 'none'") ||
+			!strings.Contains(policy, "frame-src http://"+host+"/session-page/;") ||
 			// No <base> but the site's own: the page names its files from the root.
 			!strings.Contains(policy, "base-uri 'self'") ||
 			// NSH's runtime writes its import map inline, with blob: URLs.
