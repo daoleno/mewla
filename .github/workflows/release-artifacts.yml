@@ -272,29 +272,35 @@ jobs:
           retention-days: 1
 
   # The artifact every later job, and anyone testing a candidate, downloads: the three binaries
-  # under one name, as before the build was split.
+  # under one name, as before the build was split. It is uploaded from the files checked here, and
+  # never read back by name: a download by name right after an upload asks the artifact service's
+  # list, which does not know the new artifact for a moment, and about one run in four failed with
+  # "Artifact not found" 0.2 s after "successfully finalized" (11-21 to 11-24, five runs). The parts
+  # were finalized by earlier jobs, so listing them is safe.
   daemon:
     name: Build Linux and Windows daemons
     needs: [validate, daemon-build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Upload verified daemon inputs
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
-          pattern: daemon-part-bin-*-${{ needs.validate.outputs.tag }}
-          retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
-      - name: Download the merged artifact
+      - name: Download the three verified binaries
         uses: actions/download-artifact@v4
         with:
-          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          pattern: daemon-part-bin-*-${{ needs.validate.outputs.tag }}
+          merge-multiple: true
           path: bin
       - name: It holds exactly the three binaries
         run: |
           set -euo pipefail
           sha256sum bin/*
           [[ "$(cd bin && find . -type f | LC_ALL=C sort | tr '\n' ' ')" == "./mewla-linux-amd64 ./mewla-linux-arm64 ./mewla-windows-amd64.exe " ]]
+      - name: Upload verified daemon inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          path: bin/*
+          if-no-files-found: error
+          retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
 
   daemon-linux-arm64:
     name: Run the Linux arm64 daemon
