@@ -112,7 +112,7 @@ func sweepUnmarked(t *testing.T, reads bool) {
 		}
 	}
 	usage := newUsage(map[string]int{filepath.Join(used, "sub"): 42})
-	moved, unread, err := SweepUnmarked(root, usage, now)
+	moved, unproven, err := SweepUnmarked(root, usage, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,8 +135,8 @@ func sweepUnmarked(t *testing.T, reads bool) {
 		want, keep = append(want, "helper", "tool"), keep[:len(keep)-2] // access times are read on Linux only
 	}
 	var gotUnread []string
-	for _, path := range unread {
-		gotUnread = append(gotUnread, filepath.Base(path))
+	for _, u := range unproven {
+		gotUnread = append(gotUnread, filepath.Base(u.Path))
 	}
 	if strings.Join(gotUnread, ",") != strings.Join(wantUnread, ",") {
 		t.Fatalf("unread = %v, want %v", gotUnread, wantUnread)
