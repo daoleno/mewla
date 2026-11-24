@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -122,7 +123,27 @@ func writeExecutorsConfig(req configWriteRequest) (configWriteResult, error) {
 		_ = os.Remove(tmp)
 		return result, err
 	}
+	pruneConfigBackups(req.Path, result.BackupPath)
 	return result, nil
+}
+
+// configBackupRE is the name of a backup a config write makes:
+// executors.toml.bak.<UTC time>.
+var configBackupRE = regexp.MustCompile(`\.bak\.[0-9]{8}T[0-9]{6}Z$`)
+
+// pruneConfigBackups keeps only the newest backup a config write made of
+// path (newest, when it is not ""): each write makes one, and only the last
+// is the one to go back to. Copies named otherwise (by hand) stay.
+func pruneConfigBackups(path, newest string) {
+	if newest == "" {
+		return
+	}
+	backups, _ := filepath.Glob(path + ".bak.*")
+	for _, backup := range backups {
+		if backup != newest && configBackupRE.MatchString(backup) && strings.HasPrefix(filepath.Base(backup), filepath.Base(path)+".bak.") {
+			_ = os.Remove(backup)
+		}
+	}
 }
 
 func renderExecutorsTOML(file executorFile) ([]byte, error) {
@@ -205,5 +226,6 @@ func AddExecutor(path string, entry work.Executor, now time.Time) (string, error
 		_ = os.Remove(tmp)
 		return backup, err
 	}
+	pruneConfigBackups(path, backup)
 	return backup, nil
 }
