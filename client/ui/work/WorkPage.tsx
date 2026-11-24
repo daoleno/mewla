@@ -14,7 +14,7 @@ import { mergedWorkers, type BrainWorkSlip } from "../../core/work/surface";
 import { progressBackLine, progressOutcomes, type BrainWorkProgress, type JudgedOutcomeState } from "../../core/work/judgedProgress";
 import { OutcomeMark, ProgressHalo } from "../kit/ProgressHalo";
 import { AgentIcon } from "../icons/AgentIcon";
-import { WorkerScreenButton } from "../chat/TimelineRows";
+import { SELECTION, WorkerScreenButton } from "../chat/TimelineRows";
 import { clock } from "../calendar/clock";
 import { createAttachmentUploads } from "../more/files/upload";
 import { brainDraft, connection, currentTransport, workers } from "../session";
@@ -225,7 +225,7 @@ function TopBlock(props: { project: () => string | undefined; title: () => strin
   return (
     <View class="gap-1 px-1 pb-1 pt-3">
       <Caption testID="work-eyebrow" text={["Work", props.project()].filter(Boolean).join(" · ")} />
-      <View selectable><Text testID="work-title" role="header" class="text-display font-bold tracking-display">{props.title()}</Text></View>
+      <View selectable><Text testID="work-title" role="header" class={`text-display font-bold tracking-display ${SELECTION}`}>{props.title()}</Text></View>
       <View testID="work-state" class="mt-1 flex-row items-center gap-2">
         <If when={props.dot()} else={<If when={props.done()}><Icon name="check" size={16} tone="soft" /></If>}><View class={`size-2 rounded-full ${props.dot() === "seal" ? "bg-seal" : "bg-foreground"}`} /></If>
         <Text class="min-w-0 flex-1 text-sub text-muted-foreground line-clamp-1">
@@ -246,8 +246,8 @@ function Brief(props: { text: () => string }) {
   // Read in the JSX: a component runs once, and the brief arrives after the page opens.
   return <><If when={props.text()}><>
       <Caption role="header" class="mb-2 mt-6 px-4" text="Brief" />
-      <View selectable testID="work-brief-toggle" onPress={() => whole.set(!whole())} class="px-1">
-        <Text testID="work-brief" class={`text-sub leading-[22px] text-muted-foreground ${whole() ? "" : "line-clamp-4"}`}>{props.text()}</Text>
+      <View selectable testID="work-brief-toggle" onPress={() => whole.set(!whole())} onLongPress={() => {}} class="px-1">
+        <Text testID="work-brief" class={`text-sub leading-[22px] text-muted-foreground ${whole() ? "" : "line-clamp-4"} ${SELECTION}`}>{props.text()}</Text>
       </View>
     </></If></>;
 }
@@ -256,7 +256,7 @@ function Brief(props: { text: () => string }) {
 function Paragraph(props: { testID: string; label: string; text: () => string }) {
   return <><If when={props.text()}><>
       <Caption role="header" class="mb-2 mt-6 px-4" text={props.label} />
-      <View selectable class="rounded-(--radius-group) bg-card px-4 py-3"><Text testID={props.testID} class="text-body">{props.text()}</Text></View>
+      <View selectable class="rounded-(--radius-group) bg-card px-4 py-3"><Text testID={props.testID} class={`text-body ${SELECTION}`}>{props.text()}</Text></View>
     </></If></>;
 }
 
@@ -280,8 +280,8 @@ function Moments(props: { testID: string; label: string; items: () => readonly {
       <View testID={props.testID} class="overflow-hidden rounded-(--radius-group) bg-card">
         {props.items().map((item, index) => (
           <View selectable testID={`${props.testID}-item`} class={`gap-0.5 px-4 py-2.5 ${index === 0 ? "" : "border-t border-border"}`}>
-            <Text class="text-caption text-muted-foreground">{momentTime(item.at)}</Text>
-            <Text class={`text-sub ${props.quoted ? "italic" : ""}`}>{props.quoted ? `“${item.text}”` : item.text}</Text>
+            <Text class={`text-caption text-muted-foreground ${SELECTION}`}>{momentTime(item.at)}</Text>
+            <Text class={`text-sub ${props.quoted ? "italic" : ""} ${SELECTION}`}>{props.quoted ? `“${item.text}”` : item.text}</Text>
           </View>
         ))}
       </View>
@@ -298,7 +298,7 @@ function Ask(props: { slip: () => BrainWorkSlip; answers: () => BrainWorkAction[
     <View testID="work-ask" class="mt-4 overflow-hidden rounded-(--radius-group) bg-card">
       <View class="flex-row items-center gap-3 p-4">
         <View class="size-2 rounded-full bg-seal" />
-        <View selectable class="min-w-0 flex-1"><Text testID="work-question" class="text-body font-semibold">{props.slip().question!}</Text></View>
+        <View selectable class="min-w-0 flex-1"><Text testID="work-question" class={`text-body font-semibold ${SELECTION}`}>{props.slip().question!}</Text></View>
         <WorkerScreenButton worker={props.worker} />
       </View>
       {props.answers().map((action) => <AnswerRow action={action} slip={props.slip} onPress={() => props.onAnswer(action)} />)}
