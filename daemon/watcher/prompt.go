@@ -573,9 +573,9 @@ func (w *Watcher) AnswerPrompt(sessionID, promptID string, number int) error {
 		return refusePrompt("target provider could not be proven; no key was sent")
 	}
 	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
-	return w.sessionInputOwner().serialized(sessionID, func() error {
+	return w.promptAnswered(sessionID, w.sessionInputOwner().serialized(sessionID, func() error {
 		return w.answerPrompt(pane, sessionID, promptID, number)
-	})
+	}))
 }
 
 // answerPrompt is AnswerPrompt on a pane, inside the Session's serialized input.
@@ -646,9 +646,9 @@ func (w *Watcher) AnswerPromptText(sessionID, promptID, text string) error {
 		return refusePrompt("target provider could not be proven; no key was sent")
 	}
 	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
-	return w.sessionInputOwner().serialized(sessionID, func() error {
+	return w.promptAnswered(sessionID, w.sessionInputOwner().serialized(sessionID, func() error {
 		return w.answerPromptText(pane, sessionID, promptID, text)
-	})
+	}))
 }
 
 func (w *Watcher) answerPromptText(pane claudeChoicePane, sessionID, promptID, text string) error {

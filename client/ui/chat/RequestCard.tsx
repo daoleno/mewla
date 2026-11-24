@@ -3,7 +3,7 @@ import { SELECTION } from "./TimelineRows";
 import type { Signal, ViewRef } from "nsh";
 import { clock } from "../calendar/clock";
 import { sealedOfAnswered } from "../../core/timeline/answered";
-import type { AnsweredTimelineItem } from "../../core/timeline/types";
+import { promptBaseKey, type AnsweredTimelineItem } from "../../core/timeline/types";
 import { Button, Input } from "nsh/base";
 import { Draft } from "../../core/conversation/draft";
 import { writeIntoDraft } from "./Composer";
@@ -151,7 +151,8 @@ function ChoiceBody(props: { card: Card; choice: ConversationChoice; connected: 
   // What is picked and typed is kept on this device for this card, so a reload or a crash does not lose it (owner
   // 11-24: the card came back empty after a reload); answered or sealed, it is cleared.
   const serverId = untracked(current)?.id;
-  const kept = serverId ? new Draft(Storage, `choice:${serverId}:${props.card.key}`) : null;
+  // Kept by the question, not its showing: picks survive a daemon restart, which stamps the open question anew.
+  const kept = serverId ? new Draft(Storage, `choice:${serverId}:${promptBaseKey(props.card.key)}`) : null;
   void kept?.load().then((saved) => {
     const restored = restoreChoiceDraft(choice, saved);
     if (restored && !keptChoiceDraft(untracked(draft))) draft.set(restored);

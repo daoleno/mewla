@@ -123,6 +123,27 @@ describe("requests in Brain's thread", () => {
     await app.waitUntil(() => !app.texts().includes("1 needs you"));
   }, 20_000);
 
+  // 0.4.28 gate (lane A f25/f26): Claude asked again, word for word, a question answered on another device. Same screen,
+  // same prompt id; the card never came (Session "Blocked", tray "All quiet") until a reload. Each showing has its time.
+  test("the same question asked again, after it was answered elsewhere, is a card again", async () => {
+    const first = "2026-11-25T02:10:00.123Z", again = "2026-11-25T02:10:09.456Z";
+    const asking = (askedAt: string) => session("docs", { delegated: true, prompt: { ...SIGN_IN, asked_at: askedAt } });
+    const app = await open(APP, { platform: "android", storage: paired, host: phoneHost({ brain, worker_sessions: [asking(first)] }) });
+    await app.waitFor("id:request-card", { timeout: 10_000 });
+    await app.host.send("app.daemonPush", { type: "request_answered", request: {
+      id: `prompt:docs:p-1:${Date.parse(first)}`, kind: "permission", session_id: "docs", work_id: "w1", title: "Sign in to GitHub?", asked: "gh auth login", answer: "Yes", outcome: "approved",
+      by: { kind: "device", device_name: "Mewla Web" }, asked_at: first, answered_at: "2026-11-25T02:10:04.000Z", anchor: { prompt_id: "p-1" },
+    } });
+    await app.waitUntil(() => !app.shows("id:request-card"));
+    await app.waitUntil(() => !app.texts().includes("1 needs you"));
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: session("docs", { delegated: true, status: "running", updated_at: Date.now() + 1000 }) });
+    await app.wait(300);
+    await app.host.send("app.daemonPush", { type: "worker_session_updated", worker_session: { ...asking(again), updated_at: Date.now() + 2000 } });
+    await app.waitFor("id:request-card", { timeout: 5_000 });
+    expect(app.texts()).toContain("gh auth login");
+    await app.waitFor("text:1 needs you");
+  }, 20_000);
+
   test("a delegated Worker's request Brain answered leaves no line; the person's own answer leaves the foot once the thread moves on (owner 11-17)", async () => {
     const app = await open(APP, {
       platform: "android", storage: paired,

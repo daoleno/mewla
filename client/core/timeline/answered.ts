@@ -4,6 +4,7 @@
  * `request_answered` broadcast) and stays as its sealed line in the thread, after a restart too.
  */
 import { looksLikeCommand, type SealedRequest } from "./requestCards";
+import { showingSuffix } from "./types";
 
 export type AnsweredOutcome = "answered" | "approved" | "denied" | "not_answered" | "dismissed";
 
@@ -47,12 +48,20 @@ export function parseAnsweredRequest(raw: unknown): AnsweredRequest | null {
   };
 }
 
-/** The keys of the cards (and tray rows) a record answers: the client's keys for the same request. */
+/**
+ * The keys of the cards (and tray rows) a record answers: the client's keys for the same request. A screen prompt's is
+ * its showing's (`asked_at`, the prompt's own stamp): the same question asked again is a new card (0.4.28 gate f25).
+ * The bare key follows, for a daemon that does not stamp its prompts yet; a stamped card never has it.
+ */
 export function answeredKeys(record: AnsweredRequest): string[] {
   const keys: string[] = [];
   const session = record.session_id, a = record.anchor ?? {};
   if (session && a.approval_id) keys.push(`approval:${session}:${a.approval_id}`);
-  if (session && a.prompt_id) keys.push(`prompt:${session}:${a.prompt_id}`);
+  if (session && a.prompt_id) {
+    const showing = showingSuffix(record.asked_at);
+    if (showing) keys.push(`prompt:${session}:${a.prompt_id}${showing}`);
+    keys.push(`prompt:${session}:${a.prompt_id}`);
+  }
   if (a.call_id) keys.push(`brain-choice:${a.call_id}`);
   if (record.kind === "work_question" && record.work_id) keys.push(`work:${record.work_id}`);
   return keys;

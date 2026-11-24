@@ -142,4 +142,29 @@ export interface WorkerPrompt {
   code?: string;
   /** What a sign-in screen takes as text, answered with `text` (Claude: the code `link`'s page shows). */
   input?: string;
+  /**
+   * When this showing of the prompt appeared (WIRE §2). `id` is drawn from what the prompt shows, so an agent that asks
+   * the same thing again shows the same id; this tells the showings apart, and an answer's record carries the same time.
+   */
+  asked_at?: string;
+}
+
+/**
+ * The key of a Session's prompt as a card and a tray row: one per showing (`asked_at`), so the answer to a question is
+ * never taken for the same question asked again. A daemon from before showings were stamped gives the bare key.
+ */
+export function promptRequestKey(workerId: string, prompt: Pick<WorkerPrompt, "id" | "asked_at">): string {
+  return `prompt:${workerId}:${prompt.id}${showingSuffix(prompt.asked_at)}`;
+}
+
+/** The key without its showing: what stays the same while one question is on screen, across a daemon restart too. */
+export function promptBaseKey(key: string): string {
+  const at = key.startsWith("prompt:") ? key.lastIndexOf("@") : -1;
+  return at > 0 ? key.slice(0, at) : key;
+}
+
+export function showingSuffix(askedAt: string | undefined): string {
+  if (!askedAt) return "";
+  const ms = Date.parse(askedAt);
+  return `@${Number.isFinite(ms) ? ms : askedAt}`;
 }
