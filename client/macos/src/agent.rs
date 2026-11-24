@@ -14,6 +14,8 @@ use std::process::Command;
 
 use objc2_foundation::NSString;
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
+
+use crate::launchjob;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -98,7 +100,7 @@ fn configure(home: &Path, cli: &Path, said: &mut Vec<String>) -> Result<(), Stri
                 return Err("previous daemon did not stop cleanly".into());
             }
             let paired = devices(cli)?;
-            register_installed()?;
+            register_installed(said)?;
             let version = Command::new(cli).args(["version", "--json"]).output().map_err(|e| e.to_string())?;
             let version: Value = serde_json::from_slice(&version.stdout).map_err(|e| e.to_string())?;
             let version = version["version"].as_str().ok_or("missing helper version")?;
@@ -135,13 +137,13 @@ fn configure(home: &Path, cli: &Path, said: &mut Vec<String>) -> Result<(), Stri
         }
         said.push("previous daemon identity and pairing verified; committed CLI takeover".into());
     } else if installed.exists() {
-        register_installed()?;
+        register_installed(said)?;
     } else if cli == Path::new(INSTALLED_CLI)
         && launchd_listing(&relative_job).is_some_and(|s| s.contains("last exit code = 78") && s.contains("Contents/Helpers/mewla"))
     {
         // Recover an earlier app which already removed its managed CLI before launchd failed.
         unregister_label(LABEL)?;
-        register_installed()?;
+        register_installed(said)?;
         if !wait(60, || installed_running() && health().is_some()) {
             return Err("installed daemon could not recover the previous app installation".into());
         }
@@ -228,30 +230,95 @@ fn installed_running() -> bool {
         .is_some_and(|s| s.lines().any(|l| l == "\tstate = running") && s.lines().any(|l| l.trim() == format!("program = {INSTALLED_HOST}")))
 }
 
-/// The installed job's program, when launchd has it loaded.
-fn installed_program() -> Option<String> {
-    let listing = launchd_listing(&format!("{}/{INSTALLED_LABEL}", domain()))?;
-    listing.lines().find_map(|l| l.trim().strip_prefix("program = ").map(str::to_owned))
+/// Why the daemon's job cannot start, in the app's words (This Mac says it: ui/mac/local.ts), once this launch found
+/// it; empty otherwise.
+static LAUNCH_PROBLEM: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// launchd refuses the job however often it is registered again.
+pub const REFUSED: &str = "macOS is not letting Mewla start";
+/// The person turned Mewla off in System Settings › General › Login Items.
+pub const LOGIN_ITEM_OFF: &str = "Mewla is off in Login Items";
+
+/// Why the daemon's job cannot start, when this launch found that it cannot.
+pub fn launch_problem() -> Option<String> {
+    LAUNCH_PROBLEM.lock().ok().map(|p| p.clone()).filter(|p| !p.is_empty())
 }
 
-fn register_installed() -> Result<(), String> {
-    if installed_running() {
+fn installed_target() -> String {
+    format!("{}/{INSTALLED_LABEL}", domain())
+}
+
+fn installed_job() -> Option<launchjob::Job> {
+    launchd_listing(&installed_target()).map(|listing| launchjob::read(&listing))
+}
+
+/// Registers the installed job and waits until launchd runs it. A job loaded from an older app (the bare helper as
+/// its program), or one whose launch constraint still names the helper's identity, or one launchd cannot set up
+/// (EX_CONFIG) is unregistered and registered again: launchd keeps the constraint recorded at the first
+/// registration, Background Task Management reuses its item for the same plist, and once asked to repair that item
+/// it drops it; nothing but a new registration heals the job (the owner's Mac after 0.4.25 → 0.4.26). The session
+/// host and its Sessions run on throughout (AbandonProcessGroup). Each step is said, for the app's log.
+fn register_installed(said: &mut Vec<String>) -> Result<(), String> {
+    let before = installed_job();
+    if before.as_ref().is_some_and(|job| job.running && job.program.as_deref() == Some(INSTALLED_HOST)) {
         return Ok(());
     }
+    said.push(format!("installed job: {}", before.as_ref().map(launchjob::describe).unwrap_or_else(|| "not loaded".into())));
     unsafe {
         let service = SMAppService::agentServiceWithPlistName(&NSString::from_str(&format!("{INSTALLED_LABEL}.plist")));
-        // Loaded from an older app's plist (the bare helper as its program): launchd keeps that until the job is
-        // registered again, so the daemon would go on being charged its own Accessibility. Unregistered first; the
-        // session host and its Sessions run on (AbandonProcessGroup).
-        if installed_program().is_some_and(|program| program != INSTALLED_HOST) {
-            service.unregisterAndReturnError().map_err(|e| e.localizedDescription().to_string())?;
-            if !wait(45, || launchd_listing(&format!("{}/{INSTALLED_LABEL}", domain())).is_none()) {
-                return Err("the older daemon job did not unload".into());
+        for round in 1..=3 {
+            let job = installed_job();
+            let why = job.as_ref().and_then(|job| launchjob::stale(job, INSTALLED_HOST));
+            if let Some(why) = why {
+                said.push(format!("installed job round {round}: registering again: {why} (status {})", service.status().0));
+                if let Err(err) = service.unregisterAndReturnError() {
+                    said.push(format!("unregister: {}", err.localizedDescription()));
+                }
+                if !wait(45, || installed_job().is_none()) {
+                    // A job Background Task Management no longer knows may outlive its unregistration: launchd's own way.
+                    let out = launchctl(&["bootout", &installed_target()]);
+                    said.push(format!("still loaded after unregister; bootout: {out:?}"));
+                    if !wait(15, || installed_job().is_none()) {
+                        return Err(fail(REFUSED, said, "the older daemon job did not unload"));
+                    }
+                }
+            }
+            match service.registerAndReturnError() {
+                Ok(()) => said.push(format!("registered the installed job (status {})", service.status().0)),
+                Err(err) => said.push(format!("register: {} (code {}, status {})", err.localizedDescription(), err.code(), service.status().0)),
+            }
+            if service.status() == SMAppServiceStatus::RequiresApproval {
+                return Err(fail(LOGIN_ITEM_OFF, said, "the installed job needs approval in Login Items"));
+            }
+            // Its first spawn tells: running, or refused at once (EX_CONFIG) when an old item was reused.
+            wait(20, || installed_job().is_some_and(|job| job.running || job.ex_config));
+            let now = installed_job();
+            said.push(format!("installed job after round {round}: {}", now.as_ref().map(launchjob::describe).unwrap_or_else(|| "not loaded".into())));
+            if installed_running() {
+                set_problem("");
+                return Ok(());
+            }
+            if now.is_some() && now.as_ref().and_then(|job| launchjob::stale(job, INSTALLED_HOST)).is_none() {
+                // Loaded, not refused, not running yet: launchd's throttle; the daemon follows.
+                set_problem("");
+                return Ok(());
             }
         }
-        service.registerAndReturnError().map_err(|e| e.localizedDescription().to_string())?;
     }
-    Ok(())
+    Err(fail(REFUSED, said, "launchd still refuses the installed job"))
+}
+
+fn set_problem(words: &str) {
+    if let Ok(mut problem) = LAUNCH_PROBLEM.lock() {
+        *problem = words.to_owned();
+    }
+}
+
+/// Keeps `words` for This Mac to say and returns the log's line.
+fn fail(words: &str, said: &mut Vec<String>, line: &str) -> String {
+    set_problem(words);
+    said.push(format!("This Mac says: {words}"));
+    line.to_owned()
 }
 
 fn unregister_label(label: &str) -> Result<(), String> {
