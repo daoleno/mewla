@@ -2,8 +2,20 @@ package server
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/gorilla/websocket"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -103,5 +115,89 @@ func TestAgentRuntimeSelectionCarriesPendingAndRequiredEffort(t *testing.T) {
 	models := runtime["native_models"].([]map[string]any)
 	if models[0]["reasoning_effort_required"] != true {
 		t.Fatalf("model = %#v", models[0])
+	}
+}
+
+// blockingSessionModels answers once released: an agent slow to list its models
+// (Claude starting `claude -p` to read them, cold, under load, or not at all).
+type blockingSessionModels struct{ release chan struct{} }
+
+func (b blockingSessionModels) Models(ctx context.Context, _ *classifier.Worker) (AgentModels, error) {
+	select {
+	case <-b.release:
+		return AgentModels{Current: "sonnet"}, nil
+	case <-ctx.Done():
+		return AgentModels{}, ctx.Err()
+	}
+}
+
+func (b blockingSessionModels) SetModel(ctx context.Context, w *classifier.Worker, _, _ string) (AgentModels, error) {
+	return b.Models(ctx, w)
+}
+
+func (blockingSessionModels) ModelsAvailable(*classifier.Worker) bool { return true }
+
+// A page asks a Session's model as it opens it, beside its conversation. The
+// connection reads one message at a time: a model read that waited on the
+// agent held every message behind it, the conversation too (a web reload's
+// chat ~5 s late in the 0.4.28 gate; 30 s here with an agent that never
+// answered). Other messages are read while it waits.
+func TestASlowModelReadHoldsNoOtherMessage(t *testing.T) {
+	authManager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairing, _ := authManager.IssuePairingToken(time.Minute)
+	publicKey, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	deviceID := "device-models"
+	if _, err := authManager.EnrollDevice(pairing.Value, authManager.DaemonID(), authManager.PublicKeyHex(), deviceID, "phone", hex.EncodeToString(publicKey)); err != nil {
+		t.Fatal(err)
+	}
+	srv := New(authManager, watcher.New(time.Second), nil, nil, nil, nil, nil)
+	worker := &classifier.Worker{ID: "mh-slow", Command: "claude --session-id 3311e9d4", State: classifier.StateRunning}
+	srv.getWorkerOverride = func(id string) *classifier.Worker {
+		if id == worker.ID {
+			return worker
+		}
+		return nil
+	}
+	release := make(chan struct{})
+	srv.SetSessionModels(work.WorkerProviderClaude, blockingSessionModels{release: release})
+	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
+	t.Cleanup(httpServer.Close)
+	header := http.Header{}
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), deviceID, "mewla-connect"))
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	readRequest := func(want string) map[string]any {
+		t.Helper()
+		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				t.Fatalf("waiting for %s: %v", want, err)
+			}
+			var payload map[string]any
+			if json.Unmarshal(raw, &payload) == nil && payload["request_id"] == want {
+				return payload
+			}
+		}
+	}
+	if err := conn.WriteJSON(map[string]any{"type": "get_thread_runtime", "request_id": "slow", "worker_id": worker.ID}); err != nil {
+		t.Fatal(err)
+	}
+	// Any message after it: a model read for a Session that has none answers at once.
+	if err := conn.WriteJSON(map[string]any{"type": "get_thread_runtime", "request_id": "next", "worker_id": "mh-missing"}); err != nil {
+		t.Fatal(err)
+	}
+	if next := readRequest("next"); next["type"] != "error" {
+		t.Fatalf("the message behind a slow model read = %#v", next)
+	}
+	close(release)
+	if slow := readRequest("slow"); slow["type"] != "thread_runtime" {
+		t.Fatalf("the slow read's answer = %#v", slow)
 	}
 }
