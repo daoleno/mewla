@@ -37,6 +37,7 @@ mod host;
 mod permissions;
 #[cfg(target_os = "macos")]
 mod secure;
+mod terminal;
 
 #[cfg(target_os = "macos")]
 fn main() -> std::process::ExitCode {
@@ -49,6 +50,8 @@ fn main() -> std::process::ExitCode {
     }
     // Every part of `nsh/base` the app's code imports (the stock host serves only its core part to a Rust app).
     nsh_platform_macos::set_ui_sets(vec![nsh_base::registry()]);
+    // The terminal's native view (`mewla.terminal`, terminal/), as client/ios and client/android register theirs.
+    nsh_platform_macos::set_components(terminal::register);
     let (dir, mut options) = setup();
     let contents = dir.parent().and_then(|p| p.parent()).map(std::path::Path::to_path_buf).unwrap_or_default();
     // SAFETY: the bytecode is a resource of this app's own bundle, which the code signature covers.

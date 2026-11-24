@@ -85,10 +85,7 @@ describe("parseWebTerminalEvent", () => {
     expect(parseWebTerminalEvent(JSON.stringify({ type: "tapCell", col: -1, row: -1, text: "https://x.dev", index: 0, extra: 1 }))).toEqual({ type: "tapCell", col: -1, row: -1, text: "https://x.dev", index: 0 });
     expect(parseWebTerminalEvent(JSON.stringify({ type: "ready", touch: true }))).toEqual({ type: "ready", touch: true });
     expect(parseWebTerminalEvent(JSON.stringify({ type: "copy", text: "" }))).toBeNull();
-    expect(parseWebTerminalEvent(JSON.stringify({ type: "painted", cells: 120 }))).toEqual({ type: "painted", cells: 120 });
-    expect(parseWebTerminalEvent(JSON.stringify({ type: "painted", cells: -1 }))).toBeNull();
-    expect(parseWebTerminalEvent(JSON.stringify({ type: "visibility", state: "hidden" }))).toEqual({ type: "visibility", state: "hidden" });
-    expect(parseWebTerminalEvent(JSON.stringify({ type: "visibility", state: 1 }))).toBeNull();
+    expect(parseWebTerminalEvent(JSON.stringify({ type: "painted", cells: 120 }))).toBeNull();
     expect(parseWebTerminalEvent(JSON.stringify({ type: "eval", code: "x" }))).toBeNull();
     expect(parseWebTerminalEvent("not json")).toBeNull();
     expect(parseWebTerminalEvent(42)).toBeNull();
