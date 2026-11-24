@@ -3804,13 +3804,20 @@ func currentLinkRoute(authManager *auth.Manager, linkConfigPath string) (server.
 	return server.LinkRoute{RouteID: identity.RouteID, TransportPin: identity.SPKISHA256, Candidates: link.RouteCandidates(config, identity)}, true
 }
 
-// machineConfigPaths are the person's own Codex config and Claude Code
-// settings, which the machine-level gateway is projected into. A daemon run
-// for a test beside the person's own (MEWLA_NO_CONFIG_TAKEOVER=1) leaves both
-// alone: they belong to the person's daemon.
+// machineConfigPaths are the Codex config and Claude Code settings the
+// machine-level gateway is projected into. A daemon run for a test beside the
+// person's own (MEWLA_NO_CONFIG_TAKEOVER=1) leaves the person's alone: they
+// belong to the person's daemon. A CODEX_HOME of its own is still projected,
+// so its Codex Sessions start the way the person's do.
 func machineConfigPaths() (codexConfig, claudeSettings string) {
-	if strings.TrimSpace(os.Getenv("MEWLA_NO_CONFIG_TAKEOVER")) != "" {
-		return "", ""
+	codexConfig, claudeSettings = modelprofiles.DefaultCodexConfigPath(), modelprofiles.DefaultClaudeSettingsPath()
+	if strings.TrimSpace(os.Getenv("MEWLA_NO_CONFIG_TAKEOVER")) == "" {
+		return codexConfig, claudeSettings
 	}
-	return modelprofiles.DefaultCodexConfigPath(), modelprofiles.DefaultClaudeSettingsPath()
+	home, _ := os.UserHomeDir()
+	own := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	if own == "" || home == "" || filepath.Clean(own) == filepath.Join(home, ".codex") {
+		codexConfig = ""
+	}
+	return codexConfig, ""
 }

@@ -319,8 +319,10 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 const claudeScreenWait = 4 * time.Second
 
 // claudeOpenTries bounds how often /model is typed into a Claude that does
-// not open its picker yet (one just started takes input before its commands).
-const claudeOpenTries = 3
+// not open its picker yet: one just started (a new folder, its MCP servers)
+// takes input some seconds before its commands; five tries fit the 30 s
+// budget of a switch.
+const claudeOpenTries = 5
 
 // openPicker types /model until Claude's picker shows. A Claude that took
 // the text without opening the picker has it cleared from its input again,

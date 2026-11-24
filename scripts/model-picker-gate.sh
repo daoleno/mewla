@@ -105,6 +105,13 @@ for name, body in (("model-profiles.toml", out), ("provider-credentials.json", j
     os.close(fd)
 print("routes: copied %d connection(s)" % len(blocks), file=sys.stderr)
 PY
+  # Codex gets a home of its own, so the daemon's gateway is projected into a
+  # copy of this computer's Codex config (as the person's daemon does into
+  # theirs) and its Sessions start the same way. The gateway's provider needs
+  # no sign-in file.
+  mkdir -p "$S/codex-home"
+  install -m 600 "$HOME/.codex/config.toml" "$S/codex-home/config.toml"
+  export CODEX_HOME="$S/codex-home"
 fi
 
 AGENT_PATH="$S/bin:$HOME/.opencode/bin:$HOME/.grok/bin:$HOME/.local/bin"
@@ -117,7 +124,7 @@ up() {
   env -i HOME="$HOME" USER="$USER" LANG=en_US.UTF-8 TERM=xterm-256color SHELL=/bin/zsh \
     PATH="$AGENT_PATH" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-}" \
     TMUX_TMPDIR="$S/tmux" MEWLA_STATE_ROOT="$S/state" MEWLA_NO_AUTOUPDATE=1 MEWLA_BRAIN_HOST_EXECUTOR=brainstub \
-    MEWLA_NO_CONFIG_TAKEOVER=1 \
+    MEWLA_NO_CONFIG_TAKEOVER=1 ${CODEX_HOME:+CODEX_HOME="$CODEX_HOME"} \
     "$S/bin/mewla" serve -addr "127.0.0.1:$PORT" -loopback-only -state-dir "$S/state" >> "$S/daemon.log" 2>&1 < /dev/null &
     echo $! > "$S/daemon.pid")
 }
@@ -178,7 +185,7 @@ done
 cat > "$S/restart.sh" <<EOF
 #!/usr/bin/env bash
 $(declare -f up down)
-S=$S PORT=$PORT AGENT_PATH="$AGENT_PATH"
+S=$S PORT=$PORT AGENT_PATH="$AGENT_PATH" ${CODEX_HOME:+CODEX_HOME="$CODEX_HOME"}
 down
 up
 EOF
