@@ -23,9 +23,9 @@ settings:
     # build's MARKETING_VERSION is its train (MEWLA_TESTFLIGHT_VERSION below): Beta App Review fully reviews only the
     # first build of a marketing version. MEWLA_APP_VERSION (Info.plist MewlaVersion) is the real release, which
     # the app reports (`update.info`, crash logs) instead of the marketing version.
-    MARKETING_VERSION: "0.4.27"
-    CURRENT_PROJECT_VERSION: "42799"
-    MEWLA_APP_VERSION: "0.4.27"
+    MARKETING_VERSION: "0.4.28"
+    CURRENT_PROJECT_VERSION: "42899"
+    MEWLA_APP_VERSION: "0.4.28"
     # The TestFlight train: the first iOS release of this minor, kept for its later releases (0.4.10 shows as
     # "0.4.9 (41099)" in TestFlight). Above every earlier train, which TestFlight needs to list it as the newest.
     # scripts/prepare-release.py opens the next one on a minor bump; release_identity.py checks it.
