@@ -15,7 +15,9 @@ import (
 
 // A keep is a Session's word that a path in its scratch must outlive it:
 // until a date, for a reason. When the Session ends the path moves out of the
-// scratch to KeptPath; when the keep ends it goes to the trash.
+// scratch to KeptPath; when the keep ends it goes to the trash. A keep can
+// also give a term to a path in no Session's scratch (Brain's backup in t/):
+// the collector leaves it alone until the date, then trashes it where it is.
 const (
 	KindKept = "kept"
 	// KeepLimit is the longest a Session may keep something.
@@ -219,15 +221,30 @@ func ReleaseKeep(stateRoot, id, owner string, now time.Time) (Keep, error) {
 
 func dropKeep(stateRoot string, k Keep, reason string, now time.Time) error {
 	Record(stateRoot, Event{At: now, Action: ActionKeepEnded, Kind: KindKept, Subject: k.Path, Owner: k.Owner, Detail: k.ID + ": " + reason})
-	if k.Moved != "" {
+	switch {
+	case k.Moved != "":
 		if _, err := os.Lstat(k.Moved); err == nil {
 			if _, err := Trash(stateRoot, KindKept, k.Moved, k.Owner, reason, now); err != nil {
 				return err
 			}
 		}
 		_ = os.Remove(filepath.Dir(k.Moved))
+	case !inMarkedScratch(stateRoot, k.Path):
+		// No Session's scratch takes it away: the keep was its only term.
+		if _, err := os.Lstat(k.Path); err == nil {
+			if _, err := Trash(stateRoot, KindKept, k.Path, k.Owner, reason, now); err != nil {
+				return err
+			}
+		}
 	}
 	return removeKeep(stateRoot, k.ID)
+}
+
+// inMarkedScratch reports whether path is in a Session's scratch, which its
+// lease release takes to the trash.
+func inMarkedScratch(stateRoot, path string) bool {
+	scratch, ok := scratchOf(stateRoot, path)
+	return ok && hasMarker(scratch)
 }
 
 func within(path, dir string) bool {

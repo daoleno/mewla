@@ -63,9 +63,13 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 		return nil, nil, err
 	}
 	reads := readsRecorded(root)
+	keeps, err := ListKeeps(stateRoot)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if before[name] {
+		if before[name] || keptIn(keeps, filepath.Join(root, name)) {
 			continue
 		}
 		path := filepath.Join(root, name)
@@ -78,10 +82,8 @@ func SweepUnmarked(stateRoot string, usage Usage, now time.Time) (moved []Item, 
 		if info.Mode().IsRegular() && strings.HasSuffix(name, ".lock") {
 			continue
 		}
-		if info.IsDir() {
-			if marker, err := os.Lstat(filepath.Join(path, scratchMarker)); err == nil && marker.Mode().IsRegular() {
-				continue // a Session's scratch: its lease releases it
-			}
+		if info.IsDir() && hasMarker(path) {
+			continue // a Session's scratch: its lease releases it
 		}
 		if _, used := usage.Uses(path); used {
 			continue
@@ -136,6 +138,22 @@ func restartInTRoot(stateRoot, original string, now time.Time) {
 	if data, err := json.MarshalIndent(snapshot, "", "  "); err == nil {
 		_ = writeFileAtomic(path, append(data, '\n'))
 	}
+}
+
+// hasMarker reports whether dir is marked as a Session's scratch.
+func hasMarker(dir string) bool {
+	marker, err := os.Lstat(filepath.Join(dir, scratchMarker))
+	return err == nil && marker.Mode().IsRegular()
+}
+
+// keptIn reports whether a keep still in place is path or inside it.
+func keptIn(keeps []Keep, path string) bool {
+	for _, k := range keeps {
+		if k.Moved == "" && (k.Path == path || within(k.Path, path)) {
+			return true
+		}
+	}
+	return false
 }
 
 // readSnapshot returns the names the t/ root held when the rule came,

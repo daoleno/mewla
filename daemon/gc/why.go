@@ -81,7 +81,9 @@ func WhyPath(l WhyLookup, path string) (Why, error) {
 		scratch := filepath.Join(root, "t", parts[1])
 		unit, marked := markerUnit(scratch)
 		if !marked {
-			subject.State = unmarkedState(l.Root, parts[1])
+			if subject.State = keptState(l.Root, abs); subject.State == "" {
+				subject.State = unmarkedState(l.Root, parts[1])
+			}
 			why.Chain = []WhyLink{subject}
 			return why, nil
 		}
