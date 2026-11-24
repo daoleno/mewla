@@ -63,11 +63,16 @@ func (s *Server) handleModelProfileMessage(conn *websocket.Conn, raw clientMessa
 	case "test_provider_connection":
 		s.handleTestProviderConnection(conn, raw)
 		return true
+	// A Session's model is asked of its agent (Claude starts `claude -p` to
+	// list them; Codex asks its app-server), which can take seconds: off this
+	// connection's read loop, or the conversation asked for beside it waits as
+	// long (a web reload's chat ~5 s late, 0.4.28 gate). Replies carry their
+	// request_id.
 	case "get_thread_runtime":
-		s.handleGetThreadRuntime(conn, raw)
+		go s.handleGetThreadRuntime(conn, raw)
 		return true
 	case "set_thread_runtime":
-		s.handleSetThreadRuntime(conn, raw)
+		go s.handleSetThreadRuntime(conn, raw)
 		return true
 	case "set_provider_credential":
 		s.handleSetProviderCredential(conn, raw)
