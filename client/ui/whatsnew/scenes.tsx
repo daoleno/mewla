@@ -469,6 +469,46 @@ function PictureSave() {
   );
 }
 
+/** Copying from a reply: a word held is selected in ink with its handles; the system's menu; Copy message; Copied. */
+function ChatCopy() {
+  const held = loop([{ offset: 0, opacity: 0 }, { offset: 0.16, opacity: 0 }, { offset: 0.2, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const menu = loop([{ offset: 0, opacity: 0, translateY: 6 }, { offset: 0.22, opacity: 0, translateY: 6 }, { offset: 0.3, opacity: 1, translateY: 0 }, { offset: 0.6, opacity: 1, translateY: 0 }, { offset: 0.66, opacity: 0, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  const copied = loop([{ offset: 0, opacity: 0, translateY: 4 }, { offset: 0.64, opacity: 0, translateY: 4 }, { offset: 0.7, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
+  return (
+    <View class="w-[250px] gap-1.5">
+      <Card class="relative self-center flex-row gap-3 px-3 py-1.5" style={menu}>
+        <Text class="text-[11px] text-foreground">Copy</Text>
+        <Text class="text-[11px] text-foreground">Select all</Text>
+        <Text class="text-[11px] font-semibold text-foreground">Copy message</Text>
+        <Press at={0.56} style={{ right: 26, top: -2 }} />
+      </Card>
+      <View class="flex-row flex-wrap items-end">
+        <Text class="text-[12px] leading-[18px] text-foreground">{"The fix is in: the\u00a0"}</Text>
+        <View class="relative">
+          <Text class="text-[12px] leading-[18px] text-foreground">window</Text>
+          <View class="absolute inset-0" style={held}>
+            <View class="absolute inset-0 bg-foreground opacity-20" />
+            <View class="absolute -bottom-[9px] -left-[5px] size-[10px] rounded-full bg-foreground" />
+            <View class="absolute -bottom-[9px] -right-[5px] size-[10px] rounded-full bg-foreground" />
+          </View>
+          <Press at={0.1} style={{ left: 8, top: -4 }} />
+        </View>
+        <Text class="text-[12px] leading-[18px] text-foreground">{"\u00a0counts per minute."}</Text>
+      </View>
+      <View class="mt-1.5 gap-0.5 pl-2">
+        <Text class="text-[12px] text-foreground">1. Counted per minute</Text>
+        <Text class="text-[12px] text-foreground">2. Tests green</Text>
+      </View>
+      <View class="items-center" style={copied}>
+        <View class="flex-row items-center gap-1 rounded-full bg-primary px-2.5 py-1">
+          <Icon name="check" size={11} tone="canvas" />
+          <Text class="text-[11px] font-semibold text-primary-foreground">Copied</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /** A Work's ⋯: Rename, Move to project, Merge with. */
 function WorkMenu() {
   const menu = loop([{ offset: 0, opacity: 0, translateY: -6 }, { offset: 0.2, opacity: 0, translateY: -6 }, { offset: 0.28, opacity: 1, translateY: 0 }, { offset: 0.92, opacity: 1, translateY: 0 }, { offset: 1, opacity: 0, translateY: 0 }]);
@@ -864,6 +904,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "network-hop": NetworkHop,
   "update-line": UpdateLine,
   "chat-diagram": ChatDiagram,
+  "chat-copy": ChatCopy,
   "screen-reflow": ScreenReflow,
   "screen-pointer": ScreenPointer,
   "picture-save": PictureSave,
