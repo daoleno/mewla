@@ -98,6 +98,21 @@ func (p *paneScreens) inventory(panes []sessionPane) {
 	}
 }
 
+// targetOfPane is the Session whose pane process is pid in the last listing.
+func (p *paneScreens) targetOfPane(pid int) (string, bool) {
+	if p == nil || pid <= 0 {
+		return "", false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for target, stamp := range p.stamps {
+		if stamp.pid == pid && !stamp.dead {
+			return target, true
+		}
+	}
+	return "", false
+}
+
 // reuse returns the pane's last screen when nothing could have changed it.
 func (p *paneScreens) reuse(target string) (content string, alive bool, deadStatus int, ok bool) {
 	if p == nil {

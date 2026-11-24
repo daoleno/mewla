@@ -464,7 +464,12 @@ A helper that must outlast its Session, such as a script a Trigger runs or a
 tool Brain runs again, does not belong in `~/.mewla/t`. Brain keeps its own in
 its workspace under `worklog/<topic>/`, which nothing collects, and runs the
 Trigger there (`mewla trigger create -cwd`). A Worker's helper goes in the project's worktree, or
-`mewla gc keep` keeps it from its TMPDIR.
+`mewla gc keep` keeps it from its TMPDIR. Something of Brain's that should go
+later, such as a rollback binary, goes in `~/.mewla/t` with a date: from
+Brain's host, `mewla gc keep PATH --until DATE --why REASON` keeps a path there
+outside every Session's scratch, and when the keep ends it goes to the trash.
+The daemon knows Brain's host by its pane; `mewla gc release` ends the keep or
+trashes such a path now, unless a process uses it.
 
 Before stopping a process or deleting a path you did not make, ask what
 holds it: `mewla gc why PID` or `mewla gc why PATH` names the Session and the

@@ -18,6 +18,9 @@ import (
 type Why struct {
 	Chain []WhyLink `json:"chain"`
 	Mewla bool      `json:"mewla"`
+	// Brain is true for a process of Brain's host: its own pane or what that
+	// started.
+	Brain bool `json:"brain,omitempty"`
 }
 
 // WhyLink is one step of the chain.
@@ -32,9 +35,12 @@ type WhyLink struct {
 	By string `json:"by,omitempty"`
 }
 
-// WhySession is what the daemon knows of a live Session by its resource
-// unit.
-type WhySession struct{ ID, Name, State string }
+// WhySession is what the daemon knows of a live Session. Brain marks
+// Brain's own host.
+type WhySession struct {
+	ID, Name, State string
+	Brain           bool
+}
 
 // WhyLookup is where the chain is read: the state root, and the daemon's
 // view of its live Sessions and their Work. Session and Work may be nil (no
@@ -43,6 +49,9 @@ type WhyLookup struct {
 	Root    string
 	Session func(unit string) (WhySession, bool)
 	Work    func(sessionID string) (WhyLink, bool)
+	// Pane is the live Session whose pane process is pid (the daemon's
+	// inventory of its session host).
+	Pane func(pid int) (WhySession, bool)
 }
 
 // ErrNoProcess is returned for a pid no process has.
@@ -167,6 +176,33 @@ func whyProcess(l WhyLookup, p whyProc, records map[int]workerproc.Process) Why 
 			return held(by, unit)
 		}
 		pid = record.PPID
+	}
+	// Then the session host's own inventory: a process a live Session's pane
+	// started is that Session's. Brain's host has no slice and no lease, so
+	// this is where Brain's processes are known.
+	if l.Pane != nil {
+		for pid, seen := p.pid, 0; pid > 1 && seen < 64; seen++ {
+			if s, ok := l.Pane(pid); ok {
+				by := "it is the Session's pane"
+				if pid != p.pid {
+					by = "the Session's pane " + itoa(pid) + " started it"
+				}
+				why.Chain = []WhyLink{subject, {Kind: "session", ID: s.ID, Name: s.Name, State: s.State, By: by}}
+				if l.Work != nil && !s.Brain {
+					if w, ok := l.Work(s.ID); ok {
+						w.Kind = "work"
+						why.Chain = append(why.Chain, w)
+					}
+				}
+				why.Brain = s.Brain
+				return why
+			}
+			record, ok := records[pid]
+			if !ok {
+				break
+			}
+			pid = record.PPID
+		}
 	}
 	// Then where it runs from: an owned scratch holds what runs out of it,
 	// whatever its environment says (setsid env -i keeps none).

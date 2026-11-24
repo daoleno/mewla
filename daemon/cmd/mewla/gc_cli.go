@@ -24,9 +24,11 @@ const gcUsage = `Usage: mewla gc <status|why|keep|release|restore> [flags]
                     and what the collector moved to its trash (--all: everyone's)
   keep PATH --until DATE --why REASON
                     Keep a path in this Session's scratch past the Session, until
-                    DATE (YYYY-MM-DD or a number of days: 7d; 30 days at most)
-  release PATH|ID   Move a path in this Session's scratch to the trash now, or
-                    end one of this Session's keeps
+                    DATE (YYYY-MM-DD or a number of days: 7d; 30 days at most).
+                    From Brain's host: a path in the t/ root outside every
+                    Session's scratch, then trashed when the keep ends
+  release PATH|ID   Move a path in this Session's scratch (Brain: in the t/ root)
+                    to the trash now, or end one of its keeps
   restore ID        Put a trashed item back where it was
   why PID|PATH      What holds a process or a path: its Session and Work, or
                     that it is not Mewla's
@@ -310,7 +312,7 @@ type gcOwnSession struct {
 func gcOwnCallingSession() (gcOwnSession, error) {
 	unit := strings.TrimSpace(os.Getenv("MEWLA_WORKER_RESOURCE_UNIT"))
 	if unit == "" {
-		return gcOwnSession{}, errors.New("not inside a Mewla Session: keep and release act on a Session's own scratch")
+		return gcOwnSession{}, errors.New("not inside a Mewla Session or Brain's host: keep and release act on a Session's own scratch, and for Brain on the t/ root")
 	}
 	owner, _, ok := strings.Cut(strings.TrimPrefix(unit, "mewla-worker-"), "-")
 	if !ok || !strings.HasPrefix(unit, "mewla-worker-") || !strings.HasSuffix(unit, ".scope") {
@@ -330,6 +332,110 @@ func gcOwnCallingSession() (gcOwnSession, error) {
 		return gcOwnSession{}, err
 	}
 	return gcOwnSession{Unit: unit, Scratch: scratch, Root: root}, nil
+}
+
+// gcBrainCaller is the state root when the daemon finds this process in
+// Brain's host: Brain's pane started it. It has no Session scratch, and owns
+// what it keeps or releases in the t/ root. A variable for tests.
+var gcBrainCaller = func() (string, bool) {
+	if strings.TrimSpace(os.Getenv("MEWLA_WORKER_RESOURCE_UNIT")) != "" {
+		return "", false
+	}
+	stateDir := strings.TrimSpace(os.Getenv("MEWLA_STATE_DIR"))
+	resp, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "gc_why", ProcessID: os.Getpid()})
+	if err != nil || !resp.OK || resp.Why == nil || !resp.Why.Brain {
+		return "", false
+	}
+	root, err := gcStateRoot(stateDir)
+	return root, err == nil
+}
+
+// gcBrainPath resolves path (symlinks too) and requires it in the t/ root,
+// not the root itself and not in a Session's scratch, which its Session keeps
+// or releases.
+func gcBrainPath(root, path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	tRoot, err := filepath.EvalSymlinks(filepath.Join(root, "t"))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(tRoot, resolved)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s is not in %s: Brain keeps and releases paths in the t/ root", path, filepath.Join(root, "t"))
+	}
+	top := filepath.Join(tRoot, strings.Split(rel, string(filepath.Separator))[0])
+	if marker, err := os.Lstat(filepath.Join(top, gc.ScratchMarker)); err == nil && marker.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is in a Session's scratch (%s): that Session keeps or releases it", path, top)
+	}
+	return filepath.Join(root, "t", rel), nil
+}
+
+// gcBrainKeep keeps path for Brain until untilFlag; when the keep ends the
+// path goes to the trash.
+func gcBrainKeep(root, path, untilFlag, why string, now time.Time, stdout io.Writer) error {
+	path, err := gcBrainPath(root, path)
+	if err != nil {
+		return err
+	}
+	until, err := gcUntil(untilFlag, now)
+	if err != nil {
+		return err
+	}
+	k, err := gc.AddKeep(root, path, gc.OwnerBrain, until, why, now)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Kept %s until %s (%s). When the keep ends it goes to the trash for 3 days.\n", path, k.Until.Local().Format("2006-01-02 15:04"), k.ID)
+	return nil
+}
+
+// gcBrainRelease moves a path of the t/ root that no process uses to the
+// trash now, or ends one of Brain's keeps (its path goes to the trash).
+func gcBrainRelease(root, target string, usage gc.Usage, now time.Time, stdout io.Writer) error {
+	keeps, err := gc.ListKeeps(root)
+	if err != nil {
+		return err
+	}
+	end := func(k gc.Keep) error {
+		if _, err := gc.ReleaseKeep(root, k.ID, gc.OwnerBrain, now); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "Ended keep %s; %s is in the trash for 3 days (mewla gc status --all).\n", k.ID, k.Path)
+		return nil
+	}
+	for _, k := range keeps {
+		if k.ID == target {
+			return end(k)
+		}
+	}
+	path, err := gcBrainPath(root, target)
+	if err != nil {
+		return err
+	}
+	if pid, used := usage.Uses(path); used {
+		return fmt.Errorf("process %d uses %s; it stays", pid, path)
+	}
+	if filepath.Dir(path) == filepath.Join(root, "t") && strings.HasSuffix(path, ".lock") {
+		return fmt.Errorf("%s is a lock file: a process may take it at any moment; it stays", path)
+	}
+	for _, k := range keeps {
+		if k.Owner == gc.OwnerBrain && k.Path == path {
+			return end(k)
+		}
+	}
+	item, err := gc.Trash(root, gc.KindUnmarked, path, gc.OwnerBrain, gc.ReasonReleasedByBrain, now)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Moved %s to the trash (%s); mewla gc restore %s puts it back.\n", path, item.ID, item.ID)
+	return nil
 }
 
 // gcOwnPath resolves path (symlinks too) and requires it inside the
@@ -386,6 +492,9 @@ func runGCKeep(args []string, stdout, stderr io.Writer) error {
 	}
 	session, err := gcOwnCallingSession()
 	if err != nil {
+		if root, brain := gcBrainCaller(); brain {
+			return gcBrainKeep(root, fs.Arg(0), *untilFlag, *why, time.Now(), stdout)
+		}
 		return err
 	}
 	path, err := gcOwnPath(session, fs.Arg(0))
@@ -416,6 +525,13 @@ func runGCRelease(args []string, stdout, stderr io.Writer) error {
 	}
 	session, err := gcOwnCallingSession()
 	if err != nil {
+		if root, brain := gcBrainCaller(); brain {
+			usage, ok := gc.ReadUsage()
+			if !ok {
+				return errors.New("which processes use a path cannot be read here, so Brain's release is refused")
+			}
+			return gcBrainRelease(root, fs.Arg(0), usage, time.Now(), stdout)
+		}
 		return err
 	}
 	now := time.Now()
