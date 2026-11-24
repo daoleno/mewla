@@ -95,19 +95,22 @@ func startUnitProcess(t *testing.T, unit string) (*exec.Cmd, <-chan struct{}) {
 	return nil, nil
 }
 
+// waitGoneIdle returns once every goroutine releaseGone started has ended: the
+// release and the collector pass after it. Waiting on releasing alone would
+// return while the collector still reads the test's clock and writes under the
+// state root the test is about to remove.
 func waitGoneIdle(t *testing.T, m *portableDelegatedResourceManager) {
 	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		m.mu.Lock()
-		busy := m.gone.releasing
-		m.mu.Unlock()
-		if !busy {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		m.gone.passes.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("release of gone Sessions never finished")
 	}
-	t.Fatal("release of gone Sessions never finished")
 }
 
 // A Session whose host went away (a reboot, a host that stopped or was
