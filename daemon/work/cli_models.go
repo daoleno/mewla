@@ -40,6 +40,10 @@ func ReadCLIModels(ctx context.Context, provider, command, cwd string) ([]CLIMod
 	case WorkerProviderCursor:
 		models = ParseCursorModels(stdout.String())
 	case WorkerProviderGrok:
+		// Signed out, Grok still lists its models; none of them can run.
+		if strings.Contains(stdout.String()+stderr.String(), "You are not authenticated") {
+			return nil, fmt.Errorf("%s: not signed in", AgentProductName(provider, command))
+		}
 		models = ParseGrokModels(stdout.String())
 	}
 	if len(models) > 0 {

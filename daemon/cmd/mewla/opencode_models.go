@@ -37,6 +37,19 @@ func (o *opencodeEvents) modelService(workerID string) (opencodeModelService, st
 	return service, w.session, nil
 }
 
+// ModelsAvailable: the service has the Session's session. OpenCode creates it
+// with the first message typed in its terminal UI, which until then holds the
+// model itself; a session created any other way would leave that UI behind.
+func (o *opencodeEvents) ModelsAvailable(worker *classifier.Worker) bool {
+	w := o.worker(worker.ID)
+	if w == nil || o.current() == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.connected
+}
+
 // Models reads the Session's menu from the service.
 func (o *opencodeEvents) Models(ctx context.Context, worker *classifier.Worker) (server.AgentModels, error) {
 	service, session, err := o.modelService(worker.ID)
@@ -58,7 +71,9 @@ func (o *opencodeEvents) Models(ctx context.Context, worker *classifier.Worker) 
 			return server.AgentModels{}, err
 		}
 	}
-	return opencodeAgentModels(models, current), nil
+	out := opencodeAgentModels(models, current)
+	out.Pending = o.later.of(worker.ID)
+	return out, nil
 }
 
 // SetModel switches the session's next turns to the model and variant.
@@ -76,7 +91,22 @@ func (o *opencodeEvents) SetModel(ctx context.Context, worker *classifier.Worker
 	} else if !found {
 		return server.AgentModels{}, errOpencodeNoSession
 	}
-	if err := service.SwitchModel(ctx, session, opencodeapi.ModelRef{ID: id, ProviderID: provider, Variant: effort}); err != nil {
+	ref := opencodeapi.ModelRef{ID: id, ProviderID: provider, Variant: effort}
+	// A turn under way keeps the model it started with and writes it back to
+	// the session as it ends, over a switch made meanwhile: the choice is
+	// held and made when the turn ends.
+	if o.later.busy(worker.ID) {
+		o.later.hold(worker.ID, server.AgentChoice{Model: model, Effort: effort}, func(ctx context.Context) error {
+			service, session, err := o.modelService(worker.ID)
+			if err != nil {
+				return err
+			}
+			return service.SwitchModel(ctx, session, ref)
+		})
+		return o.Models(ctx, worker)
+	}
+	o.later.drop(worker.ID)
+	if err := service.SwitchModel(ctx, session, ref); err != nil {
 		return server.AgentModels{}, err
 	}
 	return o.Models(ctx, worker)
@@ -95,6 +125,7 @@ func opencodeAgentModels(models []opencodeapi.ModelInfo, current opencodeapi.Mod
 	if current.ProviderID != "" && current.ID != "" {
 		out.Current = current.ProviderID + "/" + current.ID
 	}
+	seen := map[string]bool{}
 	for _, model := range models {
 		id := strings.TrimSpace(model.ModelID)
 		if id == "" {
@@ -103,6 +134,12 @@ func opencodeAgentModels(models []opencodeapi.ModelInfo, current opencodeapi.Mod
 		if id == "" || model.ProviderID == "" || (model.Enabled != nil && !*model.Enabled) || model.Status == "deprecated" {
 			continue
 		}
+		// OpenCode lists a model once per way it can reach it; the menu
+		// names it once, as OpenCode's own picker does.
+		if seen[model.ProviderID+"/"+id] {
+			continue
+		}
+		seen[model.ProviderID+"/"+id] = true
 		entry := server.AgentModel{ID: model.ProviderID + "/" + id, Name: model.Name}
 		for _, variant := range model.Variants {
 			if variant.ID != "" && variant.ID != opencodeDefaultVariant {
@@ -112,4 +149,13 @@ func opencodeAgentModels(models []opencodeapi.ModelInfo, current opencodeapi.Mod
 		out.Models = append(out.Models, entry)
 	}
 	return out
+}
+
+// Settle makes a pick held during the turn that just ended before the next
+// message is sent, so that message runs on it.
+func (o *opencodeEvents) Settle(ctx context.Context, worker *classifier.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	return o.later.settle(ctx, worker.ID)
 }

@@ -288,3 +288,66 @@ func TestFirstHandledOffersEachFollowerInTurn(t *testing.T) {
 		t.Fatal("no follower took the Worker, yet it was handled")
 	}
 }
+
+// fakeOpencodeModels adds OpenCode's model calls to the fake service.
+type fakeOpencodeModels struct {
+	*fakeOpencode
+	mu       sync.Mutex
+	switches []opencodeapi.ModelRef
+}
+
+func (f *fakeOpencodeModels) Models(context.Context) ([]opencodeapi.ModelInfo, error) {
+	return []opencodeapi.ModelInfo{{ID: "flash", ModelID: "flash", ProviderID: "go"}, {ID: "free", ModelID: "free", ProviderID: "zen"}}, nil
+}
+func (f *fakeOpencodeModels) DefaultModel(context.Context) (opencodeapi.ModelRef, error) {
+	return opencodeapi.ModelRef{ID: "flash", ProviderID: "go"}, nil
+}
+func (f *fakeOpencodeModels) SessionModel(context.Context, string) (opencodeapi.ModelRef, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.switches) > 0 {
+		return f.switches[len(f.switches)-1], true, nil
+	}
+	return opencodeapi.ModelRef{ID: "flash", ProviderID: "go"}, true, nil
+}
+func (f *fakeOpencodeModels) SwitchModel(_ context.Context, _ string, ref opencodeapi.ModelRef) error {
+	f.mu.Lock()
+	f.switches = append(f.switches, ref)
+	f.mu.Unlock()
+	return nil
+}
+
+// A pick made while OpenCode runs a turn is made when the turn ends: the
+// turn writes its own model back to the session as it ends (11-24 gate: a
+// switch made mid-turn was undone and the next turn ran on the old model).
+func TestOpencodeSwitchWhileWorkingIsMadeWhenTheTurnEnds(t *testing.T) {
+	service := &fakeOpencodeModels{fakeOpencode: newFakeOpencode()}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	hub := agentevents.NewHub()
+	events := newOpencodeEvents(ctx, hub, func(*classifier.Worker) string { return work.WorkerProviderOpenCode })
+	events.later.poll = 10 * time.Millisecond
+	events.open = func(context.Context) (opencodeService, error) { return service, nil }
+	worker := &classifier.Worker{ID: "%5", Command: "opencode --session " + ocSession}
+	events.Observe(watcher.SessionEvent{Type: "worker_discovered", WorkerID: "%5", Worker: worker})
+	waitFor(t, "the Worker to connect", func() bool { return events.ModelsAvailable(worker) })
+	d := `{"sessionID":"` + ocSession + `"}`
+	service.frames <- frame("session.execution.started", d)
+	waitFor(t, "the turn to start", func() bool { return events.later.busy("%5") })
+	after, err := events.SetModel(context.Background(), worker, "zen/free", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service.mu.Lock()
+	early := len(service.switches)
+	service.mu.Unlock()
+	if after.Pending == nil || after.Pending.Model != "zen/free" || early != 0 {
+		t.Fatalf("pending %#v, switched %d times during the turn", after.Pending, early)
+	}
+	service.frames <- frame("session.execution.succeeded", d)
+	waitFor(t, "the switch after the turn", func() bool {
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		return len(service.switches) == 1 && service.switches[0].ProviderID == "zen" && service.switches[0].ID == "free"
+	})
+}

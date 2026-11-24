@@ -43,10 +43,25 @@ func (c *codexEvents) Models(ctx context.Context, worker *classifier.Worker) (se
 	current, effort := "", ""
 	if status.Thread != nil {
 		current, effort = status.Thread.Model, status.Thread.Effort
+	} else if chosen, ok := s.firstTurnSettings(thread); ok {
+		// Set before the first message: the thread's first turn runs on it.
+		current, effort = chosen.model, chosen.effort
 	} else if status.Config != nil {
 		current, effort = status.Config.Model, status.Config.Effort
 	}
 	return codexAgentModels(models, current, effort), nil
+}
+
+// ModelsAvailable: the Session's Codex is connected and its thread is known
+// (the TUI loads it as it starts; a Codex still on a startup question has
+// none yet, and a Codex opened by hand has no app-server Mewla can ask).
+func (c *codexEvents) ModelsAvailable(worker *classifier.Worker) bool {
+	s := c.session(worker.ID)
+	if s == nil {
+		return false
+	}
+	client, thread := s.connection()
+	return client != nil && thread != ""
 }
 
 // SetModel applies the model and effort to the running thread.
@@ -72,7 +87,15 @@ func (c *codexEvents) SetModel(ctx context.Context, worker *classifier.Worker, m
 		target = &effort
 	}
 	if _, err := live.ApplySettings(ctx, thread, model, target, codexctl.Settings{}, codexctl.DefaultAckTimeout); err != nil {
-		return server.AgentModels{}, err
+		if !codexctl.ThreadNotStarted(err) {
+			return server.AgentModels{}, err
+		}
+		// Before the first message the thread has no rollout to attach to;
+		// its settings are set directly and its first turn runs on them.
+		if err := live.UpdateSettings(ctx, thread, model, target); err != nil {
+			return server.AgentModels{}, err
+		}
+		s.setFirstTurnSettings(thread, model, effort)
 	}
 	return c.Models(ctx, worker)
 }

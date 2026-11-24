@@ -38,6 +38,11 @@ type dshModels struct {
 // Session runs on, switched by DSH itself.
 type dshSessionModels struct{}
 
+// ModelsAvailable: the Session's DSH listens on its socket.
+func (dshSessionModels) ModelsAvailable(worker *classifier.Worker) bool {
+	return work.DSHSessionReady(work.DSHSessionID(worker.Command))
+}
+
 func (dshSessionModels) Models(ctx context.Context, worker *classifier.Worker) (AgentModels, error) {
 	var models dshModels
 	if err := work.CallDSH(ctx, work.DSHSessionID(worker.Command), "session.models", map[string]any{}, &models); err != nil {
@@ -62,7 +67,6 @@ func (d dshSessionModels) SetModel(ctx context.Context, worker *classifier.Worke
 	after, err := d.Models(ctx, worker)
 	// Native acknowledgement applies the selection; DSH saves its session log
 	// asynchronously, so no daemon fsync is claimed.
-	after.Unsaved = "DSH accepted the choice; its native session log saves asynchronously."
 	return after, err
 }
 

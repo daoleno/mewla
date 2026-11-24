@@ -99,6 +99,17 @@ func launchProgram(command string) string {
 	return strings.Trim(fields[0], `"'`)
 }
 
+// LaunchProgramProvider is the agent a command line starts by its program
+// ("claude --model haiku" is Claude; "zsh -i -l -c 'claude …'" is a shell that
+// has not started Claude yet): "" for any other program.
+func LaunchProgramProvider(command string) string {
+	program := launchProgram(command)
+	if program == "" {
+		return ""
+	}
+	return inferWorkerProviderOne(filepath.Base(program))
+}
+
 // MissingAgentFor says whether a launch command runs a known agent's CLI that
 // is not installed here (nil when it is, and for a shell, which has no command,
 // and for any other program: a custom command is the person's own). A Session

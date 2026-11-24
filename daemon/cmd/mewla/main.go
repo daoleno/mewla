@@ -633,6 +633,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize provider credentials: %w", err)
 	}
+	codexConfigPath, claudeSettingsPath := machineConfigPaths()
 	profileOwner, err := modelprofiles.StartOwner(modelprofiles.OwnerConfig{
 		ProfilesPath:       profilesPath,
 		RoutesPath:         routesPath,
@@ -672,11 +673,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 		// retargets the gateway without touching running Codex processes.
 		GatewayAddr:     modelprofiles.DefaultGatewayListenAddr,
 		GatewayStateDir: filepath.Join(authManager.StorageDir(), "codex-gateway"),
-		CodexConfigPath: modelprofiles.DefaultCodexConfigPath(),
+		CodexConfigPath: codexConfigPath,
 		// Every Claude on the machine (plain shells, IDEs) reaches the selected
 		// Claude Provider through the same gateway via the env block of the
 		// user's Claude Code settings; Mewla-launched Sessions keep their routes.
-		ClaudeSettingsPath: modelprofiles.DefaultClaudeSettingsPath(),
+		ClaudeSettingsPath: claudeSettingsPath,
 	})
 	if err != nil {
 		return fmt.Errorf("start model profiles owner: %w", err)
@@ -714,6 +715,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		InputReadyBudget: work.DefaultScheduledInputReadyBudget,
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
+	controlHandler.settleModels = srv.SettleSessionModels
 	// A provider outage holds Brain's lane and shows one line in Chat; its end
 	// delivers what was held and clears the line.
 	w.SetProviderAvailabilityListener(srv.ProviderAvailabilityChanged)
@@ -740,8 +742,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetSessionModels(work.WorkerProviderOpenCode, opencodeFollow)
 	srv.SetSessionModels(work.WorkerProviderPi, piFollow)
 	srv.SetSessionModels(work.WorkerProviderClaude, newClaudeModels(w, eventHub))
-	srv.SetSessionModels(work.WorkerProviderCursor, newTypedModels(work.WorkerProviderCursor, w))
-	srv.SetSessionModels(work.WorkerProviderGrok, newTypedModels(work.WorkerProviderGrok, w))
+	srv.SetSessionModels(work.WorkerProviderCursor, newTypedModels(work.WorkerProviderCursor, w, eventHub))
+	srv.SetSessionModels(work.WorkerProviderGrok, newTypedModels(work.WorkerProviderGrok, w, eventHub))
 	answeredRequests, err := answered.Open(stateDir)
 	if err != nil {
 		return fmt.Errorf("open answered requests: %w", err)
@@ -3801,4 +3803,22 @@ func currentLinkRoute(authManager *auth.Manager, linkConfigPath string) (server.
 		return server.LinkRoute{}, false
 	}
 	return server.LinkRoute{RouteID: identity.RouteID, TransportPin: identity.SPKISHA256, Candidates: link.RouteCandidates(config, identity)}, true
+}
+
+// machineConfigPaths are the Codex config and Claude Code settings the
+// machine-level gateway is projected into. A daemon run for a test beside the
+// person's own (MEWLA_NO_CONFIG_TAKEOVER=1) leaves the person's alone: they
+// belong to the person's daemon. A CODEX_HOME of its own is still projected,
+// so its Codex Sessions start the way the person's do.
+func machineConfigPaths() (codexConfig, claudeSettings string) {
+	codexConfig, claudeSettings = modelprofiles.DefaultCodexConfigPath(), modelprofiles.DefaultClaudeSettingsPath()
+	if strings.TrimSpace(os.Getenv("MEWLA_NO_CONFIG_TAKEOVER")) == "" {
+		return codexConfig, claudeSettings
+	}
+	home, _ := os.UserHomeDir()
+	own := strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	if own == "" || home == "" || filepath.Clean(own) == filepath.Join(home, ".codex") {
+		codexConfig = ""
+	}
+	return codexConfig, ""
 }

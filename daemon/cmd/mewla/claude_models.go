@@ -33,6 +33,12 @@ type claudeModels struct {
 	hub    *agentevents.Hub
 	// read lists a launch command's models (tests replace it).
 	read func(ctx context.Context, command, cwd string) ([]work.ClaudeModel, error)
+	// launchArgs is the command line the Session's Claude was started with
+	// (its process's own), which keeps the --model and --effort the
+	// Worker's recorded command drops.
+	launchArgs func(worker *classifier.Worker) string
+	// later holds a choice made while Claude is in a turn.
+	later *turnPending
 
 	mu      sync.Mutex
 	lists   map[string]claudeModelList
@@ -57,18 +63,43 @@ func newClaudeModels(screen claudeScreen, hub *agentevents.Hub) *claudeModels {
 	return &claudeModels{screen: screen, hub: hub, lists: map[string]claudeModelList{}, applied: map[string]claudeChoice{},
 		read: func(ctx context.Context, command, cwd string) ([]work.ClaudeModel, error) {
 			return work.ReadClaudeModels(ctx, command, cwd, os.Environ())
-		}}
+		},
+		launchArgs: workerProcessArgs,
+		later:      newTurnPending(hub)}
 }
 
+// claudeCommand is the command line of the Claude the Session runs: its
+// recorded command when that starts Claude, else the program's own (a
+// Session starts as `zsh -i -l -c '<command>'`, and its recorded command
+// stays the shell's a while after the shell became Claude). "" while no Claude
+// runs yet.
+func (c *claudeModels) claudeCommand(worker *classifier.Worker) string {
+	if work.LaunchProgramProvider(worker.Command) == work.WorkerProviderClaude {
+		return worker.Command
+	}
+	if c.launchArgs != nil {
+		if args := c.launchArgs(worker); work.LaunchProgramProvider(args) == work.WorkerProviderClaude {
+			return args
+		}
+	}
+	return ""
+}
+
+var errClaudeNotRunning = errors.New("Claude has not started in this Session yet")
+
 func (c *claudeModels) list(ctx context.Context, worker *classifier.Worker) ([]work.ClaudeModel, error) {
-	key := strings.Join(strings.Fields(worker.Command), " ")
+	command := c.claudeCommand(worker)
+	if command == "" {
+		return nil, errClaudeNotRunning
+	}
+	key := strings.Join(strings.Fields(command), " ")
 	c.mu.Lock()
 	cached, ok := c.lists[key]
 	c.mu.Unlock()
 	if ok && time.Since(cached.at) < claudeListFresh {
 		return cached.models, nil
 	}
-	models, err := c.read(ctx, worker.Command, worker.Cwd)
+	models, err := c.read(ctx, command, worker.Cwd)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +107,13 @@ func (c *claudeModels) list(ctx context.Context, worker *classifier.Worker) ([]w
 	c.lists[key] = claudeModelList{models: models, at: time.Now()}
 	c.mu.Unlock()
 	return models, nil
+}
+
+// ModelsAvailable: Claude runs in the Session. A Session Mewla just made
+// runs its shell before Claude starts, and Claude's list is read with
+// Claude's own command line.
+func (c *claudeModels) ModelsAvailable(worker *classifier.Worker) bool {
+	return c.claudeCommand(worker) != ""
 }
 
 // Models reads the Session's menu.
@@ -98,6 +136,9 @@ func (c *claudeModels) Models(ctx context.Context, worker *classifier.Worker) (s
 	choice, chosen := c.applied[worker.ID]
 	c.mu.Unlock()
 	launchModel, launchEffort := work.ClaudeLaunchModel(worker.Command)
+	if launchModel == "" && c.launchArgs != nil {
+		launchModel, launchEffort = work.ClaudeLaunchModel(c.launchArgs(worker))
+	}
 	current, effort := claudeCurrent(models, transcript, launchModel), launchEffort
 	if transcript.Effort != "" {
 		effort = transcript.Effort
@@ -107,7 +148,9 @@ func (c *claudeModels) Models(ctx context.Context, worker *classifier.Worker) (s
 	if chosen && !transcript.At.After(choice.at) {
 		current, effort = choice.value, choice.effort
 	}
-	return claudeAgentModels(models, current, effort), nil
+	out := claudeAgentModels(models, current, effort)
+	out.Pending = c.later.of(worker.ID)
+	return out, nil
 }
 
 // claudeCurrent is the picker value the Session runs on: the one its latest
@@ -159,8 +202,6 @@ func claudeAgentModels(models []work.ClaudeModel, current, effort string) server
 	return out
 }
 
-var errClaudeBusy = errors.New("Claude is working on a turn; switch the model when it ends")
-
 // SetModel switches the Session in Claude's own picker, for this session only.
 func (c *claudeModels) SetModel(ctx context.Context, worker *classifier.Worker, model, effort string) (server.AgentModels, error) {
 	models, err := c.list(ctx, worker)
@@ -179,17 +220,27 @@ func (c *claudeModels) SetModel(ctx context.Context, worker *classifier.Worker, 
 	if effort != "" && !containsString(target.Efforts, effort) {
 		return server.AgentModels{}, fmt.Errorf("%s takes no %s effort", target.DisplayName, effort)
 	}
-	if c.hub != nil {
-		if state, ok := c.hub.State(worker.ID); ok && state.Current != nil && !state.Current.Status.Terminal() {
-			return server.AgentModels{}, errClaudeBusy
+	chosen := *target
+	apply := func(ctx context.Context) error {
+		if err := c.pick(ctx, worker.ID, chosen, effort); err != nil {
+			return err
 		}
+		c.mu.Lock()
+		c.applied[worker.ID] = claudeChoice{value: chosen.Value, effort: effort, at: time.Now()}
+		c.mu.Unlock()
+		return nil
 	}
-	if err := c.pick(ctx, worker.ID, *target, effort); err != nil {
+	// Claude's picker opens only between turns (typed during one, /model is
+	// queued as a message): a choice made while it works or waits for an
+	// answer is held and made when the turn ends.
+	if c.later.busy(worker.ID) {
+		c.later.hold(worker.ID, server.AgentChoice{Model: chosen.Value, Effort: effort}, apply)
+		return c.Models(ctx, worker)
+	}
+	c.later.drop(worker.ID)
+	if err := apply(ctx); err != nil {
 		return server.AgentModels{}, err
 	}
-	c.mu.Lock()
-	c.applied[worker.ID] = claudeChoice{value: target.Value, effort: effort, at: time.Now()}
-	c.mu.Unlock()
 	return c.Models(ctx, worker)
 }
 
@@ -201,19 +252,13 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 		return err
 	}
 	switches := strings.Count(flatScreen(before), claudeSwitchPrefix)
-	if err := c.screen.SendInput(sessionID, "/model"); err != nil {
-		return err
-	}
-	if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
-		return err
-	}
 	open := true
 	defer func() {
 		if err != nil && open {
 			_ = c.screen.SendKey(sessionID, "Escape")
 		}
 	}()
-	picker, err := c.waitPicker(ctx, sessionID, func(work.ClaudePicker) bool { return true })
+	picker, err := c.openPicker(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -264,11 +309,48 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 	if err := c.screen.SendKey(sessionID, "s"); err != nil {
 		return err
 	}
+	if err := c.waitApplied(ctx, sessionID, switches); err != nil {
+		return err
+	}
 	open = false
-	return c.waitApplied(ctx, sessionID, switches)
+	return nil
 }
 
-const claudeScreenWait = 5 * time.Second
+const claudeScreenWait = 4 * time.Second
+
+// claudeOpenTries bounds how often /model is typed into a Claude that does
+// not open its picker yet: one just started (a new folder, its MCP servers)
+// takes input some seconds before its commands; five tries fit the 30 s
+// budget of a switch.
+const claudeOpenTries = 5
+
+// openPicker types /model until Claude's picker shows. A Claude that took
+// the text without opening the picker has it cleared from its input again,
+// so it never joins the person's next message.
+func (c *claudeModels) openPicker(ctx context.Context, sessionID string) (work.ClaudePicker, error) {
+	var lastErr error
+	for try := 0; try < claudeOpenTries; try++ {
+		if err := c.screen.SendInput(sessionID, "/model"); err != nil {
+			return work.ClaudePicker{}, err
+		}
+		if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
+			return work.ClaudePicker{}, err
+		}
+		picker, err := c.waitPicker(ctx, sessionID, func(work.ClaudePicker) bool { return true })
+		if err == nil {
+			return picker, nil
+		}
+		lastErr = err
+		for _, key := range []string{"Escape", "C-u", "BSpace", "C-u"} {
+			_ = c.screen.SendKey(sessionID, key)
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	return work.ClaudePicker{}, lastErr
+}
 
 func (c *claudeModels) waitPicker(ctx context.Context, sessionID string, ready func(work.ClaudePicker) bool) (work.ClaudePicker, error) {
 	deadline := time.Now().Add(claudeScreenWait)
@@ -291,17 +373,15 @@ func (c *claudeModels) waitPicker(ctx context.Context, sessionID string, ready f
 
 const claudeSwitchPrefix = "Set model to "
 
-// errClaudeAsks: Claude asks the person to confirm the switch (it costs a
-// re-read of the conversation); the question stays theirs to answer.
-type errClaudeAsks struct{ question string }
-
-func (e errClaudeAsks) Error() string { return e.question }
-
 // waitApplied waits for Claude's own new line for the switch ("Set model to …
-// for this session only"), or Claude's question about it, or reports
-// Claude's last line. Lines are read flattened, as the terminal wraps them.
+// for this session only"), or reports Claude's last line. When Claude asks to
+// confirm a switch in a conversation already under way ("Switch model? …
+// the full history gets re-read"), the person's pick in the Model sheet is
+// that answer: its first option, "Yes, switch to …", is taken. Lines are read
+// flattened, as the terminal wraps them.
 func (c *claudeModels) waitApplied(ctx context.Context, sessionID string, switches int) error {
 	deadline := time.Now().Add(claudeScreenWait)
+	confirmed := false
 	for {
 		screen, err := c.screen.CapturePaneContent(sessionID)
 		if err != nil {
@@ -319,12 +399,12 @@ func (c *claudeModels) waitApplied(ctx context.Context, sessionID string, switch
 				}
 				return errors.New(line)
 			}
-			if at := strings.LastIndex(flat, "Switch model?"); at >= 0 && strings.Contains(flat[at:], "Yes, switch to") {
-				question := flat[at:]
-				if end := strings.Index(question, " This conversation"); end >= 0 {
-					question = question[:end]
+			if at := strings.LastIndex(flat, "Switch model?"); !confirmed && at >= 0 && strings.Contains(flat[at:], "Yes, switch to") {
+				if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
+					return err
 				}
-				return errClaudeAsks{question: "Claude asks in the Session: " + question}
+				confirmed = true
+				deadline = time.Now().Add(claudeScreenWait)
 			}
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
@@ -356,3 +436,12 @@ func indexOf(values []string, value string) int {
 }
 
 func containsString(values []string, value string) bool { return indexOf(values, value) >= 0 }
+
+// Settle makes a pick held during the turn that just ended before the next
+// message is sent, so that message runs on it.
+func (c *claudeModels) Settle(ctx context.Context, worker *classifier.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	return c.later.settle(ctx, worker.ID)
+}

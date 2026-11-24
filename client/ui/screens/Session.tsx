@@ -295,6 +295,13 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
       if (retry) clearTimeout(retry);
     };
   });
+  // A model picked while the agent worked is taken when its turn ends: read
+  // the runtime again then, so the chip shows what the agent runs on.
+  effect(() => {
+    if (activity()?.status === "running" || !untracked(runtime)?.pending_model_id) return;
+    const timer = setTimeout(() => void getThreadRuntime(transport, props.workerId).then((selection) => runtime.set(selection)).catch(() => {}), 2500);
+    return () => clearTimeout(timer);
+  });
   // A DSH Session's web UI, when the computer runs it.
   const dshWeb = signal<string | null>(null);
   const dshLive = computed(() => kind() === "dsh" && connected());
@@ -716,6 +723,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                   // The Session's model beside Send while the composer is open: one line, cut short, never pushing Send.
                   render: () => <If when={modelChip()}><Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
                       class="h-9 max-w-full min-w-0 flex-row items-center gap-0.5 rounded-full px-2.5 active:bg-accent">
+                      <If when={modelChip()!.pending}><Icon name="hourglass" size={13} color="muted-foreground" /></If>
                       <Text testID="model-chip-label" class="min-w-0 shrink text-sm text-muted-foreground line-clamp-1">{modelChip()!.label}</Text>
                       <Icon name="chevron-down" size={14} color="muted-foreground" />
                     </Button></If>,
