@@ -4,7 +4,7 @@
 #      quick chat's shortcut;
 #   2. the Dock's reopen (`open` of the running app) shows the same window again;
 #   3. a click in Brain's composer gives it the keys, and what is typed lands in it (NSH 0.7: a press no longer moves
-#      the keyboard focus to a control);
+#      the keyboard focus to a control); closed and reopened from the Dock, that draft is still there;
 #   4. the quick chat's shortcut (⇧⌘Space) opens the perch;
 #   5. Quit (as the app menu's) ends the app and its daemon (`mewla serve`). Its session host and Sessions run on, as on
 #      any daemon stop (the daemon takes them down only when the app is gone without a Quit); this run stops them after.
@@ -74,6 +74,17 @@ if [ -n "${at:-}" ]; then
   # macOS may capitalize the first letter (its text substitutions): matched in any case.
   "$W/ax" texts "$APP" | grep -qi "typed on the Mac" && echo "3. the click gave the composer the keys: the typing is in it" || fail "the typing did not land in the composer"
   shot typed
+  # Closed and brought back from the Dock again: the draft is still in the composer.
+  hidden=$(count "window: main hidden")
+  "$W/ax" close "$APP" || fail "no close button to press the second time"
+  wait_more "window: main hidden" "$hidden" 15 || fail "the window did not hide on its second close"
+  sleep 2
+  shown=$(count "window: main shown")
+  open -a "$D/$APP.app"
+  wait_more "window: main shown" "$shown" 15 || fail "the Dock's second reopen did not show the window"
+  sleep 3
+  "$W/ax" texts "$APP" | grep -qi "typed on the Mac" && echo "3. closed and reopened: the draft is still in the composer" || fail "the draft was gone after a close and the Dock's reopen"
+  shot draft-kept
 fi
 
 # 4. The quick chat's shortcut.
