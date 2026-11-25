@@ -216,6 +216,16 @@ request. A second daemon run for a test beside your own
 (`MEWLA_NO_CONFIG_TAKEOVER=1`) leaves both files alone; with a `CODEX_HOME` of
 its own it points that copy's Codex config at its gateway instead.
 
+**Prompt cache.** Claude Code on an API key or a gateway keeps its prompt
+cache for 5 minutes, so a Session that waits longer (a build, a test, a reply)
+pays for its whole context again at the next request. A Claude Session Mewla
+starts on an API key, a token or an `apiKeyHelper` gets
+`CLAUDE_CODE_PROMPT_CACHE_TTL=1h` in its environment, which keeps it for an hour.
+A subscription sign-in is left alone (Claude Code already keeps an hour there,
+within its usage limits), and so is any Session where you set that variable
+yourself, in the executor command, the daemon's environment or Claude's
+`settings.json`. Mewla does not write to your `settings.json` for this.
+
 **Images and web search in Codex.** Codex's built-in `image_gen` and `web.run`
 tools call their own endpoints (`/v1/images/generations`, `/v1/images/edits`,
 `/v1/alpha/search`). The gateway sends these to the selected Codex connection,
