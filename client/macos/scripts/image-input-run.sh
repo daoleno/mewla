@@ -34,6 +34,9 @@ shot() { "$S/capture-windows.sh" "Mewla Dev" "$C/$1" "$1-" >/dev/null || true; s
 front() { osascript -e 'tell application "System Events" to set frontmost of process "Mewla Dev" to true' || echo "could not bring Mewla Dev to the front"; sleep 1; }
 key() { osascript -e "tell application \"System Events\" to $1" || echo "could not send: $1"; }
 cmd_v() { key 'keystroke "v" using command down'; }
+# A launched app can take a while to show its first window (a cold runner's Safari took longer than a fixed wait).
+windows_of() { osascript -e "tell application \"System Events\" to count windows of process \"$1\"" 2>/dev/null || echo 0; }
+wait_window() { for _ in $(seq 1 "${2:-30}"); do [ "$(windows_of "$1")" -gt 0 ] 2>/dev/null && return 0; sleep 1; done; echo "$1 showed no window in ${2:-30} s"; return 1; }
 place() { osascript -e "tell application \"System Events\" to tell process \"$1\"" -e "set position of window 1 to {$2, $3}" -e "set size of window 1 to {$4, $5}" -e 'end tell' || echo "could not place $1"; }
 # The newest composer's chips, as the app logs them (mac.ts imageInputLog): "chips N [status name: error]...".
 chips() { log | grep "dev script: chips" | tail -1 | sed 's/.*dev script: //'; }
@@ -111,14 +114,18 @@ send; wait_chips '^chips 0$' 20 || failed "phase 1: Send did not take the chips"
 shot phase1-sent
 
 report "== 2. An image out of Safari and Chrome, and the screenshot thumbnail"
-open -a Safari "http://127.0.0.1:8765/"; sleep 8; place Safari 0 30 440 440; sleep 2
+open -a Safari "http://127.0.0.1:8765/"
+# Once more if no window came: Safari can launch without opening the page's window.
+wait_window Safari 30 || { open -a Safari "http://127.0.0.1:8765/"; wait_window Safari 30; } || failed "Safari: no window"
+sleep 3; place Safari 0 30 440 440; sleep 2
 shot safari-open
 "$B/mousedrag" 200 250 "$mid_x" "$mid_y" 2 > "$D/mousedrag.out" 2>&1
 wait_chips '\[ready picture\.png\]' 30 && report "Safari: $(chips)" || failed "Safari: the page's image is not a chip"
 pkill -x Safari; sleep 2
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --user-data-dir="$D/chrome" --no-first-run --no-default-browser-check \
   --window-position=0,30 --window-size=440,440 "http://127.0.0.1:8765/" > "$D/chrome.out" 2>&1 &
-sleep 10; shot chrome-open
+wait_window "Google Chrome" 30 || failed "Chrome: no window"
+sleep 5; shot chrome-open
 "$B/mousedrag" 200 260 "$mid_x" "$mid_y" 2 > "$D/mousedrag.out" 2>&1
 wait_chips '\[ready picture\.png\].*\[ready picture\.png\]' 30 && report "Chrome: $(chips)" || failed "Chrome: the page's image is not a chip"
 pkill -f "$D/chrome"; sleep 2
