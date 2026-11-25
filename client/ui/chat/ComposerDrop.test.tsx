@@ -28,7 +28,7 @@ function computer(state: "connected" | "waiting" = "connected", handlers: Record
 }
 
 describe("dropping files on a conversation (Mewla for Mac)", () => {
-  // NSH 0.6.1 hands a drop over as the files' URLs alone, as the headless `dropFiles` does: the app reads them.
+  // NSH hands a local file's drop over as its URL alone, as the headless `dropFiles` does: the app reads it.
   test("a file dropped on the conversation becomes a chip under its own name, and Send sends it", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.dropFiles("id:composer", [PICTURE]);
@@ -71,7 +71,7 @@ describe("pasting files into the composer (Mewla for Mac)", () => {
     await app.waitUntil(() => app.texts().includes("look at  /state/uploads/1.webp"));
   });
 
-  test("a file copied in Finder that came without its contents (NSH 0.6.1) is read and is a chip", async () => {
+  test("a file copied in Finder that came without its contents (NSH 0.7) is read and is a chip", async () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.type("id:composer", "look at ");
     await app.paste("id:composer", { text: "working.webp", uris: [PICTURE] });

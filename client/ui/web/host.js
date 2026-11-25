@@ -373,7 +373,7 @@ function unlockKeyboardOnExit() {
 const DROP_PLACE = '[data-testid^="file-drop-"]';
 
 /**
- * Files dragged into the page from the system (NSH 0.6.1's web build has no drops; FileDrop.tsx): over a drop place
+ * Files dragged into the page from the system (FileDrop.tsx: the app keeps its own web drop, see there): over a drop place
  * the page says which (`files.dragOver {target}`, `target` null once they leave it) and takes the drop
  * (`files.dropped {target, files}`, each file kept as a picked one is, so it uploads and shows as one); anywhere
  * else the drop is refused, so a drop that misses never opens the file in place of the app. Folders are left out.

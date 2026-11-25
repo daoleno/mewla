@@ -332,8 +332,7 @@ or pasted file is read up to 64 MB; a file past that is a chip that says so, and
 a file macOS would not let Mewla read is a chip that says it can't be read. Text
 dragged into the field goes in as text, as before. An image dragged out of a web
 page (Safari, Chrome) and the screenshot thumbnail that floats in the corner
-after ⌘⇧3 or ⌘⇧4 do not drop yet: they need a newer NSH release than the one
-Mewla is built on (NSH 0.6.1).
+after ⌘⇧3 or ⌘⇧4 drop too.
 
 In a terminal, **Attach** sends a file to the computer and types its path at the
 prompt, quoted for the shell. On the phone it is the first key of the key bar;

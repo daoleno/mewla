@@ -13,7 +13,7 @@ import type { AttachmentUploads } from "./upload";
  * - `dropped`: files dropped on the conversation with their contents (an NSH whose `onFileDrop` has `files`, the
  *   shape of a pick), uploaded the same way, one past what a drop reads a failed chip that says so;
  * - `uris`: the local files a drop or a Finder copy named (`file:` URLs, the desktops), matched with the contents
- *   that came (`localFileContents`). NSH 0.6.1 hands over none, so those that came without contents are read from
+ *   that came (`localFileContents`). NSH 0.7 hands over a local file's URL only, so those that came without contents are read from
  *   disk here (nsh.json `fs.read`), as Mewla for Mac's Attach does; one that cannot be read is a failed chip;
  * - `assets`: files dropped in a browser, which the page host keeps as it keeps picked ones (web/host.js
  *   `files.dropped`), uploaded by it with progress, as the browser's Attach does.
@@ -43,7 +43,7 @@ export async function attachIncoming(uploads: AttachmentUploads, incoming: Incom
   uploads.addAssets([...assets, ...read]);
 }
 
-/** `fs/promises` reads at most this much of a file (NSH 0.6.1); a larger one is a failed chip that says so. */
+/** `fs/promises` reads at most this much of a file (NSH 0.7); a larger one is a failed chip that says so. */
 const READ_MAX = 64 * 1024 * 1024;
 
 /** The local files `uris` name, read for upload; folders are left out, an unreadable file is a failed chip. */
