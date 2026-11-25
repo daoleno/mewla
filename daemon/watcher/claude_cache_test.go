@@ -14,7 +14,11 @@ func isolateClaudeHome(t *testing.T) (home string) {
 	home = t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	for _, name := range []string{"CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", ClaudePromptCacheTTLEnv} {
+	// No managed settings of this machine.
+	previous := claudeManagedSettingsDir
+	claudeManagedSettingsDir = filepath.Join(home, "no-managed-settings")
+	t.Cleanup(func() { claudeManagedSettingsDir = previous })
+	for _, name := range []string{"CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", ClaudePromptCacheTTLEnv, claudeForce5mEnv} {
 		t.Setenv(name, "") // restored when the test ends
 		os.Unsetenv(name)
 	}
@@ -103,7 +107,7 @@ func TestClaudePromptCacheFollowsTheCredentialsOfTheLaunch(t *testing.T) {
 			if tc.setup != nil {
 				tc.setup(t, home)
 			}
-			got := withClaudePromptCache(command, env)[ClaudePromptCacheTTLEnv]
+			got := withClaudePromptCache(command, "", env)[ClaudePromptCacheTTLEnv]
 			if got != tc.want {
 				t.Fatalf("%s = %q, want %q", ClaudePromptCacheTTLEnv, got, tc.want)
 			}
@@ -117,10 +121,10 @@ func TestClaudePromptCacheFollowsTheCredentialsOfTheLaunch(t *testing.T) {
 func TestClaudePromptCacheLeavesAMissingOrBrokenSettingsFileAlone(t *testing.T) {
 	home := isolateClaudeHome(t)
 	writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{not json`)
-	if got := withClaudePromptCache("claude", nil)[ClaudePromptCacheTTLEnv]; got != "" {
+	if got := withClaudePromptCache("claude", "", nil)[ClaudePromptCacheTTLEnv]; got != "" {
 		t.Fatalf("broken settings.json set %q", got)
 	}
-	if got := withClaudePromptCache("claude --settings /nonexistent.json", map[string]string{"ANTHROPIC_API_KEY": "k"})[ClaudePromptCacheTTLEnv]; got != "1h" {
+	if got := withClaudePromptCache("claude --settings /nonexistent.json", "", map[string]string{"ANTHROPIC_API_KEY": "k"})[ClaudePromptCacheTTLEnv]; got != "1h" {
 		t.Fatalf("unreadable --settings file hid the key: %q", got)
 	}
 }
@@ -164,5 +168,208 @@ func TestCreateSessionCarriesThePromptCacheTTLIntoTheSessionEnvironment(t *testi
 				t.Fatalf("session env has the 1h TTL = %v, want %v", has, tc.want)
 			}
 		})
+	}
+}
+
+func writeClaudeFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A top-level "promptCacheTtl" is the person's choice in every settings source
+// Claude Code reads for the launch (settings docs, "Any file" scope: user,
+// project, project local, --settings and managed), so Mewla leaves the launch
+// alone, whatever the value.
+func TestClaudePromptCacheLeavesAPromptCacheTtlSettingAlone(t *testing.T) {
+	const ttl = `"promptCacheTtl":"5m"`
+	key := map[string]string{"ANTHROPIC_API_KEY": "k"}
+	cases := []struct {
+		name    string
+		command string
+		setup   func(t *testing.T, home, project string)
+		cwd     func(project string) string
+		want    string
+	}{
+		{name: "none set", want: "1h"},
+		{
+			name: "user settings.json",
+			setup: func(t *testing.T, home, _ string) {
+				writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{`+ttl+`}`)
+			},
+		},
+		{
+			name: "user settings.json with 1h",
+			setup: func(t *testing.T, home, _ string) {
+				writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{"promptCacheTtl":"1h"}`)
+			},
+		},
+		{
+			name: "settings.json of CLAUDE_CONFIG_DIR",
+			setup: func(t *testing.T, home, _ string) {
+				dir := filepath.Join(home, "elsewhere")
+				t.Setenv("CLAUDE_CONFIG_DIR", dir)
+				writeClaudeSettingsFile(t, dir, `{`+ttl+`}`)
+			},
+		},
+		{
+			name: "the default dir is not read when CLAUDE_CONFIG_DIR points elsewhere",
+			setup: func(t *testing.T, home, _ string) {
+				t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, "elsewhere"))
+				writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{`+ttl+`}`)
+			},
+			want: "1h",
+		},
+		{
+			name: "project .claude/settings.json",
+			setup: func(t *testing.T, _, project string) {
+				writeClaudeFile(t, filepath.Join(project, ".claude", "settings.json"), `{`+ttl+`}`)
+			},
+		},
+		{
+			name: "project .claude/settings.local.json",
+			setup: func(t *testing.T, _, project string) {
+				writeClaudeFile(t, filepath.Join(project, ".claude", "settings.local.json"), `{`+ttl+`}`)
+			},
+		},
+		{
+			name: "local settings at the git root of a subfolder",
+			setup: func(t *testing.T, _, project string) {
+				writeClaudeFile(t, filepath.Join(project, ".git", "HEAD"), "ref: refs/heads/main\n")
+				writeClaudeFile(t, filepath.Join(project, ".claude", "settings.local.json"), `{`+ttl+`}`)
+			},
+			cwd: func(project string) string { return filepath.Join(project, "pkg", "sub") },
+		},
+		{
+			name: "local settings at the main checkout root of a worktree",
+			setup: func(t *testing.T, home, project string) {
+				main := filepath.Join(home, "main-checkout")
+				writeClaudeFile(t, filepath.Join(main, ".git", "HEAD"), "ref: refs/heads/main\n")
+				writeClaudeFile(t, filepath.Join(main, ".claude", "settings.local.json"), `{`+ttl+`}`)
+				writeClaudeFile(t, filepath.Join(project, ".git"), "gitdir: "+filepath.Join(main, ".git", "worktrees", "w")+"\n")
+			},
+		},
+		{
+			name: "project settings of another folder are not read",
+			setup: func(t *testing.T, home, _ string) {
+				writeClaudeFile(t, filepath.Join(home, "other", ".claude", "settings.json"), `{`+ttl+`}`)
+			},
+			want: "1h",
+		},
+		{
+			name: "managed-settings.json",
+			setup: func(t *testing.T, home, _ string) {
+				claudeManagedSettingsDir = filepath.Join(home, "managed")
+				writeClaudeFile(t, filepath.Join(home, "managed", "managed-settings.json"), `{`+ttl+`}`)
+			},
+		},
+		{
+			name: "managed-settings.d drop-in",
+			setup: func(t *testing.T, home, _ string) {
+				claudeManagedSettingsDir = filepath.Join(home, "managed")
+				writeClaudeFile(t, filepath.Join(home, "managed", "managed-settings.d", "10-cache.json"), `{`+ttl+`}`)
+			},
+		},
+		{
+			name:    "--settings payload",
+			command: `claude --settings '{"promptCacheTtl":"5m","permissions":{"defaultMode":"bypassPermissions"}}'`,
+		},
+		{
+			name:    "--settings file",
+			command: "claude --settings @PROJECT@/flag.json",
+			setup: func(t *testing.T, _, project string) {
+				writeClaudeFile(t, filepath.Join(project, "flag.json"), `{`+ttl+`}`)
+			},
+		},
+		{
+			name: "FORCE_PROMPT_CACHING_5M in the daemon's env",
+			setup: func(t *testing.T, _, _ string) {
+				t.Setenv(claudeForce5mEnv, "1")
+			},
+		},
+		{
+			name:    "FORCE_PROMPT_CACHING_5M in the command",
+			command: "env FORCE_PROMPT_CACHING_5M=1 claude",
+		},
+		{
+			name: "a value Claude Code ignores is not a choice",
+			setup: func(t *testing.T, home, _ string) {
+				writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{"promptCacheTtl":"10m"}`)
+			},
+			want: "1h",
+		},
+		{
+			name: "a non-string value is not a choice",
+			setup: func(t *testing.T, home, _ string) {
+				writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{"promptCacheTtl":5}`)
+			},
+			want: "1h",
+		},
+		{
+			name: "subagentPromptCacheTtl alone is not the main conversation's choice",
+			setup: func(t *testing.T, home, _ string) {
+				writeClaudeSettingsFile(t, filepath.Join(home, ".claude"), `{"subagentPromptCacheTtl":"5m"}`)
+			},
+			want: "1h",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := isolateClaudeHome(t)
+			project := filepath.Join(home, "project")
+			if err := os.MkdirAll(filepath.Join(project, "pkg", "sub"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if tc.setup != nil {
+				tc.setup(t, home, project)
+			}
+			command := tc.command
+			if command == "" {
+				command = "claude"
+			}
+			command = strings.ReplaceAll(command, "@PROJECT@", project)
+			cwd := project
+			if tc.cwd != nil {
+				cwd = tc.cwd(project)
+			}
+			got := withClaudePromptCache(command, cwd, key)[ClaudePromptCacheTTLEnv]
+			if got != tc.want {
+				t.Fatalf("%s = %q, want %q", ClaudePromptCacheTTLEnv, got, tc.want)
+			}
+		})
+	}
+}
+
+// The same through CreateSession: a project that chose its TTL keeps its
+// Session untouched, and one that did not gets the hour.
+func TestCreateSessionLeavesAProjectsPromptCacheTtlAlone(t *testing.T) {
+	home := isolateClaudeHome(t)
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "k")
+	chosen := filepath.Join(home, "chosen")
+	writeClaudeFile(t, filepath.Join(chosen, ".claude", "settings.local.json"), `{"promptCacheTtl":"5m"}`)
+	plain := filepath.Join(home, "plain")
+	if err := os.MkdirAll(plain, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		cwd  string
+		want bool
+	}{{chosen, false}, {plain, true}} {
+		w := New(0)
+		backend := useFakeSessionBackend(w, newFakeSessionBackend())
+		if _, err := w.CreateSession("", CreateSessionOptions{Name: "p", Command: "claude", Cwd: tc.cwd, Detached: true}); err != nil {
+			t.Fatal(err)
+		}
+		has := false
+		for _, entry := range backend.created[0].env {
+			has = has || strings.HasPrefix(entry, ClaudePromptCacheTTLEnv+"=")
+		}
+		if has != tc.want {
+			t.Fatalf("cwd %s: Session env has the TTL = %v, want %v", filepath.Base(tc.cwd), has, tc.want)
+		}
 	}
 }

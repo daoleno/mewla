@@ -4476,7 +4476,7 @@ func (w *Watcher) prepareSessionCreate(preferredTarget string, opts CreateSessio
 	}
 	// Every Session reaches here (Brain's host, Workers, a person's new
 	// Session, a relaunch), with the command still readable.
-	opts.Env = withClaudePromptCache(opts.Command, opts.Env)
+	opts.Env = withClaudePromptCache(opts.Command, cwd, opts.Env)
 	// The tools go on the command first: the adapter may wrap it in shell
 	// (Codex's own app-server), which tool injection cannot parse.
 	if !opts.Hidden {

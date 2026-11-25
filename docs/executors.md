@@ -220,11 +220,25 @@ its own it points that copy's Codex config at its gateway instead.
 cache for 5 minutes, so a Session that waits longer (a build, a test, a reply)
 pays for its whole context again at the next request. A Claude Session Mewla
 starts on an API key, a token or an `apiKeyHelper` gets
-`CLAUDE_CODE_PROMPT_CACHE_TTL=1h` in its environment, which keeps it for an hour.
-A subscription sign-in is left alone (Claude Code already keeps an hour there,
-within its usage limits), and so is any Session where you set that variable
-yourself, in the executor command, the daemon's environment or Claude's
-`settings.json`. Mewla does not write to your `settings.json` for this.
+`CLAUDE_CODE_PROMPT_CACHE_TTL=1h` in its environment, which keeps it for an
+hour (1-hour cache writes cost more than 5-minute ones). A subscription sign-in
+is left alone (Claude Code already keeps an hour there, within its usage
+limits).
+
+To keep 5 minutes, or to pick the lifetime yourself, set it the way you would
+without Mewla, and Mewla never overrides it: `"promptCacheTtl": "5m"` (or
+`"1h"`) in a Claude Code settings file, or `CLAUDE_CODE_PROMPT_CACHE_TTL` in the
+executor command, the daemon's environment or a settings `env` block. Mewla
+reads the settings files Claude Code reads for that Session: your
+`settings.json` (in `CLAUDE_CONFIG_DIR` if set), the project's
+`.claude/settings.json` and `.claude/settings.local.json`, the `--settings` of
+the command, and the managed-settings file of this machine
+(`/etc/claude-code`, `/Library/Application Support/ClaudeCode` or
+`C:\Program Files\ClaudeCode`, with its `managed-settings.d` folder). So does
+`FORCE_PROMPT_CACHING_5M`. Managed settings that reach Claude Code another way
+(the claude.ai console, a macOS profile, the Windows registry) are not read:
+set the variable in those Sessions' executor command instead. Mewla does not
+write to your settings files for this.
 
 **Images and web search in Codex.** Codex's built-in `image_gen` and `web.run`
 tools call their own endpoints (`/v1/images/generations`, `/v1/images/edits`,
