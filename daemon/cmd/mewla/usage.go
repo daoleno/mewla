@@ -68,6 +68,10 @@ func startUsage(ctx context.Context, authManager *auth.Manager, interactive bool
 			}
 		},
 	}
+	if os.Getenv(usage.EndpointEnv) != "" {
+		// A proof run points counts at its own receiver and wants them now.
+		sender.First, sender.Every = 15*time.Second, time.Minute
+	}
 	sender.Start()
 	usageSender = sender
 	go sender.Run(ctx)
