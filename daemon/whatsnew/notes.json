@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.4.29",
+      "date": "2026-11-25",
+      "highlights": [],
+      "fixes": [
+        "A message you send shows once in Brain's chat, also one with a tab, on Claude and Codex.",
+        "Claude's model picker shows versions; a pick made mid-turn says it is held, then lands.",
+        "Windows paths in a reply open: C:\\folder, ~\\file and folders."
+      ]
+    },
+    {
       "version": "0.4.28",
       "date": "2026-11-25",
       "highlights": [],
