@@ -36,7 +36,7 @@
   const count = (kind) => {
     if (off()) return;
     try {
-      // A string body goes as text/plain: no preflight, no cookie (sendBeacon to another site sends none).
+      // A string body goes as text/plain, so no preflight; connect.mewla.ai never sets a cookie, so none goes along.
       navigator.sendBeacon(ENDPOINT, JSON.stringify({ page: kind, ref: referrer() }));
     } catch {
       // Counting never gets in the way of the page.
