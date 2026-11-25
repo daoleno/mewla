@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.4.30",
+      "date": "2026-11-26",
+      "highlights": [],
+      "fixes": [
+        "Claude Sessions on an API key keep their prompt cache for an hour.",
+        "Copy says Copied only when the text really reached the clipboard.",
+        "Claude: no stray You chose card or false switch failure; no Working after /compact."
+      ]
+    },
+    {
       "version": "0.4.29",
       "date": "2026-11-25",
       "highlights": [],

@@ -943,6 +943,169 @@ function MacApp() {
   );
 }
 
+/** A composer with the person's draft in it (and, when given, a chip above it). */
+function Composer(props: { draft: string; muted?: boolean; children?: JSX.Element }) {
+  return (
+    <View class="gap-2 rounded-[18px] border border-border bg-card p-2">
+      {props.children}
+      <View class="flex-row items-center gap-2 pl-1">
+        <Text class={`flex-1 text-[11px] ${props.muted ? "text-muted-foreground" : "text-foreground"}`}>{props.draft}</Text>
+        <View class="size-[22px] items-center justify-center rounded-full bg-foreground"><Icon name="arrow-up" size={11} tone="canvas" /></View>
+      </View>
+    </View>
+  );
+}
+
+/** Mewla for Mac: the window's close hides it, the Mewla stays in the Dock, and a click there brings the window back with the draft. */
+function MacWindow() {
+  const window = loop([
+    { offset: 0, opacity: 1, scale: 1 },
+    { offset: 0.24, opacity: 1, scale: 1 },
+    { offset: 0.3, opacity: 0, scale: 0.94 },
+    { offset: 0.56, opacity: 0, scale: 0.94 },
+    { offset: 0.64, opacity: 1, scale: 1 },
+    { offset: 1, opacity: 1, scale: 1 },
+  ]);
+  const Tile = (props: { mewla?: boolean }) => (
+    <View class="items-center gap-[3px]">
+      <View class={`size-[22px] items-center justify-center rounded-[6px] ${props.mewla ? "bg-foreground" : "bg-muted"}`}>
+        {props.mewla ? <Icon name="paw" size={12} tone="canvas" /> : null}
+      </View>
+      <View class={`size-[3px] rounded-full ${props.mewla ? "bg-foreground" : "bg-transparent"}`} />
+    </View>
+  );
+  return (
+    <View class="relative h-[150px] w-[256px]">
+      <Card class="absolute left-[8px] right-[8px] top-0 h-[104px] gap-2 overflow-hidden border border-border p-2" style={window}>
+        <View class="relative flex-row gap-1">
+          <View class="size-[7px] rounded-full bg-seal" />
+          <View class="size-[7px] rounded-full bg-track" />
+          <View class="size-[7px] rounded-full bg-track" />
+          <Press at={0.18} style={{ left: -10, top: -10 }} />
+        </View>
+        <View class="flex-1 justify-end">
+          <Composer draft="Ship it tonight?" />
+        </View>
+      </Card>
+      {/* The Dock: Mewla's tile with its running dot the whole time. */}
+      <View class="absolute bottom-0 left-[62px] right-[62px] h-[36px] flex-row items-center justify-around rounded-[12px] bg-card px-2">
+        <Tile />
+        <View class="relative">
+          <Tile mewla />
+          <Press at={0.5} style={{ left: -2, top: -3 }} />
+        </View>
+        <Tile />
+        <Tile />
+      </View>
+    </View>
+  );
+}
+
+/** Mewla for Mac: a picture dragged out of a web page in the browser lands in the composer as a chip. */
+function ImageDrop() {
+  const drag = loop([
+    { offset: 0, opacity: 0, translateX: 0, translateY: 0 },
+    { offset: 0.14, opacity: 0, translateX: 0, translateY: 0 },
+    { offset: 0.2, opacity: 0.9, translateX: 0, translateY: 0 },
+    { offset: 0.48, opacity: 0.9, translateX: 10, translateY: 70 },
+    { offset: 0.52, opacity: 0, translateX: 10, translateY: 70 },
+    { offset: 1, opacity: 0, translateX: 10, translateY: 70 },
+  ]);
+  const chip = loop(appear(0.52, 4));
+  const ready = loop([{ offset: 0, opacity: 0 }, { offset: 0.66, opacity: 0 }, { offset: 0.7, opacity: 1 }, { offset: 0.92, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const uploading = loop(between(0.52, 0.66));
+  return (
+    <View class="relative h-[160px] w-[256px]">
+      <View class="absolute left-0 top-0 w-[136px]">
+        <Browser label="photos.example.com">
+          <Picture w={110} h={24} radius={6} />
+        </Browser>
+      </View>
+      <View class="absolute bottom-0 left-0 right-0">
+        <Composer draft="Use this for the banner" muted>
+          <View class="w-[132px] flex-row items-center gap-2 rounded-[10px] bg-muted px-2 py-1" style={chip}>
+            <Picture w={22} h={22} radius={5} />
+            <View class="flex-1 gap-0.5">
+              <Text class="text-[10px] font-semibold text-foreground line-clamp-1">picture.png</Text>
+              <View class="relative h-[11px]">
+                <Text class="absolute text-[9px] text-muted-foreground" style={uploading}>Uploading</Text>
+                <Text class="absolute text-[9px] text-muted-foreground" style={ready}>Ready</Text>
+              </View>
+            </View>
+          </View>
+        </Composer>
+      </View>
+      {/* The picture under the pointer, on its way from the page to the composer. */}
+      <View class="absolute" style={{ left: 44, top: 30, ...drag }}>
+        <Picture w={44} h={30} radius={6} />
+        <View class="absolute size-[10px] rounded-full border-2 border-foreground" style={{ right: -4, bottom: -4 }} />
+      </View>
+    </View>
+  );
+}
+
+/** A phone paired by address: a Session's HTML page opens inside Mewla, and two fingers zoom into it. */
+function PageZoom() {
+  const page = loop([
+    { offset: 0, opacity: 0, scale: 1 },
+    { offset: 0.06, opacity: 1, scale: 1 },
+    { offset: 0.3, opacity: 1, scale: 1 },
+    { offset: 0.6, opacity: 1, scale: 1.7 },
+    { offset: 0.94, opacity: 1, scale: 1.7 },
+    { offset: 1, opacity: 0, scale: 1.7 },
+  ]);
+  const finger = (dx: number, dy: number) => loop([
+    { offset: 0, opacity: 0, translateX: 0, translateY: 0 },
+    { offset: 0.26, opacity: 0, translateX: 0, translateY: 0 },
+    { offset: 0.3, opacity: 0.8, translateX: 0, translateY: 0 },
+    { offset: 0.6, opacity: 0.8, translateX: dx, translateY: dy },
+    { offset: 0.66, opacity: 0, translateX: dx, translateY: dy },
+    { offset: 1, opacity: 0, translateX: dx, translateY: dy },
+  ]);
+  const Bar = (props: { h: number; tone?: string }) => <View class={`w-[10px] rounded-[3px] ${props.tone ?? "bg-track"}`} style={{ height: props.h }} />;
+  return (
+    <Card class="h-[150px] w-[200px] overflow-hidden border border-border">
+      <View class="flex-row items-center gap-1.5 border-b border-border px-3 py-1.5">
+        <Icon name="chevron-left" size={12} tone="soft" />
+        <Text class="flex-1 text-[11px] font-semibold text-foreground line-clamp-1">report.html</Text>
+      </View>
+      <View class="relative flex-1 overflow-hidden">
+        <View class="absolute inset-0 gap-1.5 p-3" style={page}>
+          <Line width={110} strong />
+          <Line width={140} />
+          <View class="flex-row items-end gap-1.5 pt-1">
+            <Bar h={18} /><Bar h={30} /><Bar h={24} /><Bar h={40} tone="bg-seal" /><Bar h={28} /><Bar h={34} />
+          </View>
+          <Line width={120} />
+        </View>
+        <View class="absolute size-[16px] rounded-full bg-foreground" style={{ left: 84, top: 44, ...finger(-30, -18) }} />
+        <View class="absolute size-[16px] rounded-full bg-foreground" style={{ left: 100, top: 54, ...finger(30, 18) }} />
+      </View>
+    </Card>
+  );
+}
+
+/** A Session with hundreds of replies: one tap and its chat is there, full, at once. */
+function LongChat() {
+  const chat = loop(appear(0.22, 4));
+  const rows = [86, 120, 64, 132, 100, 76, 118];
+  return (
+    <View class="relative h-[150px] w-[250px] gap-2">
+      <Card class="relative">
+        <SessionRow name="refactor" state="240 replies" />
+        <Press at={0.12} style={{ right: 40, top: 4 }} />
+      </Card>
+      <Card class="flex-1 gap-1.5 overflow-hidden px-3 py-2" style={chat}>
+        {rows.map((width, i) => (
+          <View class={i % 3 === 1 ? "self-end" : "self-start"}>
+            <Line width={width} strong={i % 3 === 1} />
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -966,6 +1129,10 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "calendar-day": CalendarDay,
   "triggers-page": TriggersPage,
   "mac-app": MacApp,
+  "mac-window": MacWindow,
+  "image-drop": ImageDrop,
+  "page-zoom": PageZoom,
+  "long-chat": LongChat,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */
