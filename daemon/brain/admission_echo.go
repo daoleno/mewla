@@ -189,9 +189,8 @@ func reconcileAdmissionEchoes(
 			if !input.echoes(credits[cursor].admission, credits[cursor].digests) {
 				continue
 			}
+			claimEcho(&out[credits[cursor].index], input.id, input.sessionID)
 			row := &out[credits[cursor].index]
-			row.AdmissionEchoEventID = input.id
-			row.AdmissionEchoSessionID = input.sessionID
 			claimed[input.id] = true
 			claims[strings.TrimSpace(row.ID)] = input.id
 			if input.durable {
@@ -218,6 +217,13 @@ func reconcileAdmissionEchoes(
 		out = kept
 	}
 	return claimed, claims, out
+}
+
+// claimEcho records echoID as the admission row's echo: the one mutation of
+// every claim. The caller drops the echo's durable row, if it has one.
+func claimEcho(row *TimelineItem, echoID, echoSessionID string) {
+	row.AdmissionEchoEventID = echoID
+	row.AdmissionEchoSessionID = echoSessionID
 }
 
 // reconcileThreadAdmissionEchoes applies reconcileAdmissionEchoes to one

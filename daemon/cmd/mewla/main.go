@@ -1711,6 +1711,8 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 		return runBrainPlaybooks(args[1:], stderr)
 	case "gc":
 		return runBrainGC(args[1:], stderr)
+	case "claim-echo":
+		return runBrainClaimEcho(args[1:], stderr)
 	case "work":
 		return runBrainWork(args[1:], stderr)
 	case "executors":
@@ -1949,6 +1951,7 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  context        Print structured Brain context")
 	fmt.Fprintln(w, "  playbooks      Print the Brain playbook catalog")
 	fmt.Fprintln(w, "  gc             Reconcile product-owned Brain workspace blocks while preserving user content")
+	fmt.Fprintln(w, "  claim-echo     Repair: an admission claims a named stored echo row (dry run unless -apply)")
 	fmt.Fprintln(w, "  work           List, create, update, or append an event to durable Active work")
 	fmt.Fprintln(w, "  objective      Show, set, or clear the current chat's objective (the App's goal line)")
 	fmt.Fprintln(w, "  executors      List configured executors and the Brain host")
@@ -2268,6 +2271,33 @@ func runBrainGC(args []string, stderr io.Writer) error {
 		return err
 	}
 	resp, err := callControl(cfg, control.Request{Type: "brain_gc"})
+	if err != nil {
+		return err
+	}
+	return writeControlResponse(os.Stdout, resp, cfg.json)
+}
+
+// runBrainClaimEcho is an operator repair: an accepted Brain admission claims
+// one named stored echo row the automatic claim missed. The daemon checks the
+// pair (same thread, adjacent, the admitted bytes under a known transform)
+// and only reports unless -apply.
+func runBrainClaimEcho(args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla brain claim-echo", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	req := control.Request{Type: "brain_claim_echo"}
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon control socket")
+	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
+	fs.StringVar(&req.ID, "admission", "", "the admission row id (its request id)")
+	fs.StringVar(&req.EchoID, "echo", "", "the stored echo row id")
+	fs.BoolVar(&req.Apply, "apply", false, "write the claim (without it, a dry run)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || strings.TrimSpace(req.ID) == "" || strings.TrimSpace(req.EchoID) == "" {
+		return fmt.Errorf("mewla brain claim-echo needs -admission and -echo")
+	}
+	resp, err := callControl(cfg, req)
 	if err != nil {
 		return err
 	}
