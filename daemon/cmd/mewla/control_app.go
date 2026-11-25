@@ -259,6 +259,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainPlaybooks()
 	case "brain_gc":
 		return a.handleBrainGC()
+	case "brain_claim_echo":
+		return a.handleBrainClaimEcho(req)
 	case "memory_search", "memory_show":
 		return a.handleMemory(req)
 	case "brain_work_list":
@@ -1700,6 +1702,19 @@ func (a *controlApp) handleBrainGC() control.Response {
 		OK:           true,
 		Housekeeping: report,
 	}
+}
+
+// handleBrainClaimEcho has a Brain admission claim one named stored echo row
+// (mewla brain claim-echo): a dry run unless Apply.
+func (a *controlApp) handleBrainClaimEcho(req control.Request) control.Response {
+	if a == nil || a.brainStore == nil {
+		return control.ErrorResponse("brain_unavailable", "Brain workspace is not configured.")
+	}
+	repair, err := a.brainStore.RepairStoredEcho(req.ID, req.EchoID, req.Apply)
+	if err != nil {
+		return control.ErrorResponse("brain_claim_echo_refused", err.Error())
+	}
+	return control.Response{OK: true, EchoRepair: &repair}
 }
 
 // handleBrainObjective reads, declares or clears the current chat thread's

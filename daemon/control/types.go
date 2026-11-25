@@ -83,6 +83,10 @@ type Request struct {
 	HandlingID         string                                 `json:"handling_id,omitempty"`
 	ProviderTurnID     string                                 `json:"provider_turn_id,omitempty"`
 	Text               string                                 `json:"text,omitempty"`
+	// EchoID and Apply are mewla brain claim-echo's: the stored echo row the
+	// admission (ID) claims, and whether to write it (otherwise a dry run).
+	EchoID string `json:"echo_id,omitempty"`
+	Apply  bool   `json:"apply,omitempty"`
 	// ProviderCommand is one of the agent's own slash commands (worker_send:
 	// /compact), typed outside any Turn.
 	ProviderCommand      string                              `json:"provider_command,omitempty"`
@@ -199,6 +203,7 @@ type Response struct {
 	Context              any                                      `json:"context,omitempty"`
 	ScreenCapability     *screen.Capability                       `json:"screen_capability,omitempty"`
 	Housekeeping         any                                      `json:"housekeeping,omitempty"`
+	EchoRepair           *brain.StoredEchoRepair                  `json:"echo_repair,omitempty"`
 	Playbooks            any                                      `json:"playbooks,omitempty"`
 	Text                 string                                   `json:"text,omitempty"`
 	Workspace            string                                   `json:"workspace,omitempty"`
