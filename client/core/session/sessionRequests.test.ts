@@ -167,6 +167,15 @@ describe("the Model sheet's requests", () => {
     transport.close();
   });
 
+  test("a pick the agent did not take when its turn ended is read with its reason", async () => {
+    const { transport, answer } = await connected();
+    const read = getThreadRuntime(transport, "w1");
+    answer("thread_runtime", { runtime: runtime({ failed_model_id: "gpt-6-mini", failed_reasoning_effort: "low", failed_reason: "the pane is gone" }) });
+    const selection = await read;
+    expect([selection.failed_model_id, selection.failed_reasoning_effort, selection.failed_reason]).toEqual(["gpt-6-mini", "low", "the pane is gone"]);
+    transport.close();
+  });
+
   test("a busy Session fails as busy: try again without a refresh", async () => {
     const { transport, answer } = await connected();
     const done = setThreadRuntime(transport, "w1", { connectionId: "c1", modelId: "gpt-6" });

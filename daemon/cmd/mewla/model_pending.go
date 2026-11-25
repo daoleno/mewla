@@ -24,6 +24,9 @@ type turnPending struct {
 
 	mu      sync.Mutex
 	pending map[string]heldChoice
+	// failed is a held choice the agent did not take when its turn ended,
+	// with the agent's reason: the Model sheet says so until the next pick.
+	failed map[string]server.AgentFailure
 }
 
 type heldChoice struct {
@@ -34,7 +37,7 @@ type heldChoice struct {
 }
 
 func newTurnPending(hub *agentevents.Hub) *turnPending {
-	return &turnPending{hub: hub, poll: 400 * time.Millisecond, wait: 12 * time.Hour, pending: map[string]heldChoice{}}
+	return &turnPending{hub: hub, poll: 400 * time.Millisecond, wait: 12 * time.Hour, pending: map[string]heldChoice{}, failed: map[string]server.AgentFailure{}}
 }
 
 // busy reports a turn the agent is in: working, or waiting for an answer.
@@ -61,14 +64,44 @@ func (t *turnPending) of(workerID string) *server.AgentChoice {
 	return &choice
 }
 
-// drop forgets a held choice (a newer one was applied at once).
+// failure is the held choice the agent did not take, if any.
+func (t *turnPending) failure(workerID string) *server.AgentFailure {
+	if t == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	failed, ok := t.failed[workerID]
+	if !ok {
+		return nil
+	}
+	return &failed
+}
+
+// drop forgets a held choice and an earlier failure (a newer choice was
+// applied at once).
 func (t *turnPending) drop(workerID string) {
 	if t == nil {
 		return
 	}
 	t.mu.Lock()
 	delete(t.pending, workerID)
+	delete(t.failed, workerID)
 	t.mu.Unlock()
+}
+
+// done ends a held choice that was being made: it is no longer pending, and
+// a failure is kept for the Model sheet.
+func (t *turnPending) done(workerID string, held heldChoice, err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if now, ok := t.pending[workerID]; !ok || now.gen != held.gen {
+		return
+	}
+	delete(t.pending, workerID)
+	if err != nil {
+		t.failed[workerID] = server.AgentFailure{Model: held.choice.Model, Effort: held.choice.Effort, Reason: err.Error()}
+	}
 }
 
 var turnPendingGen struct {
@@ -83,8 +116,10 @@ func (t *turnPending) hold(workerID string, choice server.AgentChoice, apply fun
 	turnPendingGen.n++
 	gen := turnPendingGen.n
 	turnPendingGen.Unlock()
+	held := heldChoice{choice: choice, gen: gen, apply: apply}
 	t.mu.Lock()
-	t.pending[workerID] = heldChoice{choice: choice, gen: gen, apply: apply}
+	t.pending[workerID] = held
+	delete(t.failed, workerID)
 	t.mu.Unlock()
 	go func() {
 		deadline := time.Now().Add(t.wait)
@@ -103,11 +138,7 @@ func (t *turnPending) hold(workerID string, choice server.AgentChoice, apply fun
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		err := apply(ctx)
 		cancel()
-		t.mu.Lock()
-		if held, ok := t.pending[workerID]; ok && held.gen == gen {
-			delete(t.pending, workerID)
-		}
-		t.mu.Unlock()
+		t.done(workerID, held, err)
 		if err != nil {
 			log.Printf("model switch for %s after its turn: %v", workerID, err)
 		}
@@ -158,11 +189,7 @@ func (t *turnPending) settle(ctx context.Context, workerID string) error {
 			t.pending[workerID] = held
 			t.mu.Unlock()
 			err := held.apply(ctx)
-			t.mu.Lock()
-			if now, ok := t.pending[workerID]; ok && now.gen == held.gen {
-				delete(t.pending, workerID)
-			}
-			t.mu.Unlock()
+			t.done(workerID, held, err)
 			return err
 		}
 		t.mu.Unlock()

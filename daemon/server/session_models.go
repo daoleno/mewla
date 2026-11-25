@@ -43,6 +43,16 @@ type AgentModels struct {
 	// Pending is a choice the agent takes at its next possible moment;
 	// Current and Effort stay what it runs on until then.
 	Pending *AgentChoice
+	// Failed is a choice held for the end of a turn that the agent did not
+	// take then, with its reason; it stays until the next choice.
+	Failed *AgentFailure
+}
+
+// AgentFailure is a held choice the agent did not take, and the agent's reason.
+type AgentFailure struct {
+	Model  string
+	Effort string
+	Reason string
 }
 
 // SessionModels reaches the agent of a Session for its own models. Each agent
@@ -142,7 +152,14 @@ func (s *Server) sessionModelsProvider(worker *classifier.Worker) (string, Sessi
 	return provider, models
 }
 
-const sessionModelsBudget = 30 * time.Second
+// sessionModelsBudget bounds a read of a Session's menu. A switch has less:
+// its answer, or the agent's reason it failed, must reach the Model sheet
+// before the app's own 20 s wait for it ends (11-25: a slow pick ended as
+// "not acknowledged" with no reason).
+const (
+	sessionModelsBudget   = 30 * time.Second
+	sessionModelSetBudget = 16 * time.Second
+)
 
 // handleSessionModels answers the Model sheet of a Session from its agent:
 // the models the agent offers, each with its reasoning levels, the current
@@ -157,7 +174,11 @@ func (s *Server) handleSessionModels(conn *websocket.Conn, raw clientMessage, mu
 	if source == nil {
 		return false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sessionModelsBudget)
+	budget := sessionModelsBudget
+	if mutation {
+		budget = sessionModelSetBudget
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	var (
 		models AgentModels
@@ -239,6 +260,11 @@ func agentRuntimeSelection(workerID, provider string, models AgentModels) map[st
 	if models.Pending != nil {
 		runtime["pending_model_id"] = models.Pending.Model
 		runtime["pending_reasoning_effort"] = models.Pending.Effort
+	}
+	if models.Failed != nil {
+		runtime["failed_model_id"] = models.Failed.Model
+		runtime["failed_reasoning_effort"] = models.Failed.Effort
+		runtime["failed_reason"] = models.Failed.Reason
 	}
 	return runtime
 }

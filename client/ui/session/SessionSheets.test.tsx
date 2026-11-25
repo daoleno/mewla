@@ -145,6 +145,61 @@ describe("Model sheet", () => {
     await app.waitFor("text:closes:1");
   }, 20_000);
 
+  test("a pick held for the end of the turn says so, and the open sheet shows the switch once Claude made it", async () => {
+    // 11-25: the owner saw only an hourglass on Opus through a long turn; it
+    // stayed after Claude had switched. Labels carry the version Claude names.
+    const own = {
+      client: "claude", connection_id: "claude", connection_name: "Claude Code", model_id: "sonnet", reasoning_effort_default: undefined, reasoning_efforts: undefined,
+      native_models: [
+        { id: "default", display_name: "Default · Opus 5.5", available: true, source: "claude_native" },
+        { id: "opus", display_name: "Opus 5.5", available: true, source: "claude_native" },
+        { id: "sonnet", display_name: "Sonnet 5.5", available: true, source: "claude_native" },
+      ],
+    };
+    let now: Record<string, unknown> = own;
+    const c = computer({ sheet: "model" }, {
+      get_thread_runtime: () => ({ runtime: runtime(now) }),
+      set_thread_runtime: () => {
+        now = { ...own, pending_model_id: "opus" };
+        return { runtime: runtime(now), persistence_outcome: "applied", persistence_durable: true };
+      },
+    });
+    const app = await open(HARNESS, c);
+    await app.press("id:harness-open");
+    await app.waitFor("id:model-current-sonnet");
+    for (const label of ["Default · Opus 5.5", "Opus 5.5", "Sonnet 5.5"]) expect(app.texts()).toContain(label);
+    await app.press("id:model-row-opus");
+    await app.waitFor("id:effect-row-default");
+    expect(app.texts()).toContain("Opus 5.5");
+    await app.press("id:effect-row-default");
+    await app.waitFor("text:Opus 5.5 after this turn");
+    expect(app.count("id:model-pending-opus")).toBe(1);
+    expect(app.texts()).not.toContain("closes:1");
+    // The turn ends and Claude switches: the sheet, still open, follows.
+    now = { ...own, model_id: "opus" };
+    await app.waitFor("id:model-current-opus", { timeout: 6_000 });
+    expect(app.count("id:model-pending-opus")).toBe(0);
+    expect(app.count("id:model-switch-note")).toBe(0);
+  }, 20_000);
+
+  test("a held pick Claude did not take says why", async () => {
+    const own = {
+      client: "claude", connection_id: "claude", connection_name: "Claude Code", model_id: "sonnet", reasoning_effort_default: undefined, reasoning_efforts: undefined,
+      native_models: [
+        { id: "opus", display_name: "Opus 5.5", available: true, source: "claude_native" },
+        { id: "sonnet", display_name: "Sonnet 5.5", available: true, source: "claude_native" },
+      ],
+    };
+    let now: Record<string, unknown> = { ...own, pending_model_id: "opus" };
+    const c = computer({ sheet: "model" }, { get_thread_runtime: () => ({ runtime: runtime(now) }) });
+    const app = await open(HARNESS, c);
+    await app.press("id:harness-open");
+    await app.waitFor("text:Opus 5.5 after this turn");
+    now = { ...own, failed_model_id: "opus", failed_reason: "Claude's model picker did not show as expected" };
+    await app.waitFor("text:Could not switch to Opus 5.5: Claude's model picker did not show as expected", { timeout: 6_000 });
+    expect(app.count("id:model-current-sonnet")).toBe(1);
+  }, 20_000);
+
   test("after a refusal the next pick is taken as it is", async () => {
     let refused = true;
     const c = computer({ sheet: "model" }, {

@@ -3,6 +3,7 @@ import {
   effectRowsForRuntime,
   resolveComposerModelControl,
   runtimeChoiceForRow,
+  runtimeSwitchNote,
   threadRuntimeRows,
 } from "./sessionModelHelpers";
 import type { ThreadRuntimeSelection, ProvidersSnapshot } from "../providers/types";
@@ -212,6 +213,33 @@ describe("an agent's own models", () => {
       connectionConnected: true, selection: pi, refreshRequired: false,
     });
     expect(chip?.pending).toBe(true);
+  });
+
+  test("a held pick says it applies after this turn, and one the agent did not take says why", () => {
+    // 11-25: the sheet showed only an hourglass for a pick held through a long
+    // turn, and nothing at all when the pick was not taken.
+    const claude: ThreadRuntimeSelection = {
+      ...claudeProvider,
+      connection_id: "claude",
+      connection_name: "Claude Code",
+      model_id: "sonnet",
+      native_models: [
+        { id: "default", display_name: "Default · Opus 5.5", available: true, source: "claude_native", reasoning_efforts: ["low", "high"] },
+        { id: "opus", display_name: "Opus 5.5", available: true, source: "claude_native", reasoning_efforts: ["low", "high"] },
+        { id: "sonnet", display_name: "Sonnet 5.5", available: true, source: "claude_native", reasoning_efforts: ["low", "high"] },
+      ],
+    };
+    expect(runtimeSwitchNote(claude)).toBeNull();
+    expect(runtimeSwitchNote({ ...claude, pending_model_id: "opus" })).toEqual({ kind: "pending", text: "Opus 5.5 after this turn" });
+    expect(runtimeSwitchNote({ ...claude, pending_model_id: "opus", pending_reasoning_effort: "high" })?.text).toBe("Opus 5.5, High effort after this turn");
+    expect(runtimeSwitchNote({ ...claude, failed_model_id: "opus", failed_reason: "Claude's model picker did not show as expected" })).toEqual({
+      kind: "failed",
+      text: "Could not switch to Opus 5.5: Claude's model picker did not show as expected",
+    });
+    expect(resolveComposerModelControl({
+      capabilities: { structured_events: true, model_profile_managed: true, model_profile_active_switch: true },
+      connectionConnected: true, selection: { ...claude, pending_model_id: "opus" }, refreshRequired: false,
+    })?.accessibilityLabel).toBe("Open model and effect, Opus 5.5 after this turn");
   });
 
   test("a Claude Session on a Provider connection still shows no efforts", () => {

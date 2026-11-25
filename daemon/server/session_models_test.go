@@ -112,6 +112,13 @@ func TestAgentRuntimeSelectionCarriesPendingAndRequiredEffort(t *testing.T) {
 	if runtime["pending_model_id"] != "opencode-go/flash" || runtime["pending_reasoning_effort"] != "low" {
 		t.Fatalf("pending = %v / %v", runtime["pending_model_id"], runtime["pending_reasoning_effort"])
 	}
+	if _, failed := runtime["failed_model_id"]; failed {
+		t.Fatalf("a runtime with no failed pick says %v", runtime["failed_model_id"])
+	}
+	failed := agentRuntimeSelection("w1", "claude", AgentModels{Current: "sonnet", Failed: &AgentFailure{Model: "opus", Effort: "high", Reason: "Claude's model picker did not show"}})
+	if failed["failed_model_id"] != "opus" || failed["failed_reasoning_effort"] != "high" || failed["failed_reason"] != "Claude's model picker did not show" {
+		t.Fatalf("failed = %v / %v / %v", failed["failed_model_id"], failed["failed_reasoning_effort"], failed["failed_reason"])
+	}
 	models := runtime["native_models"].([]map[string]any)
 	if models[0]["reasoning_effort_required"] != true {
 		t.Fatalf("model = %#v", models[0])
@@ -143,6 +150,46 @@ func (blockingSessionModels) ModelsAvailable(*classifier.Worker) bool { return t
 // chat ~5 s late in the 0.4.28 gate; 30 s here with an agent that never
 // answered). Other messages are read while it waits.
 func TestASlowModelReadHoldsNoOtherMessage(t *testing.T) {
+	release := make(chan struct{})
+	worker, conn, readRequest := sessionModelsConn(t, blockingSessionModels{release: release})
+	if err := conn.WriteJSON(map[string]any{"type": "get_thread_runtime", "request_id": "slow", "worker_id": worker.ID}); err != nil {
+		t.Fatal(err)
+	}
+	// Any message after it: a model read for a Session that has none answers at once.
+	if err := conn.WriteJSON(map[string]any{"type": "get_thread_runtime", "request_id": "next", "worker_id": "mh-missing"}); err != nil {
+		t.Fatal(err)
+	}
+	if next := readRequest("next", 3*time.Second); next["type"] != "error" {
+		t.Fatalf("the message behind a slow model read = %#v", next)
+	}
+	close(release)
+	if slow := readRequest("slow", 3*time.Second); slow["type"] != "thread_runtime" {
+		t.Fatalf("the slow read's answer = %#v", slow)
+	}
+}
+
+// A switch the agent does not finish is refused with the agent's own reason
+// before the app stops waiting for it (20 s): it reached the Model sheet as
+// "not acknowledged", with no reason, when the switch had 30 s (11-25).
+func TestASwitchTheAgentDoesNotFinishFailsWithinTheAppsWait(t *testing.T) {
+	if sessionModelSetBudget >= 18*time.Second {
+		t.Fatalf("a switch may take %s; the app waits 20 s for it", sessionModelSetBudget)
+	}
+	worker, conn, readRequest := sessionModelsConn(t, blockingSessionModels{release: make(chan struct{})})
+	started := time.Now()
+	if err := conn.WriteJSON(map[string]any{"type": "set_thread_runtime", "request_id": "pick", "worker_id": worker.ID, "runtime": map[string]any{"connection_id": "claude", "model_id": "opus"}}); err != nil {
+		t.Fatal(err)
+	}
+	reply := readRequest("pick", 25*time.Second)
+	if reply["type"] != "error" || time.Since(started) >= 18*time.Second {
+		t.Fatalf("after %s the switch answered %#v", time.Since(started).Round(time.Second), reply)
+	}
+}
+
+// sessionModelsConn is a paired app connection to a daemon whose Claude
+// Sessions' menus come from models.
+func sessionModelsConn(t *testing.T, models SessionModels) (*classifier.Worker, *websocket.Conn, func(string, time.Duration) map[string]any) {
+	t.Helper()
 	authManager, err := auth.NewManager(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -161,8 +208,7 @@ func TestASlowModelReadHoldsNoOtherMessage(t *testing.T) {
 		}
 		return nil
 	}
-	release := make(chan struct{})
-	srv.SetSessionModels(work.WorkerProviderClaude, blockingSessionModels{release: release})
+	srv.SetSessionModels(work.WorkerProviderClaude, models)
 	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
 	t.Cleanup(httpServer.Close)
 	header := http.Header{}
@@ -172,9 +218,9 @@ func TestASlowModelReadHoldsNoOtherMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	readRequest := func(want string) map[string]any {
+	readRequest := func(want string, wait time.Duration) map[string]any {
 		t.Helper()
-		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(wait))
 		for {
 			_, raw, err := conn.ReadMessage()
 			if err != nil {
@@ -186,18 +232,5 @@ func TestASlowModelReadHoldsNoOtherMessage(t *testing.T) {
 			}
 		}
 	}
-	if err := conn.WriteJSON(map[string]any{"type": "get_thread_runtime", "request_id": "slow", "worker_id": worker.ID}); err != nil {
-		t.Fatal(err)
-	}
-	// Any message after it: a model read for a Session that has none answers at once.
-	if err := conn.WriteJSON(map[string]any{"type": "get_thread_runtime", "request_id": "next", "worker_id": "mh-missing"}); err != nil {
-		t.Fatal(err)
-	}
-	if next := readRequest("next"); next["type"] != "error" {
-		t.Fatalf("the message behind a slow model read = %#v", next)
-	}
-	close(release)
-	if slow := readRequest("slow"); slow["type"] != "thread_runtime" {
-		t.Fatalf("the slow read's answer = %#v", slow)
-	}
+	return worker, conn, readRequest
 }

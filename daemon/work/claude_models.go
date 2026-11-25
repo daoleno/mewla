@@ -317,6 +317,44 @@ func ParseClaudePicker(screen string) (ClaudePicker, bool) {
 	return picker, true
 }
 
+// ClaudePromptInput reads Claude Code's prompt on a screen: the text after
+// "❯" on the line under a rule, through the rule under it (a long text wraps
+// over several lines; its dimmed placeholder reads as ""). prompt is false when the screen shows no prompt (a
+// picker or a question in its place, or Claude not started yet).
+func ClaudePromptInput(screen string) (input string, prompt bool) {
+	lines := strings.Split(screen, "\n")
+	rule := func(line string) bool { return strings.HasPrefix(strings.TrimSpace(line), "──") }
+	for i := len(lines) - 1; i > 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if !strings.HasPrefix(line, "❯") || !rule(lines[i-1]) {
+			continue
+		}
+		parts := []string{strings.TrimSpace(strings.TrimPrefix(line, "❯"))}
+		closed := false
+		for _, next := range lines[i+1:] {
+			if rule(next) {
+				closed = true
+				break
+			}
+			parts = append(parts, strings.TrimSpace(next))
+		}
+		if !closed {
+			return "", false
+		}
+		input := strings.TrimSpace(strings.Join(parts, " "))
+		if claudePromptPlaceholder.MatchString(input) {
+			input = ""
+		}
+		return input, true
+	}
+	return "", false
+}
+
+// claudePromptPlaceholder is the dimmed text Claude shows in an empty prompt
+// (a suggestion on a new conversation, a hint after a provider error), the
+// shapes watcher's claudeComposerRe accepts as an empty composer.
+var claudePromptPlaceholder = regexp.MustCompile(`^(?:Try[\t ]+(?:"[^"\n]+"|“[^”\n]+”|'[^'\n]+')|Resend your message to try again|Once fixed, resend your message)$`)
+
 // ClaudeTranscriptFor is the transcript of a Claude Worker the way its Chat
 // finds it ("" when it has none yet).
 func ClaudeTranscriptFor(worker classifier.Worker) string {

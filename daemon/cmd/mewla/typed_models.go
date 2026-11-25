@@ -101,7 +101,7 @@ func (t *typedModels) Models(ctx context.Context, worker *classifier.Worker) (se
 	if current == "" {
 		current = work.LaunchModelFlag(worker.Command)
 	}
-	out := server.AgentModels{Label: work.AgentProductName(t.provider, worker.Command), Pending: t.later.of(worker.ID)}
+	out := server.AgentModels{Label: work.AgentProductName(t.provider, worker.Command), Pending: t.later.of(worker.ID), Failed: t.later.failure(worker.ID)}
 	for _, model := range models {
 		if current == "" && (model.Current || model.Default) {
 			current = model.ID

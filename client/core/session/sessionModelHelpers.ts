@@ -133,11 +133,34 @@ export function runtimeChoiceForRow(
   };
 }
 
-/** The Session's model by its agent's own name for it ("Sonnet", "GPT-6-Luna"), else its id. */
+/** The Session's model by its agent's own name for it ("Sonnet 5.5", "GPT-6-Luna"), else its id. */
 export function runtimeModelLabel(selection: ThreadRuntimeSelection): string {
-  const modelId = normalizeProviderId(selection.pending_model_id || selection.model_id);
+  return runtimeModelName(selection, selection.pending_model_id || selection.model_id);
+}
+
+/** A model of the Session's menu by its agent's own name for it, else its id. */
+export function runtimeModelName(selection: ThreadRuntimeSelection, id: string): string {
+  const modelId = normalizeProviderId(id);
   const own = selection.native_models?.find((model) => normalizeProviderId(model.id) === modelId);
   return own?.display_name?.trim() || modelId;
+}
+
+/**
+ * What the Model sheet says about a pick that is not what the agent runs on:
+ * held for the end of the turn it is in ("Opus 5.5 after this turn"), or held
+ * and then not taken, with the agent's reason. Null when there is neither.
+ */
+export function runtimeSwitchNote(selection: ThreadRuntimeSelection | null | undefined): { kind: "pending" | "failed"; text: string } | null {
+  if (!selection) return null;
+  const effortOf = (effort: string | undefined) => (effort?.trim() ? `, ${reasoningEffortLabel(effort)} effort` : "");
+  if (selection.pending_model_id) {
+    return { kind: "pending", text: `${runtimeModelName(selection, selection.pending_model_id)}${effortOf(selection.pending_reasoning_effort)} after this turn` };
+  }
+  if (selection.failed_model_id) {
+    const reason = selection.failed_reason?.trim();
+    return { kind: "failed", text: `Could not switch to ${runtimeModelName(selection, selection.failed_model_id)}${effortOf(selection.failed_reasoning_effort)}${reason ? `: ${reason}` : ""}` };
+  }
+  return null;
 }
 
 export function resolveComposerModelControl(input: {
