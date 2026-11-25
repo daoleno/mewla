@@ -18,8 +18,12 @@ const notion = (n: number) => ({ id: `n${n}`, integration: "notion", name: `Noti
 const expires = () => new Date(Date.now() + 3_600_000).toISOString();
 const setup = { id: "gws-flow", integration: "gws", status: "waiting", authorization_url: "https://console.cloud.google.com/auth/overview", code_required: true, setup_required: true, message: "Set up the consent screen.", expires: expires() };
 
-/** `answer` gives the connections, or `{ error }` for a refusal; `delay` is how long the computer takes to answer. */
-function computer(page: unknown, answer: (request: Request, n: number) => Record<string, unknown>, delay = 0) {
+/**
+ * `answer` gives the connections, or `{ error }` for a refusal; `delay` is how long the computer takes to answer, and
+ * `during` runs halfway through it (NSH 0.7's steps resolve once the host calls they started have answered, so what
+ * shows while the computer answers is read from inside the call).
+ */
+function computer(page: unknown, answer: (request: Request, n: number) => Record<string, unknown>, delay = 0, during?: () => void) {
   const asked: Request[] = [];
   const secure = new Map<string, string>();
   return {
@@ -36,7 +40,11 @@ function computer(page: unknown, answer: (request: Request, n: number) => Record
             const request = body.connection_request as Request;
             asked.push(request);
             const reply = answer(request, asked.filter((r) => r.action === request.action).length);
-            if (delay && request.action !== "list") await new Promise((done) => setTimeout(done, delay));
+            if (delay && request.action !== "list") {
+              await new Promise((done) => setTimeout(done, delay / 2));
+              during?.();
+              await new Promise((done) => setTimeout(done, delay / 2));
+            }
             return typeof reply.error === "string" ? reply : { reply: "connections_result", connections: reply };
           },
         },
@@ -147,14 +155,16 @@ describe("Extensions' buttons take a tap that spans the computer's news", () => 
 
 describe("a tapped button shows that it took", () => {
   test("Connect: busy at once while the computer answers, then what it said in plain words", async () => {
-    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : { error: "The computer could not start this sign-in.", code: "plugin_request_failed" }), 1_500);
-    const app = await open(HARNESS, c.options);
+    let app: Awaited<ReturnType<typeof open>> | undefined;
+    let whileAnswering: { spinner: boolean; button: boolean; other: boolean } | undefined;
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : { error: "The computer could not start this sign-in.", code: "plugin_request_failed" }), 1_500, () => {
+      whileAnswering = { spinner: app!.shows("label:Waiting"), button: app!.shows("id:connect-notion"), other: app!.enabled("id:connect-gws") };
+    });
+    app = await open(HARNESS, c.options);
     await app.waitFor("id:connect-notion");
     await app.press("id:connect-notion");
-    // While the computer answers: the button is a spinner, and every other service waits.
-    await app.waitFor("label:Waiting");
-    expect(app.shows("id:connect-notion")).toBe(false);
-    expect(app.enabled("id:connect-gws")).toBe(false);
+    // While the computer answered: the button was a spinner, and every other service waited.
+    expect(whileAnswering).toEqual({ spinner: true, button: false, other: false });
     await app.waitFor("text:That didn't go through");
     expect(app.texts()).toContain("The computer could not start this sign-in.");
     // And the row can be tapped again.

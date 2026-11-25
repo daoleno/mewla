@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost, pressWhenEnabled, typeUntil } from "../testing/fixtures";
+import { framesOf, paired, phoneHost, pressWhenEnabled, rowInView, typeUntil } from "../testing/fixtures";
 
 /**
  * Owner 11-13: Brain's whole thread flashed, sometimes several times, and a thread read back up jumped.
@@ -184,14 +184,15 @@ describe("a Session's chat read back up stays where it is (owner 11-13: history 
   }
   const still = async (app: Awaited<ReturnType<typeof open>>, before: string | undefined, what: string) => {
     await app.wait(400);
-    expect(`${what}: ${firstDrawn(app)?.slice(0, 11)}`).toBe(`${what}: ${before?.slice(0, 11)}`);
+    expect(`${what}: ${rowInView(app, "session-chat")}`).toBe(`${what}: ${before}`);
     // The jump control says there is more below (with a request open, its count).
     expect(`${what}: ${app.shows("id:jump-latest") || app.shows("id:jump-requests")}`).toBe(`${what}: true`);
   };
 
   test("through new messages, a streaming reply, an earlier row growing, older history, a request and a reconnect", async () => {
     const app = await readSessionBackUp();
-    const before = firstDrawn(app);
+    const before = rowInView(app, "session-chat");
+    expect(before).toBeDefined();
     await app.host.send("app.conversation", { worker: "w1", upserts: [msg(60)] });
     await still(app, before, "a new message");
     for (const tail of ["one", "one two three", "one two three four five six seven eight nine ten. ".repeat(6)]) {
