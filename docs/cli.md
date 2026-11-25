@@ -21,6 +21,7 @@ mewla deps -agent codex       # install that agent, sign in, and Brain runs on i
 mewla setup                   # guided setup on top of doctor: pick Brain's agent
 mewla setup remote            # over SSH: sign in with a code, run in the background, pair a phone
 mewla update [--check]        # verify and install the latest release, then restart Mewla onto it
+mewla telemetry [status|on|off|show|reset]  # anonymous usage counts (docs/security-and-privacy.md#usage-counts)
 mewla restart                 # restart Mewla running in the background; Sessions keep running
 mewla restart -if-older       # the same, only when the running Mewla is older than this one (Mewla for Mac runs it after an update)
 mewla version [--json]        # version, commit and platform

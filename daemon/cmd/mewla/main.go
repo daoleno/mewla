@@ -63,6 +63,7 @@ import (
 	"github.com/daoleno/mewla/daemon/setup"
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
+	"github.com/daoleno/mewla/daemon/usage"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -123,6 +124,8 @@ func main() {
 	}
 	// MEWLA_STATE_ROOT relocates all state for a throwaway daemon; see statedir.
 	statedir.InitFromEnv()
+	// Only release binaries send usage counts (see usage.Release).
+	usage.Release = releaseBuild == "1"
 	args := os.Args[1:]
 	if stateDir := os.Getenv(agentuse.OpenShimEnv); stateDir != "" {
 		// The browser tools started Mewla in place of Chrome (Windows; see
@@ -206,6 +209,8 @@ func run(args []string, stderr io.Writer) error {
 			return runResources(args[1:], stderr)
 		case "gc":
 			return runGCCommand(args[1:], stderr)
+		case "telemetry":
+			return runTelemetryCommand(args[1:], os.Stdout, stderr)
 		case "worker":
 			return runWorkerCommand(args[1:], stderr)
 		case "agent-event":
@@ -399,6 +404,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return err
 	}
 	startUpdateNotice(stderr, stateDir)
+	{
+		file, isFile := stderr.(*os.File)
+		interactive := isFile && startupNoticeAllowed(term.IsTerminal(int(file.Fd())), os.Getenv("TERM"), os.Getenv("CI"), false)
+		startUsage(ctx, authManager, interactive, stderr)
+	}
 
 	w := watcher.New(500 * time.Millisecond)
 	w.ConfigureDelegatedResources(authManager.DaemonID())
@@ -467,6 +477,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
 	}
+	eventHub.OnTurnFinished(func(e agentevents.Event) { usageBrainTurn(brainStore.HostSession, e) })
 	// Brain hears of the Friends playbook only while Friends is on.
 	brainStore.GateSeed("playbooks/friends.md", func() bool {
 		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
@@ -730,7 +741,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		controlHandler.whatsNew = whatsNewStore
 	}
 	w.SetExecutorResolver(execs.IDForCommand)
-	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
+	w.SetLaunchAdapter(countSessionStarts(authManager.StorageDir(), launchAdapterFor(execs, adapters)))
 	w.SetRelaunchAdapter(relaunchAdapterFor(execs, adapters))
 	srv.SetAgentLevels(agentLevelsFor(execs, adapters, eventHub))
 	srv.SetAgentActivity(hubActivity(eventHub))
@@ -3025,6 +3036,13 @@ func runPair(cfg pairConfig, stderr io.Writer) error {
 	if !pairingInfo.ShortLinks {
 		links.localShort = ""
 	}
+	if !cfg.json {
+		transport := "lan"
+		if links.phoneAddress == relayLabel || phoneAddress != "" {
+			transport = "relay"
+		}
+		recordUsage(stateDir, "pair_shown", map[string]string{"transport": transport})
+	}
 	if cfg.json {
 		return writePairingJSON(cfg.stdout, pairingInfo, links)
 	}
@@ -3185,6 +3203,7 @@ Set up and maintain
   host      Run or inspect the session host that keeps agent terminals running
   attach    Pick a live Session, or name one, and show it here; --all tiles them all (Ctrl-\ detaches)
   update    Verify and install the latest Mewla release
+  telemetry Anonymous usage counts: status, on, off, show what waits
   restart   Restart the running Mewla onto the installed version; Sessions keep running
   version   Print the Mewla version, commit and platform
 

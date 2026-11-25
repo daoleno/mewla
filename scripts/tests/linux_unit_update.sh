@@ -20,6 +20,8 @@
 # Needs docker (with archlinux:latest), go, openssl, python3; the
 # libghostty-vt cache that scripts/build-libghostty-desktop.sh writes.
 set -euo pipefail
+# Release-flagged test binaries must never send usage counts.
+export MEWLA_TELEMETRY=0
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="${1:-}"

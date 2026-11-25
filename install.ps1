@@ -11,6 +11,7 @@
 #   MEWLA_INSTALL_DIR=<path>       install into this folder
 #   MEWLA_NO_PATH_UPDATE=1         do not change your user PATH
 #   MEWLA_NO_START=1               do not start Mewla or register it to start at login
+#   MEWLA_NO_TELEMETRY=1           turn Mewla's anonymous usage counts off before it starts
 #   MEWLA_DRY_RUN=1                print the plan without changing anything
 #   MEWLA_INSTALL_FROM=<folder>    use mewla-windows-amd64.zip and SHA256SUMS from this
 #                                  folder instead of downloading them (offline or staged)
@@ -48,6 +49,7 @@ Set-StrictMode -Version 2.0
   $DryRun = Flag 'MEWLA_DRY_RUN'
   $NoPathUpdate = Flag 'MEWLA_NO_PATH_UPDATE'
   $NoStart = Flag 'MEWLA_NO_START'
+  $NoTelemetry = Flag 'MEWLA_NO_TELEMETRY'
   $Version = "$env:MEWLA_VERSION".Trim()
   $InstallDir = "$env:MEWLA_INSTALL_DIR".Trim()
   $InstallFrom = "$env:MEWLA_INSTALL_FROM".Trim()
@@ -262,6 +264,13 @@ namespace MewlaInstall {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
   }
   Say "Installed Mewla $Version at $Target"
+  # Off before Mewla first starts, with the installed binary itself.
+  if ($NoTelemetry) {
+    if ((Invoke-Native $Target @('telemetry', 'off') -Quiet) -eq 0) { Say 'Anonymous usage counts are off.' }
+    else { Write-Warning "mewla installer: could not turn usage counts off; run: mewla telemetry off" }
+  } else {
+    Say 'Mewla sends anonymous usage counts (never your content). Turn them off: mewla telemetry off'
+  }
 
   if (-not $NoPathUpdate) {
     $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)

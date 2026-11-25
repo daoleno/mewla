@@ -18,6 +18,8 @@
 # it starts). Needs systemd --user, openssl, python3, curl.
 
 set -euo pipefail
+# Release-flagged test binaries must never send usage counts.
+export MEWLA_TELEMETRY=0
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCENARIOS=("$@")

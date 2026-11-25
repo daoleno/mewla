@@ -378,6 +378,17 @@ dashboards, so they stay literal in this runbook.
 
 Both run from one image (`daemon/Dockerfile.link`). Nothing uses kamal-proxy.
 
+**Usage counts** (`-usage-db`, `daemon/usage/ingest`): the account role also
+answers `POST /v1/events` (anonymous usage counts from computers) and
+`POST /v1/visit` (mewla.ai page views from `site/visit.js`), writing
+`usage.db` on the same volume. It checks every request against
+`daemon/usage/schema.go` (anything outside it is refused whole), caps a body at
+64 KiB (512 B for a visit), an install at 2,000 events a day and an address at
+120 batches or 600 visits an hour, in memory. It logs only store failures,
+never a request, and keeps no address, user agent or account. Per-install rows
+go after 90 days; `rollups` keeps daily totals. Read it like the account
+database (a read-only copy of the volume); the growth dashboard does.
+
 Trust boundaries:
 
 - A grant binds account, machine, route ID, hostname label and the daemon's

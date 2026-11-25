@@ -15,6 +15,7 @@ import { goHome } from "./shell/nav";
 import { tray } from "./tray/state";
 import { startAppUpdate } from "./update/update";
 import { startMac } from "./mac/mac";
+import { followAppDaily } from "./more/settings/usage";
 import { thisMacChosen } from "./mac/local";
 // Registers the monospaced face theme.json's `font-mono` names, before the first frame.
 import "./kit/monoFont";
@@ -47,6 +48,8 @@ export function startApp(): void {
   startNotifications();
   startAppUpdate();
   startMac();
+  // This app's once-a-day usage count, through the current computer (which may have counts off).
+  followAppDaily();
 
   // Android's navigation bar draws its buttons for the app's appearance, also when it changes while the app runs
   // (Settings › Appearance, or the system's when it follows it); NSH sets only the status bar. iOS has no such bar.

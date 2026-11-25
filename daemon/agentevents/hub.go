@@ -66,6 +66,7 @@ type Hub struct {
 	onBound     func(workerID string)
 	onResolved  func(workerID string, approval Approval, e Event)
 	onStopped   func(e Event)
+	onTurnEnd   func(e Event)
 }
 
 type workerState struct {
@@ -117,7 +118,7 @@ func (h *Hub) Publish(e Event) {
 	w.apply(e)
 	changed := before != approvalIDs(w.Approvals)
 	rebound := e.Kind == KindBound && (w.Bound != boundBefore || w.Binding.ConversationID != bindingBefore.ConversationID || w.Binding.Ref != bindingBefore.Ref)
-	onApprovals, onBound, onResolved, onStopped := h.onApprovals, h.onBound, h.onResolved, h.onStopped
+	onApprovals, onBound, onResolved, onStopped, onTurnEnd := h.onApprovals, h.onBound, h.onResolved, h.onStopped, h.onTurnEnd
 	subs := make([]chan Event, 0, len(w.subs))
 	for _, ch := range w.subs {
 		subs = append(subs, ch)
@@ -135,6 +136,9 @@ func (h *Hub) Publish(e Event) {
 	if e.Kind == KindCommandsStopped && onStopped != nil {
 		onStopped(e)
 	}
+	if e.Kind == KindTurnFinished && onTurnEnd != nil {
+		onTurnEnd(e)
+	}
 	for _, ch := range subs {
 		select {
 		case ch <- e:
@@ -148,6 +152,14 @@ func (h *Hub) Publish(e Event) {
 func (h *Hub) OnCommandsStopped(notify func(e Event)) {
 	h.mu.Lock()
 	h.onStopped = notify
+	h.mu.Unlock()
+}
+
+// OnTurnFinished calls notify, outside the Hub's lock, with each
+// KindTurnFinished event.
+func (h *Hub) OnTurnFinished(notify func(e Event)) {
+	h.mu.Lock()
+	h.onTurnEnd = notify
 	h.mu.Unlock()
 }
 

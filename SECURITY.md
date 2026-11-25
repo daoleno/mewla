@@ -24,4 +24,4 @@ Do **not** open a public issue for unpatched remotely exploitable flaws.
 
 ## Out of scope for “Mewla cloud” language
 
-Mewla does not operate a hosted relay or store your agent transcripts in a Mewla-operated cloud. Host compromise, misconfigured public tunnels, and bypass-permission executors are operator risks documented in `docs/security-and-privacy.md`.
+Mewla never stores your agent transcripts in a Mewla-operated cloud. Its hosted relay and account service (`mewla login`) pass encrypted traffic they cannot read and keep only the account records and anonymous usage counts listed in `docs/security-and-privacy.md`. Host compromise, misconfigured public tunnels, and bypass-permission executors are operator risks documented in `docs/security-and-privacy.md`.

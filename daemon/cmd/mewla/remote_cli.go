@@ -139,8 +139,10 @@ func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remo
 	// public certificate logs, so it never defaults to the hostname.
 	start, err := client.StartLogin(ctx, strings.TrimSpace(options.machineName), identity.RouteID)
 	if err != nil {
+		recordUsage(stateDir, "login_failed", map[string]string{"reason": remote.LoginFailureClass(err)})
 		return remote.Config{}, fmt.Errorf("start sign-in: %w", err)
 	}
+	recordUsage(stateDir, "login_started", nil)
 	page := start.VerificationURI
 	if start.VerificationURIComplete != "" {
 		page = start.VerificationURIComplete
@@ -169,13 +171,16 @@ func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remo
 		machine, err := client.PollLogin(ctx, start.LoginID)
 		if errors.Is(err, remote.ErrLoginPending) {
 			if start.ExpiresAtMS > 0 && time.Now().After(deadline) {
+				recordUsage(stateDir, "login_failed", map[string]string{"reason": "expired"})
 				return remote.Config{}, errors.New("the sign-in code expired; run mewla login again")
 			}
 			continue
 		}
 		if err != nil {
+			recordUsage(stateDir, "login_failed", map[string]string{"reason": remote.LoginFailureClass(err)})
 			return remote.Config{}, err
 		}
+		recordUsage(stateDir, "login_finished", nil)
 		config := remote.Config{ServiceURL: serviceURL, ServiceCAPEM: caPEM, RemoteAccess: true, Machine: machine}
 		if err := remote.SaveConfig(stateDir, config); err != nil {
 			return remote.Config{}, fmt.Errorf("save remote access sign-in: %w", err)

@@ -38,7 +38,7 @@ function Stage([string]$Name, [hashtable]$Entries, [string]$Sums) {
 
 # Runs install.ps1 the way `irm | iex` does, in a fresh powershell.exe.
 function Install([hashtable]$Env) {
-  $vars = @{ MEWLA_INSTALL_FROM = ''; MEWLA_INSTALL_DIR = ''; MEWLA_NO_START = '1'; MEWLA_NO_PATH_UPDATE = '1'; MEWLA_DRY_RUN = ''; MEWLA_VERSION = '' }
+  $vars = @{ MEWLA_INSTALL_FROM = ''; MEWLA_INSTALL_DIR = ''; MEWLA_NO_START = '1'; MEWLA_NO_PATH_UPDATE = '1'; MEWLA_DRY_RUN = ''; MEWLA_VERSION = ''; MEWLA_NO_TELEMETRY = ''; MEWLA_STATE_ROOT = '' }
   foreach ($k in $Env.Keys) { $vars[$k] = $Env[$k] }
   foreach ($k in $vars.Keys) { [Environment]::SetEnvironmentVariable($k, $vars[$k], 'Process') }
   $previous = $ErrorActionPreference
@@ -64,11 +64,21 @@ try {
   $r = Install @{ MEWLA_INSTALL_FROM = $dir; MEWLA_INSTALL_DIR = $installDir; MEWLA_NO_PATH_UPDATE = '0' }
   $exe = Join-Path $installDir 'mewla.exe'
   Check 'installs from a staged release' ($r.Code -eq 0 -and (Test-Path $exe) -and $r.Output -match 'Installed Mewla') $r.Output
+  Check 'says it sends anonymous usage counts and how to turn them off' ($r.Output -match 'anonymous usage counts \(never your content\)\. Turn them off: mewla telemetry off') $r.Output
   $userPath = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
   Check 'adds the folder to the user PATH once' (@(@($userPath -split ';') | Where-Object { $_ -ieq $installDir }).Count -eq 1) $userPath
   $version = & $exe version 2>&1 | Out-String
   Check 'the installed mewla.exe runs' ($LASTEXITCODE -eq 0) $version
   Check 'no staging files are left' (@(Get-ChildItem $installDir -Force | Where-Object { $_.Name -like '.mewla-install-*' }).Count -eq 0) ''
+
+  # MEWLA_NO_TELEMETRY=1 turns counts off with the installed binary before Mewla starts
+  # (in a state root of its own, so a run on a person's computer leaves theirs alone).
+  $stateRoot = Join-Path $root 'state-root'
+  $r = Install @{ MEWLA_INSTALL_FROM = $dir; MEWLA_INSTALL_DIR = $installDir; MEWLA_NO_TELEMETRY = '1'; MEWLA_STATE_ROOT = $stateRoot }
+  [Environment]::SetEnvironmentVariable('MEWLA_STATE_ROOT', $stateRoot, 'Process')
+  $status = & $exe telemetry status 2>&1 | Out-String
+  [Environment]::SetEnvironmentVariable('MEWLA_STATE_ROOT', $null, 'Process')
+  Check 'MEWLA_NO_TELEMETRY=1 turns usage counts off' ($r.Code -eq 0 -and $r.Output -match 'Anonymous usage counts are off' -and $status -match 'Usage counts are off\. Turn on') "$($r.Output)`n$status"
 
   # A second install over a running mewla.exe moves it aside instead of
   # failing: a long-running program stands in for the running daemon.

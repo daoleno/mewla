@@ -38,6 +38,7 @@ import (
 	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/codexctl"
 	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
@@ -56,6 +57,7 @@ import (
 	"github.com/daoleno/mewla/daemon/stats"
 	"github.com/daoleno/mewla/daemon/terminal"
 	"github.com/daoleno/mewla/daemon/trigger"
+	"github.com/daoleno/mewla/daemon/usage"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/whatsnew"
 	"github.com/daoleno/mewla/daemon/work"
@@ -582,6 +584,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
 	mux.HandleFunc("/computers", s.handleComputers)
 	mux.HandleFunc("/agents", s.handleAgents)
+	mux.HandleFunc("/usage", s.handleUsage)
 	mux.HandleFunc("/mcp", s.handleMCP)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
 	mux.HandleFunc("/watch", s.handleWatch)
@@ -1030,9 +1033,11 @@ func (s *Server) handlePair(w http.ResponseWriter, r *http.Request) {
 		raw.DevicePublicKey,
 	)
 	if err != nil {
+		s.recordUsage("pair_failed", map[string]string{"reason": pairFailureClass(err)})
 		http.Error(w, err.Error(), pairErrorStatus(err))
 		return
 	}
+	s.recordUsage("pair_ok", map[string]string{"transport": usage.OneOf(clientaddr.Path(r), usage.Transports)})
 
 	answer := map[string]any{
 		"ok":                true,

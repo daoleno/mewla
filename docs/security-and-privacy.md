@@ -274,13 +274,69 @@ The daemon connects out only for features you use:
 | The model provider you selected | Requests from Codex and Claude Code through the local gateway |
 | Connected extension services | Calls Brain or Workers make. For Hyperliquid, the addresses Brain reads (public on Hyperliquid), the API wallet's address when you add a key to find its account, and, for trades, orders signed with that wallet; the key itself never leaves the server. For AWS, the installed CLI calls AWS using its own local profile and cache. Mewla checks command permissions and task authorization; local programs can also use the shared ~/.aws credentials directly |
 | Cloudflare | When you start a Quick Tunnel |
+| `connect.mewla.ai` | Anonymous usage counts, about once an hour, unless you turn them off |
 
-Mewla sends no telemetry.
+## Usage counts
+
+Mewla counts how it is used so we can see where setup gets stuck and what
+people use. The counts are anonymous and never carry your content. They are on
+by default; turn them off with any of:
+
+- **Settings › Privacy › Share anonymous usage counts** in the app (for the
+  current computer and its phones)
+- `mewla telemetry off` (`on`, `status`, `show` prints what waits to be sent,
+  `reset` gives the computer a new random id)
+- `MEWLA_TELEMETRY=0` or `DO_NOT_TRACK=1` in Mewla's environment
+- `install.sh --no-telemetry`, or `MEWLA_NO_TELEMETRY=1` for `install.ps1`,
+  before Mewla first starts
+
+Turning them off also deletes what has not been sent yet. Nothing is sent from
+development builds or when `CI` is set, and the first counts leave at the
+earliest ten minutes after Mewla first starts.
+
+**Who sends.** Only your computer. The app sends its one daily count through
+the computer it is connected to, never to a server of its own, so the
+computer's switch covers its phones too.
+
+**What is sent.** Each count is an event name with a few properties, and each
+property is a word from a fixed list, a bucket, a version number or a random
+id. The computer and the server both refuse anything else, so free text cannot
+be sent even by mistake. The events:
+
+| Event | Properties |
+| --- | --- |
+| `install` (first start) | OS, CPU architecture, Mewla version, how it was installed |
+| `daily` (once a day while Mewla runs) | OS, architecture, version, signed in or not, paired devices (0, 1, 2-3, 4-9, 10+), which agent CLIs are installed, Relay in use |
+| `login_started`, `login_finished`, `login_failed` | why a sign-in failed: denied, expired, network, quota, conflict, other |
+| `pair_shown`, `pair_ok`, `pair_failed` | how the phone reached the computer (LAN, Relay, Tailscale, …), the phone's platform when known, why pairing failed (expired, admission, pin, denied, …) |
+| `first_reply` | how long after install the first Brain reply came (a bucket), which agent |
+| `reply_failed` | the error class (provider sign-in, quota, model, timeout, other), which agent |
+| `session_started` | which agent |
+| `update` | from and to version, whether it worked |
+| `app_daily` (once a day per app) | a random app id, Android, iOS, Mac or web, the OS's major version, the app's version |
+
+Each batch carries the computer's random install id (32 hex, made on this
+computer, `mewla telemetry reset` replaces it) and the UTC day. It carries no
+time of day.
+
+**Never sent.** Prompts, replies, transcripts, file names, paths, repository
+or host names, computer names and addresses, error messages, model output,
+your GitHub account, emails, or anything you type.
+
+**What the server keeps.** The counts go to Mewla's account service
+(`connect.mewla.ai/v1/events`), which adds them to daily counters by event,
+properties and install id. It keeps no IP address (it uses the address in
+memory only, to limit how often one address may send), no user agent and no
+link between the install id and a Mewla account, even when the computer is
+signed in. Per-install counters are deleted after 90 days; daily totals with
+no install id are kept.
+
+The schema is `daemon/usage/schema.go`; the server is `daemon/usage/ingest`.
 
 ## Remote access account
 
 Signing in to a Mewla account (`mewla login`, or turning on Friends) is the
-only Mewla service that keeps data about you: your GitHub id and username, and
+only Mewla service that keeps data that names you: your GitHub id and username, and
 each signed-in computer's address, name and public key. Friends alone does not
 turn on remote access: the computer gets no relay connection or public address
 until you run `mewla login`. `mewla logout -delete-account` deletes the account

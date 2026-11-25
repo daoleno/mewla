@@ -15,6 +15,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/platform"
+	"github.com/daoleno/mewla/daemon/usage"
 )
 
 // An update never replaces the installed binary until the new one has
@@ -260,7 +261,11 @@ func RecordFailure(stateDir string, failure Failure) error {
 	if err != nil {
 		return err
 	}
-	return atomicfile.Write(filepath.Join(stateDir, failedFile), append(raw, '\n'), 0o600)
+	if err := atomicfile.Write(filepath.Join(stateDir, failedFile), append(raw, '\n'), 0o600); err != nil {
+		return err
+	}
+	usage.Record(stateDir, "update", map[string]string{"to": strings.TrimPrefix(failure.Version, "v"), "result": "failed"})
+	return nil
 }
 
 // LastFailure returns the recorded rollback, if any.

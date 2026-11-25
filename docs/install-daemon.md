@@ -35,7 +35,10 @@ The installer follows GitHub's `releases/latest` redirect to the newest stable
 release (no GitHub API call, so API rate limits don't apply), downloads the
 archive for your platform and its `SHA256SUMS`, verifies the checksum, and
 installs `mewla` into a user-owned directory on your `PATH` (or
-`~/.local/bin`). It sends no telemetry and installs `mewla` without `sudo`.
+`~/.local/bin`) without `sudo`. Mewla sends anonymous usage counts unless you
+turn them off: `--no-telemetry` here (`MEWLA_NO_TELEMETRY=1` for `install.ps1`)
+turns them off before Mewla first starts; see
+[Usage counts](security-and-privacy.md#usage-counts).
 
 The last line is the command that starts Mewla: `mewla`, or its full path
 when the current shell cannot find it yet. New terminals find `mewla` once the

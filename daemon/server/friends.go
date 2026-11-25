@@ -21,6 +21,7 @@ import (
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/remote"
+	"github.com/daoleno/mewla/daemon/usage"
 )
 
 // friendsLocal is Friends on this computer, with the service client built from
@@ -380,9 +381,11 @@ func (s *Server) friendsLoginStart(w http.ResponseWriter, ctx context.Context, s
 	}
 	start, err := client.StartLogin(ctx, "", identity.RouteID)
 	if err != nil {
+		usage.Record(stateDir, "login_failed", map[string]string{"reason": remote.LoginFailureClass(err)})
 		friendsFail(w, fmt.Errorf("start sign-in: %w", err))
 		return
 	}
+	usage.Record(stateDir, "login_started", nil)
 	friendsLogins.Lock()
 	friendsLogins.pending[start.LoginID] = friendsLogin{serviceURL: serviceURL, caPEM: caPEM}
 	friendsLogins.Unlock()
@@ -411,9 +414,11 @@ func (s *Server) friendsLoginPoll(w http.ResponseWriter, ctx context.Context, st
 		friendsLogins.Lock()
 		delete(friendsLogins.pending, loginID)
 		friendsLogins.Unlock()
+		usage.Record(stateDir, "login_failed", map[string]string{"reason": remote.LoginFailureClass(err)})
 		friendsFail(w, err)
 		return
 	}
+	usage.Record(stateDir, "login_finished", nil)
 	// A computer that already has remote access keeps it; a new sign-in from
 	// here is the account alone.
 	_, remoteOn, _ := remote.LoadRemote(stateDir)

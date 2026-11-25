@@ -150,6 +150,9 @@ func (s *Server) handleEnrollmentDecision(w http.ResponseWriter, r *http.Request
 			http.Error(w, "enrollment unavailable", http.StatusInternalServerError)
 			return
 		}
+		s.recordUsage("pair_ok", map[string]string{"transport": "other", "platform": usagePlatform(request.Platform)})
+	} else {
+		s.recordUsage("pair_failed", map[string]string{"reason": "denied"})
 	}
 	s.broadcastEnrollmentDecision(request)
 	s.writeJSONWithAssertion(w, http.StatusOK, "mewla-enrollment-decision", map[string]any{"status": request.Status, "request_id": request.ID})

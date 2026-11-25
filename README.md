@@ -64,7 +64,7 @@ Linux and macOS, `mewla` offers to install an agent CLI (Claude Code or Codex)
 when none is ready.
 
 ```sh
-# 1. Install: checksum-verified, no telemetry
+# 1. Install: checksum-verified; add --no-telemetry to turn usage counts off
 curl -fsSL https://mewla.ai/install.sh | sh     # Linux, macOS
 irm https://mewla.ai/install.ps1 | iex          # Windows, in PowerShell
 
@@ -83,6 +83,11 @@ mewla
 Other ways to connect, such as the same Wi-Fi only or Tailscale, are in
 [Connect and pair](docs/connect-and-pair.md). The full path is in
 [Get started](docs/get-started.md).
+
+Mewla sends anonymous usage counts (never your prompts, replies, file names,
+paths or addresses) to Mewla's own server, so we can see where setup gets
+stuck. `mewla telemetry off`, `MEWLA_TELEMETRY=0` or the switch in Settings
+turns them off; [what is sent](docs/security-and-privacy.md#usage-counts).
 
 > [!WARNING]
 > Every agent Mewla launches runs with full authority: no approval prompts, no

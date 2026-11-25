@@ -12,6 +12,7 @@ NO_PATH_UPDATE=${MEWLA_NO_PATH_UPDATE:-0}
 VERSION=${MEWLA_VERSION:-}
 INSTALL_DIR=${MEWLA_INSTALL_DIR:-}
 SETUP_REMOTE=${MEWLA_SETUP_REMOTE:-0}
+NO_TELEMETRY=${MEWLA_NO_TELEMETRY:-0}
 WORK_DIR=
 INSTALL_TEMP=
 
@@ -38,11 +39,12 @@ Options:
   --no-path-update           do not edit a shell profile
   --remote                   after installing, run `mewla setup remote`: sign in with a
                              code, run in the background and pair a phone (for SSH)
+  --no-telemetry             turn Mewla's anonymous usage counts off before it first starts
   --dry-run                  print the planned action without changing files
   -h, --help                 show this help
 
 The same settings may be supplied as MEWLA_VERSION, MEWLA_INSTALL_DIR,
-MEWLA_NO_PATH_UPDATE=1, MEWLA_DRY_RUN=1 and MEWLA_SETUP_REMOTE=1.
+MEWLA_NO_PATH_UPDATE=1, MEWLA_DRY_RUN=1, MEWLA_SETUP_REMOTE=1 and MEWLA_NO_TELEMETRY=1.
 
 Without MEWLA_VERSION, the installer follows GitHub's releases/latest redirect to
 the newest stable release (no GitHub API call, so API rate limits do not apply).
@@ -56,6 +58,20 @@ cleanup() {
   fi
   if [ -n "$WORK_DIR" ]; then
     rm -rf "$WORK_DIR"
+  fi
+}
+
+# apply_usage_choice says what Mewla counts, or turns counting off with the
+# installed binary before Mewla first starts (--no-telemetry).
+apply_usage_choice() {
+  if [ "$NO_TELEMETRY" -eq 1 ]; then
+    if "$1" telemetry off >/dev/null 2>&1; then
+      say "Anonymous usage counts are off."
+    else
+      warn "could not turn usage counts off; run: mewla telemetry off"
+    fi
+  else
+    say "Mewla sends anonymous usage counts (never your content). Turn them off: mewla telemetry off"
   fi
 }
 
@@ -83,6 +99,10 @@ while [ "$#" -gt 0 ]; do
       SETUP_REMOTE=1
       shift
       ;;
+    --no-telemetry)
+      NO_TELEMETRY=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -98,6 +118,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 case $DRY_RUN in 0|1) ;; *) die "MEWLA_DRY_RUN must be 0 or 1" ;; esac
+case $NO_TELEMETRY in 0|1) ;; *) die "MEWLA_NO_TELEMETRY must be 0 or 1" ;; esac
 case $NO_PATH_UPDATE in 0|1) ;; *) die "MEWLA_NO_PATH_UPDATE must be 0 or 1" ;; esac
 case $SETUP_REMOTE in 0|1) ;; *) die "MEWLA_SETUP_REMOTE must be 0 or 1" ;; esac
 
@@ -467,6 +488,7 @@ if [ -z "$VERSION" ] && [ -z "$INSTALL_DIR" ] && [ -n "${EXISTING_MEWLA:-}" ]; t
   say "Using the existing user-owned Mewla installation at $EXISTING_MEWLA."
   say "Delegating to its signed release updater..."
   "$EXISTING_MEWLA" update
+  apply_usage_choice "$EXISTING_MEWLA"
   if [ "$SETUP_REMOTE" -eq 1 ]; then
     setup_status=0
     run_remote_setup "$EXISTING_MEWLA" || setup_status=$?
@@ -537,6 +559,7 @@ say "Installed Mewla $VERSION at $target"
 if [ -n "$PROFILE_UPDATED" ]; then
   say "Added $HOME/.local/bin to $PROFILE_UPDATED for new terminals (marker: $PATH_MARKER)."
 fi
+apply_usage_choice "$target"
 
 if [ "$SETUP_REMOTE" -eq 1 ]; then
   setup_status=0
