@@ -1435,15 +1435,6 @@ func claudePastedInput(raw string) (string, bool) {
 	return claudeWholePasteEnvelope(claudePasteEnvelope, raw)
 }
 
-// ClaudeSubmittedInput is the text Claude Code submits, and records in its
-// transcript, for text typed or pasted into its prompt: the prompt editor
-// turns every tab into four spaces (Claude Code 2.1.310 to 2.1.332,
-// value.replaceAll("\t", "    ") on every change). An admission whose bytes
-// hold a tab is echoed with these bytes, never its own.
-func ClaudeSubmittedInput(text string) string {
-	return strings.ReplaceAll(text, "\t", "    ")
-}
-
 // claudeQueuedPasteEnvelope is how Claude Code (2.1.323) records a paste it
 // absorbed mid-turn: the queued_command prompt is the bare envelope, with no
 // "\n\n" before it and no "\n" after. Only queued prompts are read this way;
