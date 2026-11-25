@@ -63,9 +63,6 @@ targets:
       - { path: Assets.xcassets }
     dependencies:
       - { framework: "Frameworks/${NSH_FRAMEWORK}.xcframework", embed: false }
-      # NativeShell's web sign-in (open_auth_session, NSH 0.6.0) uses ASWebAuthenticationSession, and
-      # the framework's module map does not link AuthenticationServices: without it the app does not link.
-      - { sdk: AuthenticationServices.framework }
       - { target: MewlaLiveWidgets, embed: true }
       # Static, linked in; its path is relative to the MEWLA_GHOSTTY build setting (a custom source tree).
       - { sdk: libs/ios/GhosttyVt.xcframework, root: MEWLA_GHOSTTY }
