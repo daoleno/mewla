@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -38,11 +41,17 @@ type fakeClaude struct {
 	swallow bool
 	// placeholder is the dimmed suggestion an empty prompt shows.
 	placeholder string
-	typed       string
-	inputs      int
-	sent        []string
-	history     []string
-	keys        []string
+	// transcript is the Session's transcript, where Claude records each
+	// /model and its answer.
+	transcript string
+	// rows, when set, is how many lines the terminal shows: the oldest
+	// scroll away.
+	rows    int
+	typed   string
+	inputs  int
+	sent    []string
+	history []string
+	keys    []string
 }
 
 func (f *fakeClaude) CapturePaneContent(string) (string, error) {
@@ -77,7 +86,37 @@ func (f *fakeClaude) CapturePaneContent(string) (string, error) {
 		}
 		b.WriteString("────────────────────\n❯ " + shown + "\n────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n")
 	}
+	if f.rows > 0 {
+		lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
+		if len(lines) > f.rows {
+			lines = lines[len(lines)-f.rows:]
+		}
+		return strings.Join(lines, "\n") + "\n", nil
+	}
 	return b.String(), nil
+}
+
+// switched is Claude taking the pick: its line on screen, and the /model
+// command with its answer in the transcript, as Claude Code 2.1.332 writes
+// them.
+func (f *fakeClaude) switched() {
+	line := "Set model to " + f.names[f.current] + " for this session only with " + f.efforts[f.effort] + " effort"
+	f.history = append(f.history, "❯ /model", "  ⎿  Set model to "+f.names[f.current]+" for this", "  session only with "+f.efforts[f.effort]+" effort")
+	if f.transcript == "" {
+		return
+	}
+	at := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	record := func(text string) string {
+		raw, _ := json.Marshal(map[string]any{"type": "user", "timestamp": at, "message": map[string]any{"role": "user", "content": text}})
+		return string(raw) + "\n"
+	}
+	file, err := os.OpenFile(f.transcript, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = file.WriteString(record("<command-name>/model</command-name>\n            <command-message>model</command-message>\n            <command-args></command-args>") +
+		record("<local-command-stdout>"+strings.Replace(strings.Replace(line, f.names[f.current], "`"+f.names[f.current]+"`", 1), " "+f.efforts[f.effort]+" effort", " `"+f.efforts[f.effort]+"` effort", 1)+"</local-command-stdout>"))
 }
 
 func (f *fakeClaude) SendInput(_ string, text string) error {
@@ -100,7 +139,7 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 		if f.pending >= 0 {
 			// Claude's question: its first option, "Yes, switch to …".
 			f.current, f.pending = f.pending, -1
-			f.history = append(f.history, "❯ /model", "  ⎿  Set model to "+f.names[f.current]+" for this", "  session only with "+f.efforts[f.effort]+" effort")
+			f.switched()
 			return nil
 		}
 		if f.deaf > 0 || f.lag > 0 {
@@ -151,7 +190,7 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 			return nil
 		}
 		f.current = f.selected
-		f.history = append(f.history, "❯ /model", "  ⎿  Set model to "+f.names[f.current]+" for this", "  session only with "+f.efforts[f.effort]+" effort")
+		f.switched()
 	default:
 		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
 			return errors.New("a digit picks and saves as the default")
@@ -162,6 +201,7 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 
 func claudeModelsForTest(screen *fakeClaude) *claudeModels {
 	c := newClaudeModels(screen, nil)
+	c.transcriptOf = func(*classifier.Worker) string { return screen.transcript }
 	c.read = func(context.Context, string, string) ([]work.ClaudeModel, error) {
 		efforts := []string{"low", "medium", "high", "xhigh", "max"}
 		return []work.ClaudeModel{
@@ -174,8 +214,8 @@ func claudeModelsForTest(screen *fakeClaude) *claudeModels {
 	return c
 }
 
-func newFakeClaude() *fakeClaude {
-	return &fakeClaude{
+func newFakeClaude(t *testing.T) *fakeClaude {
+	return &fakeClaude{transcript: filepath.Join(t.TempDir(), "session.jsonl"),
 		labels:  []string{"Default (recommended)", "Opus", "Fable", "Sonnet"},
 		names:   []string{"Opus 5.5", "Opus 5.5", "Fable 5.2", "Sonnet 5.5"},
 		efforts: []string{"low", "medium", "high", "xhigh", "max"},
@@ -185,7 +225,7 @@ func newFakeClaude() *fakeClaude {
 }
 
 func TestClaudeSwitchUsesThePickersSessionOnlyKey(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	models := claudeModelsForTest(screen)
 	worker := &classifier.Worker{ID: "w1", Command: "claude --permission-mode default", Cwd: t.TempDir()}
 	after, err := models.SetModel(context.Background(), worker, "fable", "high")
@@ -208,7 +248,7 @@ func TestClaudeSwitchUsesThePickersSessionOnlyKey(t *testing.T) {
 // no question is left open to swallow their next message (11-24: it was
 // reported as "Could not switch model" and left on screen).
 func TestClaudeSwitchAnswersClaudesQuestion(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	screen.asks = true
 	models := claudeModelsForTest(screen)
 	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
@@ -229,7 +269,7 @@ func TestClaudeSwitchAnswersClaudesQuestion(t *testing.T) {
 
 // A switch that fails after the picker opened leaves nothing open on screen.
 func TestClaudeSwitchFailureClosesThePicker(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	screen.asks = true
 	screen.names[1] = "Opus 5.5"
 	models := claudeModelsForTest(screen)
@@ -257,7 +297,7 @@ func (n *noConfirmClaude) SendKey(id, key string) error {
 // A choice made while Claude works (or waits for an answer in its turn) is
 // held, shown as pending, and made in Claude's picker when the turn ends.
 func TestClaudeSwitchWhileWorkingIsMadeWhenTheTurnEnds(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	hub := agentevents.NewHub()
 	models := claudeModelsForTest(screen)
 	models.hub = hub
@@ -296,7 +336,7 @@ func TestClaudeSwitchWhileWorkingIsMadeWhenTheTurnEnds(t *testing.T) {
 // A message sent right after the turn ends runs on the model picked during
 // that turn: the send makes the held pick first instead of racing it.
 func TestClaudeHeldPickIsMadeBeforeTheNextMessage(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	hub := agentevents.NewHub()
 	models := claudeModelsForTest(screen)
 	models.hub = hub
@@ -322,7 +362,7 @@ func TestClaudeHeldPickIsMadeBeforeTheNextMessage(t *testing.T) {
 // The Session's model before its first message is the one Claude was started
 // with: the Worker's recorded command keeps only --session-id.
 func TestClaudeCurrentReadsTheLaunchFlagsOfTheProcess(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	models := claudeModelsForTest(screen)
 	models.launchArgs = func(*classifier.Worker) string {
 		return "claude --model sonnet --effort low --settings {} --session-id 3311e9d4"
@@ -365,7 +405,7 @@ func TestClaudeCurrentFollowsTheTranscript(t *testing.T) {
 // own lines name it, and Default with the model it runs on now (11-25: the
 // sheet said "Opus", "Sonnet", "Default (recommended)").
 func TestClaudeMenuNamesEachModelWithItsVersion(t *testing.T) {
-	models := claudeModelsForTest(newFakeClaude())
+	models := claudeModelsForTest(newFakeClaude(t))
 	got, err := models.Models(context.Background(), &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +427,7 @@ func TestClaudeMenuNamesEachModelWithItsVersion(t *testing.T) {
 // the menu, with Claude's reason, until the next pick: it was only logged,
 // and the Model sheet showed the old model with nothing said.
 func TestClaudeHeldPickThatFailsSaysWhy(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	hub := agentevents.NewHub()
 	models := claudeModelsForTest(screen)
 	models.hub = hub
@@ -436,7 +476,7 @@ func (b *brokenScreen) CapturePaneContent(id string) (string, error) {
 // its picker: Mewla clears it and types it again (11-24 gate: the first pick
 // on a new Session failed and left "/model" in Claude's input).
 func TestClaudeSwitchRetriesAClaudeNotReadyYet(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	screen.deaf = 1
 	models := claudeModelsForTest(screen)
 	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
@@ -454,7 +494,7 @@ func TestClaudeSwitchRetriesAClaudeNotReadyYet(t *testing.T) {
 // typed twice (11-25: a new Session's retry made "/model/model", which
 // Claude answered as a message, and the switch took 16 s).
 func TestClaudeSwitchEntersModelOnceClaudeShowsIt(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	screen.lag = 3
 	screen.placeholder = `Try "refactor <filepath>"`
 	models := claudeModelsForTest(screen)
@@ -472,7 +512,7 @@ func TestClaudeSwitchEntersModelOnceClaudeShowsIt(t *testing.T) {
 // A /model Claude took without opening its picker is never typed again: the
 // switch fails with Claude's last line, and at most the one /model went in.
 func TestClaudeSwitchNeverTypesModelTwice(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	screen.swallow = true
 	models := claudeModelsForTest(screen)
 	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
@@ -487,7 +527,7 @@ func TestClaudeSwitchNeverTypesModelTwice(t *testing.T) {
 // The person's own text in Claude's prompt is left as it is: the switch is
 // refused with the reason, and nothing is typed or entered.
 func TestClaudeSwitchLeavesThePersonsDraft(t *testing.T) {
-	screen := newFakeClaude()
+	screen := newFakeClaude(t)
 	screen.typed = "fix the login bug"
 	models := claudeModelsForTest(screen)
 	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
@@ -504,7 +544,7 @@ func TestClaudeSwitchLeavesThePersonsDraft(t *testing.T) {
 // offered until Claude runs (11-24 gate: Claude's list was read with the
 // shell's command line, "zsh: no such option: input_format").
 func TestClaudeMenuWaitsForClaudeToRun(t *testing.T) {
-	models := claudeModelsForTest(newFakeClaude())
+	models := claudeModelsForTest(newFakeClaude(t))
 	if models.ModelsAvailable(&classifier.Worker{ID: "w1", Command: "zsh"}) {
 		t.Fatal("a shell was offered Claude's models")
 	}
@@ -531,4 +571,70 @@ func TestClaudeMenuWaitsForClaudeToRun(t *testing.T) {
 	if _, err := models.Models(context.Background(), wrapped); err != nil || read != program {
 		t.Fatalf("Claude's list was read with %q: %v", read, err)
 	}
+}
+
+// Claude's answer to each switch is read from its transcript: the screen
+// keeps only its last lines. A Session switched a dozen times in a row (the
+// 0.4.29 held-pick loop) was told "Claude did not confirm the switch" from
+// the fifth on, while Claude had switched each time: the earlier "Set model
+// to" lines had scrolled away, so their count stopped growing.
+func TestClaudeSwitchesWhoseLinesScrolledAwayStillLand(t *testing.T) {
+	screen := newFakeClaude(t)
+	screen.asks = true
+	// A turn and a switch are 9 lines; the pane holds two of them above
+	// Claude's prompt, so each new "Set model to" line pushes an old one out.
+	screen.rows = 22
+	models := claudeModelsForTest(screen)
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	picks := []string{"opus", "fable", "sonnet"}
+	for i := 0; i < 12; i++ {
+		want := picks[i%len(picks)]
+		after, err := models.SetModel(context.Background(), worker, want, "low")
+		if err != nil {
+			t.Fatalf("switch %d to %s: %v", i+1, want, err)
+		}
+		if after.Current != want || after.Effort != "low" || screen.labels[screen.current] == "" {
+			t.Fatalf("switch %d: menu says %s/%s, want %s/low", i+1, after.Current, after.Effort, want)
+		}
+		// Claude answers a turn between the switches, as in the held-pick loop.
+		screen.mu.Lock()
+		screen.history = append(screen.history, "❯ Run this exact shell command, then reply with the word done: sleep 12", "● Bash(sleep 12)", "  ⎿  (No output)", "● done", "", "✻ Worked for 14s")
+		screen.mu.Unlock()
+	}
+}
+
+// A /model Claude answers with no switch fails with Claude's own words.
+func TestClaudeSwitchClaudeDidNotMakeSaysWhy(t *testing.T) {
+	screen := newFakeClaude(t)
+	models := claudeModelsForTest(screen)
+	models.screen = &keepingClaude{screen}
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	_, err := models.SetModel(context.Background(), worker, "opus", "")
+	if err == nil || err.Error() != "Kept model as Sonnet 5.5" {
+		t.Fatalf("err = %v, want Claude's own answer", err)
+	}
+}
+
+// keepingClaude closes its picker on "s" without switching, and says so.
+type keepingClaude struct{ *fakeClaude }
+
+func (k *keepingClaude) SendKey(id, key string) error {
+	if key != "s" {
+		return k.fakeClaude.SendKey(id, key)
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.keys = append(k.keys, key)
+	k.open = false
+	at := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	file, err := os.OpenFile(k.transcript, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	for _, text := range []string{"<command-name>/model</command-name>", "<local-command-stdout>Kept model as Sonnet 5.5</local-command-stdout>"} {
+		raw, _ := json.Marshal(map[string]any{"type": "user", "timestamp": at, "message": map[string]any{"role": "user", "content": text}})
+		_, _ = file.Write(append(raw, '\n'))
+	}
+	return nil
 }

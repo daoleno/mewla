@@ -198,15 +198,49 @@ type ClaudeTranscriptChoice struct {
 	At     time.Time
 }
 
-var claudeSwitchLine = regexp.MustCompile("Set model to `?([^`<]+?)`?(?: for this session only| and saved as your default for new sessions)?(?: with `?([a-z]+)`? effort)?(?:</local-command-stdout>|$)")
+var claudeSwitchLine = regexp.MustCompile("^Set model to `?([^`<]+?)`?( for this session only| and saved as your default for new sessions)?(?: with `?([a-z]+)`? effort)?$")
 
-// ClaudeTranscriptState reads a Claude transcript tail for the model the
-// Session runs on.
-func ClaudeTranscriptState(tail []byte) ClaudeTranscriptChoice {
-	var choice ClaudeTranscriptChoice
+var claudeANSI = regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]")
+
+// ClaudeSwitch is what Claude's /model answered, in its own words: "Set
+// model to `Sonnet 5.5` for this session only with `low` effort", "Kept
+// model as Sonnet 5.5".
+type ClaudeSwitch struct {
+	// Line is Claude's answer as plain text.
+	Line string
+	// Named is the model a switch named; "" when the answer is no switch.
+	Named string
+	// Effort is the effort the switch named, if any.
+	Effort string
+	// SessionOnly: the switch is for this session only (Mewla's), not saved
+	// as the default for new sessions.
+	SessionOnly bool
+	At          time.Time
+}
+
+// ParseClaudeSwitch reads Claude's answer to a /model (its command output,
+// with or without the <local-command-stdout> wrapper).
+func ParseClaudeSwitch(text string) ClaudeSwitch {
+	text = strings.TrimSpace(claudeANSI.ReplaceAllString(text, ""))
+	for _, tag := range []string{"local-command-stderr", "local-command-stdout"} {
+		text = strings.TrimSuffix(strings.TrimPrefix(text, "<"+tag+">"), "</"+tag+">")
+	}
+	text = strings.TrimSpace(text)
+	out := ClaudeSwitch{Line: strings.ReplaceAll(text, "`", "")}
+	if match := claudeSwitchLine.FindStringSubmatch(text); match != nil {
+		out.Named, out.SessionOnly, out.Effort = strings.TrimSpace(match[1]), match[2] == " for this session only", match[3]
+	}
+	return out
+}
+
+// claudeModelRecords walks a transcript tail's /model answers in order: each
+// <local-command-stdout> that follows a <command-name>/model</command-name>
+// record, and each answer Claude gave (assistant) as itself.
+func claudeModelRecords(tail []byte, visit func(kind string, at time.Time, model string, answer ClaudeSwitch)) {
+	afterModel := false
 	for _, line := range bytes.Split(tail, []byte("\n")) {
 		isAnswer := bytes.Contains(line, []byte(`"assistant"`))
-		if !isAnswer && !bytes.Contains(line, []byte("Set model to")) {
+		if !isAnswer && !bytes.Contains(line, []byte("local-command-stdout")) && !bytes.Contains(line, []byte("command-name")) {
 			continue
 		}
 		var entry struct {
@@ -223,34 +257,83 @@ func ClaudeTranscriptState(tail []byte) ClaudeTranscriptChoice {
 		switch entry.Type {
 		case "assistant":
 			if m := strings.TrimSpace(entry.Message.Model); m != "" && m != "<synthetic>" {
-				choice.Resolved, choice.Named, choice.At = m, "", entry.Timestamp
+				visit("answer", entry.Timestamp, m, ClaudeSwitch{})
 			}
 		case "user":
 			var text string
-			if json.Unmarshal(entry.Message.Content, &text) != nil || !strings.Contains(text, "<local-command-stdout>Set model to") {
+			if json.Unmarshal(entry.Message.Content, &text) != nil {
 				continue
 			}
-			match := claudeSwitchLine.FindStringSubmatch(text[strings.Index(text, "Set model to"):])
-			if match == nil {
-				continue
-			}
-			choice.Resolved, choice.Named, choice.At = "", strings.TrimSpace(match[1]), entry.Timestamp
-			if match[2] != "" {
-				choice.Effort = match[2]
+			text = strings.TrimSpace(text)
+			switch {
+			case strings.HasPrefix(text, "<command-name>"):
+				afterModel = strings.HasPrefix(text, "<command-name>/model</command-name>")
+			case strings.HasPrefix(text, "<local-command-stdout>"):
+				answer := ParseClaudeSwitch(text)
+				// A switch line names itself; Claude's other answers to
+				// /model ("Kept model as …") only follow its command record.
+				if afterModel || answer.Named != "" {
+					answer.At = entry.Timestamp
+					visit("model", entry.Timestamp, "", answer)
+				}
+				afterModel = false
 			}
 		}
 	}
+}
+
+// ClaudeTranscriptState reads a Claude transcript tail for the model the
+// Session runs on.
+func ClaudeTranscriptState(tail []byte) ClaudeTranscriptChoice {
+	var choice ClaudeTranscriptChoice
+	claudeModelRecords(tail, func(kind string, at time.Time, model string, answer ClaudeSwitch) {
+		switch {
+		case kind == "answer":
+			choice.Resolved, choice.Named, choice.At = model, "", at
+		case answer.Named != "":
+			choice.Resolved, choice.Named, choice.At = "", answer.Named, at
+			if answer.Effort != "" {
+				choice.Effort = answer.Effort
+			}
+		}
+	})
 	return choice
+}
+
+// ClaudeModelAnswerSince is Claude's latest answer to a /model written at or
+// after since: how a switch Mewla made in Claude's picker turned out. ok is
+// false while Claude has written none. The transcript, not the screen, is
+// read: the screen keeps only its last lines, and after a few switches the
+// earlier answers have scrolled away (0.4.29 held-pick loop).
+func ClaudeModelAnswerSince(tail []byte, since time.Time) (answer ClaudeSwitch, ok bool) {
+	claudeModelRecords(tail, func(kind string, at time.Time, _ string, got ClaudeSwitch) {
+		if kind == "model" && !at.Before(since) {
+			answer, ok = got, true
+		}
+	})
+	return answer, ok
+}
+
+// ReadClaudeModelAnswerSince is ClaudeModelAnswerSince over the end of a
+// transcript file.
+func ReadClaudeModelAnswerSince(path string, since time.Time) (ClaudeSwitch, bool) {
+	return ClaudeModelAnswerSince(readClaudeTail(path), since)
 }
 
 // ReadClaudeTranscriptState reads the end of a transcript file.
 func ReadClaudeTranscriptState(path string) ClaudeTranscriptChoice {
+	return ClaudeTranscriptState(readClaudeTail(path))
+}
+
+// readClaudeTail is the last 512 KiB of a transcript file (nil when it
+// cannot be read).
+func readClaudeTail(path string) []byte {
 	if strings.TrimSpace(path) == "" {
-		return ClaudeTranscriptChoice{}
+		return nil
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return ClaudeTranscriptChoice{}
+		return nil
 	}
 	defer file.Close()
 	const window = 512 << 10
@@ -258,7 +341,7 @@ func ReadClaudeTranscriptState(path string) ClaudeTranscriptChoice {
 		_, _ = file.Seek(info.Size()-window, io.SeekStart)
 	}
 	tail, _ := io.ReadAll(io.LimitReader(file, window))
-	return ClaudeTranscriptState(tail)
+	return tail
 }
 
 // ClaudePicker is Claude Code's model picker as its screen shows it.

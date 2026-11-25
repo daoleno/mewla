@@ -930,8 +930,6 @@ func commandFlag(command, flag string) string {
 	return ""
 }
 
-var claudeSwitchLine = regexp.MustCompile("Set model to `?([^`]+?)`? for this session only(?: with `?([a-z]+)`? effort)?")
-
 // claudeRecord reads Claude's transcript: each answer's model, and Claude's
 // own line for the latest switch's effort.
 func claudeRecord(s *session) record {
@@ -969,8 +967,9 @@ func claudeRecord(s *session) record {
 		case "user":
 			var text string
 			if json.Unmarshal(line.Message.Content, &text) == nil {
-				if m := claudeSwitchLine.FindStringSubmatch(text); m != nil {
-					effort = m[2]
+				// The daemon's own reader of Claude's answer to /model.
+				if answer := work.ParseClaudeSwitch(text); answer.Named != "" && answer.SessionOnly {
+					effort = answer.Effort
 				}
 			}
 		}
