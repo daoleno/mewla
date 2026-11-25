@@ -1,6 +1,6 @@
 import { cleanup, colorScheme, computed, effect, host, lifecycle, reduceMotion, signal, Storage, untracked } from "nsh";
 import { newestTerminalAttach } from "../terminal/attach";
-import { Application, GlobalShortcut, Tray, Window } from "nsh/desktop";
+import { Application, GlobalShortcut, Tray, Window, type WindowRef } from "nsh/desktop";
 import { ARRIVE_COUNT_MS, menuBarItem, menuBarReaction, PEEK_MS, peekOf, stopWords, type MenuBarItem, type MenuBarReaction } from "../../core/mac/menuBar";
 import type { PetState } from "../../core/settings/petPreview";
 import { catNow } from "../home/Cat";
@@ -75,7 +75,27 @@ async function stopMewla(): Promise<void> {
 export function startMac(): void {
   if (!isMacApp()) return;
   const params = host.params as MacParams;
-  Window.get("main")?.set({ titleBar: MAC_TITLE_BAR, transparent: true });
+  // The app runs with no window shown (the menu bar cat, the perch) until Quit; the Dock's reopen brings the window
+  // back. NSH 0.7's window model: the main window is the implicit first window `mount` opens (after this runs), and
+  // a close press would close it for good, so it hides instead, as ⌘W does (menus.ts).
+  Application.setQuitMode("explicit");
+  Application.on("reopen", showMainWindow);
+  let wired: WindowRef | null = null;
+  effect(() => {
+    const main = Window.get("main");
+    if (!main || main === wired) return;
+    wired = main;
+    untracked(() => {
+      main.set({ titleBar: MAC_TITLE_BAR, transparent: true, closeOnPress: false });
+      // The first time the person closes the window, the quick chat's shortcut is offered from the cat (§2.4,
+      // `m-shortcut`): its close button here, ⌘W in menus.ts. Their close, not the window's state, which also goes
+      // hidden when it is minimized or the app hidden (⌘H).
+      main.on("closePress", () => {
+        main.hide();
+        offerShortcutOnce();
+      });
+    });
+  });
   // The Dock icon while the window shows; with it closed (⌘W hides it) only the menu bar cat stays.
   let wasVisible: boolean | undefined;
   effect(() => {
@@ -88,11 +108,6 @@ export function startMac(): void {
     if (visible !== wasVisible) console.log(`window: main ${visible ? "shown" : "hidden"}`);
     wasVisible = visible;
   });
-  // The first time the person closes the window, the quick chat's shortcut is offered from the cat (§2.4,
-  // `m-shortcut`): its close button here, ⌘W in menus.ts. Their close, not the window's state, which also goes
-  // hidden when it is minimized or the app hidden (⌘H).
-  Window.get("main")?.on("closePress", () => untracked(offerShortcutOnce));
-
   // This computer's daemon is the app's computer: join it once the stored computers are read.
   let joined = false;
   effect(() => {

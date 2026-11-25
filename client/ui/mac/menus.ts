@@ -87,10 +87,11 @@ export function startMacMenus(perchShortcut: () => string | null): void {
   });
 }
 
-/** ⌘W: closes the window in front. Closing the main window is the person's close, as its close button's (mac.ts):
- * the first one offers the quick chat's shortcut. */
+/** ⌘W: closes the window in front; the main window hides, as its close button hides it (mac.ts), and the first time
+ * offers the quick chat's shortcut. */
 function closeFocusedWindow(): void {
   const window = focusedWindow();
-  window?.close();
-  if (window?.id === "main") offerShortcutOnce();
+  if (window?.id !== "main") return window?.close();
+  window.hide();
+  offerShortcutOnce();
 }
