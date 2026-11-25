@@ -431,8 +431,9 @@ const claudeSwitchPrefix = "Set model to "
 // for this session only"), or reports Claude's last line. When Claude asks to
 // confirm a switch in a conversation already under way ("Switch model? …
 // the full history gets re-read"), the person's pick in the Model sheet is
-// that answer: its first option, "Yes, switch to …", is taken. Lines are read
-// flattened, as the terminal wraps them.
+// that answer: its first option, "Yes, switch to …", is taken (the classifier
+// knows this confirm and never makes it the person's prompt). Claude's own
+// line is read flattened, as the terminal wraps it.
 func (c *claudeModels) waitApplied(ctx context.Context, sessionID string, switches int) error {
 	deadline := time.Now().Add(claudeScreenWait)
 	confirmed := false
@@ -453,7 +454,7 @@ func (c *claudeModels) waitApplied(ctx context.Context, sessionID string, switch
 				}
 				return errors.New(line)
 			}
-			if at := strings.LastIndex(flat, "Switch model?"); !confirmed && at >= 0 && strings.Contains(flat[at:], "Yes, switch to") {
+			if !confirmed && classifier.ClaudeModelSwitchConfirm(screen) {
 				if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
 					return err
 				}

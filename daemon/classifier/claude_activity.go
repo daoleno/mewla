@@ -76,6 +76,12 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		}
 		return signal
 	}
+	// Claude's /model asks to confirm a switch in a cached conversation with
+	// the same footer. Mewla's Model sheet answers it itself (and a person who
+	// typed /model is at the terminal): it is not the person's question.
+	if ClaudeModelSwitchConfirm(pane) {
+		return ActivitySignal{State: StateUnknown, Source: "claude_model_switch", Provider: a.Name()}
+	}
 	// Launch-time menus (trust this folder, accept a mode, pick a theme) end
 	// in "Enter to confirm" and appear before any conversation exists.
 	// Since 2.1.322 the folder trust menu shows no numbers.
@@ -168,6 +174,27 @@ func latestClaudePaneWindow(content string) string {
 		return normalized[start:]
 	}
 	return latestProviderPaneWindow(normalized, "")
+}
+
+// ClaudeModelSwitchConfirm reports whether the bottom of a Claude pane is the
+// confirmation /model asks for before it switches the model of a cached
+// conversation: "Switch model?" above "1. Yes, switch to …", then the footer
+// "Enter to confirm · Esc to cancel" (Claude Code 2.1.332).
+func ClaudeModelSwitchConfirm(pane string) bool {
+	tail := claudePromptTail(pane, 16)
+	if len(tail) == 0 || !strings.HasPrefix(tail[0], "Enter to confirm") {
+		return false
+	}
+	choice := false
+	for _, line := range tail[1:] {
+		if strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(line, "❯")), "1. Yes, switch to ") {
+			choice = true
+		}
+		if line == "Switch model?" {
+			return choice
+		}
+	}
+	return false
 }
 
 // claudePromptTail returns the last n non-blank lines, trimmed.
