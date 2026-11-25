@@ -235,8 +235,12 @@ code or in the text; a path in a code block is not. Any other path a reply
 names, such as `worklog/plan-1116/DESIGN.md`, `./out/report.pdf`,
 `src/main.go:42` or `/tmp/shot.png`, becomes a link once the computer says it
 is a file there: a relative path is read from the folder the agent works in
-(Brain's: its workspace). A path that names no file stays text. A computer
-on an older Mewla links only home paths until it is updated.
+(Brain's: its workspace). A file named on its own in code right after a
+folder the reply named, such as `report.html` after `D:\work\out\`, is read
+from that folder first. Windows paths work the same way: `D:\work\report.html`,
+`D:/work/chart.png`, `.\out\report.pdf`, `reports\q3.html` and `~\notes\plan.md`.
+A path that names no file stays text. A computer on an older Mewla links only
+home paths until it is updated.
 A Session's files open from its chat after it has ended too, read from the
 folder that run worked in, also after Mewla restarts. A file that is no
 longer there, such as one in a scratch folder or worktree that was cleaned up,
@@ -254,7 +258,7 @@ the phone for landscape); on a Mac and in a browser **Open in browser** opens
 it in a tab. A phone paired by the computer's address (Wi-Fi, Tailscale or an
 https address) rather than through Mewla Relay opens the page in its browser,
 which reaches that address. A link out of the page opens in your browser. A folder named
-with its slash in code, such as `reports/q3/`, opens its `index.html`. An open
+with its slash in code, such as `reports/q3/` (or `reports\q3\` on Windows), opens its `index.html`. An open
 page keeps working after the Session that wrote it has ended. It runs in a sandbox of its own: it cannot reach the app, your
 sign-in or the daemon, and it reads only its own folder and what is below it,
 never hidden files, nothing above the folder and nothing through a link that
