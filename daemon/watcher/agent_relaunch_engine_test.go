@@ -953,13 +953,7 @@ func TestHostAgentRelaunchLeavesWhatTheAgentStartedRunning(t *testing.T) {
 	h := newHostHarness(t)
 	owner := "abc123"
 	unit := delegatedResourceUnit(owner, "0123456789abcdef0123456789abcdef")
-	root := t.TempDir()
-	leaseDir := filepath.Join(root, "leases")
-	if err := os.MkdirAll(leaseDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	h.w.resources = &portableDelegatedResourceManager{owner: owner, leaseDir: leaseDir, tempRoot: root,
-		byTarget: map[string]string{}, reserved: map[string]time.Time{}, now: time.Now}
+	h.w.resources = newTestPortableResourceManager(t, owner)
 	marker := filepath.Join(t.TempDir(), "server.pid")
 	cwd := t.TempDir()
 	id := createHostSession(t, h.w, backendCreateSpec{
