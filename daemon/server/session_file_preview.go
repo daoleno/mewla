@@ -20,11 +20,12 @@ import (
 	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/namedpath"
 	"github.com/gorilla/websocket"
 )
 
 const (
-	maxSessionFileReferenceBytes = 4096
+	maxSessionFileReferenceBytes = namedpath.MaxReferenceBytes
 	maxSessionFileTextBytes      = 512 << 10
 	maxSessionFileBinaryBytes    = 50 << 20
 	// Media streams from disk in Range requests and is never read whole, so its
@@ -93,7 +94,7 @@ type resolvedSessionFile struct {
 }
 
 // errSessionFileMissing: the referenced file does not exist; answered 404.
-var errSessionFileMissing = errors.New("Session file is missing")
+var errSessionFileMissing = namedpath.ErrMissing
 
 func (s *Server) handleSessionFileMetadata(conn *websocket.Conn, raw clientMessage) {
 	resolved, err := s.resolveCurrentSessionFile(raw)
@@ -152,11 +153,11 @@ func existingSessionFiles(cwd string, references []string) []string {
 		if i >= maxSessionFileExistsPaths {
 			break
 		}
-		_, canonicalPath, err := resolveSessionFilePath(cwd, reference)
+		_, canonicalPath, err := namedpath.Resolve(cwd, reference)
 		if err != nil {
 			continue
 		}
-		canonicalPath = sessionFolderPage(canonicalPath, reference)
+		canonicalPath = namedpath.FolderPage(canonicalPath, reference)
 		if info, err := os.Stat(canonicalPath); err == nil && info.Mode().IsRegular() {
 			existing = append(existing, reference)
 		}
@@ -224,11 +225,11 @@ func validateSessionFileIdentity(worker *classifier.Worker, raw clientMessage) e
 }
 
 func openSessionFile(cwd, reference string) (*resolvedSessionFile, error) {
-	canonicalCWD, canonicalPath, err := resolveSessionFilePath(cwd, reference)
+	canonicalCWD, canonicalPath, err := namedpath.Resolve(cwd, reference)
 	if err != nil {
 		return nil, err
 	}
-	canonicalPath = sessionFolderPage(canonicalPath, reference)
+	canonicalPath = namedpath.FolderPage(canonicalPath, reference)
 
 	// Check before Open so known directories and special files (notably FIFOs)
 	// are rejected without attempting a potentially blocking read. The post-open
@@ -258,94 +259,6 @@ func openSessionFile(cwd, reference string) (*resolvedSessionFile, error) {
 		return nil, fmt.Errorf("file reference is not a regular file")
 	}
 	return finishOpenSessionFile(file, info, canonicalCWD, canonicalPath)
-}
-
-// resolveSessionFilePath: the live Session's canonical cwd and the canonical path a reference names, relative ones
-// against that cwd and "~/…" against the daemon account's home.
-func resolveSessionFilePath(cwd, reference string) (string, string, error) {
-	if strings.TrimSpace(reference) == "" {
-		return "", "", fmt.Errorf("file reference is required")
-	}
-	if len(reference) > maxSessionFileReferenceBytes || strings.ContainsRune(reference, 0) {
-		return "", "", fmt.Errorf("file reference is invalid")
-	}
-
-	referencePath := filepath.FromSlash(reference)
-	// "~/…" (a path an agent names in a reply) is the home of the account the daemon runs as, not a folder of the cwd.
-	if rest, ok := strings.CutPrefix(reference, "~/"); ok {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", "", fmt.Errorf("resolve home folder: %w", err)
-		}
-		referencePath = filepath.Join(home, filepath.FromSlash(rest))
-	}
-	// The Session's folder, for a relative reference and for the path shown beside the file. An ended run's
-	// folder can be gone (a worktree or scratch collected): its absolute references still resolve.
-	canonicalCWD, cwdErr := canonicalSessionCWD(cwd)
-	if cwdErr != nil && !filepath.IsAbs(referencePath) {
-		if os.IsNotExist(errors.Unwrap(cwdErr)) {
-			return "", "", errSessionFileMissing
-		}
-		return "", "", cwdErr
-	}
-	candidatePath := referencePath
-	if !filepath.IsAbs(referencePath) {
-		// canonicalCWD names the exact live directory inode. Keep the reference
-		// components intact until EvalSymlinks so aliases followed by ".." have
-		// host filesystem semantics instead of filepath.Join's lexical semantics.
-		candidatePath = canonicalCWD + string(filepath.Separator) + referencePath
-	}
-	canonicalPath, err := filepath.EvalSymlinks(candidatePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", "", errSessionFileMissing
-		}
-		return "", "", fmt.Errorf("resolve Session file: %w", err)
-	}
-
-	return canonicalCWD, canonicalPath, nil
-}
-
-// sessionFolderPage: for a reference that names a folder ("reports/q3/", with its slash), the folder's
-// index.html, the page a folder report opens with (through any symlink); otherwise canonicalPath as it is.
-func sessionFolderPage(canonicalPath, reference string) string {
-	if !strings.HasSuffix(reference, "/") {
-		return canonicalPath
-	}
-	if info, err := os.Stat(canonicalPath); err != nil || !info.IsDir() {
-		return canonicalPath
-	}
-	page, err := filepath.EvalSymlinks(filepath.Join(canonicalPath, "index.html"))
-	if err != nil {
-		return canonicalPath
-	}
-	return page
-}
-
-// canonicalSessionCWD: the Session's folder through any symlink; an error when it is unknown, gone or not a folder.
-func canonicalSessionCWD(cwd string) (string, error) {
-	if strings.TrimSpace(cwd) == "" {
-		return "", fmt.Errorf("live Session CWD is unavailable")
-	}
-	cwdPath := filepath.FromSlash(cwd)
-	if !filepath.IsAbs(cwdPath) {
-		var err error
-		if cwdPath, err = filepath.Abs(cwdPath); err != nil {
-			return "", fmt.Errorf("resolve live Session CWD: %w", err)
-		}
-	}
-	canonical, err := filepath.EvalSymlinks(cwdPath)
-	if err != nil {
-		return "", fmt.Errorf("resolve live Session CWD: %w", err)
-	}
-	info, err := os.Stat(canonical)
-	if err != nil {
-		return "", fmt.Errorf("inspect live Session CWD: %w", err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("live Session CWD is not a directory")
-	}
-	return canonical, nil
 }
 
 // finishOpenSessionFile: an opened regular file classified from its first bytes, rewound.

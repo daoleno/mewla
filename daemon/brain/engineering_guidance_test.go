@@ -24,8 +24,12 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 		t.Fatal(err)
 	}
 	agents := string(mustReadFile(t, store.workspaceInstructionsPath()))
-	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 5940 { // 5780 + the file-link fact (2026-11-24)
+	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 6000 { // 5780 + the file-link fact (2026-11-24, full path and any computer 11-25)
 		t.Fatalf("standing guidance missing or oversized: %d bytes", len(agents))
+	}
+	// A Windows user's 0.4.27 Brain, which had no such line, sent them to WeChat for a report it named (11-24).
+	if !strings.Contains(agents, "A file path named in a reply opens in Mewla with one tap, on the phone too, from any computer") || !strings.Contains(agents, "name its full path") {
+		t.Fatal("Brain is not told that a path it names opens in Mewla")
 	}
 	if len(catalog.Playbooks) != 6 {
 		t.Fatalf("expected six lazy playbooks, got %d", len(catalog.Playbooks))

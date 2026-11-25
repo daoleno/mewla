@@ -164,3 +164,69 @@ describe("paths that are not a home's link once the computer said they are files
     expect(chatFileCandidates("see /home/me/reports/ and `/home/me/workspace` and `/home/me/../x/` and `~/a/…/b/` and `/` and `~/`")).toEqual([]);
   });
 });
+
+// Owner's Windows user, 11-24 18:15 (Android phone, Windows computer): Brain named its report folder and then the page
+// in it on its own; neither was a link, and Brain told them to send the file over WeChat.
+describe("Windows paths are asked about and link like their / forms", () => {
+  const FOLDER = "D:\\Project\\AN\\01_策略研究\\wendao-gold-lab\\outputs\\explainer_20261124\\";
+  const PAGE = `${FOLDER}黄金策略图解.html`;
+  const reply = `在电脑上打开 \`${FOLDER}\`，把 \`黄金策略图解.html\` 拖进微信的“文件传输助手”。`;
+
+  test("the user's reply: the folder and the bare page name after it are asked about, the page in that folder first", () => {
+    expect(chatFileCandidates(reply)).toEqual([FOLDER, PAGE, "黄金策略图解.html"]);
+    expect(linkFilePaths(reply)).toBe(reply);
+    const linked = linkFilePaths(reply, new Set([PAGE]));
+    expect(linked).toBe(`在电脑上打开 \`${FOLDER}\`，把 [\`黄金策略图解.html\`](${"<" + PAGE.replace(/\\/g, "\\\\") + ">"}) 拖进微信的“文件传输助手”。`);
+    expect(destinations(linked).map(recognizeSessionFileReference)).toEqual([PAGE]);
+    // The folder links too once the computer says it holds an index.html.
+    expect(destinations(linkFilePaths(reply, new Set([FOLDER, PAGE])))).toEqual([FOLDER, PAGE]);
+    // Not in the folder: the name is the Session's cwd's, as before.
+    expect(destinations(linkFilePaths(reply, new Set(["黄金策略图解.html"])))).toEqual(["黄金策略图解.html"]);
+  });
+
+  test("a folder named in text, CJK punctuation after it, is the folder a later bare name is in", () => {
+    const text = `报告在 ${FOLDER}，打开 \`黄金策略图解.html\`。`;
+    expect(chatFileCandidates(text)).toEqual([PAGE, "黄金策略图解.html"]);
+    expect(destinations(linkFilePaths(text, new Set([PAGE])))).toEqual([PAGE]);
+  });
+
+  test("each Windows form: drive, other drive, backslash and slash relative, .\\, ~\\, folders with a closing backslash", () => {
+    const cases: Array<[string, string]> = [
+      // [reply, the path asked about and linked]
+      [`\`${PAGE}\``, PAGE],
+      [`图：${FOLDER}chart.png`, `${FOLDER}chart.png`],
+      ["`C:\\proj\\out\\chart.html`", "C:\\proj\\out\\chart.html"],
+      ["`D:/Project/AN/01_策略研究/chart.png`", "D:/Project/AN/01_策略研究/chart.png"],
+      ["`.\\reports\\q3.html`", ".\\reports\\q3.html"],
+      ["见 reports\\q3.html 和别的", "reports\\q3.html"],
+      ["`~\\mewla-path-test\\home.html`", "~\\mewla-path-test\\home.html"],
+      ["`site\\`", "site\\"],
+      ["`.\\reports\\q3\\`", ".\\reports\\q3\\"],
+      ["`D:\\Project\\AN\\outputs\\site\\`", "D:\\Project\\AN\\outputs\\site\\"],
+      ["`~\\reports\\q3\\`", "~\\reports\\q3\\"],
+      ["at src\\main.go:42 now", "src\\main.go"],
+    ];
+    for (const [text, asked] of cases) {
+      expect(chatFileCandidates(text)).toEqual([asked]);
+      expect(linkFilePaths(text)).toBe(text);
+      const linked = destinations(linkFilePaths(text, new Set([asked])));
+      expect(linked.map(fileKey)).toEqual([asked]);
+      expect(recognizeSessionFileReference(linked[0])).toBe(asked.endsWith("\\") ? asked : fileKey(asked));
+    }
+  });
+
+  test("the Windows home still links at once; ~\\ is asked (an older computer cannot open it)", () => {
+    expect(destinations(linkFilePaths("`C:\\Users\\tester\\mewla-path-test\\home.html`"))).toEqual(["C:\\Users\\tester\\mewla-path-test\\home.html"]);
+    expect(linkFilePaths("`~\\a\\b.html`")).toBe("`~\\a\\b.html`");
+  });
+
+  test("a backslash before punctuation in text keeps the raw path as the link's destination", () => {
+    const text = "see ..\\..\\out\\a_b.html now";
+    expect(chatFileCandidates(text)).toEqual(["..\\..\\out\\a_b.html"]);
+    expect(destinations(linkFilePaths(text, new Set(["..\\..\\out\\a_b.html"])))).toEqual(["..\\..\\out\\a_b.html"]);
+  });
+
+  test("not Windows paths: drive alone, lone separators, elisions, a bare name with no folder before it in text", () => {
+    expect(chatFileCandidates("`D:\\` and `\\` and `C:\\a\\…\\b.html` and a bare a.html in text, a\\b without a name")).toEqual([]);
+  });
+});
