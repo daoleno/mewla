@@ -969,7 +969,7 @@ function MacWindow() {
   const Tile = (props: { mewla?: boolean }) => (
     <View class="items-center gap-[3px]">
       <View class={`size-[22px] items-center justify-center rounded-[6px] ${props.mewla ? "bg-foreground" : "bg-muted"}`}>
-        {props.mewla ? <Icon name="paw" size={12} tone="canvas" /> : null}
+        <View style={{ opacity: props.mewla ? 1 : 0 }}><Icon name="paw" size={12} tone="canvas" /></View>
       </View>
       <View class={`size-[3px] rounded-full ${props.mewla ? "bg-foreground" : "bg-transparent"}`} />
     </View>
