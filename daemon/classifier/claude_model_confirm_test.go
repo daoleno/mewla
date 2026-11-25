@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +24,10 @@ func TestClaudeModelSwitchConfirmIsNotAPrompt(t *testing.T) {
 	}
 	if !ClaudeModelSwitchConfirm(string(raw)) {
 		t.Fatal("the confirm is not recognised")
+	}
+	// Nor is the Session blocked on it: its "?" line is no question to the person.
+	if state, summary := Classify(true, strings.Split(string(raw), "\n"), "claude --model haiku"); state == StateBlocked {
+		t.Fatalf("Claude's model switch confirm blocks the Session: %q", summary)
 	}
 }
 

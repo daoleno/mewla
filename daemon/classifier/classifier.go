@@ -232,6 +232,11 @@ func Classify(paneAlive bool, lines []string, command string) (WorkerState, stri
 		return StateDone, summarize(tail)
 	}
 
+	if isClaudePane(command, lines) && ClaudeModelSwitchConfirm(strings.Join(lines, "\n")) {
+		// Claude's /model asking to confirm a switch ("Switch model?") is
+		// answered by Mewla's Model sheet, not waited on: never blocked.
+		return StateUnknown, "Switching model"
+	}
 	if line := matchingImmediateBlockedLine(interactiveTail); line != "" {
 		return StateBlocked, truncate(line, 100)
 	}
