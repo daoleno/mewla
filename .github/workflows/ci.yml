@@ -275,9 +275,9 @@ jobs:
       - name: Build every package
         run: go build ./...
       - name: Vet the Windows platform layer
-        run: go vet ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./sessionhost ./hostdeps
+        run: go vet ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./sessionhost ./hostdeps ./namedpath
       - name: Test the Windows platform layer
-        run: go test -count=1 ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./hostdeps
+        run: go test -count=1 ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./hostdeps ./namedpath
       - name: Test finding Codex conversations on Windows
         run: go test -count=1 -run 'TestCodexWorkspace|TestCodexRecordedCWDs|TestQueryCodexThreadsUsesMinimalSourceSchema|TestIdleCodexPolls|TestCodexSelectionIsRevisited|TestCodexResumedInAnotherFolder' ./work
       - name: Test a Codex Brain's chat binding on Windows

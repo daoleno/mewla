@@ -10,6 +10,11 @@
  * a file there (`existing`, by `fileKey`): relative paths are its cwd's, and route-like `/api/v1/x.json` in
  * prose names no file. `chatFileCandidates` lists the paths to ask about: in text only paths with a folder,
  * in a code span a bare `RESULT.md` too.
+ *
+ * Windows paths are the same paths (owner's Windows user 11-24: Brain's `D:\Project\AN\01_策略研究\…\explainer_20261124\`
+ * and then `黄金策略图解.html` were plain text): `\` separates folders as `/` does, a drive (`D:\`, `D:/`) roots a path,
+ * and `~\`, `.\` and `reports\q3\` are asked about like their `/` forms. A bare file name in code after a folder the
+ * reply named is asked about in that folder first.
  */
 
 const HOME_PATH = /^(?:~\/|\/(?:home|Users)\/[^/\s]+\/|\/root\/|[A-Za-z]:[\\/]Users[\\/][^\\/\s]+[\\/])/;
@@ -27,22 +32,29 @@ const HOME_HINT = /(?:~\/|\/home\/|\/Users\/|\/root\/|[A-Za-z]:[\\/]Users)/;
  * A path the computer is asked about: no space, quote, bracket or glob; not a URL or an elided `…/a.md`; its
  * extension has a letter (`127.0.0.1:8317` and `v0.3.0` are not files).
  */
-const OTHER_FILE = /^(?![a-z][a-z0-9+.-]*:\/\/)(?!.*(?:\.\.\.|…))[^\s`<>|"'()[\]{}*?,;=\\]*[^\\/\s.]\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,10}(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)?$/i;
-/** A relative folder named with its closing slash, as an agent names a folder report: no space, quote, bracket, glob or dots-only part. */
-const FOLDER = /^(?![a-z][a-z0-9+.-]*:)(?!.*(?:\.\.\.|…))(?:\.\/)?(?:[^\s`<>|"'()[\]{}*?,;=\\/.][^\s`<>|"'()[\]{}*?,;=\\/]*\/)+$/i;
+const OTHER_FILE = /^(?![a-z][a-z0-9+.-]*:\/\/)(?!.*(?:\.\.\.|…))[^\s`<>|"'()[\]{}*?,;=]*[^\\/\s.]\.(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{1,10}(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)?$/i;
 /**
- * An absolute or home folder named with its closing slash (`/home/me/reports/q3/`, `~/reports/q3/`): asked about
- * as a relative one is (0.4.28 gate: Brain's `~/…/report/` was plain text, or a link that did nothing). Hidden
- * folders (`~/.mewla/`) count; `.`/`..` parts and elisions do not.
+ * A relative folder named with its closing slash (or backslash), as an agent names a folder report: no space, quote,
+ * bracket, glob or dots-only part.
  */
-const ROOTED_FOLDER = /^(?:~\/|\/)(?!.*(?:\.\.\.|…))(?:(?!\.{1,2}\/)[^\s`<>|"'()[\]{}*?,;=\\/]+\/)+$/;
+const FOLDER = /^(?![a-z][a-z0-9+.-]*:)(?!.*(?:\.\.\.|…))(?:\.[\\/])?(?:[^\s`<>|"'()[\]{}*?,;=\\/.][^\s`<>|"'()[\]{}*?,;=\\/]*[\\/])+$/i;
+/**
+ * An absolute or home folder named with its closing slash (`/home/me/reports/q3/`, `~/reports/q3/`, `D:\out\q3\`):
+ * asked about as a relative one is (0.4.28 gate: Brain's `~/…/report/` was plain text, or a link that did nothing).
+ * Hidden folders (`~/.mewla/`) count; `.`/`..` parts and elisions do not.
+ */
+const ROOTED_FOLDER = /^(?:~[\\/]|\/|[A-Za-z]:[\\/])(?!.*(?:\.\.\.|…))(?:(?!\.{1,2}[\\/])[^\s`<>|"'()[\]{}*?,;=\\/]+[\\/])+$/;
+const SEPARATOR = /[\\/]/;
 const LINE_SUFFIX = /(?::\d+(?::\d+)?|#L\d+(?:C\d+)?)$/i;
 /** At most this many paths of one reply are asked about. */
 export const MAX_CHAT_FILE_CANDIDATES = 64;
 const NONE: ReadonlySet<string> = new Set();
 
-/** What decides whether a path the reply names is linked; `null`: it is not a file path at all. */
-type Accept = (path: string, inCode: boolean) => boolean;
+/**
+ * Where a path the reply names links to (itself, or a bare name joined to `folder`, the last folder the reply named
+ * before it); null: it is not linked.
+ */
+type Accept = (path: string, inCode: boolean, folder: string | null) => string | null;
 
 /** A code span's whole content, when it is one home file path. */
 export function namedHomeFile(value: string): string | null {
@@ -61,10 +73,23 @@ function otherFile(path: string, inCode: boolean): string | null {
   if (!path || path.length > 4096) return null;
   // A folder in code (`reports/q3/`, `/home/me/reports/q3/`, `~/reports/q3/`): linked when the computer says it
   // holds an index.html, which it opens.
-  if (inCode && (ROOTED_FOLDER.test(path) || (FOLDER.test(path) && !HOME_PATH.test(path)))) return path;
+  if (inCode && namedFolder(path)) return path;
   if (HOME_PATH.test(path)) return null;
   if (!OTHER_FILE.test(path)) return null;
-  return inCode || path.includes("/") ? path : null;
+  return inCode || SEPARATOR.test(path) ? path : null;
+}
+
+/** A folder named with its closing separator (`reports/q3/`, `D:\out\q3\`, `~/x/`). */
+function namedFolder(path: string): boolean {
+  return ROOTED_FOLDER.test(path) || (FOLDER.test(path) && !HOME_PATH.test(path));
+}
+
+/**
+ * A bare file name in code (`黄金策略图解.html`) right after the reply named a folder: the file in that folder, asked
+ * about before the name alone (which is the Session's cwd's).
+ */
+function inFolder(path: string, inCode: boolean, folder: string | null): string | null {
+  return inCode && folder && !SEPARATOR.test(path) && OTHER_FILE.test(path) ? folder + path : null;
 }
 
 /**
@@ -74,7 +99,12 @@ function otherFile(path: string, inCode: boolean): string | null {
 export function linkFilePaths(markdown: string, existing: ReadonlySet<string> = NONE): string {
   if (!markdown) return markdown;
   if (!existing.size && !HOME_HINT.test(markdown)) return markdown;
-  return walk(markdown, (path, inCode) => (namedHomeFile(path) ? true : Boolean(otherFile(path, inCode)) && existing.has(fileKey(path))));
+  return walk(markdown, (path, inCode, folder) => {
+    if (namedHomeFile(path)) return path;
+    const joined = inFolder(path, inCode, folder);
+    if (joined && existing.has(fileKey(joined))) return joined;
+    return otherFile(path, inCode) && existing.has(fileKey(path)) ? path : null;
+  });
 }
 
 /**
@@ -82,18 +112,27 @@ export function linkFilePaths(markdown: string, existing: ReadonlySet<string> = 
  * what to ask the speaking Session's computer about before they are linked.
  */
 export function chatFileCandidates(markdown: string): string[] {
-  if (!markdown || (!markdown.includes("/") && !markdown.includes("`"))) return [];
+  if (!markdown || (!markdown.includes("/") && !markdown.includes("\\") && !markdown.includes("`"))) return [];
   const found = new Set<string>();
-  walk(markdown, (path, inCode) => {
+  const add = (path: string) => {
+    if (found.size < MAX_CHAT_FILE_CANDIDATES) found.add(fileKey(path));
+  };
+  walk(markdown, (path, inCode, folder) => {
+    const joined = inFolder(path, inCode, folder);
+    if (joined) add(joined);
     const other = otherFile(path, inCode);
-    if (other && found.size < MAX_CHAT_FILE_CANDIDATES) found.add(fileKey(other));
-    return false;
+    if (other) add(other);
+    return null;
   });
   return [...found];
 }
 
+/** What a reply has named so far, in reading order. */
+type Context = { folder: string | null };
+
 function walk(markdown: string, accept: Accept): string {
   const lines = markdown.split("\n");
+  const context: Context = { folder: null };
   let fence: string | null = null;
   let blank = true;
   let inList = false;
@@ -121,7 +160,7 @@ function walk(markdown: string, accept: Accept): string {
     else if (LIST_ITEM.test(line)) inList = true;
     blank = false;
     if (inIndented) continue;
-    const linked = linkLine(line, accept);
+    const linked = linkLine(line, accept, context);
     if (linked !== line) {
       lines[i] = linked;
       changed = true;
@@ -130,12 +169,12 @@ function walk(markdown: string, accept: Accept): string {
   return changed ? lines.join("\n") : markdown;
 }
 
-function linkLine(line: string, accept: Accept): string {
+function linkLine(line: string, accept: Accept, context: Context): string {
   let out = "";
   let text = 0; // start of the plain text not yet copied
   let i = 0;
   const flush = (end: number) => {
-    if (end > text) out += linkBare(line.slice(text, end), accept);
+    if (end > text) out += linkBare(line.slice(text, end), accept, context);
   };
   while (i < line.length) {
     const c = line[i];
@@ -154,7 +193,9 @@ function linkLine(line: string, accept: Accept): string {
       flush(i);
       const span = line.slice(i, close + run);
       const content = stripCodeSpan(line.slice(i + run, close)).trim();
-      out += content && accept(content, true) ? `[${span}](${destination(content)})` : span;
+      const linked = content ? accept(content, true, context.folder) : null;
+      out += linked ? `[${span}](${destination(linked)})` : span;
+      if (content && namedFolder(content)) context.folder = content;
       i = close + run;
       text = i;
       continue;
@@ -236,7 +277,7 @@ function linkEnd(line: string, start: number): number {
 }
 
 /** File paths in running text: after a space, a bracket, a quote or a non-ASCII letter (Chinese has no spaces). */
-function linkBare(text: string, accept: Accept): string {
+function linkBare(text: string, accept: Accept, context: Context): string {
   if (!text.includes("/") && !text.includes("\\")) return text;
   let out = "";
   let copied = 0;
@@ -248,18 +289,24 @@ function linkBare(text: string, accept: Accept): string {
     let end = i;
     while (end < text.length && !BARE_STOP.test(text[end])) end++;
     const run = text.slice(i, end);
-    const path = run.includes("/") || HOME_PATH.test(run) ? fileEnd(run) : null;
-    if (!path || !accept(path, false)) {
+    const named = FOLDER_END.exec(run.replace(TRAILING, ""))?.[1];
+    if (named && namedFolder(named)) context.folder = named;
+    const path = SEPARATOR.test(run) ? fileEnd(run) : null;
+    const linked = path ? accept(path, false, context.folder) : null;
+    if (!path || !linked) {
       // Past this path only: Chinese after it can be followed by another (`docs/a.md和/home/me/b.pdf`).
       i = path ? i + path.length - 1 : end;
       continue;
     }
-    out += text.slice(copied, i) + `[${path}](${destination(path)})`;
+    out += text.slice(copied, i) + `[${path}](${destination(linked)})`;
     copied = i + path.length;
     i = copied - 1;
   }
   return copied ? out + text.slice(copied) : text;
 }
+
+/** A folder in running text: the run up to its last separator, when only nothing or CJK punctuation and words follow. */
+const FOLDER_END = /^(.*[\\/])(?:[\u3000-\u303f\uff00-\uffef][^\\/]*)?$/;
 
 /** Chinese, Japanese or Korean text: written with no space after a path, it ends the path at its extension. */
 const CJK = /[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/;
