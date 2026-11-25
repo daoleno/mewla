@@ -41,7 +41,7 @@ jobs:
           web: "true"
       - name: Install NSH
         run: client/scripts/fetch-nsh.sh
-      # NSH 0.6 needs Rust 1.97 or later.
+      # NSH 0.7 needs Rust 1.97 or later.
       - name: Rust
         run: |
           rustup toolchain install stable --profile minimal
