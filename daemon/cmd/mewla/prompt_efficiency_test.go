@@ -29,10 +29,10 @@ func TestWorkerPromptKeepsPayloadAndOneExactTurn(t *testing.T) {
 	if strings.Count(result, "Mewla lifecycle protocol:") != 1 || strings.Count(result, "Mewla delegated turn contract:") != 1 {
 		t.Fatal("duplicate protocol")
 	}
-	if len(result)-len(user) > 2720 { // 2560 + the file-link fact (2026-11-24)
+	if len(result)-len(user) > 2780 { // 2560 + the file-link fact (2026-11-24, full path and any computer 11-25)
 		t.Fatalf("Worker overhead=%d bytes", len(result)-len(user))
 	}
-	for _, required := range []string{"required repository gates", "risk-proportionate", "--phase", "--attention", "never in the project repository", "report resource limits rather than bypassing them"} {
+	for _, required := range []string{"required repository gates", "risk-proportionate", "--phase", "--attention", "never in the project repository", "report resource limits rather than bypassing them", "opens in Mewla with one tap, on the phone too, from any computer", "name its full path"} {
 		if !strings.Contains(result, required) {
 			t.Fatalf("missing %q", required)
 		}
@@ -115,7 +115,7 @@ func TestEngineeringScenarioBriefsReachNativeWorkers(t *testing.T) {
 					t.Fatalf("Codex command changed: %s", command)
 				}
 				payload := fw.submitted[0].text
-				if !strings.HasPrefix(payload, scenario.ExampleBrief+"\n\n") || len(payload)-len(scenario.ExampleBrief) > 2720 {
+				if !strings.HasPrefix(payload, scenario.ExampleBrief+"\n\n") || len(payload)-len(scenario.ExampleBrief) > 2780 {
 					t.Fatalf("method-bearing brief was changed or overhead grew: overhead=%d", len(payload)-len(scenario.ExampleBrief))
 				}
 				for _, excluded := range []string{"pstack", "# Wayfind", "# Delegate Brief"} {
