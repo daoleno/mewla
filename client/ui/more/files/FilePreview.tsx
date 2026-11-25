@@ -358,9 +358,9 @@ function HtmlPage(props: { page: SessionPage; testID: string }) {
       class="flex-1 bg-white"
       src={props.page.url}
       // The page's computer, wherever it is reached (its address, not only 127.0.0.1), and pinch zoom past the page's
-      // own viewport (longbridge/nsh#3145, #3144). NSH 0.7.0's TS types leave both props out (its core and hosts take
-      // them): NSH-ISSUE-webview-prop-types.md in the upgrade's worklog.
-      {...({ allowOrigin: sessionPageOrigin(props.page.url) ?? undefined, zoomable: true } as object)}
+      // own viewport (longbridge/nsh#3145, #3144).
+      allowOrigin={sessionPageOrigin(props.page.url) ?? undefined}
+      zoomable
       incognito
       injectedJavaScript={SESSION_PAGE_LINKS_SCRIPT}
       onMessage={(e) => openOutside(sessionPageLinkToOpen(e.data))}
