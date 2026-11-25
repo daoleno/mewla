@@ -28,7 +28,7 @@ class PublisherTests(unittest.TestCase):
             publisher.publisher_flags(self.config, ['github'])
 
     def test_reject_secrets_unknown_owner_and_linker_injection(self):
-        for path, value in [(('github', 'client_secret'), 'secret'), (('github', 'owner'), 'paul-freeride'), (('slack', 'workspace_id'), None), (('slack', 'workspace_id'), 'T123OTHER'), (('github', 'client_id'), 'x -X main.Version=evil'), (('github', 'client_id'), '$(touch bad)'), (('github', 'client_id'), '')]:
+        for path, value in [(('github', 'client_secret'), 'secret'), (('github', 'owner'), 'other-owner'), (('slack', 'workspace_id'), None), (('slack', 'workspace_id'), 'T123OTHER'), (('github', 'client_id'), 'x -X main.Version=evil'), (('github', 'client_id'), '$(touch bad)'), (('github', 'client_id'), '')]:
             with self.subTest(path=path, value=value):
                 config = copy.deepcopy(self.config)
                 config[path[0]][path[1]] = value

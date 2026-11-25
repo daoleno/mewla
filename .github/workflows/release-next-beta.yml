@@ -103,8 +103,9 @@ jobs:
           NEXT_TAG: ${{ steps.release.outputs.next_tag }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Every commit and tag in Mewla is daoleno's (identity.yml fails any other).
+          git config user.name "daoleno"
+          git config user.email "daodaoonline@gmail.com"
           git add --pathspec-from-file="$RUNNER_TEMP/mewla-release-paths"
           git diff --cached --check
 

@@ -1,0 +1,27 @@
+name: Identity
+
+# Every commit in Mewla is daoleno's (docs/ci-release.md, "Identity"): a push to any branch and
+# every PR fail when the history they carry has another author or committer, or a Co-authored-by
+# trailer. GitHub's own web-merge committer is allowed. The whole history is checked, so a branch
+# built on history from before the 2026-11-25 rewrite fails too.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The PR's own head, not GitHub's test merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+      - name: Every commit is daoleno's
+        run: python3 scripts/check-identity.py HEAD

@@ -471,7 +471,7 @@ class ReleaseWorkflowContractTests(unittest.TestCase):
             'START_SHA="$(git rev-parse refs/remotes/origin/main)"',
             './scripts/prepare-release.py --version "$TARGET_VERSION"',
             "./scripts/verify-release-identity.sh",
-            'git config user.name "github-actions[bot]"',
+            'git config user.name "daoleno"',
             'git add --pathspec-from-file="$RUNNER_TEMP/mewla-release-paths"',
             'git commit -m "Prepare $NEXT_TAG"',
             'git tag -a "$NEXT_TAG" HEAD',

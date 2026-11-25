@@ -455,7 +455,7 @@ describe("Needs fixing reads at a glance (owner 11-14)", () => {
     ({ id, integration, name, identity: name, enabled: true, status, history: [], access: { read: "allowed", write: "off" }, ...extra });
   const accounts = [
     account("g1", "github", "daoleno", "authorization_required"),
-    account("g2", "github", "paul-freeride", "connected"),
+    account("g2", "github", "work-account", "connected"),
     ...["ace-mgmt", "old-1", "old-2"].map((name) => account(`a-${name}`, "aws", name, "authorization_required", { profile: name, profile_status: "expired", auth_method: "cli" })),
     account("a-prod", "aws", "freeride-prod", "connected", { profile: "freeride-prod", profile_status: "valid", auth_method: "cli" }),
   ];
@@ -476,8 +476,8 @@ describe("Needs fixing reads at a glance (owner 11-14)", () => {
     expect(texts.some((text) => text.includes("Sign-in expired"))).toBe(false);
     // GitHub: one of two needs it, so it is named; the working one is not.
     expect(texts).toContain("daoleno");
-    expect(texts).not.toContain("paul-freeride");
-    expect(texts).not.toContain("daoleno · paul-freeride");
+    expect(texts).not.toContain("work-account");
+    expect(texts).not.toContain("daoleno · work-account");
     // AWS: three of four.
     expect(texts).toContain("3 of 4");
     expect(app.enabled("id:connect-github")).toBe(true);

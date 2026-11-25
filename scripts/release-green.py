@@ -6,7 +6,7 @@
 Walks main's first-parent history back from SHA to the nearest commit with a CI run (ci.yml).
 Every commit passed on the way must need no run of its own: one whose files are all in ci.yml's
 push `paths-ignore` (docs, site, root Markdown) or a release preparation commit ("Prepare vX.Y.Z"
-by github-actions[bot], which only moves the version). The commits before the run's commit are
+by release-next-beta.yml, which only moves the version). The commits before the run's commit are
 in it: one push runs CI once, on its newest commit.
 
 That run must have succeeded. One still running is waited for up to --wait-minutes, so a release
@@ -28,7 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / ".github/workflows/ci.yml"
-BOT = "github-actions[bot]"
+RELEASE_AUTHOR = "daoleno"  # release-next-beta.yml commits as daoleno, like every commit here
 PREPARE = re.compile(r"^Prepare v\d+\.\d+\.\d+(-beta\.\d+)?$")
 MAX_COMMITS = 200
 
@@ -91,7 +91,7 @@ def verdict(runs: list[dict]) -> tuple[str, dict | None]:
 def needs_no_run(sha: str, ignored: list[re.Pattern[str]]) -> str | None:
     """Why this commit has no CI run of its own, or None when it should have one."""
     author, subject = git("show", "-s", "--format=%an%x00%s", sha).rstrip("\n").split("\x00", 1)
-    if author == BOT and PREPARE.match(subject):
+    if author == RELEASE_AUTHOR and PREPARE.match(subject):
         return "release preparation"
     files = [f for f in git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).splitlines() if f]
     if files and all(any(p.match(f) for p in ignored) for f in files):

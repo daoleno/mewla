@@ -22,7 +22,7 @@ The earlier403 is therefore a prior discovery/transport denial that is not repro
 
 ### GitHub: approved owner and concrete registration handoff
 
-Approved owner is **daoleno**, not the currently accessible CLI identity `paul-freeride`. Never switch that production identity or register under it as a shortcut. If an accessible signed-in publisher browser is unavailable, the owner can complete the following in their own browser; no password/session/secret transfer is needed:
+Approved owner is **daoleno**, not whichever other CLI identity is signed in on the machine. Never switch that production identity or register under it as a shortcut. If an accessible signed-in publisher browser is unavailable, the owner can complete the following in their own browser; no password/session/secret transfer is needed:
 
 1. Check [existing OAuth apps](https://github.com/settings/developers) while signed in as daoleno. Reuse an appropriate Mewla registration if one exists.
 2. Otherwise open [Register a new OAuth application](https://github.com/settings/applications/new):
