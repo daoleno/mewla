@@ -4,7 +4,7 @@ import { installPlatform } from "../core/platform";
 import { keepReadingPlaces, loadReadingPlaces } from "../core/timeline/readingPlace";
 import { nshPlatform } from "./platform";
 import { justPaired, linkPairing, pairFromText, pairingStatus } from "./pairing";
-import { CrashReportSheet, crashReports, loadCrashReports } from "./crash/CrashReports";
+import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { brainDraft, connection, current, loadSession, networkChanged, openBrainThread, ready, resumeConnection, setConnectionAway } from "./session";
 import { FirstRun, openPhonePage, openSettingsLink, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
@@ -137,8 +137,6 @@ mount(() => (
     {/* First run, and on a phone the connected step after any pairing. */}
     <If when={ready() && (!current() || justPaired() || thisMacChosen())}><View class="absolute inset-0 bg-background"><FirstRun /></View></If>
     <If when={ready() && current() && !justPaired()}><LinkPairingNote /></If>
-    {/* Only while there is a report: a closed sheet at the root is what let NSH 0.6.1 hand a sheet's late Dismiss to
-        the page under it on Android (the app blank after a few closes; longbridge/nsh#3014 fixes it in NSH). */}
-    <If when={crashReports().length > 0}><CrashReportSheet /></If>
+    <CrashReportSheet />
   </View>
 ));
