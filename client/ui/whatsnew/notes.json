@@ -7,7 +7,7 @@
         {
           "id": "0.4.29-usage-counts-on",
           "title": "Anonymous usage counts are on",
-          "line": "Mewla counts versions and setup steps. Never your messages, files or paths.",
+          "line": "Mewla counts versions, setup steps, agents and features. Never your messages or files.",
           "media": {
             "scene": "update-line"
           },
@@ -30,9 +30,9 @@
         }
       ],
       "fixes": [
+        "Anonymous usage counts are on by default; turn them off with mewla telemetry off.",
         "A message you send shows once in Brain's chat, also one with a tab, on Claude and Codex.",
-        "Claude's model picker shows versions; a pick made mid-turn says it is held, then lands.",
-        "Windows paths in a reply open: C:\\folder, ~\\file and folders."
+        "Claude's model picker shows versions; a pick made mid-turn says it is held, then lands."
       ]
     },
     {

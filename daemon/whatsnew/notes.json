@@ -5,9 +5,9 @@
       "date": "2026-11-25",
       "highlights": [],
       "fixes": [
+        "Anonymous usage counts are on by default; turn them off with mewla telemetry off.",
         "A message you send shows once in Brain's chat, also one with a tab, on Claude and Codex.",
-        "Claude's model picker shows versions; a pick made mid-turn says it is held, then lands.",
-        "Windows paths in a reply open: C:\\folder, ~\\file and folders."
+        "Claude's model picker shows versions; a pick made mid-turn says it is held, then lands."
       ]
     },
     {
