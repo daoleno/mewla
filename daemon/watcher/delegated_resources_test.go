@@ -43,6 +43,10 @@ func (m *fakeDelegatedResourceManager) Release(target, unit string) error {
 	return m.releaseErr
 }
 
+// newTestPortableResourceManager is the only way a test gets a manager it
+// hands to a Watcher: a poll starts releaseGone's goroutines, which read the
+// clock and write the gc ledger under the state root, and the test's cleanup
+// joins them before TempDir removes that root (TestNoTestBuildsAWatcherManagerByHand).
 func newTestPortableResourceManager(t *testing.T, owner string) *portableDelegatedResourceManager {
 	t.Helper()
 	root := t.TempDir()
@@ -53,7 +57,7 @@ func newTestPortableResourceManager(t *testing.T, owner string) *portableDelegat
 			t.Fatal(err)
 		}
 	}
-	return &portableDelegatedResourceManager{
+	m := &portableDelegatedResourceManager{
 		owner:    owner,
 		leaseDir: leaseDir,
 		tempRoot: tempRoot,
@@ -61,6 +65,9 @@ func newTestPortableResourceManager(t *testing.T, owner string) *portableDelegat
 		reserved: make(map[string]time.Time),
 		now:      time.Now,
 	}
+	// Registered after the TempDir above, so it runs before the root goes.
+	t.Cleanup(func() { waitGoneIdle(t, m) })
+	return m
 }
 
 func TestDelegatedResourceUnitIsStrictlyNamespaced(t *testing.T) {
@@ -568,5 +575,28 @@ func TestKillDelegatedSessionReleasesExactBoundUnit(t *testing.T) {
 	}
 	if kills := backend.kills(); len(kills) != 1 || kills[0] != "%42" {
 		t.Fatalf("killed = %v", kills)
+	}
+}
+
+// A Watcher's poll starts releaseGone goroutines that write the gc ledger
+// under the manager's state root. A manager a test builds by hand and hands to
+// a Watcher has nobody joining them, and TempDir removes the root under their
+// writes ("gc: directory not empty", main CI 11-25). Managers for a Watcher
+// come from newTestPortableResourceManager, which joins them in the cleanup.
+func TestNoTestBuildsAWatcherManagerByHand(t *testing.T) {
+	files, err := filepath.Glob("*_test.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("test files: %v, %v", files, err)
+	}
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for n, line := range strings.Split(string(raw), "\n") {
+			if strings.Contains(line, "resources = &portable"+"DelegatedResourceManager{") {
+				t.Errorf("%s:%d hands a hand-built manager to a Watcher; use newTestPortableResourceManager", file, n+1)
+			}
+		}
 	}
 }
