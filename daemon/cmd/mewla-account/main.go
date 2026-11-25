@@ -29,6 +29,7 @@ import (
 	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/daoleno/mewla/daemon/proxyproto"
 	"github.com/daoleno/mewla/daemon/slacktoken"
+	"github.com/daoleno/mewla/daemon/usage/ingest"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -66,6 +67,7 @@ func run(args []string) error {
 	var tlsCacheDir string
 	var proxyProtocol bool
 	var friendsDB string
+	var usageDB string
 	var media friendsMediaFlags
 	var slackClientID string
 
@@ -95,6 +97,7 @@ func run(args []string) error {
 	flags.BoolVar(&proxyProtocol, "proxy-protocol", false, "require a PROXY protocol v1 header on -tls-addr connections (only behind the relay's -sni-route-proxy-protocol)")
 	flags.StringVar(&friendsDB, "friends-db", "", "SQLite database of Mewla Friends, mounted under "+friendsvc.PathPrefix+" (off when empty; people are the signed-in Mewla accounts)")
 	flags.StringVar(&slackClientID, "slack-client-id", "", "Mewla's Slack app client id (default $MEWLA_ACCOUNT_SLACK_CLIENT_ID); its secret is $MEWLA_ACCOUNT_SLACK_CLIENT_SECRET. Without both, Slack sign-in answers slack_unavailable and everything else runs")
+	flags.StringVar(&usageDB, "usage-db", "", "SQLite database of anonymous usage counts ("+ingest.EventsPath+" from computers, "+ingest.VisitPath+" from mewla.ai); off when empty")
 	media.register(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -214,6 +217,15 @@ func run(args []string) error {
 	defer closeFriends()
 	if friends != nil {
 		handler = withFriends(handler, friends)
+	}
+	if usageDB != "" {
+		usageStore, err := ingest.OpenStore(usageDB)
+		if err != nil {
+			return err
+		}
+		defer usageStore.Close()
+		go usageStore.MaintainEvery(maintenanceContext, time.Hour, log.Printf)
+		handler = withUsage(handler, ingest.New(ingest.Config{Store: usageStore, Logf: log.Printf}))
 	}
 	if slackClientID == "" {
 		slackClientID = strings.TrimSpace(os.Getenv("MEWLA_ACCOUNT_SLACK_CLIENT_ID"))
@@ -363,6 +375,14 @@ func (d slackAccounts) AccountForKey(ctx context.Context, key string) (string, b
 func withSlack(base, slack http.Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(slacktoken.PathPrefix+"/", slack)
+	mux.Handle("/", base)
+	return mux
+}
+
+// withUsage serves the usage counts endpoints and everything else as before.
+func withUsage(base http.Handler, usage *ingest.Handler) http.Handler {
+	mux := http.NewServeMux()
+	usage.Routes(mux)
 	mux.Handle("/", base)
 	return mux
 }
