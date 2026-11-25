@@ -72,7 +72,7 @@ func (o *opencodeEvents) Models(ctx context.Context, worker *classifier.Worker) 
 		}
 	}
 	out := opencodeAgentModels(models, current)
-	out.Pending = o.later.of(worker.ID)
+	out.Pending, out.Failed = o.later.of(worker.ID), o.later.failure(worker.ID)
 	return out, nil
 }
 

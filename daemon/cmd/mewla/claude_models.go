@@ -149,7 +149,7 @@ func (c *claudeModels) Models(ctx context.Context, worker *classifier.Worker) (s
 		current, effort = choice.value, choice.effort
 	}
 	out := claudeAgentModels(models, current, effort)
-	out.Pending = c.later.of(worker.ID)
+	out.Pending, out.Failed = c.later.of(worker.ID), c.later.failure(worker.ID)
 	return out, nil
 }
 
@@ -197,9 +197,28 @@ func claudeCurrent(models []work.ClaudeModel, transcript work.ClaudeTranscriptCh
 func claudeAgentModels(models []work.ClaudeModel, current, effort string) server.AgentModels {
 	out := server.AgentModels{Label: "Claude Code", Current: current, Effort: effort}
 	for _, model := range models {
-		out.Models = append(out.Models, server.AgentModel{ID: model.Value, Name: model.DisplayName, Efforts: model.Efforts})
+		out.Models = append(out.Models, server.AgentModel{ID: model.Value, Name: claudeModelLabel(models, model), Efforts: model.Efforts})
 	}
 	return out
+}
+
+// claudeModelLabel is what the person reads for a model: its name with its
+// version, as Claude's own lines say it ("Opus 5.5"; the picker's label is
+// only "Opus"). Default names the model it runs on now ("Default · Opus
+// 5.5"), the one of Claude's list that resolves the same. A model Claude
+// gives no name keeps its picker label.
+func claudeModelLabel(models []work.ClaudeModel, model work.ClaudeModel) string {
+	if model.Name != "" {
+		return model.Name
+	}
+	if model.Value == "default" && model.Resolved != "" {
+		for _, other := range models {
+			if other.Value != model.Value && other.Name != "" && other.Resolved == model.Resolved {
+				return "Default · " + other.Name
+			}
+		}
+	}
+	return model.DisplayName
 }
 
 // SetModel switches the Session in Claude's own picker, for this session only.
@@ -260,6 +279,8 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 	}()
 	picker, err := c.openPicker(ctx, sessionID)
 	if err != nil {
+		// Nothing is open to close (a second Escape opens Claude's rewind).
+		open = false
 		return err
 	}
 	index := -1
@@ -318,38 +339,71 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 
 const claudeScreenWait = 4 * time.Second
 
-// claudeOpenTries bounds how often /model is typed into a Claude that does
-// not open its picker yet: one just started (a new folder, its MCP servers)
-// takes input some seconds before its commands; five tries fit the 30 s
-// budget of a switch.
-const claudeOpenTries = 5
+// claudeOpenWait bounds how long Mewla waits for Claude's picker to open: a
+// Claude just started (a new folder, its MCP servers) shows its prompt and
+// takes text some seconds before its commands. It fits the switch's budget
+// (server.sessionModelSetBudget) with the steps after it.
+const claudeOpenWait = 10 * time.Second
 
-// openPicker types /model until Claude's picker shows. A Claude that took
-// the text without opening the picker has it cleared from its input again,
-// so it never joins the person's next message.
+// openPicker opens Claude's picker with /model, reading Claude's prompt on
+// screen before each key: /model is typed only into an empty prompt, Enter
+// is pressed once Claude shows the text (text and Enter that arrive together
+// are a paste, and Claude takes the Enter as a new line), and a /model that
+// did not open the picker is entered again, never typed again (nor after an
+// Enter Claude took without opening it). A prompt
+// holding the person's own text is left alone. On failure Mewla's /model is
+// taken out of the prompt again, so it never joins the person's next message
+// (11-25: on a new Session the retry typed /model twice and Claude answered
+// "/model/model" as a message).
 func (c *claudeModels) openPicker(ctx context.Context, sessionID string) (work.ClaudePicker, error) {
-	var lastErr error
-	for try := 0; try < claudeOpenTries; try++ {
-		if err := c.screen.SendInput(sessionID, "/model"); err != nil {
+	deadline := time.Now().Add(claudeOpenWait)
+	typed, typedAt := false, time.Time{}
+	// entered: Enter was pressed on a /model Claude showed. A prompt empty
+	// after that means Claude took the text (as a command still opening, or
+	// queued or sent as a message): it is never typed again.
+	entered := false
+	last := ""
+	for {
+		screen, err := c.screen.CapturePaneContent(sessionID)
+		if err != nil {
 			return work.ClaudePicker{}, err
 		}
-		if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
-			return work.ClaudePicker{}, err
-		}
-		picker, err := c.waitPicker(ctx, sessionID, func(work.ClaudePicker) bool { return true })
-		if err == nil {
+		last = screen
+		if picker, ok := work.ParseClaudePicker(screen); ok {
 			return picker, nil
 		}
-		lastErr = err
-		for _, key := range []string{"Escape", "C-u", "BSpace", "C-u"} {
-			_ = c.screen.SendKey(sessionID, key)
+		input, prompt := work.ClaudePromptInput(screen)
+		switch {
+		case !prompt:
+			// Claude shows no prompt yet (starting, or a question of its own).
+		case input == "" && !entered && (!typed || time.Since(typedAt) > 2*time.Second):
+			// Typed again only into a prompt that stayed empty: Claude did
+			// not take the text.
+			if err := c.screen.SendInput(sessionID, "/model"); err != nil {
+				return work.ClaudePicker{}, err
+			}
+			typed, typedAt = true, time.Now()
+		case input == "/model":
+			if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
+				return work.ClaudePicker{}, err
+			}
+			entered = true
+			if picker, err := c.waitPicker(ctx, sessionID, func(work.ClaudePicker) bool { return true }); err == nil {
+				return picker, nil
+			}
+		case input != "" && !typed:
+			return work.ClaudePicker{}, fmt.Errorf("Claude's prompt holds text: %s", input)
 		}
-		if ctx.Err() != nil {
-			break
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			if input, _ := work.ClaudePromptInput(last); input == "/model" {
+				for range input {
+					_ = c.screen.SendKey(sessionID, "BSpace")
+				}
+			}
+			return work.ClaudePicker{}, fmt.Errorf("Claude's model picker did not open: %s", lastLine(last))
 		}
-		time.Sleep(time.Second)
+		time.Sleep(200 * time.Millisecond)
 	}
-	return work.ClaudePicker{}, lastErr
 }
 
 func (c *claudeModels) waitPicker(ctx context.Context, sessionID string, ready func(work.ClaudePicker) bool) (work.ClaudePicker, error) {

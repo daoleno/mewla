@@ -283,6 +283,9 @@ export function parseThreadRuntimeSelection(
     hot_switchable: record.hot_switchable === true,
     pending_model_id: asString(record.pending_model_id) || undefined,
     pending_reasoning_effort: asString(record.pending_reasoning_effort) || undefined,
+    failed_model_id: asString(record.failed_model_id) || undefined,
+    failed_reasoning_effort: asString(record.failed_reasoning_effort) || undefined,
+    failed_reason: asString(record.failed_reason) || undefined,
   };
   const agentModels = Array.isArray(record.native_models);
   if (

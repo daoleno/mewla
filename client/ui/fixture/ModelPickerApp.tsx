@@ -15,7 +15,7 @@ const runtime = {
   session_id: "a11y", client: "claude", connection_id: "claude", connection_name: "Claude Code", provider_label: "Claude Code",
   model_id: "haiku", reasoning_effort: "medium", reasoning_efforts: efforts, credential_ready: true, hot_switchable: true,
   pending_model_id: "sonnet", pending_reasoning_effort: "high",
-  native_models: [own("default", "Default (recommended)"), own("opus", "Opus"), own("fable", "Fable"), own("sonnet", "Sonnet"), own("haiku", "Haiku")],
+  native_models: [own("default", "Default · Opus 5.5"), own("opus", "Opus 5.5"), own("fable", "Fable 5.2"), own("sonnet", "Sonnet 5.5"), own("haiku", "Haiku 5.5")],
 };
 const switchable = { structured_events: true, model_profile_managed: true, model_profile_active_switch: true };
 const signedOut = { structured_events: true, model_profile_managed: true, model_profile_active_switch: false };

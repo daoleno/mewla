@@ -121,6 +121,13 @@ export type ThreadRuntimeSelection = {
    */
   pending_model_id?: string;
   pending_reasoning_effort?: string;
+  /**
+   * A pick held for the end of a turn that the agent did not take then, and
+   * the agent's reason; it stays until the next pick.
+   */
+  failed_model_id?: string;
+  failed_reasoning_effort?: string;
+  failed_reason?: string;
 };
 
 export type ProviderModelsResult = {
