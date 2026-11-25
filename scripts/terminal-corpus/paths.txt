@@ -1,6 +1,6 @@
 # What a change to makes the web corpus worth running: the terminal's UI, its model and its pure-JS surface, the
 # native packer and glyphs the web page shares with the phones, the pinned engine, the corpus itself and its runner.
-# git paths, fnmatch rules with * crossing "/" (read by changed.sh and by scripts/ci-local.py, so CI and a local run agree).
+# git paths, fnmatch rules with * crossing "/" (read by changed.sh).
 client/ui/terminal/*
 client/ui/web/terminal/*
 client/core/terminal/*
