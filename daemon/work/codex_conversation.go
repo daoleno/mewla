@@ -562,6 +562,9 @@ type codexPendingUserEcho struct {
 	lineNumber int
 	timestamp  string
 	text       string
+	// exact is the input as Codex recorded it, before display cleaning: the
+	// bytes the person submitted, which an admission's digest is taken of.
+	exact string
 }
 
 type recentCodexMessageFingerprint struct {
@@ -752,7 +755,7 @@ func (b *codexConversationBuilder) flushPendingUserEcho() {
 	// not merely a display echo. Preserve its exact digest just like the paired
 	// event_msg shape so restart recovery can correlate a pending transaction
 	// without cwd/latest-session guessing or input replay.
-	b.markAdmissionDigest(pending.lineNumber, pending.text)
+	b.markAdmissionDigest(pending.lineNumber, pending.exact)
 }
 
 func (b *codexConversationBuilder) consumeSessionMeta(raw json.RawMessage) {
@@ -962,6 +965,7 @@ func (b *codexConversationBuilder) consumeResponseItem(lineNumber int, timestamp
 				lineNumber: lineNumber,
 				timestamp:  timestamp,
 				text:       text,
+				exact:      codexUserInputExactText(payload.Content, text),
 			}
 		case "assistant":
 			b.addMessage(lineNumber, timestamp, payload.Role, text)
@@ -1905,6 +1909,29 @@ func codexConversationContentText(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// codexUserInputExactText is a user message's submitted bytes: its one
+// input_text exactly as Codex recorded it. Display cleaning (blank-line runs,
+// trailing spaces) changes what a person sees, never what they sent. Content
+// that is not a single text part keeps the displayed text.
+func codexUserInputExactText(raw json.RawMessage, display string) string {
+	var items []map[string]json.RawMessage
+	if json.Unmarshal(raw, &items) != nil {
+		return display
+	}
+	exact, texts := "", 0
+	for _, item := range items {
+		switch jsonString(item["type"]) {
+		case "input_text", "text":
+			exact = jsonString(item["text"])
+			texts++
+		}
+	}
+	if texts != 1 {
+		return display
+	}
+	return exact
 }
 
 func codexFunctionOutputText(rawOutput, rawContent json.RawMessage) string {
