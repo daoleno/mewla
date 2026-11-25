@@ -255,9 +255,9 @@ run, charts draw and respond (zoom, hover, tabs), libraries load from a CDN,
 and the files beside it (`./data.json`, `./style.css`, `./img/chart.png`) load
 too, however large the page. **Full screen** gives it the whole display (turn
 the phone for landscape); on a Mac and in a browser **Open in browser** opens
-it in a tab. A phone paired by the computer's address (Wi-Fi, Tailscale or an
-https address) rather than through Mewla Relay opens the page in its browser,
-which reaches that address. A link out of the page opens in your browser. A folder named
+it in a tab. On a phone it shows in the app however the phone reaches the
+computer (Mewla Relay, Wi-Fi, Tailscale or an https address), and pinches zoom
+in past the page's own width. A link out of the page opens in your browser. A folder named
 with its slash in code, such as `reports/q3/` (or `reports\q3\` on Windows), opens its `index.html`. An open
 page keeps working after the Session that wrote it has ended. It runs in a sandbox of its own: it cannot reach the app, your
 sign-in or the daemon, and it reads only its own folder and what is below it,

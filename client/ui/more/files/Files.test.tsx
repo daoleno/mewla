@@ -99,17 +99,12 @@ describe("File preview", () => {
     await app.waitUntil(() => app.clipboard() === "<h1>Quarterly</h1>");
   });
 
-  test("on a phone paired by its address, a tap opens the page in the browser at once, and again on Open again", async () => {
+  test("on a phone paired by its address, the page shows in the app's own web view, granted its computer's origin", async () => {
     const c = preview(htmlMeta(), { network: { [`POST ${BASE}/session-page-grant`]: pageGrant() } });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:file-page-outside");
-    await app.waitUntil(() => app.openedUrls().length === 1);
-    expect(app.openedUrls()).toEqual(["http://desk.test:9877/session-page/abc.def/report.html"]);
-    expect(app.texts()).toContain("Opened in browser");
-    expect(app.shows("id:file-html")).toBe(false);
-    await app.press("text:Open again");
-    await app.waitUntil(() => app.openedUrls().length === 2);
-    expect(app.requests().filter((r) => r.url === `${BASE}/session-page-grant`)).toHaveLength(2);
+    await app.waitFor("id:file-html");
+    expect(app.shows("id:file-page-outside")).toBe(false);
+    expect(app.openedUrls()).toEqual([]);
   });
 
   test("a file deleted or moved since the Session wrote it says it is gone", async () => {
