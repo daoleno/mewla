@@ -253,7 +253,9 @@ wait_chips '\[ready clip 63MB\.mov\]' 180 && report "63 MB file: ready after $(s
 t0=$(now); drop_file 1 "$D/m2" "$D/part 1.bin" "$D/part 2.bin" "$D/part 3.bin" "$D/part 4.bin" "$D/part 5.bin"
 wait_chips '(\[ready part [1-5]\.bin\].*){5}' 180 && report "five 20 MB files at once: ready after $(since "$t0") s; memory $(rss_now) KB" || failed "the five 20 MB files are not ready chips"
 t0=$(now); drop_file 1 "$D/m3" "$D/huge 600MB.mov"
-wait_chips '\[failed huge 600MB\.mov: This file is larger than 512 MB\.\]' 60 && report "600 MB file: $(since "$t0") s to its failed chip" || failed "the 600 MB file has no failed chip that says why"
+# A local file is read by the app up to 64 MB (NSH 0.7 hands a drop's local file over as its URL); with its contents
+# from NSH (longbridge/nsh#3015, #3016) the limit is a drop's 512 MB.
+wait_chips '\[failed huge 600MB\.mov: This file is larger than (64|512) MB\.\]' 60 && report "600 MB file: $(since "$t0") s to its failed chip" || failed "the 600 MB file has no failed chip that says why"
 front; shot phase4
 kill "$sampler" 2>/dev/null
 report "app memory peak during sizes: $(sort -n "$D/rss.txt" | tail -1 | tr -d ' ') KB"
