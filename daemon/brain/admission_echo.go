@@ -49,19 +49,30 @@ type providerUserInput struct {
 	durable   bool
 }
 
+// admissionEchoDigests are the native input bytes a provider can record for
+// an admission: the admitted bytes, and the same bytes as Claude Code's prompt
+// editor submits them (work.ClaudeSubmittedInput). Other providers record the
+// exact bytes; the second digest is the first one when nothing is rewritten.
+func admissionEchoDigests(admission BrainInputAdmission) []string {
+	return providerInputDigests(admission.BodySHA256, AdmissionDigest(work.ClaudeSubmittedInput(admission.DisplayBody)))
+}
+
 // echoes reports whether this input is the provider's record of the admitted
-// bytes. Provider and Host Session identity are deliberately not inputs: the
-// admission is the user's message, and a Host whose native transcript is not
-// (yet) bound must not turn its own echo into a second bubble. Provider clocks
-// keep milliseconds, so the causal bound is the admission's prepare
-// millisecond; the provider can only record the input after it was typed.
-func (input providerUserInput) echoes(admission BrainInputAdmission) bool {
+// bytes (digests from admissionEchoDigests). Provider and Host Session
+// identity are deliberately not inputs: the admission is the user's message,
+// and a Host whose native transcript is not (yet) bound must not turn its own
+// echo into a second bubble. Provider clocks keep milliseconds, so the causal
+// bound is the admission's prepare millisecond; the provider can only record
+// the input after it was typed.
+func (input providerUserInput) echoes(admission BrainInputAdmission, admissionDigests []string) bool {
 	if input.createdAt.Before(admission.CreatedAt.UTC().Truncate(time.Millisecond)) {
 		return false
 	}
 	for _, digest := range input.digests {
-		if digest == admission.BodySHA256 {
-			return true
+		for _, admitted := range admissionDigests {
+			if digest == admitted {
+				return true
+			}
 		}
 	}
 	return false
@@ -105,6 +116,7 @@ func reconcileAdmissionEchoes(
 	type credit struct {
 		index     int
 		admission BrainInputAdmission
+		digests   []string
 	}
 	var credits []credit
 	for index, item := range items {
@@ -113,7 +125,7 @@ func reconcileAdmissionEchoes(
 		}
 		admission, ok := accepted[strings.TrimSpace(item.ID)]
 		if ok && timelineItemMatchesBrainInputAdmission(item, admission) {
-			credits = append(credits, credit{index: index, admission: admission})
+			credits = append(credits, credit{index: index, admission: admission, digests: admissionEchoDigests(admission)})
 		}
 	}
 	if len(credits) == 0 {
@@ -173,7 +185,7 @@ func reconcileAdmissionEchoes(
 	removed := map[string]bool{}
 	for _, input := range inputs {
 		for cursor := range credits {
-			if !input.echoes(credits[cursor].admission) {
+			if !input.echoes(credits[cursor].admission, credits[cursor].digests) {
 				continue
 			}
 			row := &out[credits[cursor].index]

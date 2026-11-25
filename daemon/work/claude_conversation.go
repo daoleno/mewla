@@ -642,6 +642,9 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		IsMeta      bool   `json:"isMeta"`
 		IsSidechain bool   `json:"isSidechain"`
 		TurnOrigin  string `json:"turnOrigin"`
+		// PromptSource "queued" marks a user record of a prompt Claude took
+		// while busy; it carries the queued prompt's bare paste envelope.
+		PromptSource string `json:"promptSource"`
 		// IsCompactSummary marks the summary Claude writes to open a compacted
 		// conversation; it is a user-role record the person did not type.
 		IsCompactSummary bool `json:"isCompactSummary"`
@@ -735,7 +738,11 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 			origin = ConversationOriginProvider
 		}
 		b.denialKind = strings.TrimSpace(envelope.ToolDenialKind)
-		consumed := b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult)
+		pastedInput := claudePastedInput
+		if envelope.PromptSource == claudeQueuedPromptSource {
+			pastedInput = claudeQueuedPastedInput
+		}
+		consumed := b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult, pastedInput)
 		b.denialKind = ""
 		if consumed &&
 			!b.activityLifecycle.running() {
@@ -822,14 +829,14 @@ func claudeAssistantRecordContinuesTurn(stopReason string, raw json.RawMessage) 
 	return true
 }
 
-func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID, timestamp, origin string, raw, toolUseResult json.RawMessage) bool {
+func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID, timestamp, origin string, raw, toolUseResult json.RawMessage, pastedInput func(string) (string, bool)) bool {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return false
 	}
 	if raw[0] == '"' {
 		var text string
 		if json.Unmarshal(raw, &text) == nil {
-			b.addMessage(lineNumber, recordID, 0, timestamp, "user", origin, text)
+			b.addUserMessage(lineNumber, recordID, 0, timestamp, origin, text, pastedInput)
 			return claudeVisibleUserText(text)
 		}
 		return false
@@ -845,7 +852,7 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 		switch strings.ToLower(strings.TrimSpace(item.Type)) {
 		case "text":
 			textIndex++
-			b.addMessage(lineNumber, recordID, textIndex, timestamp, "user", origin, item.Text)
+			b.addUserMessage(lineNumber, recordID, textIndex, timestamp, origin, item.Text, pastedInput)
 			hasUserText = hasUserText || claudeVisibleUserText(item.Text)
 		case "tool_result":
 			b.settleChoice(item.ToolUseID, toolUseResults[strings.TrimSpace(item.ToolUseID)], item.IsError)
@@ -1428,11 +1435,26 @@ func claudePastedInput(raw string) (string, bool) {
 	return claudeWholePasteEnvelope(claudePasteEnvelope, raw)
 }
 
+// ClaudeSubmittedInput is the text Claude Code submits, and records in its
+// transcript, for text typed or pasted into its prompt: the prompt editor
+// turns every tab into four spaces (Claude Code 2.1.310 to 2.1.332,
+// value.replaceAll("\t", "    ") on every change). An admission whose bytes
+// hold a tab is echoed with these bytes, never its own.
+func ClaudeSubmittedInput(text string) string {
+	return strings.ReplaceAll(text, "\t", "    ")
+}
+
 // claudeQueuedPasteEnvelope is how Claude Code (2.1.323) records a paste it
 // absorbed mid-turn: the queued_command prompt is the bare envelope, with no
 // "\n\n" before it and no "\n" after. Only queued prompts are read this way;
 // a typed user record keeps the strict typed-submit form above.
 var claudeQueuedPasteEnvelope = regexp.MustCompile(`(?s)\A<pasted_content id="([0-9a-f]{4})">\n(.*)\n</pasted_content id="([0-9a-f]{4})">\z`)
+
+// claudeQueuedPromptSource is the promptSource of a user record holding a
+// prompt Claude Code (2.1.318 to 2.1.330) took while busy. Such a send is
+// recorded either as this record or as a queued_command attachment, never both,
+// and both carry the prompt in the same queued form.
+const claudeQueuedPromptSource = "queued"
 
 // claudeQueuedPastedInput decodes a queued_command prompt's paste envelope, so
 // a message sent while Claude was busy keeps the submitted text's digest and
