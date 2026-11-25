@@ -62,7 +62,7 @@ func (f *fakeClaude) CapturePaneContent(string) (string, error) {
 		fmt.Fprintf(&b, "  ● %s effort ←/→ to adjust\n  s to use this session only · Enter to save · Esc to cancel\n", strings.ToUpper(f.efforts[f.effort][:1])+f.efforts[f.effort][1:])
 	}
 	if f.asks && f.pending >= 0 {
-		b.WriteString("  Switch model?\n  Your next response will be slower and use\n  more tokens\n\n  This conversation is cached.\n  ❯ 1. Yes, switch to " + f.names[f.pending] + "\n    2. No, go back\n")
+		b.WriteString("  Switch model?\n  Your next response will be slower and use\n  more tokens\n\n  This conversation is cached.\n  ❯ 1. Yes, switch to " + f.names[f.pending] + "\n    2. No, go back\n\n  Enter to confirm · Esc to cancel\n")
 	}
 	if !f.open && (!f.asks || f.pending < 0) {
 		// Claude's prompt between its rules; typed text shows once Claude
