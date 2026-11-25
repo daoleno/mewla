@@ -37,8 +37,9 @@ On Linux, WSL2 or macOS:
 curl -fsSL https://mewla.ai/install.sh | sh
 ```
 
-It verifies the release checksum, installs `mewla` without `sudo` and sends no
-telemetry. The last line is the command that starts Mewla: `mewla`, or its
+It verifies the release checksum and installs `mewla` without `sudo`. Mewla
+sends anonymous usage counts, never your content; `--no-telemetry` (or
+`mewla telemetry off` later) turns them off. The last line is the command that starts Mewla: `mewla`, or its
 full path when your current shell cannot find it yet.
 
 On Windows, in PowerShell (Windows PowerShell or PowerShell 7):
