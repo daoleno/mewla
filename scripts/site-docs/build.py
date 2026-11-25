@@ -310,6 +310,7 @@ TEMPLATE = """<!doctype html>
 {icon}<link rel="stylesheet" href="{docs_root}docs.css">
 <script>document.documentElement.classList.add("js")</script>
 <script defer src="{docs_root}search.js"></script>
+<script defer src="{site_root}visit.js"></script>
 </head>
 <body data-docs-root="{docs_root}">
 <a class="skip" href="#content">Skip to content</a>

@@ -12,6 +12,7 @@
 <meta name="theme-color" content="#18191C" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="../../favicon-32.png" type="image/png">
 <link rel="stylesheet" href="../../docs/docs.css">
+<script defer src="../../visit.js"></script>
 </head>
 <body>
 <a class="skip" href="#content">跳到正文</a>
@@ -25,11 +26,11 @@
   <article class="d-doc">
 <h1>隐私政策</h1>
 <p>Mewla 让你在自己的电脑上运行 AI Agent，并在手机上使用它们。你的工作只在你的设备和你的电脑之间流动。</p>
-<p class="d-updated">最后更新：2026 年 10 月 27 日。如与英文版不一致，以英文版为准。</p>
+<p class="d-updated">最后更新：2026 年 11 月 25 日。如与英文版不一致，以英文版为准。</p>
 
 <div class="callout callout-short">
 <ul>
-<li>Mewla App 和你电脑上的 <code>mewla</code> 程序不向我们发送任何统计、遥测或崩溃报告。没有广告，没有跟踪。</li>
+<li>你电脑上的 <code>mewla</code> 程序会向我们发送匿名的使用计数（用了哪些版本和功能、安装卡在哪里），从不包含你的内容，你也可以关闭它。没有崩溃报告，没有广告，没有跟踪。</li>
 <li>你的会话、提示词、文件、终端和屏幕只在你的手机和你自己的电脑之间传输。我们收不到。</li>
 <li>只有当你打开远程访问（<code>mewla login</code>）时，我们才保存一个很小的账号：你的 GitHub id 和用户名，以及你登录的每台电脑的地址和名字。</li>
 <li>你随时可以用 <code>mewla logout -delete-account</code> 删除这个账号。</li>
@@ -50,12 +51,21 @@
 <li><strong>更新。</strong>从 GitHub 下载的 Android App 会去 GitHub Releases 检查新版本。App Store 和 Google Play 的版本不会。</li>
 </ul>
 
+<h2 id="usage">使用计数</h2>
+<p>你电脑上的 <code>mewla</code> 会向我们发送匿名的使用计数，让我们知道安装和配对卡在哪里、哪些功能和版本在被使用。它默认开启，你随时可以关闭：在 App 的 设置 › 隐私 里关掉，运行 <code>mewla telemetry off</code>，或设置 <code>MEWLA_TELEMETRY=0</code> 或 <code>DO_NOT_TRACK=1</code>；安装脚本的 <code>--no-telemetry</code> 会在 Mewla 第一次启动前就关闭它。关闭时，还没发出的计数会被删除。</p>
+<ul>
+<li><strong>计数是什么。</strong>一个事件，例如“已安装”“已登录”“配对了手机”“Brain 第一次回复”“开始了会话”，带几个属性，每个属性都是固定列表里的一个词、一个区间或一个版本号：你的操作系统及其主版本号、Mewla 和 App 的版本、用的是哪个 Agent（例如 Claude Code 或 Codex）、手机是怎么连上电脑的、失败的原因（例如“已过期”）、配对了几台设备（0、1、2–3、4–9 或 10+）。每一批计数带着一个在你电脑上生成的随机 id 和日期，不带具体时间。</li>
+<li><strong>计数里永远没有</strong>你的提示词、回复、文件、文件名、路径、仓库名、电脑名和地址、错误信息、你的 GitHub 账号或你输入的任何内容。你的电脑和我们的服务器都会拒收固定列表之外的任何值。</li>
+<li><strong>App</strong> 每天发一条计数（一个随机的 App id、平台、系统主版本号和 App 版本），经由它连着的电脑发出，从不直接发给我们。如果那台电脑关了计数，就什么都不发。</li>
+<li><strong>我们保存什么。</strong>我们的账号服务把计数累加成按天的计数器。它不保存你的 IP 地址（只在内存里用来限制同一地址的发送频率），也不把随机 id 和你的 Mewla 账号关联，即使你登录了。带随机 id 的计数器 90 天后删除；不带 id 的每日总数会保留。</li>
+</ul>
+
 <h2 id="ai">AI Agent 和模型服务</h2>
 <p>Claude Code、Codex 等 Agent 和 Mewla 的 Brain 都运行在你的电脑上。你使用它们时，是你电脑上的 Agent 把你的提示词，以及它决定附带的文件或命令输出，发给你选择的模型服务（例如 Anthropic 或 OpenAI），用的是你自己在那家服务的账号或 API key。Mewla App 不会把它们发给任何模型服务，我们也收不到。模型服务收到的内容，适用它自己的隐私政策。</p>
 <p>你在电脑上连接的其他服务（例如 GitHub、Notion）也一样：由你的电脑直接和它们通信。</p>
 
 <h2 id="remote">远程访问（可选）</h2>
-<p>运行 <code>mewla login</code> 后，你的电脑会得到一个地址，例如 <code>quiet-otter-3f9a.m.mewla.ai</code>，这样手机在任何网络下都能连上它。这是我们运营的唯一一项服务。不用它也能用 Mewla（在自己的局域网里，或者通过 Tailscale 或你自己的隧道）。</p>
+<p>运行 <code>mewla login</code> 后，你的电脑会得到一个地址，例如 <code>quiet-otter-3f9a.m.mewla.ai</code>，这样手机在任何网络下都能连上它。它运行在我们的账号服务上，这个服务也接收上面说的使用计数。不用它也能用 Mewla（在自己的局域网里，或者通过 Tailscale 或你自己的隧道）。</p>
 <h3>账号服务保存什么</h3>
 <ul>
 <li>你的 GitHub 用户 id 和用户名。你用 GitHub 登录；我们只申请读取你 GitHub 资料的权限，并且不保存 GitHub 令牌。</li>
@@ -95,7 +105,7 @@
 </ul>
 
 <h2 id="website">本网站</h2>
-<p>mewla.ai 托管在 GitHub Pages 上，并从 Google Fonts 加载字体。和任何网站服务器一样，它们在你访问时能看到你的 IP 地址和浏览器信息，适用它们各自的隐私政策。本网站不设置 cookie，没有统计分析。它会在浏览器的本地存储里记住你选的宠物，这个信息不会离开你的浏览器。</p>
+<p>mewla.ai 托管在 GitHub Pages 上，并从 Google Fonts 加载字体。和任何网站服务器一样，它们在你访问时能看到你的 IP 地址和浏览器信息，适用它们各自的隐私政策。本网站不设置 cookie。它统计页面访问：每次访问会把页面类型（首页、文档、隐私或支持）和一个表示来源的词（例如“github”“google”或“direct”）发给我们的账号服务，点击下载按钮或安装命令算作一次下载。不保存任何 id、cookie 或 IP 地址；如果你的浏览器要求网站不要跟踪（Do Not Track 或 Global Privacy Control），就什么都不发。它会在浏览器的本地存储里记住你选的宠物，这个信息不会离开你的浏览器。</p>
 
 <h2 id="children">儿童</h2>
 <p>Mewla 是给开发者用的工具，不面向儿童。</p>
