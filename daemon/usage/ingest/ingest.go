@@ -167,9 +167,14 @@ func (s *Store) AddVisit(ctx context.Context, day string, v usage.Visit) error {
 	return err
 }
 
-// Maintain rolls every finished day (before yesterday, UTC) up into daily
-// totals and deletes per-install counters older than RawDays.
+// acceptDays is how far back a batch's day may be (dayInWindow).
+const acceptDays = 7
+
+// Maintain rolls every day that can no longer change (older than the days a
+// batch may still name, UTC) up into daily totals, and deletes per-install
+// counters older than RawDays.
 func (s *Store) Maintain(ctx context.Context, now time.Time) error {
+	rollCut := now.UTC().AddDate(0, 0, -(acceptDays + 1)).Format(time.DateOnly)
 	yesterday := now.UTC().AddDate(0, 0, -1).Format(time.DateOnly)
 	rawCut := now.UTC().AddDate(0, 0, -RawDays).Format(time.DateOnly)
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -180,11 +185,11 @@ func (s *Store) Maintain(ctx context.Context, now time.Time) error {
 	if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO rollups (day, name, props, events, installs)
 		SELECT day, name, props, SUM(n), COUNT(DISTINCT install) FROM events
 		WHERE day < ? AND day NOT IN (SELECT day FROM rolled_days)
-		GROUP BY day, name, props`, yesterday); err != nil {
+		GROUP BY day, name, props`, rollCut); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO rolled_days (day)
-		SELECT DISTINCT day FROM events WHERE day < ?`, yesterday); err != nil {
+		SELECT DISTINCT day FROM events WHERE day < ?`, rollCut); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE day < ?`, rawCut); err != nil {
@@ -313,7 +318,7 @@ func dayInWindow(day string, now time.Time) bool {
 		return false
 	}
 	today, _ := time.Parse(time.DateOnly, now.UTC().Format(time.DateOnly))
-	return !d.Before(today.AddDate(0, 0, -7)) && !d.After(today.AddDate(0, 0, 1))
+	return !d.Before(today.AddDate(0, 0, -acceptDays)) && !d.After(today.AddDate(0, 0, 1))
 }
 
 // addressKey is the rate-limit key: an IPv4 address or an IPv6 /64. It

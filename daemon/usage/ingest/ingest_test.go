@@ -212,7 +212,7 @@ func TestDaysOutsideTheWindowAreDropped(t *testing.T) {
 	}
 }
 
-func TestMaintainRollsUpFinishedDaysAndPurgesOldRows(t *testing.T) {
+func TestMaintainRollsUpDaysThatCanNoLongerChangeAndPurgesOldRows(t *testing.T) {
 	_, store, _, _ := newTestHandler(t)
 	ctx := context.Background()
 	add := func(day, id string) {
@@ -222,18 +222,28 @@ func TestMaintainRollsUpFinishedDaysAndPurgesOldRows(t *testing.T) {
 	}
 	other := strings.Repeat("f", 32)
 	add("2029-11-01", install)
+	add("2030-03-01", install)
 	add("2030-03-10", install)
-	add("2030-03-10", other)
-	add("2030-03-14", install)
 	if err := store.Maintain(ctx, clock); err != nil {
+		t.Fatal(err)
+	}
+	// 03-10 is still inside the days a batch may name: not rolled yet, so a
+	// late batch for it still counts once it is.
+	var n int
+	_ = store.db.QueryRow(`SELECT COUNT(*) FROM rollups WHERE day = '2030-03-10'`).Scan(&n)
+	if n != 0 {
+		t.Fatal("a day that can still change was rolled up")
+	}
+	add("2030-03-10", other)
+	if err := store.Maintain(ctx, clock.AddDate(0, 0, 10)); err != nil {
 		t.Fatal(err)
 	}
 	var events, installs int
 	if err := store.db.QueryRow(`SELECT events, installs FROM rollups WHERE day = '2030-03-10'`).Scan(&events, &installs); err != nil || events != 2 || installs != 2 {
 		t.Fatalf("rollup = %d/%d, %v", events, installs, err)
 	}
-	if countRows(t, store, "rollups") != 2 {
-		t.Fatalf("rollups = %d, want the two finished days", countRows(t, store, "rollups"))
+	if countRows(t, store, "rollups") != 3 {
+		t.Fatalf("rollups = %d, want 11-01, 03-01 and 03-10", countRows(t, store, "rollups"))
 	}
 	var old int
 	_ = store.db.QueryRow(`SELECT COUNT(*) FROM events WHERE day = '2029-11-01'`).Scan(&old)
@@ -241,10 +251,10 @@ func TestMaintainRollsUpFinishedDaysAndPurgesOldRows(t *testing.T) {
 		t.Fatal("raw rows past RawDays were kept")
 	}
 	// Running again keeps the rollups as they are.
-	if err := store.Maintain(ctx, clock); err != nil {
+	if err := store.Maintain(ctx, clock.AddDate(0, 0, 10)); err != nil {
 		t.Fatal(err)
 	}
-	if countRows(t, store, "rollups") != 2 {
+	if countRows(t, store, "rollups") != 3 {
 		t.Fatal("maintain is not idempotent")
 	}
 }
