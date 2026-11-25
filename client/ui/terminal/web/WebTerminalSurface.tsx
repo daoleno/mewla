@@ -84,6 +84,7 @@ export function WebTerminalSurface(props: NativeComponentProps<TerminalProps, We
     },
     focus: () => post({ type: "focus" }),
     blur: () => post({ type: "blur" }),
+    clearSelection: () => web?.clearSelection(),
     measure: () => web?.measure() ?? Promise.resolve(null),
     reveal: (options) => web?.reveal(options),
     animateLayout: (transition) => web?.animateLayout(transition),

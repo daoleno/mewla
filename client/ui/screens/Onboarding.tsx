@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, createMotion, effect, host, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, createMotion, effect, host, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
@@ -35,6 +35,7 @@ import { PetSprite } from "../pets/PetSprite";
 import { connection, problem, resumeConnection, servers } from "../session";
 import { probeComputer } from "../more/settings/computers";
 import { OnboardingScanner } from "./OnboardingScanner";
+import { writeClipboard } from "../kit/clipboard";
 
 /**
  * First run: Welcome → Install → Scan → Connected, with Brain's cat hopping between the hero spot
@@ -251,7 +252,7 @@ function CommandCard() {
       <Text class="text-caption text-muted-foreground">{INSTALL_NOTE}</Text>
       <View class="flex-row flex-wrap gap-2">
         <TintedButton testID="copy-command" icon={copied() ? "check" : "copy"} label={copied() ? "Copied" : "Copy"}
-          onPress={() => void Clipboard.writeText(INSTALL_COMMAND).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })} />
+          onPress={() => void writeClipboard(INSTALL_COMMAND).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })} />
         <If when={host.available()}><TintedButton testID="share-command" icon="share" label="Send to computer" onPress={() => void host.call("app.share", { text: INSTALL_COMMAND }).catch(() => {})} /></If>
       </View>
     </View>

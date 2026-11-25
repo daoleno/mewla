@@ -1,4 +1,4 @@
-import { Clipboard, computed, effect, signal, untracked, type Signal } from "nsh";
+import { computed, effect, signal, untracked, type Signal } from "nsh";
 import type { Daemon } from "../../../core/more/daemon";
 import type { GitBranchesPayload, GitCommitDetail, GitCommitSummary, GitDiffStatusSnapshot, GitDiscardUndo, GitHunkAction, GitRepoFileContentPayload, GitRepoPathsPayload } from "../../../core/git/gitDiff";
 import { buildGitReviewGroups, gitReviewOrder, gitReviewPaths, type GitReviewEntry, type GitReviewGroup } from "../../../core/git/gitReviewModel";
@@ -19,6 +19,7 @@ import { supportsChatInterface } from "../../../core/session/sessionRoute";
 import { outbox, workers } from "../../session";
 import { daemon } from "../daemon";
 import { confirmDestructive } from "../../kit/kit";
+import { writeClipboard } from "../../kit/clipboard";
 
 /**
  * Git review of one Session's repository on the current computer: its status,
@@ -449,7 +450,7 @@ effect(() => {
 /** Copies `text`; says `title` (with `detail`) when it went, "Couldn't copy" when it did not. */
 export async function copyText(text: string, title: string, detail?: string): Promise<void> {
   try {
-    await Clipboard.writeText(text);
+    await writeClipboard(text);
     say({ title, detail, tone: "success" });
   } catch (reason) {
     failed("Couldn't copy", reason);

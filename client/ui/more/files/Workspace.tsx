@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, effect, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { listDetail } from "../../shell/layout";
@@ -32,6 +32,7 @@ import type { PageNav } from "../routes";
 import { ZoomImage } from "./FilePreview";
 import { MediaPlayer } from "./Media";
 import { renderFileCode } from "../../mermaid/fileCode";
+import { writeClipboard } from "../../kit/clipboard";
 
 // Each folder the workspace showed, per (computer, folder), while the app runs: going back into one reads nothing.
 const trees = new Map<string, BrainWorkspaceTree>();
@@ -202,7 +203,7 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity;
   const copy = () => {
     const f = file();
     if (!f?.content) return;
-    void Clipboard.writeText(f.content).then(
+    void writeClipboard(f.content).then(
       () => {
         copied.set(true);
         if (copiedTimer) clearTimeout(copiedTimer);

@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, effect, Image, openUrl, platform, safeArea, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { cleanup, effect, Image, openUrl, platform, safeArea, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
@@ -50,6 +50,7 @@ import { MediaPlayer } from "./Media";
 import { filePreviewRoute } from "./routes";
 import { viewerBaseUrl } from "../../viewerBase";
 import { renderFileCode } from "../../mermaid/fileCode";
+import { writeClipboard } from "../../kit/clipboard";
 
 /** What a picture's or PDF's stream failing means: the file changed, or the stream lapsed. */
 export const SESSION_FILE_STREAM_FAILED = "The file stream changed or could not be loaded. Refresh and try again.";
@@ -138,7 +139,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   };
 
   const copy = createSessionFileCopyLifecycleOwner<ReturnType<typeof setTimeout>>({
-    copyText: (value) => Clipboard.writeText(value),
+    copyText: (value) => writeClipboard(value),
     onCopiedChange: (value) => copied.set(value),
     scheduleReset: (callback, ms) => setTimeout(callback, ms),
     cancelReset: (timer) => clearTimeout(timer),

@@ -1,9 +1,10 @@
-import { cleanup, Clipboard, effect, Image, Share, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, Image, Share, signal, Text, untracked, View } from "nsh";
 import { Button, Dialog } from "nsh/base";
 import { Icon } from "../kit/Icon";
 import { Segmented } from "../kit/Segmented";
 import mark from "./assets/mark.png";
 import { daemonPairing, setMacLAN, showMainWindow, type DaemonPairing } from "./local";
+import { writeClipboard } from "../kit/clipboard";
 
 /** Pair a phone (DESIGN-MAC.md §2.4, `w-pair`): a 440 dialog over the window, radius 22, padding 20. */
 export const pairPhoneOpen = signal(false);
@@ -86,7 +87,7 @@ function PairPhone() {
   const copy = () => {
     const value = untracked(link);
     if (!value) return;
-    void Clipboard.writeText(value).then(() => {
+    void writeClipboard(value).then(() => {
       copied.set(true);
       setTimeout(() => copied.set(false), 1_600);
     });

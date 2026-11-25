@@ -1,4 +1,4 @@
-import { Clipboard, computed, signal, Text, untracked, View } from "nsh";
+import { computed, signal, Text, untracked, View } from "nsh";
 import { Button, TextView } from "nsh/base";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
 import { activityFileRows, type ActivityFileRow } from "../../core/timeline/activityFiles";
@@ -43,6 +43,7 @@ import { agentDisplays, displayOfWorker } from "../screenfloat/agentDisplays";
 import { isMermaidLanguage } from "../../core/mermaid/mermaid";
 import { MermaidBlock } from "../mermaid/MermaidBlock";
 import { density, requestCardSize, threadType } from "../kit/density";
+import { writeClipboard } from "../kit/clipboard";
 
 /**
  * Which rows are open. A list recycles its cells, so a row's own signal would
@@ -88,7 +89,7 @@ export function CodeBlock(props: { code: string; language?: string }) {
   const copied = signal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const copy = () => {
-    void Clipboard.writeText(props.code).then(() => {
+    void writeClipboard(props.code).then(() => {
       copied.set(true);
       clearTimeout(timer);
       timer = setTimeout(() => copied.set(false), 1500);
