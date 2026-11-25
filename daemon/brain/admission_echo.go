@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -51,10 +52,10 @@ type providerUserInput struct {
 
 // admissionEchoDigests are the native input bytes a provider can record for
 // an admission: the admitted bytes, and the same bytes as Claude Code's prompt
-// editor submits them (work.ClaudeSubmittedInput). Other providers record the
+// editor submits them (classifier.ClaudeSubmittedInput). Other providers record the
 // exact bytes; the second digest is the first one when nothing is rewritten.
 func admissionEchoDigests(admission BrainInputAdmission) []string {
-	return providerInputDigests(admission.BodySHA256, AdmissionDigest(work.ClaudeSubmittedInput(admission.DisplayBody)))
+	return providerInputDigests(admission.BodySHA256, AdmissionDigest(classifier.ClaudeSubmittedInput(admission.DisplayBody)))
 }
 
 // echoes reports whether this input is the provider's record of the admitted

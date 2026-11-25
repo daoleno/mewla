@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // InputOutcome describes what Mewla knows at the provider-mutation boundary.
@@ -446,6 +448,12 @@ func (owner *sessionInputOwner) submitWithTurn(
 	boundary ...inputReuseBoundary,
 ) (InputResult, error) {
 	result := InputResult{Outcome: InputNotSubmitted, Receipt: strings.TrimSpace(receipt)}
+	if isClaudeCommand(command) {
+		// Claude records the input as its prompt editor submits it, so Mewla
+		// submits, and digests, exactly those bytes: a brief holding a tab
+		// still proves its own turn from the transcript.
+		payload = classifier.ClaudeSubmittedInput(payload)
+	}
 	requiresConfirmation := turn != nil
 	// Delegated transport contract: a successful owned paste+submit is the
 	// submission outcome. The provider transcript digest and completion are owned
