@@ -118,6 +118,7 @@ case ${1:-} in
     exit "${FAKE_DEPS_STATUS:-0}"
     ;;
   update) printf 'fixture update\n'; exit 0 ;;
+  telemetry) printf 'fixture telemetry %s\n' "${2:-}" >> "$HOME/fixture-telemetry"; exit "${FAKE_TELEMETRY_STATUS:-0}" ;;
   setup)
     [ -z "${FAKE_NO_SETUP_REMOTE:-}" ] || exit 2
     [ "${2:-}" = remote ] || exit 2
@@ -448,6 +449,30 @@ test_remote_setup_hands_over_or_falls_back() {
   pass "--remote hands over to mewla setup remote without reading the terminal, and falls back on releases without it"
 }
 
+test_usage_counts_notice_and_off_switch() {
+  new_case usage-notice
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_NO_PATH_UPDATE=1
+  assert_contains "$CASE_DIR/output" "Mewla sends anonymous usage counts (never your content). Turn them off: mewla telemetry off"
+  assert_not_exists "$HOME_DIR/fixture-telemetry"
+
+  new_case usage-off
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_NO_PATH_UPDATE=1 MEWLA_NO_TELEMETRY=1
+  assert_contains "$CASE_DIR/output" "Anonymous usage counts are off."
+  assert_contains "$HOME_DIR/fixture-telemetry" "fixture telemetry off"
+  assert_not_contains "$CASE_DIR/output" "Turn them off"
+
+  new_case usage-off-fails
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_NO_PATH_UPDATE=1 MEWLA_NO_TELEMETRY=1 FAKE_TELEMETRY_STATUS=2
+  assert_contains "$CASE_DIR/output" "could not turn usage counts off; run: mewla telemetry off"
+  pass "says it counts, and --no-telemetry turns counts off with the installed binary before Mewla starts"
+}
+
 test_executable_failure_keeps_previous_install() {
   new_case executable-failure
   make_archive
@@ -481,5 +506,6 @@ test_profile_idempotency_and_no_mutation
 test_missing_tools
 test_next_step_is_the_start_command
 test_remote_setup_hands_over_or_falls_back
+test_usage_counts_notice_and_off_switch
 test_executable_failure_keeps_previous_install
 printf '1..%d\n' "$PASS"

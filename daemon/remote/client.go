@@ -265,3 +265,23 @@ func (err *ServiceError) Error() string {
 	}
 	return fmt.Sprintf("remote access service: %s", err.Code)
 }
+
+// LoginFailureClass names why a sign-in failed, as an anonymous usage count
+// reason (usage.LoginFailures): never the error text.
+func LoginFailureClass(err error) string {
+	var service *ServiceError
+	if errors.As(err, &service) {
+		switch {
+		case service.Status == http.StatusForbidden && service.Code == "denied":
+			return "denied"
+		case service.Status == http.StatusForbidden && service.Code == "quota":
+			return "quota"
+		case service.Status == http.StatusConflict:
+			return "conflict"
+		case service.Status == http.StatusGone:
+			return "expired"
+		}
+		return "other"
+	}
+	return "network"
+}

@@ -373,3 +373,23 @@ func (s *Store) MaintainEvery(ctx context.Context, every time.Duration, logf fun
 		}
 	}
 }
+
+// CountByName sums the per-install counters by event name (the dashboard
+// and tests).
+func CountByName(ctx context.Context, s *Store) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT name, SUM(n) FROM events GROUP BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var name string
+		var n int
+		if err := rows.Scan(&name, &n); err != nil {
+			return nil, err
+		}
+		out[name] = n
+	}
+	return out, rows.Err()
+}

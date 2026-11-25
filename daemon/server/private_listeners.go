@@ -36,6 +36,7 @@ var privateAllowedPaths = map[string]bool{
 	"/computers":               true,
 	"/computers/invite":        true,
 	"/agents":                  true,
+	"/usage":                   true,
 	"/agent-use":               true,
 	"/brain/grant-request":     true,
 	"/phone":                   true,
