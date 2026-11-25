@@ -39,6 +39,9 @@ type claudeModels struct {
 	launchArgs func(worker *classifier.Worker) string
 	// later holds a choice made while Claude is in a turn.
 	later *turnPending
+	// transcriptOf is the Session's Claude transcript ("" while it has none):
+	// what Claude answered to a switch is read there.
+	transcriptOf func(worker *classifier.Worker) string
 
 	mu      sync.Mutex
 	lists   map[string]claudeModelList
@@ -64,8 +67,20 @@ func newClaudeModels(screen claudeScreen, hub *agentevents.Hub) *claudeModels {
 		read: func(ctx context.Context, command, cwd string) ([]work.ClaudeModel, error) {
 			return work.ReadClaudeModels(ctx, command, cwd, os.Environ())
 		},
-		launchArgs: workerProcessArgs,
-		later:      newTurnPending(hub)}
+		launchArgs:   workerProcessArgs,
+		later:        newTurnPending(hub),
+		transcriptOf: func(worker *classifier.Worker) string { return claudeTranscriptOf(hub, worker) }}
+}
+
+// claudeTranscriptOf is the transcript the Session's Chat reads: the hub's
+// binding, else the one Claude's launch names.
+func claudeTranscriptOf(hub *agentevents.Hub, worker *classifier.Worker) string {
+	if hub != nil {
+		if state, ok := hub.State(worker.ID); ok && state.Binding.Ref != "" {
+			return state.Binding.Ref
+		}
+	}
+	return work.ClaudeTranscriptFor(*worker)
 }
 
 // claudeCommand is the command line of the Claude the Session runs: its
@@ -122,16 +137,7 @@ func (c *claudeModels) Models(ctx context.Context, worker *classifier.Worker) (s
 	if err != nil {
 		return server.AgentModels{}, err
 	}
-	path := ""
-	if c.hub != nil {
-		if state, ok := c.hub.State(worker.ID); ok {
-			path = state.Binding.Ref
-		}
-	}
-	if path == "" {
-		path = work.ClaudeTranscriptFor(*worker)
-	}
-	transcript := work.ReadClaudeTranscriptState(path)
+	transcript := work.ReadClaudeTranscriptState(c.transcriptOf(worker))
 	c.mu.Lock()
 	choice, chosen := c.applied[worker.ID]
 	c.mu.Unlock()
@@ -241,7 +247,7 @@ func (c *claudeModels) SetModel(ctx context.Context, worker *classifier.Worker, 
 	}
 	chosen := *target
 	apply := func(ctx context.Context) error {
-		if err := c.pick(ctx, worker.ID, chosen, effort); err != nil {
+		if err := c.pick(ctx, worker, chosen, effort); err != nil {
 			return err
 		}
 		c.mu.Lock()
@@ -265,12 +271,11 @@ func (c *claudeModels) SetModel(ctx context.Context, worker *classifier.Worker, 
 
 // pick opens Claude's picker, moves to the model and effort, reading the
 // screen after each key, and takes it for this session only.
-func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.ClaudeModel, effort string) (err error) {
-	before, err := c.screen.CapturePaneContent(sessionID)
-	if err != nil {
-		return err
-	}
-	switches := strings.Count(flatScreen(before), claudeSwitchPrefix)
+func (c *claudeModels) pick(ctx context.Context, worker *classifier.Worker, target work.ClaudeModel, effort string) (err error) {
+	sessionID := worker.ID
+	// Claude's answer to this switch is the first one it writes from now on
+	// (its transcript stamps milliseconds).
+	since := time.Now().Truncate(time.Millisecond)
 	open := true
 	defer func() {
 		if err != nil && open {
@@ -330,7 +335,7 @@ func (c *claudeModels) pick(ctx context.Context, sessionID string, target work.C
 	if err := c.screen.SendKey(sessionID, "s"); err != nil {
 		return err
 	}
-	if err := c.waitApplied(ctx, sessionID, switches); err != nil {
+	if err := c.waitApplied(ctx, worker, since); err != nil {
 		return err
 	}
 	open = false
@@ -425,42 +430,36 @@ func (c *claudeModels) waitPicker(ctx context.Context, sessionID string, ready f
 	}
 }
 
-const claudeSwitchPrefix = "Set model to "
-
-// waitApplied waits for Claude's own new line for the switch ("Set model to …
-// for this session only"), or reports Claude's last line. When Claude asks to
-// confirm a switch in a conversation already under way ("Switch model? …
-// the full history gets re-read"), the person's pick in the Model sheet is
-// that answer: its first option, "Yes, switch to …", is taken (the classifier
-// knows this confirm and never makes it the person's prompt). Claude's own
-// line is read flattened, as the terminal wraps it.
-func (c *claudeModels) waitApplied(ctx context.Context, sessionID string, switches int) error {
+// waitApplied waits for Claude's answer to the switch in its transcript ("Set
+// model to … for this session only"; anything else it answered is the
+// failure, in its words). The screen is read only for Claude's question in a
+// conversation already under way ("Switch model? … the full history gets
+// re-read"): the person's pick in the Model sheet is that answer, so its first
+// option, "Yes, switch to …", is taken (the classifier knows this confirm and
+// never makes it the person's prompt). Lines on the screen do not decide:
+// it keeps only its last ones, and after a few switches the earlier answers
+// have scrolled away (a counted switch then never "arrived").
+func (c *claudeModels) waitApplied(ctx context.Context, worker *classifier.Worker, since time.Time) error {
+	sessionID := worker.ID
 	deadline := time.Now().Add(claudeScreenWait)
 	confirmed := false
 	for {
+		if answer, ok := work.ReadClaudeModelAnswerSince(c.transcriptOf(worker), since); ok {
+			if answer.Named != "" && answer.SessionOnly {
+				return nil
+			}
+			return errors.New(answer.Line)
+		}
 		screen, err := c.screen.CapturePaneContent(sessionID)
 		if err != nil {
 			return err
 		}
-		flat := flatScreen(screen)
-		if _, open := work.ParseClaudePicker(screen); !open {
-			if strings.Count(flat, claudeSwitchPrefix) > switches {
-				line := flat[strings.LastIndex(flat, claudeSwitchPrefix):]
-				if end := strings.Index(line, " effort"); end >= 0 {
-					line = line[:end+len(" effort")]
-				}
-				if strings.Contains(line, "for this session only") {
-					return nil
-				}
-				return errors.New(line)
+		if _, open := work.ParseClaudePicker(screen); !open && !confirmed && classifier.ClaudeModelSwitchConfirm(screen) {
+			if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
+				return err
 			}
-			if !confirmed && classifier.ClaudeModelSwitchConfirm(screen) {
-				if err := c.screen.SendKey(sessionID, "Enter"); err != nil {
-					return err
-				}
-				confirmed = true
-				deadline = time.Now().Add(claudeScreenWait)
-			}
+			confirmed = true
+			deadline = time.Now().Add(claudeScreenWait)
 		}
 		if time.Now().After(deadline) || ctx.Err() != nil {
 			return fmt.Errorf("Claude did not confirm the switch: %s", lastLine(screen))
@@ -468,8 +467,6 @@ func (c *claudeModels) waitApplied(ctx context.Context, sessionID string, switch
 		time.Sleep(150 * time.Millisecond)
 	}
 }
-
-func flatScreen(screen string) string { return strings.Join(strings.Fields(screen), " ") }
 
 func lastLine(screen string) string {
 	lines := strings.Split(strings.TrimSpace(screen), "\n")
