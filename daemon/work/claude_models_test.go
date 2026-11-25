@@ -2,6 +2,7 @@ package work
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +110,30 @@ func TestClaudeModelsListRunsOnTheSessionsSignIn(t *testing.T) {
 	}
 	if got := withLaunchEnv(env, "claude --settings a=b"); !reflect.DeepEqual(got, env) {
 		t.Fatalf("plain launch env = %q, want the daemon's", got)
+	}
+}
+
+// Claude Code 2.1.331's prompt: the text after ❯ between two rules, wrapped
+// over lines; a picker or a question in its place is no prompt.
+func TestClaudePromptInputReadsThePromptBetweenItsRules(t *testing.T) {
+	rule := strings.Repeat("─", 40)
+	for _, tc := range []struct {
+		screen string
+		input  string
+		prompt bool
+	}{
+		{screen: "✻ Baked for 2s\n\n" + rule + "\n❯ \n" + rule + "\n  ⏵⏵ auto mode on (shift+tab to cycle)\n", prompt: true},
+		{screen: rule + "\n❯ /model\n" + rule + "\n  ◐ medium · /effort\n", input: "/model", prompt: true},
+		{screen: rule + "\n❯ Try \"refactor <filepath>\"\n" + rule + "\n", prompt: true},
+		{screen: rule + "\n❯ Resend your message to try again\n" + rule + "\n", prompt: true},
+		{screen: rule + "\n❯ fix the login bug and then\n  run the tests\n" + rule + "\n", input: "fix the login bug and then run the tests", prompt: true},
+		{screen: "  Select model\n  ❯ 4. Sonnet    Sonnet 5.5 · text\n    5. Haiku ✔\n"},
+		{screen: "  Switch model?\n  ❯ 1. Yes, switch to Sonnet 5.5\n    2. No, go back\n"},
+		{screen: "mewla-origin 59b03a01\n"},
+	} {
+		input, prompt := ClaudePromptInput(tc.screen)
+		if input != tc.input || prompt != tc.prompt {
+			t.Errorf("%q: input %q prompt %v, want %q %v", tc.screen, input, prompt, tc.input, tc.prompt)
+		}
 	}
 }

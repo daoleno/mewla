@@ -49,7 +49,7 @@ connection's models.
 
 | Agent | The list | A switch |
 | --- | --- | --- |
-| Claude Code | Its model picker (the `initialize` answer of `claude -p`), with each model's effort levels | Made in Claude's own picker with its "use this session only" key: the conversation goes on, and your default for new sessions stays as it is. After a turn Claude asks whether to switch (the next answer re-reads the conversation); your pick is that answer |
+| Claude Code | Its model picker (the `initialize` answer of `claude -p`), with each model's effort levels, each named with the version Claude gives it ("Opus 5.5"; Default with the model it runs on now) | Made in Claude's own picker with its "use this session only" key: the conversation goes on, and your default for new sessions stays as it is. After a turn Claude asks whether to switch (the next answer re-reads the conversation); your pick is that answer |
 | Codex | `model/list` of the Session's own app-server, with each model's efforts | Applied to the thread, before its first message too (its first turn runs on it) |
 | OpenCode | The service's models of the providers you signed in to, with their variants as efforts | `session.switchModel`: the next turn uses it. Until its first message OpenCode's own screen holds the model, so the choice appears once that message is sent |
 | Pi | The models Pi can use with your keys (your scoped ones when you scoped some), with the thinking levels Pi takes for each (no Default: Pi always thinks at one of them) | `pi.setModel` and `pi.setThinkingLevel` through Mewla's extension: the conversation goes on, your default stays |
@@ -57,8 +57,13 @@ connection's models.
 | DSH, Antigravity | The agent's own models | Applied at once |
 
 Claude, Cursor Agent and Grok take a switch between turns: a pick made while
-the agent works, or waits for your answer, shows with an hourglass and is
-made when the turn ends.
+the agent works, or waits for your answer, shows with an hourglass, the Model
+sheet says "Opus 5.5 after this turn", and it is made when the turn ends. The
+sheet, if still open, then shows the new model checked. A pick the agent did
+not take then is said in the sheet with the agent's reason, and as a notice in
+the Session. A switch between turns answers within seconds or fails with
+Claude's own last line; Mewla types `/model` only into Claude's empty prompt,
+never over your draft.
 
 A Session offers no model choice while its agent cannot give one: not signed
 in, a Codex still on a startup question or started by hand outside Mewla, a Pi

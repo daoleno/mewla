@@ -29,12 +29,20 @@ type fakeClaude struct {
 	selected int
 	pending  int
 	asks     bool
-	// deaf is how many /model Claude takes into its input without opening
-	// the picker (it has just started).
-	deaf    int
-	typed   string
-	history []string
-	keys    []string
+	// deaf is how many Enter a /model in Claude's prompt takes before the
+	// picker opens (Claude has just started).
+	deaf int
+	// lag is how many screens show the prompt before Claude shows typed text.
+	lag int
+	// swallow: Enter takes the prompt's text without opening the picker.
+	swallow bool
+	// placeholder is the dimmed suggestion an empty prompt shows.
+	placeholder string
+	typed       string
+	inputs      int
+	sent        []string
+	history     []string
+	keys        []string
 }
 
 func (f *fakeClaude) CapturePaneContent(string) (string, error) {
@@ -56,7 +64,19 @@ func (f *fakeClaude) CapturePaneContent(string) (string, error) {
 	if f.asks && f.pending >= 0 {
 		b.WriteString("  Switch model?\n  Your next response will be slower and use\n  more tokens\n\n  This conversation is cached.\n  ❯ 1. Yes, switch to " + f.names[f.pending] + "\n    2. No, go back\n")
 	}
-	b.WriteString("❯ \n")
+	if !f.open && (!f.asks || f.pending < 0) {
+		// Claude's prompt between its rules; typed text shows once Claude
+		// took it (lag: screens before it does).
+		shown := f.typed
+		if f.lag > 0 {
+			f.lag--
+			shown = ""
+		}
+		if shown == "" {
+			shown = f.placeholder
+		}
+		b.WriteString("────────────────────\n❯ " + shown + "\n────────────────────\n  ⏵⏵ auto mode on (shift+tab to cycle)\n")
+	}
 	return b.String(), nil
 }
 
@@ -67,6 +87,7 @@ func (f *fakeClaude) SendInput(_ string, text string) error {
 		return fmt.Errorf("typed %q", text)
 	}
 	f.typed += text
+	f.inputs++
 	return nil
 }
 
@@ -82,8 +103,25 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 			f.history = append(f.history, "❯ /model", "  ⎿  Set model to "+f.names[f.current]+" for this", "  session only with "+f.efforts[f.effort]+" effort")
 			return nil
 		}
-		if f.deaf > 0 {
-			f.deaf--
+		if f.deaf > 0 || f.lag > 0 {
+			// Not taking commands yet, or text and Enter came as one paste:
+			// the text stays in the prompt.
+			if f.deaf > 0 {
+				f.deaf--
+			}
+			return nil
+		}
+		if f.swallow {
+			// A Claude that takes the command without opening its picker
+			// (it queues it while a turn the hub missed runs).
+			f.sent = append(f.sent, f.typed)
+			f.typed = ""
+			return nil
+		}
+		if f.typed != "/model" {
+			// What Claude does with any other text: it is sent as a message.
+			f.sent = append(f.sent, f.typed)
+			f.typed = ""
 			return nil
 		}
 		f.typed = ""
@@ -102,8 +140,10 @@ func (f *fakeClaude) SendKey(_ string, key string) error {
 		}
 	case "Escape":
 		f.open = false
-	case "C-u":
-		f.typed = ""
+	case "BSpace":
+		if f.typed != "" {
+			f.typed = f.typed[:len(f.typed)-1]
+		}
 	case "s":
 		f.open = false
 		if f.asks {
@@ -321,6 +361,77 @@ func TestClaudeCurrentFollowsTheTranscript(t *testing.T) {
 	}
 }
 
+// The person reads what they get: each model with its version, as Claude's
+// own lines name it, and Default with the model it runs on now (11-25: the
+// sheet said "Opus", "Sonnet", "Default (recommended)").
+func TestClaudeMenuNamesEachModelWithItsVersion(t *testing.T) {
+	models := claudeModelsForTest(newFakeClaude())
+	got, err := models.Models(context.Background(), &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, model := range got.Models {
+		names = append(names, model.ID+"="+model.Name)
+	}
+	if want := "default=Default · Opus 5.5 opus=Opus 5.5 fable=Fable 5.2 sonnet=Sonnet 5.5"; strings.Join(names, " ") != want {
+		t.Fatalf("menu = %q, want %q", strings.Join(names, " "), want)
+	}
+	// A model Claude gives no name keeps its picker label.
+	if label := claudeModelLabel(nil, work.ClaudeModel{Value: "custom", DisplayName: "Custom"}); label != "Custom" {
+		t.Fatalf("unnamed model = %q", label)
+	}
+}
+
+// A pick held for the end of a turn that Claude then does not take is said in
+// the menu, with Claude's reason, until the next pick: it was only logged,
+// and the Model sheet showed the old model with nothing said.
+func TestClaudeHeldPickThatFailsSaysWhy(t *testing.T) {
+	screen := newFakeClaude()
+	hub := agentevents.NewHub()
+	models := claudeModelsForTest(screen)
+	models.hub = hub
+	models.later = newTurnPending(hub)
+	models.later.poll = 10 * time.Millisecond
+	broken := &brokenScreen{fakeClaude: screen, gone: true}
+	models.screen = broken
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnStarted, TurnID: "t1", At: time.Now()})
+	if _, err := models.SetModel(context.Background(), worker, "fable", "high"); err != nil {
+		t.Fatal(err)
+	}
+	hub.Publish(agentevents.Event{WorkerID: "w1", Kind: agentevents.KindTurnFinished, TurnID: "t1", Status: agentevents.TurnCompleted, At: time.Now()})
+	deadline := time.Now().Add(5 * time.Second)
+	for models.later.of("w1") != nil && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	after, err := models.Models(context.Background(), worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Pending != nil || after.Failed == nil || after.Failed.Model != "fable" || after.Failed.Effort != "high" || !strings.Contains(after.Failed.Reason, "the pane is gone") {
+		t.Fatalf("after a failed held pick: pending %#v failed %#v", after.Pending, after.Failed)
+	}
+	// The next pick clears it.
+	broken.gone = false
+	if after, err = models.SetModel(context.Background(), worker, "opus", ""); err != nil || after.Failed != nil {
+		t.Fatalf("next pick: %v, failed %#v", err, after.Failed)
+	}
+}
+
+// brokenScreen is a Session whose screen cannot be read (its pane is gone).
+type brokenScreen struct {
+	*fakeClaude
+	gone bool
+}
+
+func (b *brokenScreen) CapturePaneContent(id string) (string, error) {
+	if b.gone {
+		return "", errors.New("the pane is gone")
+	}
+	return b.fakeClaude.CapturePaneContent(id)
+}
+
 // A Claude that has just started takes /model into its input without opening
 // its picker: Mewla clears it and types it again (11-24 gate: the first pick
 // on a new Session failed and left "/model" in Claude's input).
@@ -333,8 +444,59 @@ func TestClaudeSwitchRetriesAClaudeNotReadyYet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Current != "fable" || screen.typed != "" {
-		t.Fatalf("current %q, input left %q", after.Current, screen.typed)
+	if after.Current != "fable" || screen.typed != "" || screen.inputs != 1 || len(screen.sent) != 0 {
+		t.Fatalf("current %q, input left %q, typed %d times, sent %q", after.Current, screen.typed, screen.inputs, screen.sent)
+	}
+}
+
+// A new Claude shows typed text a moment after it took it; an Enter before
+// that is part of a paste. /model is entered once Claude shows it, and never
+// typed twice (11-25: a new Session's retry made "/model/model", which
+// Claude answered as a message, and the switch took 16 s).
+func TestClaudeSwitchEntersModelOnceClaudeShowsIt(t *testing.T) {
+	screen := newFakeClaude()
+	screen.lag = 3
+	screen.placeholder = `Try "refactor <filepath>"`
+	models := claudeModelsForTest(screen)
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	started := time.Now()
+	after, err := models.SetModel(context.Background(), worker, "fable", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Current != "fable" || screen.inputs != 1 || len(screen.sent) != 0 || time.Since(started) > 3*time.Second {
+		t.Fatalf("current %q, typed %d times, sent %q, took %s", after.Current, screen.inputs, screen.sent, time.Since(started))
+	}
+}
+
+// A /model Claude took without opening its picker is never typed again: the
+// switch fails with Claude's last line, and at most the one /model went in.
+func TestClaudeSwitchNeverTypesModelTwice(t *testing.T) {
+	screen := newFakeClaude()
+	screen.swallow = true
+	models := claudeModelsForTest(screen)
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	if _, err := models.SetModel(context.Background(), worker, "fable", ""); err == nil {
+		t.Fatal("a picker that never opened was reported as a switch")
+	}
+	if screen.inputs != 1 || len(screen.sent) > 1 {
+		t.Fatalf("typed %d times, sent %q", screen.inputs, screen.sent)
+	}
+}
+
+// The person's own text in Claude's prompt is left as it is: the switch is
+// refused with the reason, and nothing is typed or entered.
+func TestClaudeSwitchLeavesThePersonsDraft(t *testing.T) {
+	screen := newFakeClaude()
+	screen.typed = "fix the login bug"
+	models := claudeModelsForTest(screen)
+	worker := &classifier.Worker{ID: "w1", Command: "claude", Cwd: t.TempDir()}
+	_, err := models.SetModel(context.Background(), worker, "fable", "")
+	if err == nil || !strings.Contains(err.Error(), "fix the login bug") {
+		t.Fatalf("err = %v", err)
+	}
+	if screen.typed != "fix the login bug" || len(screen.keys) != 0 || len(screen.sent) != 0 {
+		t.Fatalf("draft %q, keys %v, sent %q", screen.typed, screen.keys, screen.sent)
 	}
 }
 

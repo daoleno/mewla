@@ -15,6 +15,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -37,6 +38,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
 
@@ -470,8 +472,16 @@ type runtimeView struct {
 	connection       string
 	current, pending choice
 	models           map[string][]string
+	names            map[string]string
 	order            []string
+	// failed is a held pick the agent did not take, and its reason.
+	failed, failedReason string
 }
+
+// switchLands bounds how long a pick may take to be in force: the answer to
+// an idle pick, and a held pick after the turn it waited for ended. The
+// Model sheet's hourglass is never longer (11-25: it looked endless).
+const switchLands = 15 * time.Second
 
 func (g *gate) runtime(s *session) (runtimeView, error) {
 	reply, err := g.c.request(map[string]any{"type": "get_thread_runtime", "worker_id": s.id}, 40*time.Second, "thread_runtime")
@@ -488,7 +498,8 @@ func (g *gate) runtime(s *session) (runtimeView, error) {
 func parseRuntime(reply map[string]any) runtimeView {
 	r, _ := reply["runtime"].(map[string]any)
 	str := func(key string) string { v, _ := r[key].(string); return v }
-	view := runtimeView{connection: str("connection_id"), current: choice{str("model_id"), str("reasoning_effort")}, pending: choice{str("pending_model_id"), str("pending_reasoning_effort")}, models: map[string][]string{}}
+	view := runtimeView{connection: str("connection_id"), current: choice{str("model_id"), str("reasoning_effort")}, pending: choice{str("pending_model_id"), str("pending_reasoning_effort")}, models: map[string][]string{}, names: map[string]string{},
+		failed: str("failed_model_id"), failedReason: str("failed_reason")}
 	models, _ := r["native_models"].([]any)
 	for _, raw := range models {
 		m, _ := raw.(map[string]any)
@@ -501,6 +512,7 @@ func parseRuntime(reply map[string]any) runtimeView {
 			}
 		}
 		view.models[id] = efforts
+		view.names[id], _ = m["display_name"].(string)
 		view.order = append(view.order, id)
 	}
 	return view
@@ -517,7 +529,11 @@ func (g *gate) pick(s *session, want choice) (string, bool) {
 	if want.effort != "" {
 		runtime["effect"] = want.effort
 	}
+	started := time.Now()
 	reply, err := g.c.request(map[string]any{"type": "set_thread_runtime", "worker_id": s.id, "runtime": runtime}, 60*time.Second, "thread_runtime_set")
+	if took := time.Since(started); took > switchLands {
+		return fmt.Sprintf("answered after %s (more than %s)", took.Round(time.Second), switchLands), false
+	}
 	if err != nil {
 		command := s.command
 		if len(command) > 60 {
@@ -526,17 +542,84 @@ func (g *gate) pick(s *session, want choice) (string, bool) {
 		return "refused: " + err.Error() + " (Session command: " + command + ")", false
 	}
 	view := parseRuntime(reply)
+	took := time.Since(started).Round(100 * time.Millisecond)
 	switch {
 	case view.pending.model == want.model && (want.effort == "" || view.pending.effort == want.effort):
-		return "pending", true
+		return fmt.Sprintf("pending (answered in %s)", took), true
 	case view.current.model == want.model && (want.effort == "" || view.current.effort == want.effort):
-		return "applied", true
+		return fmt.Sprintf("applied in %s", took), true
 	}
 	// What the Model sheet calls "an invalid activation selection".
 	return fmt.Sprintf("echo %s, asked %s", view.current, want), false
 }
 
 func providerOf(agent string) string { return agent }
+
+// lands waits for a held pick to be what the Session runs on, with nothing
+// pending, within switchLands.
+func (g *gate) lands(s *session, want choice) (bool, string) {
+	deadline := time.Now().Add(switchLands)
+	last := "no read"
+	for {
+		view, err := g.runtime(s)
+		switch {
+		case err != nil:
+			last = err.Error()
+		case view.failed != "":
+			return false, "the held pick failed: " + view.failedReason
+		case view.pending.model == "" && view.current.matches(s.agent, want):
+			return true, ""
+		default:
+			last = fmt.Sprintf("current %s, pending %s", view.current, view.pending)
+		}
+		if time.Now().After(deadline) {
+			return false, fmt.Sprintf("not in force %s after the turn ended: %s", switchLands, last)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+// claudeLabels checks the menu's names against Claude's own model list, read
+// here the way the daemon reads it: each model reads with the version Claude
+// names it by ("Opus 5.5"), Default with the model it runs on (11-25: the
+// sheet said "Opus", "Default (recommended)").
+func (g *gate) claudeLabels(s *session, view runtimeView) {
+	cl := cell{agent: s.agent, moment: "labels", offered: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	command := s.command
+	if work.LaunchProgramProvider(command) != work.WorkerProviderClaude {
+		command = defaultCommands["claude"]
+	}
+	own, err := work.ReadClaudeModels(ctx, command, s.cwd, os.Environ())
+	if err != nil {
+		cl.note = "Claude's own list: " + err.Error()
+		g.add(cl)
+		return
+	}
+	named := map[string]string{}
+	for _, model := range own {
+		if model.Name != "" {
+			named[model.Resolved] = model.Name
+		}
+	}
+	var shown, wrong []string
+	for _, model := range own {
+		label := view.names[model.Value]
+		shown = append(shown, label)
+		want := model.Name
+		if model.Value == "default" {
+			want = named[model.Resolved]
+		}
+		if want != "" && !strings.Contains(label, want) {
+			wrong = append(wrong, fmt.Sprintf("%s reads %q, Claude names it %q", model.Value, label, want))
+		}
+	}
+	cl.reply, cl.evidence = strings.Join(shown, ", "), fmt.Sprintf("%d models from Claude", len(own))
+	cl.pass = len(own) > 0 && len(wrong) == 0
+	cl.note = strings.Join(wrong, "; ")
+	g.add(cl)
+}
 
 // targets picks two cheap choices the Session's menu offers.
 func (g *gate) targets(s *session, view runtimeView) [2]choice {
@@ -626,6 +709,9 @@ func (g *gate) walk(s *session) {
 		g.add(cell{agent: s.agent, moment: "read", offered: true, note: err.Error()})
 		return
 	}
+	if s.agent == "claude" {
+		g.claudeLabels(s, view)
+	}
 	targets := g.targets(s, view)
 	moments := []struct {
 		name   string
@@ -671,7 +757,17 @@ func (g *gate) moment(s *session, name string, want choice, during string) {
 			time.Sleep(30 * time.Second)
 		}
 		close(stop)
-		time.Sleep(5 * time.Second) // a held pick is made as the turn ends
+		// A held pick is made as the turn ends: in force within switchLands,
+		// or the gate fails (the gate passed a pick that stayed pending).
+		if strings.HasPrefix(cl.reply, "pending") {
+			ended := time.Now()
+			if landed, why := g.lands(s, want); !landed {
+				cl.pass, cl.note = false, why
+				g.add(cl)
+				return
+			}
+			cl.reply += fmt.Sprintf(", then applied %s after the turn", time.Since(ended).Round(100*time.Millisecond))
+		}
 	} else {
 		cl.reply, cl.pass = g.pick(s, want)
 	}

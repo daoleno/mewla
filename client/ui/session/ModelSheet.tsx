@@ -12,6 +12,7 @@ import {
   reasoningEffortLabel,
   refetchFoundBindingNotSwitchable,
   runtimeChoiceForRow,
+  runtimeSwitchNote,
   threadRuntimeRows,
   type ProviderPickerModelRow,
 } from "../../core/session/sessionModelHelpers";
@@ -19,6 +20,9 @@ import { getThreadRuntime, setThreadRuntime, threadRuntimeCatalog } from "../../
 import { Icon } from "../icons/Icon";
 
 type Problem = { title: string; message: string };
+
+/** How often an open sheet reads a pick held for the end of the agent's turn. */
+const PENDING_REREAD_MS = 2_000;
 
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -30,7 +34,11 @@ function messageOf(error: unknown, fallback: string): string {
  * (Back returns). A current model that is no longer offered is listed and
  * flagged. A switch closes the sheet once the computer saved it; a failure says
  * why, and Retry reloads (after an unknown outcome a reload is required before
- * the next switch). Shown only for a Session where `canSwitchModel` holds.
+ * the next switch). A pick the agent takes when its turn ends keeps the sheet
+ * open and says so ("Opus 5.5 after this turn"); the sheet reads the runtime
+ * again while it waits, so the mark moves once the agent switched, and a pick
+ * the agent did not take says why. Shown only for a Session where
+ * `canSwitchModel` holds.
  *
  * Mount one per Session (and computer): it keeps what it read between openings.
  * `onRuntime` hears each runtime read or applied, so the composer's model chip
@@ -71,6 +79,7 @@ export function ModelPanel(props: {
   const effectKey = signal("");
 
   const rows = () => threadRuntimeRows({ snapshot: catalog(), selection: selection(), activating: activating() });
+  const note = () => runtimeSwitchNote(selection());
   const effectTarget = () => (effectKey() ? rows().find((row) => row.key === effectKey()) ?? null : null);
 
   const load = async () => {
@@ -116,6 +125,8 @@ export function ModelPanel(props: {
         owner.settleRuntimeSwitch(token, { refreshRequired: outcome === "applied_uncertain" });
         selection.set(result.runtime);
         props.onRuntime?.(result.runtime);
+        // Held for the end of the agent's turn: the sheet stays and says so.
+        if (result.runtime.pending_model_id) return effectKey.set("");
         if (outcome === "applied_durable") return props.onClose();
         return problem.set({ title: "Switched", message: durabilityWarningMessage(result.persistence) });
       }
@@ -151,6 +162,28 @@ export function ModelPanel(props: {
     if (props.shown()) untracked(() => void load());
     else effectKey.set("");
   });
+  // While a pick waits for the end of the agent's turn, the open sheet reads
+  // the runtime again (the runtime only: no catalog, no new request turn), so
+  // it shows the switch once the agent made it, or why it did not (11-25: the
+  // hourglass stayed after Claude had switched).
+  effect(() => {
+    if (!props.shown() || !selection()?.pending_model_id) return;
+    let stopped = false;
+    const timer = setInterval(() => {
+      if (untracked(activating)) return;
+      void getThreadRuntime(props.transport, props.workerId)
+        .then((next) => {
+          if (stopped || untracked(activating)) return;
+          selection.set(next);
+          props.onRuntime?.(next);
+        })
+        .catch(() => {});
+    }, PENDING_REREAD_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  });
 
   return (
     <View testID="model-sheet" class="gap-3 pb-8">
@@ -174,13 +207,13 @@ export function ModelPanel(props: {
                       <Text class="text-base line-clamp-1">{row.label}</Text>
                       <If when={row.unavailableCurrent}><Text testID="model-unavailable-current" class="text-xs text-muted-foreground">Current runtime is no longer selectable.</Text></If>
                     </View>
-                    <If when={row.pending}><Icon name="hourglass" size={16} color="muted-foreground" /></If>
-                    <If when={row.current && !row.pending}><Icon name="check" size={18} color="primary" /></If>
+                    <If when={row.pending}><View testID={`model-pending-${row.modelId}`}><Icon name="hourglass" size={16} color="muted-foreground" /></View></If>
+                    <If when={row.current && !row.pending}><View testID={`model-current-${row.modelId}`}><Icon name="check" size={18} color="primary" /></View></If>
                     <If when={row.effects.length > 0}><Icon name="chevron-right" size={18} /></If>
                   </Button>
                 ))}
               </View></If>}><View class="gap-2">
-                <Text class="text-xs text-muted-foreground">{effectTarget()!.modelId}</Text>
+                <Text class="text-xs text-muted-foreground">{effectTarget()!.label}</Text>
                 <View class="overflow-hidden rounded-xl border border-border bg-card">
                   {effectRowsForRuntime(effectTarget()!).map((entry) => (
                     <Button testID={`effect-row-${entry.key}`} accessibilityLabel={`Use ${reasoningEffortLabel(entry.effect)} effect`} disabled={activating()}
@@ -199,6 +232,7 @@ export function ModelPanel(props: {
               </View></If>
 
             <If when={activating()}><Text class="py-1 text-sm text-muted-foreground">Switching…</Text></If>
+            <If when={!activating() && note()}><Text testID="model-switch-note" class={note()!.kind === "failed" ? "py-1 text-sm text-destructive" : "py-1 text-sm text-muted-foreground"}>{note()!.text}</Text></If>
             <If when={problem()}><View testID="model-problem" class="gap-2 rounded-xl border border-border bg-card px-3 py-3">
                 <Text class="text-sm font-semibold text-destructive">{problem()!.title}</Text>
                 <Text class="text-sm text-muted-foreground">{problem()!.message}</Text>

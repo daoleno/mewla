@@ -24,7 +24,7 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { sessionStateWord } from "../../core/sessions/workerStatusPresentation";
-import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
+import { resolveComposerModelControl, runtimeSwitchNote } from "../../core/session/sessionModelHelpers";
 import { canSwitchModel, getThreadRuntime } from "../../core/session/sessionRequests";
 import { chatImage } from "../chat/assets";
 import type { ThreadRuntimeSelection } from "../../core/providers/types";
@@ -296,11 +296,30 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     };
   });
   // A model picked while the agent worked is taken when its turn ends: read
-  // the runtime again then, so the chip shows what the agent runs on.
+  // the runtime again then, until the pick is made, so the chip shows what the
+  // agent runs on; a pick the agent did not take says why (11-25: it was only
+  // logged on the computer).
   effect(() => {
     if (activity()?.status === "running" || !untracked(runtime)?.pending_model_id) return;
-    const timer = setTimeout(() => void getThreadRuntime(transport, props.workerId).then((selection) => runtime.set(selection)).catch(() => {}), 2500);
-    return () => clearTimeout(timer);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = (attempt: number): void => {
+      timer = setTimeout(() => void getThreadRuntime(transport, props.workerId).then((selection) => {
+        if (stopped) return;
+        runtime.set(selection);
+        if (selection.pending_model_id) {
+          if (attempt < 8) read(attempt + 1);
+          return;
+        }
+        const note = runtimeSwitchNote(selection);
+        if (note?.kind === "failed") notice.set(note.text);
+      }).catch(() => {}), 2000);
+    };
+    read(0);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   });
   // A DSH Session's web UI, when the computer runs it.
   const dshWeb = signal<string | null>(null);
