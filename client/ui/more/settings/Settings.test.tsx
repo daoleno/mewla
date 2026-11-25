@@ -295,6 +295,48 @@ describe("Virtual screen and Phone use", () => {
     await app.waitUntil(() => app.texts().includes("On"));
   });
 
+  test("Share anonymous usage counts is the computer's switch: off tells it, on again tells it", async () => {
+    let enabled = true;
+    const posted: Array<Record<string, unknown>> = [];
+    const c = computer({ name: "settings" }, () => null, {
+      network: {
+        "GET http://desk.test:9877/auth-check": { status: 503 },
+        "GET http://desk.test:9877/usage": () => json({ enabled, locked: "" }),
+        "POST http://desk.test:9877/usage": (request: { body?: string }) => {
+          const body = JSON.parse(String(request.body)) as Record<string, unknown>;
+          posted.push(body);
+          if (body.action === "set") enabled = body.enabled === true;
+          return json({ enabled, locked: "" });
+        },
+      },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:usage-counts");
+    expect(app.texts()).toContain("Privacy");
+    await pressWhenEnabled(app, "id:usage-counts");
+    await app.waitUntil(() => !enabled);
+    expect(posted.filter((b) => b.action === "set")).toEqual([{ action: "set", enabled: false }]);
+    await pressWhenEnabled(app, "id:usage-counts");
+    await app.waitUntil(() => enabled);
+  });
+
+  test("usage counts locked off on the computer show why and take no press; an older computer has no row", async () => {
+    const locked = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "GET http://desk.test:9877/usage": json({ enabled: false, locked: "environment" }) },
+    });
+    let app = await open(HARNESS, locked.options);
+    await app.waitFor("text:Off on this computer by MEWLA_TELEMETRY or DO_NOT_TRACK");
+    expect(app.enabled("id:usage-counts")).toBe(false);
+
+    const older = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "GET http://desk.test:9877/usage": { status: 404, body: "404 page not found" } },
+    });
+    app = await open(HARNESS, older.options);
+    await app.waitUntil(() => app.requests().some((r) => r.url === "http://desk.test:9877/usage"));
+    await app.waitFor("text:Outside agents");
+    expect(app.shows("id:usage-counts")).toBe(false);
+  });
+
   test("a computer without a virtual screen has no Virtual screen row", async () => {
     const c = computer({ name: "settings" }, () => null, {
       network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "POST http://desk.test:9877/browser": json({ virtual_screen: false, virtual_screen_unsupported: true }) },

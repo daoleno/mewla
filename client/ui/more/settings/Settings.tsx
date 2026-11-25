@@ -15,6 +15,7 @@ import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
 import { markAppUpdateSeen } from "../../update/hint";
 import { appUpdateWaiting } from "../../update/update";
+import { chooseUsage, followUsage, usageLockedText, usageState } from "./usage";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
 export type Appearance = "system" | "light" | "dark";
@@ -92,6 +93,7 @@ export function Settings(props: { nav: PageNav }) {
   followFriends();
   if (!onWeb()) void loadStrongAlerts();
   followVirtualScreen();
+  followUsage();
   // iPhone use, every 15 s while Settings is open: an agent may start or stop using it.
   let iphoneTimer: ReturnType<typeof setInterval> | null = null;
   effect(() => {
@@ -176,6 +178,20 @@ export function Settings(props: { nav: PageNav }) {
       <Section title="Pet">
         <Row testID="settings-pet" lead={{ kind: "art", src: pet().art.portrait }} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
       </Section>
+
+      {/* Usage counts: the current computer holds the switch, for itself and its phones; an older Mewla has none. */}
+      <If when={usageState().enabled !== null}><Section title="Privacy">
+        <SwitchRow
+          testID="usage-counts"
+          lead={tile("stats")}
+          title="Share anonymous usage counts"
+          subtitle={usageLockedText(usageState().locked) || usageState().error || undefined}
+          checked={usageState().enabled === true}
+          busy={usageState().busy}
+          disabled={usageState().locked !== ""}
+          onChange={chooseUsage}
+        />
+      </Section></If>
 
       <Section title="About">
         <Row lead={tile("info")} title="Mewla" value={`Version ${manifest.version}`} accessibilityLabel={`Mewla, Version ${manifest.version}`} />
