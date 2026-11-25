@@ -94,6 +94,7 @@ export function startMac(): void {
         main.hide();
         offerShortcutOnce();
       });
+      reenterFullScreen(main);
     });
   });
   // The Dock icon while the window shows; with it closed (⌘W hides it) only the menu bar cat stays.
@@ -341,6 +342,32 @@ export function startMac(): void {
 }
 
 /** Opens the page of what `find` names once it exists (`watch` changes as it may come), then focuses its composer. */
+/**
+ * The window kept in full screen (`restoreBounds`, client/macos/src/main.rs) comes back in full screen. NSH 0.7 holds a
+ * kept full screen until the window first shows and enters it then, into a Space macOS never brings up: the app runs
+ * with no window on screen (NSH-ISSUE-fullscreen-relaunch.md; the Mac capture run saw it on every launch after its
+ * full screen one). So, once it shows: out of that full screen, and into it again from the shown window, as a person's
+ * own ⌃⌘F does, which macOS brings up.
+ */
+function reenterFullScreen(main: WindowRef): void {
+  const pending = signal(false);
+  void Storage.getItem("nsh.window:main").then((kept) => {
+    try {
+      if ((JSON.parse(kept ?? "null") as { mode?: string } | null)?.mode === "fullScreen") pending.set(true);
+    } catch {
+      // Nothing kept, or not a placement: it opens as NSH opens it.
+    }
+  });
+  effect(() => {
+    const state = main.state();
+    if (!pending() || !state?.visible) return;
+    if (state.mode === "fullScreen") return untracked(() => main.setMode("normal"));
+    pending.set(false);
+    console.log("window: main back in full screen");
+    untracked(() => main.setMode("fullScreen"));
+  });
+}
+
 function openOnceThere(what: string, find: () => string | undefined, watch: () => unknown, open: (id: string) => void): void {
   let opened = false;
   effect(() => {
