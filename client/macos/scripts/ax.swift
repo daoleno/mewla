@@ -4,6 +4,9 @@
 //   swift ax.swift click <app> <x> <y>   a click there through the system's event stream
 //   swift ax.swift texts <app>           every text, title and description in its windows, one per line (a dialog)
 //   swift ax.swift press <app> <title>   presses its button titled <title> ("Allow", "Don't Allow")
+//   swift ax.swift close <app>           presses the close button of its largest window, as a person's click on it
+//   swift ax.swift field <app>           the middle ("x y") of the largest text field or text area in its windows (a composer)
+//   swift ax.swift windows <app>         its windows, one per line: "<width>x<height> <title>"
 // <app> is its name or bundle id. Exits 1 when it finds nothing.
 import AppKit
 import ApplicationServices
@@ -34,6 +37,12 @@ func middle(_ e: AXUIElement) -> CGPoint? {
   AXValueGetValue(s as! AXValue, .cgSize, &size)
   return size.width > 0 && size.height > 0 ? CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2) : nil
 }
+func size(_ e: AXUIElement) -> CGSize {
+  var size = CGSize.zero
+  if let s = attr(e, kAXSizeAttribute) { AXValueGetValue(s as! AXValue, .cgSize, &size) }
+  return size
+}
+func area(_ e: AXUIElement) -> CGFloat { size(e).width * size(e).height }
 var all: [AXUIElement] = []
 func walk(_ e: AXUIElement, _ depth: Int) {
   guard depth < 40, all.count < 20000 else { return }
@@ -53,6 +62,18 @@ case "texts":
 case "press":
   guard a.count == 4, let button = all.first(where: { role($0) == kAXButtonRole && texts($0).contains(a[3]) }) else { exit(1) }
   exit(AXUIElementPerformAction(button, kAXPressAction as CFString) == .success ? 0 : 1)
+case "close":
+  let windows = (attr(root, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+  guard let window = windows.max(by: { area($0) < area($1) }), let button = attr(window, kAXCloseButtonAttribute) else { exit(1) }
+  exit(AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success ? 0 : 1)
+case "field":
+  let fields = all.filter { [kAXTextFieldRole, kAXTextAreaRole].contains(role($0)) && middle($0) != nil }
+  guard let field = fields.max(by: { area($0) < area($1) }), let at = middle(field) else { exit(1) }
+  print(Int(at.x), Int(at.y))
+case "windows":
+  for window in (attr(root, kAXWindowsAttribute) as? [AXUIElement]) ?? [] {
+    print("\(Int(size(window).width))x\(Int(size(window).height)) \(attr(window, kAXTitleAttribute) as? String ?? "")")
+  }
 default:
   exit(2)
 }

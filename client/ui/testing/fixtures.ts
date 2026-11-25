@@ -151,3 +151,20 @@ export async function typeUntil(app: Awaited<ReturnType<typeof open>>, selector:
     }
   }
 }
+
+/**
+ * What the reader's eyes are on in a chat: the first `Message N.` row on screen in the list `list` (a test id) and
+ * its top, rounded: `"Message 41. at 120"`. A chat read back up must keep it whatever news comes. Which rows are
+ * mounted (`app.texts()`) is not it: NSH 0.7 lets go of rows further out of view, so the first mounted one changes
+ * while nothing on screen moves.
+ */
+export function rowInView(app: Awaited<ReturnType<typeof open>>, list: string): string | undefined {
+  const box = app.layout(`id:${list}`);
+  if (!box) return undefined;
+  for (const text of app.texts()) {
+    if (!text.startsWith("Message ")) continue;
+    const row = app.layout(`text:${text}`);
+    if (row && row.y + row.height > box.y + 1) return `${text.slice(0, text.indexOf(".") + 1)} at ${Math.round(row.y)}`;
+  }
+  return undefined;
+}

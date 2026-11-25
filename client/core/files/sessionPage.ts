@@ -32,17 +32,23 @@ export function sessionPageUrl(serverUrl: string, path: string): string | null {
 
 /**
  * Whether the app's own web view shows the page: in a browser always (a frame of the page's own computer), elsewhere
- * when the page is on a host the app's `webview.hosts` grants (nsh.json): `127.0.0.1`, where a computer paired through
- * Mewla Relay (and Mewla for Mac's own) is reached. A computer paired by its address (Wi-Fi/LAN, Tailscale, an https
- * address) is not, until the web view can be granted the current computer's origin at run time: there the page opens
- * in the system browser, which reaches that address.
+ * any page on http(s). A host `webview.hosts` grants (nsh.json: `127.0.0.1`, where a computer paired through Mewla
+ * Relay and Mewla for Mac's own are reached) shows as it is; the page of a computer paired by its address (Wi-Fi/LAN,
+ * Tailscale, an https address) shows under the grant of its own origin, made while the app runs (`sessionPageOrigin`,
+ * NSH 0.7's `allowOrigin` with `webview.runtimeOrigin`).
  */
 export function sessionPageShowsInApp(url: string, os: string): boolean {
   if (os === "web") return true;
+  return sessionPageOrigin(url) !== null;
+}
+
+/** The page's origin (`http(s)://host[:port]`), the one more origin its web view is granted; null for anything else. */
+export function sessionPageOrigin(url: string): string | null {
   try {
-    return new URL(url).hostname === "127.0.0.1";
+    const page = new URL(url);
+    return page.protocol === "http:" || page.protocol === "https:" ? page.origin : null;
   } catch {
-    return false;
+    return null;
   }
 }
 

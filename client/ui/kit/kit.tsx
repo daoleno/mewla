@@ -1,5 +1,5 @@
 import type { AccessibilityRole, JSX, ScrollRef } from "nsh";
-import { announce, Clipboard, effect, platform, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import { announce, effect, platform, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
 import { CAPSULE, capsulePageInset, capsuleRailPageInset } from "../../core/shell/capsule";
 import { Button, Input, Switch } from "nsh/base";
@@ -19,6 +19,7 @@ import { BusyPlace, Delayed, delayed, Spinner } from "./wait";
 export { Spinner };
 import { showAlert } from "../shell/alert";
 import { bottomBarInset } from "../shell/below";
+import { writeClipboard } from "./clipboard";
 
 /**
  * The building blocks of the pages: a page with the system header, groups of rows
@@ -598,7 +599,7 @@ export async function copyMenu(title: string, choices: ReadonlyArray<{ label: st
   const chosen = answer.action && answer.action !== "cancel" ? choices[Number(answer.action)] : undefined;
   if (!chosen) return;
   try {
-    await Clipboard.writeText(chosen.value);
+    await writeClipboard(chosen.value);
     announce("Copied");
   } catch {
     // A refused copy is not worth a message.

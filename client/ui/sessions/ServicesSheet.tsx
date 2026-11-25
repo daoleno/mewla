@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, effect, openUrl, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, openUrl, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { EmptyState, Notice, Row, Section, SectionLabel, Spinner } from "../kit/kit";
 import { Sheet } from "../kit/Sheet";
@@ -19,6 +19,7 @@ import {
 } from "../../core/sessions/servicesPresentation";
 import { connection, current, currentTransport } from "../session";
 import { showAlert } from "../shell/alert";
+import { writeClipboard } from "../kit/clipboard";
 
 /** Open from the Sessions list's menu. */
 export const servicesOpen = signal(false);
@@ -83,7 +84,7 @@ function ServiceDetail(props: { service: () => DiscoveredSessionService; onBack:
     if (action === "start") void run("start");
   };
   const copy = async (url: string) => {
-    await Clipboard.writeText(url).catch(() => {});
+    if (!(await writeClipboard(url).then(() => true, () => false))) return;
     copied.set(true);
     clearTimeout(copiedTimer);
     copiedTimer = setTimeout(() => copied.set(false), 1600);

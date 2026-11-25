@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, effect, host, openUrl, platform as nshPlatform, signal, untracked } from "nsh";
+import { cleanup, effect, host, openUrl, platform as nshPlatform, signal, untracked } from "nsh";
 import { ConnectionsFlow, initialFlowState, type FlowState, type WebDeps, type WebReturn } from "../../../core/extensions/connectionsFlow";
 import type { ConnectionResponse } from "../../../core/extensions/connections";
 import { isPluginReturnUrl, retainPluginReturn } from "../../../core/extensions/pluginOnboarding";
@@ -7,6 +7,7 @@ import { platform } from "../../../core/platform";
 import { servers } from "../../session";
 import { daemon, daemonState } from "../daemon";
 import { inFront } from "../../kit/inFront";
+import { writeClipboard } from "../../kit/clipboard";
 
 /**
  * The Plugins of the current computer: one connect flow per computer, made when
@@ -136,7 +137,7 @@ effect(() => {
       // A new tab the browser blocked (it came seconds after the tap) is said by `opened`: the card then leads with Open,
       // a tap the browser lets through.
       openUrl: (url) => openUrl(url).then((result) => result.opened),
-      copy: (text) => Clipboard.writeText(text),
+      copy: (text) => writeClipboard(text),
       now: () => Date.now(),
       every: (ms, run) => {
         const timer = setInterval(run, ms);

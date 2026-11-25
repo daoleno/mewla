@@ -305,7 +305,7 @@ fn set_dock_icon(shown: bool) {
 }
 
 /// The app's `nsh` resources and its window's options, read as NSH's release runner reads them
-/// (nsh-macos-app `setup`, NSH 0.6.1, Apache-2.0), with the app's data directory from `MEWLA_APP_DATA_DIR`.
+/// (nsh-macos-app `setup`, NSH 0.7.0, Apache-2.0), with the app's data directory from `MEWLA_APP_DATA_DIR`.
 #[cfg(target_os = "macos")]
 fn setup() -> (std::path::PathBuf, nsh_platform_macos::AppOptions) {
     use nsh_platform_macos::{ActivationPolicy, AppOptions, Appearance, AssetBase, Limits};

@@ -1,4 +1,4 @@
-import { Clipboard, effect, signal, Text, untracked, View } from "nsh";
+import { effect, signal, Text, untracked, View } from "nsh";
 import { Button, Menu, MenuItem } from "nsh/base";
 import { presentProviderError } from "../../../core/providers/errors";
 import { providerEditorCanSave, providerEditorInitialBaseUrl, providerEditorInitialName, providerEditorRequiresBaseUrl, type ProvidersEditorState } from "../../../core/providers/editorModel";
@@ -31,6 +31,7 @@ import { Segmented } from "../../kit/Segmented";
 import { createTabPager, TabPages } from "../../kit/TabPager";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
+import { writeClipboard } from "../../kit/clipboard";
 
 const CLIENTS = [
   { key: "codex", label: "Codex", mark: AGENT_ASSETS.codex },
@@ -256,7 +257,7 @@ function Gateway() {
         mono={false}
         trailing={<StateLine testID="gateway-state" tone={g().running ? "ok" : "off"} label={g().running ? "Ready" : "Unavailable"} />}
         accessibilityLabel={g().endpoint ? "Copy gateway endpoint" : undefined}
-        onPress={g().endpoint ? () => void Clipboard.writeText(g().endpoint!).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); }) : undefined}
+        onPress={g().endpoint ? () => void writeClipboard(g().endpoint!).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); }) : undefined}
       />
     </Section>
   );

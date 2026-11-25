@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, computed, openUrl, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, openUrl, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
 import { accountRow, openAccountId } from "../../../core/extensions/accountListModel";
 import { AWS_SESSION_LENGTHS, cloudProfileGroups, sessionLengthLabel } from "../../../core/extensions/cloudProfilesModel";
@@ -28,6 +28,7 @@ import { connectingService, PluginsFrame, ToolUpdateNotices } from "./Pages";
 import { ProfileName } from "./ProfileName";
 import { flowState, plugins } from "./plugins";
 import { serviceRowLead } from "./ServiceMark";
+import { writeClipboard } from "../../kit/clipboard";
 
 const API_WALLETS = "https://app.hyperliquid.xyz/API";
 const CLI_NAMES: Record<string, string> = { aws: "AWS CLI", gws: "Google Workspace CLI", gcp: "Google Cloud CLI" };
@@ -331,7 +332,7 @@ function AccountCard(props: { plugin: PluginIntegration; account: PluginAccount;
                         subtitle={detail.value}
                         value={copied() === detail.label ? "Copied" : undefined}
                         trailing={<If when={detail.copy && copied() !== detail.label}><Icon name="copy" size={16} tone="faint" /></If>}
-                        onPress={detail.copy ? () => void Clipboard.writeText(detail.value).then(() => copied.set(detail.label)) : undefined}
+                        onPress={detail.copy ? () => void writeClipboard(detail.value).then(() => copied.set(detail.label)) : undefined}
                       />
                     ))}
                     <If when={renamable}><If when={renaming()} else={<Row testID={`rename-${a.id}`} lead={tile("edit")} title="Rename profile" onPress={() => renaming.set(true)} />}><ProfileName account={a} onDone={() => renaming.set(false)} /></If></If>

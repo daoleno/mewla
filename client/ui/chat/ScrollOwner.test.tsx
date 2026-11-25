@@ -1,5 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
-import { framesOf, paired, phoneHost, pressWhenEnabled, typeUntil } from "../testing/fixtures";
+import { framesOf, paired, phoneHost, pressWhenEnabled, rowInView, typeUntil } from "../testing/fixtures";
 
 /**
  * Owner 11-14: reading history, the chat jumped to the newest message; after a send it landed somewhere in history.
@@ -48,14 +48,6 @@ function slide(app: App, worker: string, count = 1, extra: Record<string, unknow
   return app.host.send("app.conversation", { worker, upserts, deletes, ...extra });
 }
 
-/** Moves the trace shows no command or finger behind: the list's offset changing by more than a row's rounding. */
-function unbidden(entries: Entry[]) {
-  let commanded = false;
-  return entries.filter((e) => {
-    if (e.kind === "cmd" || e.kind === "drag") commanded = true;
-    return e.kind === "scroll" && !e.dragging && !commanded && Math.abs(e.jump) > 2;
-  });
-}
 
 describe("a full Session read back up", () => {
   test("its new events leave the rows under the finger where they are", async () => {
@@ -63,6 +55,8 @@ describe("a full Session read back up", () => {
     newest = 240;
     const { app, worker } = await openChat();
     const before = await readBackUp(app, "session-chat");
+    const seen = rowInView(app, "session-chat");
+    expect(seen).toBeDefined();
     const mark = trace(app).length;
     for (let i = 0; i < 3; i += 1) {
       await slide(app, worker);
@@ -72,7 +66,8 @@ describe("a full Session read back up", () => {
     const after = since(app, mark);
     // Every change the list made was narrow: none laid the rows on screen out again.
     expect(after.filter((e) => e.kind === "splice" && e.covers).map((e) => `${e.index}+${e.removed}`)).toEqual([]);
-    expect(unbidden(after).map((e) => e.jump)).toEqual([]);
+    // The row on screen stays where it is (the list's offset follows the rows deleted above it, NSH 0.7).
+    expect(rowInView(app, "session-chat")).toBe(seen);
     expect(lastOf(trace(app), "viewable")!.firstKey).toBe(before);
     expect(app.shows("id:jump-latest")).toBe(true);
   }, 60_000);
@@ -84,6 +79,8 @@ describe("a full Session, read back up, its connection back with a snapshot that
     newest = 240;
     const { app, worker } = await openChat();
     const before = await readBackUp(app, "session-chat");
+    const seen = rowInView(app, "session-chat");
+    expect(seen).toBeDefined();
     const mark = trace(app).length;
     const subscribed = framesOf(app.host.posts(), "codex_conversation_subscribe").length;
     await app.host.send("app.daemonDrop");
@@ -92,7 +89,8 @@ describe("a full Session, read back up, its connection back with a snapshot that
     await app.wait(800);
     const after = since(app, mark);
     expect(after.filter((e) => e.kind === "splice" && e.covers).map((e) => `${e.index}+${e.removed}`)).toEqual([]);
-    expect(unbidden(after).map((e) => e.jump)).toEqual([]);
+    // The row on screen stays where it is (the list's offset follows the rows deleted above it, NSH 0.7).
+    expect(rowInView(app, "session-chat")).toBe(seen);
     expect(lastOf(trace(app), "viewable")!.firstKey).toBe(before);
   }, 60_000);
 });

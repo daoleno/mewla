@@ -1,4 +1,4 @@
-import { announce, Canvas, cleanup, Clipboard, effect, keymap, platform, signal, Text, untracked, View } from "nsh";
+import { announce, Canvas, cleanup, effect, keymap, platform, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { dateKey, formatDate, formatFullDateTime } from "../../../core/more/dates";
 import { failureText } from "../../../core/more/daemon";
@@ -54,6 +54,7 @@ import { copyMenu, EmptyState, Meter, Page, RankedRow, Row, Section, ShowMore, S
 import { Segmented } from "../../kit/Segmented";
 import { daemon, daemonState } from "../daemon";
 import type { PageNav } from "../routes";
+import { writeClipboard } from "../../kit/clipboard";
 
 const MAX_LIST_ITEMS = 5;
 
@@ -449,7 +450,7 @@ export function StatsModel(props: { model: ModelStat; pricing?: PricingStatus; n
   const id = props.model.id || props.model.name;
   const copied = signal(false);
   const copyId = () =>
-    void Clipboard.writeText(id)
+    void writeClipboard(id)
       .then(() => {
         copied.set(true);
         announce("Copied");

@@ -1,10 +1,11 @@
-import { cleanup, Clipboard, colorScheme, computed, effect, safeArea, Scroll, signal, Text, untracked, View, WebView, type JSX } from "nsh";
+import { cleanup, colorScheme, computed, effect, safeArea, Scroll, signal, Text, untracked, View, WebView, type JSX } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { drawMermaid, mermaidInlineLayout, mermaidSvgDocument, prepareMermaid, type MermaidDrawing, type MermaidMode, type MermaidPalette } from "../../core/mermaid/mermaid";
 import { Icon } from "../kit/Icon";
 import { GuardedDialog } from "../shell/AppSheet";
 import { viewerBaseUrl } from "../viewerBase";
 import { MERMAID_PALETTES } from "./palette";
+import { writeClipboard } from "../kit/clipboard";
 
 /** The tallest a diagram is shown in a reply or a file; a taller one is cut there and opens whole on a tap. */
 const INLINE_MAX_HEIGHT = 420;
@@ -64,7 +65,7 @@ function Diagram(props: { code: string; source: string; drawn: () => MermaidDraw
   let timer: ReturnType<typeof setTimeout> | undefined;
   cleanup(() => clearTimeout(timer));
   const copy = () => {
-    void Clipboard.writeText(props.code).then(() => {
+    void writeClipboard(props.code).then(() => {
       copied.set(true);
       clearTimeout(timer);
       timer = setTimeout(() => copied.set(false), 1500);

@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
+import { cleanup, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
 import { threadType } from "../kit/density";
 import { delayed } from "../kit/wait";
 import { derived } from "../kit/derived";
@@ -39,6 +39,7 @@ import { AnsweredRow } from "./RequestCard";
 import { brainFiles, brainHostIdentity, openChatLink, openChatPath } from "./links";
 import { createReplyLinks } from "./chatFileLinks";
 import type { SessionFileIdentity } from "../../core/files/sessionFilePreview";
+import { writeClipboard } from "../kit/clipboard";
 
 
 /**
@@ -125,7 +126,7 @@ function BubbleFade() {
  * on the clipboard as plain text (core/timeline/messageCopy), however little of it is selected or shown.
  */
 function copyMessage(body: () => string, markdown: boolean): MenuItem[] {
-  return [{ label: "Copy message", onSelect: () => void Clipboard.writeText(messageCopyText(untracked(body), markdown)).catch(() => {}) }];
+  return [{ label: "Copy message", onSelect: () => void writeClipboard(messageCopyText(untracked(body), markdown)).catch(() => {}) }];
 }
 
 /** A long press is the text's (its selection), never a tap: on the bubble's edge it does nothing. */

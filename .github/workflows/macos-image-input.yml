@@ -4,10 +4,9 @@ name: Mewla for Mac image input
 # pastes with a real ⌘V, real AppKit drags from another app, an image dragged out of Safari and Chrome, the screenshot
 # thumbnail, files in Desktop, Documents and Downloads (macOS's privacy prompts as a person meets them), large files,
 # a Session's chat and a Work's reply box (client/macos/scripts/image-input-run.sh). Mewla for Mac is built on the
-# NSH release it ships with (client/macos/Cargo.toml). The image out of a browser and the screenshot thumbnail, and
-# files read past 64 MB, need an NSH release with longbridge/nsh#2964 and the drop's contents (#3015, #3016):
-# NSH 0.6.1 drops neither, so those steps fail until Mewla moves to such a release. A push to a mac-image/ branch,
-# or a dispatch.
+# NSH release it ships with (client/macos/Cargo.toml): since NSH 0.7 (longbridge/nsh#2964) the image out of a browser
+# drops with its contents. A local file larger than the 64 MB `fs/promises` reads is a failed chip that says so until
+# NSH hands a drop's local files over with their contents (#3015, #3016). A push to a mac-image/ branch, or a dispatch.
 
 on:
   workflow_dispatch:

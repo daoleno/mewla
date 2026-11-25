@@ -1,8 +1,9 @@
-import { Clipboard, host, Scroll, signal, Storage, Text, View } from "nsh";
+import { host, Scroll, signal, Storage, Text, View } from "nsh";
 import { Button, Sheet, TextView } from "nsh/base";
 import { crashDiagnostic, crashesToShow, crashKindLabel, crashTitle, keptForLoop, readCrashReports, type CrashReport } from "../../core/crash";
 import { current, onTransport } from "../session";
 import { sheetSides } from "../shell/AppSheet";
+import { writeClipboard } from "../kit/clipboard";
 
 /** The reports the sheet shows (a crash loop's, core/crash.ts `crashesToShow`), until the person dismisses them. */
 export const crashReports = signal<CrashReport[]>([]);
@@ -85,7 +86,7 @@ export function CrashReportSheet() {
         </View>
       </Scroll>
       <View class="flex-row gap-2">
-        <Button testID="crash-copy" onPress={() => void Clipboard.writeText(all()).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })}
+        <Button testID="crash-copy" onPress={() => void writeClipboard(all()).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })}
           class="flex-1 rounded-xl border border-border px-4 py-3 active:bg-accent">
           <Text class="text-center text-base font-semibold text-foreground">{copied() ? "Copied" : "Copy"}</Text>
         </Button>

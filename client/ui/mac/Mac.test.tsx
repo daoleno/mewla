@@ -288,6 +288,17 @@ describe("Mewla for Mac", () => {
     await app.waitUntil(() => app.window("shortcut-offer").state() === null, { timeout: 5_000 });
   }, 30_000);
 
+  test("the close button hides the window and the app runs on; the Dock's reopen shows the same window, its draft kept", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    await app.type("id:composer", "kept across the close");
+    await app.window("main").pressClose();
+    await app.waitUntil(() => app.window("main").state()?.visible === false, { timeout: 5_000 });
+    await app.reopen();
+    await app.waitUntil(() => app.window("main").state()?.visible === true, { timeout: 5_000 });
+    expect(app.value("id:composer")).toBe("kept across the close");
+  }, 30_000);
+
   test("⌘W on the main window is a close too: the quick chat's shortcut is offered from the cat", async () => {
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
     await app.waitFor("id:composer", { timeout: 15_000 });

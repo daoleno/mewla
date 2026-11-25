@@ -41,7 +41,7 @@ jobs:
           web: "true"
       - name: Install NSH
         run: client/scripts/fetch-nsh.sh
-      # NSH 0.6 needs Rust 1.97 or later.
+      # NSH 0.7 needs Rust 1.97 or later.
       - name: Rust
         run: |
           rustup toolchain install stable --profile minimal
@@ -245,6 +245,10 @@ jobs:
           grep -iE "terminal|attach" "$D/state/logs/app-daemon.log" | tail -40 || true
           echo "--- the daemon's log, last 120 lines"; tail -120 "$D/state/logs/app-daemon.log" || true
           if grep -E "ERROR (js|nsh)" "$D"/data/logs/*; then exit 1; fi
+      # NSH 0.7's windows: the close button hides the main window and the app and its daemon run on; the Dock's reopen
+      # shows it again; a click in the composer gives it the keys; ⇧⌘Space opens the perch; Quit ends the app.
+      - name: The window hides on close, the Dock brings it back, and Quit ends the app
+        run: client/macos/scripts/window-lifecycle-check.sh "$RUNNER_TEMP/dev-run" "$RUNNER_TEMP/dev-run/captures/window"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -611,6 +615,8 @@ jobs:
           # What `nsh update-manifest` reads the id and version from; the archive is the new app's zip.
           mkdir -p "$RUNNER_TEMP/entry" "$RUNNER_TEMP/serve"
           python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"url":sys.argv[2],"publicKey":sys.argv[3]}}, open(sys.argv[4],"w"))' "$new" "$url" "$pub" "$RUNNER_TEMP/entry/nsh.json"
+          # NSH 0.7 wants the entry's module beside its nsh.json; a stub stands for the app's.
+          echo 'export default function App() { return null; }' > "$RUNNER_TEMP/entry/App.tsx"
           cp "$RUNNER_TEMP/new/Mewla-$new-macos-aarch64.zip" "$RUNNER_TEMP/serve/"
           "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/proof-key/update.secret" --out "$RUNNER_TEMP/serve" "$RUNNER_TEMP/serve/Mewla-$new-macos-aarch64.zip"
           cat "$RUNNER_TEMP/serve/latest.json"

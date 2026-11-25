@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, effect, Image, openUrl, platform, safeArea, Scroll, signal, Text, untracked, View, WebView } from "nsh";
+import { cleanup, effect, Image, openUrl, platform, safeArea, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { Button, TextView } from "nsh/base";
 import { NavPage } from "../../shell/NavPage";
@@ -17,7 +17,7 @@ import {
   SESSION_FILE_NO_IDENTITY,
 } from "../../../core/files/presentation";
 import { getSessionFileMetadata, getSessionFileText } from "../../../core/files/requests";
-import { grantSessionPage, SESSION_PAGE_LINKS_SCRIPT, sessionPageLinkToOpen, sessionPageShowsInApp, type SessionPage } from "../../../core/files/sessionPage";
+import { grantSessionPage, SESSION_PAGE_LINKS_SCRIPT, sessionPageLinkToOpen, sessionPageOrigin, sessionPageShowsInApp, type SessionPage } from "../../../core/files/sessionPage";
 import {
   bindSessionFileRequestToGeneration,
   buildSessionFileBinarySource,
@@ -50,6 +50,7 @@ import { MediaPlayer } from "./Media";
 import { filePreviewRoute } from "./routes";
 import { viewerBaseUrl } from "../../viewerBase";
 import { renderFileCode } from "../../mermaid/fileCode";
+import { writeClipboard } from "../../kit/clipboard";
 
 /** What a picture's or PDF's stream failing means: the file changed, or the stream lapsed. */
 export const SESSION_FILE_STREAM_FAILED = "The file stream changed or could not be loaded. Refresh and try again.";
@@ -116,8 +117,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
         if (mine !== epoch) return;
         if (sessionPageShowsInApp(granted.url, platform.os)) page.set(granted);
         else {
-          // A computer paired by its address (Wi-Fi/LAN, an https address): the app's web view may not show its
-          // pages yet, the phone's browser reaches them. The tap opens the page there, at once.
+          // Not a page on http(s): the system browser decides what it is.
           outside.set(granted);
           void openUrl(granted.url).catch(() => {});
         }
@@ -138,7 +138,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   };
 
   const copy = createSessionFileCopyLifecycleOwner<ReturnType<typeof setTimeout>>({
-    copyText: (value) => Clipboard.writeText(value),
+    copyText: (value) => writeClipboard(value),
     onCopiedChange: (value) => copied.set(value),
     scheduleReset: (callback, ms) => setTimeout(callback, ms),
     cancelReset: (timer) => clearTimeout(timer),
@@ -357,6 +357,10 @@ function HtmlPage(props: { page: SessionPage; testID: string }) {
       testID={props.testID}
       class="flex-1 bg-white"
       src={props.page.url}
+      // The page's computer, wherever it is reached (its address, not only 127.0.0.1), and pinch zoom past the page's
+      // own viewport (longbridge/nsh#3145, #3144). NSH 0.7.0's TS types leave both props out (its core and hosts take
+      // them): NSH-ISSUE-webview-prop-types.md in the upgrade's worklog.
+      {...({ allowOrigin: sessionPageOrigin(props.page.url) ?? undefined, zoomable: true } as object)}
       incognito
       injectedJavaScript={SESSION_PAGE_LINKS_SCRIPT}
       onMessage={(e) => openOutside(sessionPageLinkToOpen(e.data))}

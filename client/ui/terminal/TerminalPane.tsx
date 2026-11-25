@@ -20,6 +20,7 @@ import { loadTerminalTextSize, setTerminalTextSize, TERMINAL_TEXT, terminalTextS
 import { motion } from "../../core/motion/tokens";
 import { SlowLine, StateView, states, useWait } from "../kit/wait";
 import { current, resumeConnection } from "../session";
+import { writeClipboard } from "../kit/clipboard";
 
 /**
  * The native view on the phones and the Mac (client/macos/src/terminal); the web's is libghostty-vt (WebAssembly) on a
@@ -332,7 +333,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
             scrolledBack.set(!atBottom);
           }}
           onTapCell={({ col, row, text, index }) => tap(col, row, text, index)}
-          onCopy={({ text }) => void Clipboard.writeText(text).catch(() => {})} />
+          onCopy={({ text }) => void writeClipboard(text).catch(() => {})} />
         <View class={`absolute inset-0 ${GROUP_FILL}`} style={{ pointerEvents: "none", opacity: wait.dim() ? 0.5 : 0, transitionProperty: "opacity", transitionDuration: motion.dur.base }} />
         <SlowLine on={wait.slow()} testID="terminal-slow-line" />
         <If when={wait.view() === "failed"}>
