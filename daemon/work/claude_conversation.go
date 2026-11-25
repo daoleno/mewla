@@ -744,7 +744,11 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		}
 		consumed := b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult, pastedInput)
 		b.denialKind = ""
-		if consumed &&
+		// The summary of a compaction is Claude's, not a prompt: it opens no
+		// turn. A /compact the person sent gets no reply, so a turn it opened
+		// would run until the next message; a turn compacted on its way keeps
+		// running from its own prompt.
+		if consumed && !envelope.IsCompactSummary &&
 			!b.activityLifecycle.running() {
 			b.pendingTaskTurn = claudePendingTaskTurn{}
 			b.activityLifecycle.start(activityID, timestamp)
