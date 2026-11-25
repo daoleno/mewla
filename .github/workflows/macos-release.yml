@@ -253,6 +253,8 @@ jobs:
             # What `nsh update-manifest` reads the id, version and the key's public half from; the apps' own is the one that counts.
             mkdir -p "$RUNNER_TEMP/entry"
             python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"github":"daoleno/mewla","publicKey":open(sys.argv[2]).read().strip()}}, open(sys.argv[3],"w"))' "$VERSION" client/macos/update-public-key.txt "$RUNNER_TEMP/entry/nsh.json"
+            # NSH 0.7 wants the entry's module beside its nsh.json; a stub stands for the app's.
+            echo 'export default function App() { return null; }' > "$RUNNER_TEMP/entry/App.tsx"
             if [ "${{ needs.gate.outputs.proof }}" = true ]; then base=http://127.0.0.1:8765; else base="https://github.com/daoleno/mewla/releases/download/v$VERSION"; fi
             "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/update.secret" --base-url "$base" --out "$out" "$out/Mewla-$VERSION-macos-aarch64.zip"
             rm -f "$RUNNER_TEMP/update.secret"

@@ -615,6 +615,8 @@ jobs:
           # What `nsh update-manifest` reads the id and version from; the archive is the new app's zip.
           mkdir -p "$RUNNER_TEMP/entry" "$RUNNER_TEMP/serve"
           python3 -I -c 'import json,sys; json.dump({"id":"com.daoleno.mewla","version":sys.argv[1],"updater":{"url":sys.argv[2],"publicKey":sys.argv[3]}}, open(sys.argv[4],"w"))' "$new" "$url" "$pub" "$RUNNER_TEMP/entry/nsh.json"
+          # NSH 0.7 wants the entry's module beside its nsh.json; a stub stands for the app's.
+          echo 'export default function App() { return null; }' > "$RUNNER_TEMP/entry/App.tsx"
           cp "$RUNNER_TEMP/new/Mewla-$new-macos-aarch64.zip" "$RUNNER_TEMP/serve/"
           "$HOME/.nsh/bin/nsh" update-manifest --entry "$RUNNER_TEMP/entry" --key "$RUNNER_TEMP/proof-key/update.secret" --out "$RUNNER_TEMP/serve" "$RUNNER_TEMP/serve/Mewla-$new-macos-aarch64.zip"
           cat "$RUNNER_TEMP/serve/latest.json"
