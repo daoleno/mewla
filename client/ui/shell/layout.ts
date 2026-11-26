@@ -4,6 +4,7 @@ import { railEdge } from "../../core/shell/rail";
 import { screenDockWidth } from "../../core/screen/float";
 import { clampPaneWidth, MAC_PANE_WIDTH, nextWide, WIDE_MIN_WIDTH, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 import { isMacApp } from "../mac/app";
+import { BESIDE_BRAIN_WIDTH, showsBeside } from "../../core/web/beside";
 
 /**
  * The window's width less what the system draws at its sides (the iPhone Duo's 84 pt side bar, a phone's cutout
@@ -67,3 +68,16 @@ export const floatsShown = signal(0);
 
 /** A list page shows the item it opens beside it (Git review › diff, Files › file): wide, with a right pane of 880 pt or more. */
 export const listDetail = computed(() => showsListDetail({ wide: wide(), paneWidth: stackWidth() }));
+
+/**
+ * Beside (core/web/beside.ts): a desktop or browser window whose right pane is 1480 or wider splits it, Brain's thread
+ * at its left and what a card or a row opens at its right (the Work board while nothing is open). Never on iOS or
+ * Android: their stack is the system's.
+ */
+export const beside = computed(() => showsBeside({ desktop: !mobile, wide: wide(), rightPane: stackWidth() }));
+
+/** The beside pane's width, as laid out. */
+export const besidePaneWidth = signal(0);
+
+/** Brain's pane while the beside pane is up. */
+export const besideBrainWidth = isMacApp() ? BESIDE_BRAIN_WIDTH.mac : BESIDE_BRAIN_WIDTH.web;

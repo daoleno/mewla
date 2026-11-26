@@ -19,6 +19,6 @@ describe("a chat under a pushed page keeps its place on the web", () => {
 
   test("Brain and a Session tell their chat when it is on screen", () => {
     expect(read("home/Home.tsx")).toMatch(/<ChatTimeline testID="brain-chat".*shown=\{homeShown\}/);
-    expect(read("screens/Session.tsx")).toMatch(/<ChatTimeline testID="session-chat".*shown=\{\(\) => props\.active\(\) && mode\(\) === "chat"\}/);
+    expect(read("screens/Session.tsx")).toMatch(/<ChatTimeline testID="session-chat".*shown=\{\(\) => props\.active\(\) && chatShown\(\)\}/);
   });
 });

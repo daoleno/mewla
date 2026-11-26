@@ -355,7 +355,7 @@ function telling(word: string | undefined): string {
   return word && !BARE_STATE_WORDS.has(word) && word !== "Queued" && word !== "Running" ? word : "";
 }
 
-function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now: number): TrayRow {
+export function workRow(slip: BrainWorkSlip, sessions: ReadonlyMap<string, Worker>, now: number): TrayRow {
   const joined = slip.workerSessions ?? [];
   // A Work with several Workers is one row with Brain's mark, "N Workers", opening Work detail (§1.3).
   const several = joined.length > 1;

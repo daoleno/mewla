@@ -10,7 +10,9 @@ import { placeOfRoutes, routesOfPlace } from "./routePlaces";
 import { DesktopOverlays } from "./desktop/Overlays";
 import { LeftPane, PaneHandle } from "./LeftPane";
 import { Rail } from "./Rail";
-import { floatsShown, loadPaneWidth, paneWidth, rightPaneWidth, screenDock, wide } from "./layout";
+import { beside, besideBrainWidth, besidePaneWidth, floatsShown, loadPaneWidth, paneWidth, rightPaneWidth, screenDock, stackWidth, wide } from "./layout";
+import { intoBeside, opensBeside, outOfBeside } from "../../core/web/beside";
+import { WorkBoard } from "../work/WorkBoard";
 import { MenuHost } from "../kit/Menu";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
 import { Onboarding, PairPage } from "../screens/Onboarding";
@@ -38,7 +40,7 @@ import { settingsLinkRoutes } from "../../core/settings/settingsLink";
 import { setOpenExtensions } from "../more/extensions/plugins";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "../sessions/workLinks";
-import { goHome, isTop, nav, openPage, openSession, pageNav, trayOpen } from "./nav";
+import { besideNav, besidePages, besideShown, closeBeside, goHome, isBesideTop, isTop, nav, openPage, openSession, pageNav, replaceSession, setBesidePages, shown, trayOpen, type BesideRoute } from "./nav";
 import type { Route } from "./routes";
 import { belowSections, paneBottom } from "./below";
 
@@ -46,7 +48,10 @@ export { belowSections } from "./below";
 
 // A computer switch: sheets close first (they listen to the switch themselves), then the stack
 // returns to the new computer's home (SPEC §3.8).
-onTransport(() => () => goHome());
+onTransport(() => () => {
+  closeBeside();
+  goHome();
+});
 
 /** `mewla://settings…` (not a pairing link): the Settings page it names, under the computer page. True when it was one. */
 export function openSettingsLink(url: string): boolean {
@@ -73,22 +78,27 @@ export function openScreenPage(worker: string | null, takeOver = false) {
 
 /** Moves every Brain terminal on the stack to Brain's current host. */
 function followBrainHost(host: string) {
+  const stale = (route: BesideRoute) => route.name === "session" && route.brain === true && route.workerId !== host;
+  const follow = <R extends BesideRoute>(route: R): R => (stale(route) ? { name: "session", workerId: host, brain: true } as R : route);
   const routes = nav.routes();
-  const stale = (route: Route) => route.name === "session" && route.brain === true && route.workerId !== host;
-  if (routes.some(stale)) nav.setRoutes(routes.map((route) => (stale(route) ? { name: "session", workerId: host, brain: true } : route)));
+  if (routes.some(stale)) nav.setRoutes(routes.map(follow));
+  const aside = besideNav.routes();
+  if (aside.some(stale)) besideNav.setRoutes(aside.map(follow));
 }
 
 /** Goes to a place a URL, the palette or `G` then a letter names. */
 export function openPlace(place: WebPlace) {
-  nav.setRoutes([{ name: "home" }, ...routesOfPlace(place)]);
+  const routes = routesOfPlace(place);
+  if (untracked(beside) && opensBeside(routes[0])) return openPage(...routes);
+  nav.setRoutes([{ name: "home" }, ...routes]);
 }
 
 /** Where the person is: what the URL and the tab title follow. */
-export const currentPlace = computed<WebPlace>(() => placeOfRoutes(nav.routes()));
+export const currentPlace = computed<WebPlace>(() => placeOfRoutes(shown()));
 
-/** A history entry: the stack. */
+/** A history entry: the stack, with what stood beside Brain. */
 function snapshot(): PageSnapshot {
-  return { routes: nav.routes() };
+  return { routes: shown() };
 }
 
 /** Reopens what a history entry showed, or a place a URL names. */
@@ -96,12 +106,16 @@ function restore(page: PoppedPage<PageSnapshot>) {
   if (page.kind === "place") return openPlace(page.place);
   const routes = page.snapshot.routes as Route[];
   if (!routes.length || routes[0]?.name !== "home") return goHome();
+  if (untracked(beside) && opensBeside(routes[1])) {
+    if (untracked(nav.routes).length > 1) nav.popToRoot();
+    return setBesidePages(reuseRoutes(untracked(besidePages) as unknown[], routes.slice(1)) as Route[]);
+  }
   nav.setRoutes(reuseRoutes(untracked(nav.routes) as unknown[], routes) as Route[]);
 }
 
 /** The page the floating screen floats over: whose Session or Work file it is, and whether it is Screen or the Phone page. */
 const floatPage = () => {
-  const top = nav.routes().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
+  const top = shown().at(-1) as { name: string; workerId?: string; id?: string } | undefined;
   return {
     owner: routeOwner(top, (id) => workFiles().find((item) => item.id === id)?.frontmatter.worker_session),
     screenPage: top?.name === "screen",
@@ -109,11 +123,17 @@ const floatPage = () => {
   };
 };
 
-function page(route: Route, index: () => number): JSX.Element {
+/** The stack a page is made on: the one stack, or the beside pane's. */
+type PageStackOf = { nav: NavStackState<Route>; top: (index: number) => boolean; width: () => number };
+const MAIN: PageStackOf = { nav, top: isTop, width: () => stackWidth() };
+const BESIDE: PageStackOf = { nav: besideNav as unknown as NavStackState<Route>, top: isBesideTop, width: () => besidePaneWidth() };
+
+function page(route: Route, index: () => number, on: PageStackOf = MAIN): JSX.Element {
+  const nav = on.nav;
   switch (route.name) {
     case "home": return <Home />;
     case "session":
-      return <Session nav={nav} workerId={route.workerId} hint={route.hint} brain={route.brain} active={() => isTop(index())} />;
+      return <Session nav={nav} workerId={route.workerId} hint={route.hint} brain={route.brain} active={() => on.top(index())} pageWidth={on.width} />;
     case "allSessions": return <AllSessions nav={nav} />;
     case "computer": return <ComputerPage nav={pageNav} onSwitchExecutor={openBrainHost} />;
     case "pair": return <PairPage onScreen={() => isTop(index())} onPaired={() => goHome()} />;
@@ -153,8 +173,22 @@ const PANE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "calen
 function Stack() {
   return (
     <Paged nav={nav}>
-      <NavStack state={nav} style={{ flex: 1 }}>{page}</NavStack>
+      <NavStack state={nav} style={{ flex: 1 }}>{(route, index) => page(route, index)}</NavStack>
     </Paged>
+  );
+}
+
+/**
+ * The beside pane (core/web/beside.ts): the Work board at its root, then what a card, a row or a link opened. Its
+ * pages have a Back: to the page under, and from the first one to the board.
+ */
+function BesideStack() {
+  return (
+    <PageStack.Provider value={{ canGoBack: () => besideNav.routes().length > 1, back: () => besideNav.pop() }}>
+      <NavStack testID="beside-stack" state={besideNav} style={{ flex: 1 }}>
+        {(route, index) => <If when={route.name === "board"} else={page(route as Route, index, BESIDE)}><WorkBoard /></If>}
+      </NavStack>
+    </PageStack.Provider>
   );
 }
 
@@ -177,7 +211,7 @@ function Overlays(props: { bottomInset?: () => number }) {
     <>
       <ScreenFloatHost page={floatPage} onOpenPhone={openPhonePage} onOpenScreen={openScreenPage} bottomInset={props.bottomInset} leftInset={() => (wide() ? paneWidth() : 0)} />
       <WhatsNewSheet />
-      <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? nav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
+      <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? replaceSession({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
       <CalendarAlertCard />
@@ -200,6 +234,23 @@ export function Shell() {
   effect(() => {
     if (wide()) untracked(() => trayOpen() && trayOpen.set(false));
   });
+  // Crossing the split's gate: the pages above Brain move beside it, and back on the stack when it closes.
+  effect(() => {
+    const split = beside();
+    untracked(() => {
+      if (split) {
+        const moved = intoBeside(nav.routes());
+        if (moved) {
+          setBesidePages(moved.beside);
+          nav.setRoutes(moved.main);
+        }
+        return;
+      }
+      const back = outOfBeside(nav.routes(), besidePages());
+      if (back) nav.setRoutes(back);
+      closeBeside();
+    });
+  });
   // Brain's terminal is Brain's host's: one the computer replaces (after a restart, or a lost Session resumed) takes the
   // open terminal with it, on whatever page of the stack it is.
   effect(() => {
@@ -219,7 +270,13 @@ export function Shell() {
         <View testID="right-pane" class={isMacApp() ? "flex-1 bg-background" : "flex-1"} style={{ paddingRight: floatsShown() > 0 ? screenDock() : 0 }} onLayout={({ bounds }) => {
           rightPaneWidth.set(bounds.size.width);
           paneBottom.set(bounds.origin.y + bounds.size.height);
-        }}><Stack /></View>
+        }}>
+          <View class="flex-1 flex-row">
+            <View class="h-full" style={besideShown() ? { width: besideBrainWidth } : { flex: 1 }}><Stack /></View>
+            {/* Kept while the split is up, so what it shows keeps its state under a page that covers both (Settings). */}
+            <If when={beside()}><View testID="beside-pane" onLayout={({ bounds }) => besidePaneWidth.set(bounds.size.width)} class="h-full flex-1 flex-col overflow-hidden border-l border-border" style={{ display: besideShown() ? "flex" : "none" }}><BesideStack /></View></If>
+          </View>
+        </View>
       </View>
       {/* In the system's vertical bar, when there is one (the iPhone Duo): the page's controls and the app's places. */}
       <Rail />

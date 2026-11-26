@@ -16,7 +16,7 @@ import { currentBrain } from "../brain";
 import { isMacApp, isThisMac, localProblem, macLightsRow } from "../mac/local";
 import { paletteOpen } from "./desktop/Overlays";
 import { paneRange, paneWidth, setPaneWidth } from "./layout";
-import { goHome, nav, openPage } from "./nav";
+import { goHome, nav, openPage, shown } from "./nav";
 import { MaterialTint } from "../mac/materials";
 
 /** A left-pane row replaces the right pane's page above Brain (SPEC §14.1): Brain › that page › what it pushed. */
@@ -34,7 +34,7 @@ const REPLACE: TrayOpeners = {
 const MAC = isMacApp();
 
 /** Which row's page is in the right pane. */
-const selected = computed(() => paneSelection(nav.routes() as readonly { name: string }[]));
+const selected = computed(() => paneSelection(shown() as readonly { name: string }[]));
 
 /** The pane header (68): the cat (the computer page), the computer's name and its state line. */
 function PaneHeader() {
@@ -154,7 +154,7 @@ export function PaneHandle() {
 export function LeftPane() {
   // Sort › Last opened reads when each Session was opened here: the pane never "opens", so read as pages change.
   effect(() => {
-    nav.routes();
+    shown();
     untracked(refreshOpened);
   });
   return (

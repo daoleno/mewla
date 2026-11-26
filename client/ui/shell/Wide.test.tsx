@@ -393,3 +393,102 @@ describe("Phone use's link", () => {
     await app.waitFor("id:phone-page");
   }, 20_000);
 });
+
+describe("beside: a wide window opens what you pick next to Brain (core/web/beside.ts)", () => {
+  const big = { platform: "web" as const, width: 1920, height: 1080, storage: paired };
+  const work = [
+    { work_id: "docsref", revision: 1, title: "docs-refresh", status: "running", progress_mode: "owned", unread_result: false, updated_at: new Date().toISOString() },
+    { work_id: "naming", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() },
+  ];
+
+  test("from 1920 the beside pane stands next to Brain with the Work board; 1440 keeps one page", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: { current_work: work } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitFor("id:work-board-needs");
+    expect(app.count("id:work-board-card")).toBe(2);
+    expect(app.texts()).toContain("Which name?");
+    expect(app.shows("id:home-header")).toBe(true);
+    await app.setViewport(1440, 900);
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    expect(app.shows("id:home-header")).toBe(true);
+  }, 20_000);
+
+  test("a row and a card open beside Brain; Back returns the pane to the board, and the URL names what is open", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: { current_work: work }, worker_sessions: [running("w1", "api"), running("w2", "docs")], conversations: { w1: [], w2: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") >= 2, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.waitFor("id:beside-pane >> id:session-status");
+    // Brain stays: its composer and the pane's Session side by side, the row selected.
+    expect(app.shows("id:home-header")).toBe(true);
+    expect(app.count("id:tray-running >> id:selected-well")).toBe(1);
+    // Another row takes its place: never a deeper stack.
+    await app.press("id:tray-running >> text:docs");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w2");
+    // A Work card on the board opens its detail beside Brain.
+    await app.press("id:beside-pane >> id:page-back");
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => routes(app).join(" ") === "home");
+    await app.press("id:work-board-card >> text:Which name?");
+    await app.waitFor("id:beside-pane >> id:work-detail");
+    await app.waitUntil(() => last(app)?.path === "/work-detail/naming");
+  }, 30_000);
+
+  test("narrowed, what stood beside Brain goes on the stack over it; widened, it stands beside again", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.setViewport(1280, 800);
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    await app.waitFor("id:session-status");
+    expect(app.shows("id:home-header")).toBe(false);
+    expect(routes(app).join(" ")).toBe("home session:w1");
+    await app.setViewport(1920, 1080);
+    await app.waitFor("id:beside-pane >> id:session-status");
+    expect(app.shows("id:home-header")).toBe(true);
+    expect(routes(app).join(" ")).toBe("home session:w1");
+  }, 30_000);
+
+  test("a page that is not a Session or a Work (Settings) covers both; Back finds the pane as it was", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.press("id:home-cat");
+    await app.waitUntil(() => routes(app).join(" ") === "home computer");
+    expect(app.shows("id:home-header")).toBe(false);
+    // The pane is kept under the page (display none), so its own Back is still in the tree, laid out clipped to nothing.
+    expect(app.shows("id:beside-pane")).toBe(false);
+    await app.press("id:page-back >> nth=0");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    expect(app.shows("id:beside-pane >> id:session-status")).toBe(true);
+  }, 30_000);
+
+  test("on an ultrawide a Session shows its chat and its terminal side by side, with no view switch", async () => {
+    const app = await open(APP, { platform: "web", width: 3440, height: 1440, storage: paired, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitFor("id:beside-pane >> id:session-chat");
+    await app.waitFor("id:beside-pane >> id:terminal-group");
+    expect(app.shows("id:session-mode")).toBe(false);
+    await app.setViewport(2560, 1440);
+    await app.waitFor("id:session-mode");
+    expect(app.shows("id:terminal-group")).toBe(false);
+  }, 30_000);
+
+  test("a tablet as wide as an ultrawide keeps its one stack: beside is the desktops' and the web's", async () => {
+    const app = await open(APP, { platform: "android", width: 2560, height: 1600, storage: paired, host: phoneHost({ brain: {} }) });
+    await app.waitFor("id:left-pane", { timeout: 10_000 });
+    await app.wait(300);
+    expect(app.shows("id:beside-pane")).toBe(false);
+  }, 20_000);
+});

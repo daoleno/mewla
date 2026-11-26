@@ -20,7 +20,9 @@ import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
 import type { BrainCurrentWork } from "../../core/timeline/types";
 import { workForCards } from "../../core/timeline/model";
 import { markWorkRead } from "../../core/work/brainWork";
-import { goHome, homeShown, openBrainTerminal, openPage, openSession, openWorkDetail, trayOpen } from "../shell/nav";
+import { goHome, homeShown, openFromBrain, openPage, trayOpen } from "../shell/nav";
+import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
+
 import { lastEditablePrompt } from "../../core/web/composer";
 import { workspaceRoute } from "../more/files/routes";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread, servers, shownConnection, workers } from "../session";
@@ -56,6 +58,11 @@ import { brainComposing, brainNeedsPerson, lines as updateLines } from "../whats
 import { density, headerSize } from "../kit/density";
 import { FileDrop } from "../chat/FileDrop";
 import { attachIncoming, type IncomingFiles } from "../more/files/incoming";
+
+// What a card in the thread opens: beside Brain while the split is up (in place of what stood there), else pushed.
+const openSession = (workerId: string, hint?: TerminalRouteSessionHint) => openFromBrain({ name: "session", workerId, hint });
+const openBrainTerminal = (workerId: string) => openFromBrain({ name: "session", workerId, brain: true });
+const openWorkDetail = (workId: string) => openFromBrain({ name: "workDetail", workId });
 
 const startingChat = signal(false);
 const notice = signal("");

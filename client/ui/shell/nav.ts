@@ -1,8 +1,10 @@
-import { effect, Keyboard, signal, untracked } from "nsh";
+import { computed, effect, Keyboard, signal, untracked } from "nsh";
 import { createNavStack } from "nsh/base";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { PageNav } from "../more/routes";
 import type { Route } from "./routes";
+import { beside } from "./layout";
+import { opensBeside, shownRoutes } from "../../core/web/beside";
 
 /**
  * The app's one stack (SPEC §3): home at the bottom, every other page pushed on it. Pages take
@@ -10,6 +12,39 @@ import type { Route } from "./routes";
  * which build the natural stack under the page so Back leads somewhere sensible (§3.8).
  */
 export const nav = createNavStack<Route>([{ name: "home" }]);
+
+/** The beside pane's routes (core/web/beside.ts): the Work board at its root, then what was opened beside Brain. */
+export type BesideRoute = Route | { name: "board" };
+const BOARD: BesideRoute = { name: "board" };
+export const besideNav = createNavStack<BesideRoute>([BOARD]);
+
+/** The beside pane shows: the split is up and Brain is the page on the stack. */
+export function besideShown(): boolean {
+  return beside() && nav.routes().length === 1;
+}
+
+/** Whether the beside page at `index` is the one shown. */
+export function isBesideTop(index: number): boolean {
+  return besideShown() && index === besideNav.routes().length - 1;
+}
+
+/** The beside pane back to the Work board (a computer switch: what it held was the old computer's). */
+export function closeBeside(): void {
+  if (untracked(besideNav.routes).length > 1) besideNav.popToRoot();
+}
+
+/** Puts `pages` beside Brain, over the board (the split crossed, a URL restored). */
+export function setBesidePages(pages: readonly Route[]): void {
+  besideNav.setRoutes([BOARD, ...pages]);
+}
+
+/** The pages open beside Brain, without the board. */
+export function besidePages(): Route[] {
+  return besideNav.routes().slice(1) as Route[];
+}
+
+/** What shows: Brain and what stands beside it, or the stack (core/web/beside.ts): the URL, the tab and the left pane's selection. */
+export const shown = computed(() => shownRoutes(nav.routes(), besidePages(), beside()));
 
 /** Home's tray (SPEC §3.2): home's own overlay. It stays open while a page pushed from it is on the stack. */
 export const trayOpen = signal(false);
@@ -26,6 +61,12 @@ export function homeShown(): boolean {
 
 /** Replaces everything above home with `routes`. */
 export function openPage(...routes: Route[]): void {
+  // With the split up, a Session, a Work or a Work file stands beside Brain in place of what stood there.
+  if (untracked(beside) && opensBeside(routes[0])) {
+    if (untracked(nav.routes).length > 1) nav.popToRoot();
+    besideNav.setRoutes([BOARD, ...routes.filter((route) => route.name !== "home")]);
+    return;
+  }
   // Home stays the page it is (its draft, thread scroll and tray, SPEC §3.8): only what is above it changes.
   nav.setRoutes([untracked(nav.routes)[0] ?? { name: "home" }, ...routes.filter((route) => route.name !== "home")]);
 }
@@ -38,16 +79,35 @@ export function goHome(options: { tray?: boolean } = {}): void {
 
 /** Pushes a Session of the current computer on whatever is shown. */
 export function openSession(workerId: string, hint?: TerminalRouteSessionHint): void {
-  nav.push({ name: "session", workerId, hint });
+  push({ name: "session", workerId, hint });
+}
+
+/** Pushes a page: on the beside pane while it shows (a link inside it, a new Session), else on the one stack. */
+function push(route: Route): void {
+  if (untracked(besideShown) && opensBeside(route)) besideNav.push(route);
+  else nav.push(route);
+}
+
+/** Opens what a card in Brain's thread names: in place of what stands beside Brain, or pushed over Brain. */
+export function openFromBrain(route: Route): void {
+  if (untracked(besideShown) && opensBeside(route)) openPage(route);
+  else nav.push(route);
+}
+
+/** A Session in place of the Session shown (New session from a Session): in the beside pane when that is where it is. */
+export function replaceSession(route: Route): void {
+  const top = untracked(besideNav.routes).at(-1);
+  if (untracked(besideShown) && top?.name === "session") besideNav.replace(route);
+  else nav.replace(route);
 }
 
 /** Brain's own Session on its terminal (Brain's menu › Open terminal). */
 export function openBrainTerminal(workerId: string): void {
-  nav.push({ name: "session", workerId, brain: true });
+  push({ name: "session", workerId, brain: true });
 }
 
 export function openWorkDetail(workId: string): void {
-  nav.push({ name: "workDetail", workId });
+  push({ name: "workDetail", workId });
 }
 
 /** Calendar, and an item (and one of its runs) on it, as a link opens them. */

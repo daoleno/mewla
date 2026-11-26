@@ -1,7 +1,8 @@
 import { cleanup, computed, effect, keyboardFrame, openUrl, platform, safeArea, signal, Storage, Text, untracked, View, windowSize } from "nsh";
 import { isAvailable as mobile } from "nsh/mobile";
 import { CAPSULE, capsuleCompactNameWidth, capsuleInset, capsuleNameIsLong, capsuleRailInset, capsuleTerminalInset, crampedOverKeyboard } from "../../core/shell/capsule";
-import { rail, stackWidth } from "../shell/layout";
+import { besideBrainWidth, rail, stackWidth, wide } from "../shell/layout";
+import { showsSessionDuo } from "../../core/web/beside";
 import { Capsule, createCapsule } from "../shell/Capsule";
 import { CapsuleBack } from "../shell/NavPage";
 import { listSessionServices } from "../../core/sessions/services";
@@ -79,7 +80,7 @@ void getInterfaceRenderModes(Storage).then((modes) => storedModes.set(modes)).ca
  * own Session (Brain's menu › Open terminal), its terminal only, titled
  * "Brain", "{agent} · workspace" (SPEC §1.6, §4).
  */
-export function Session(props: { nav: NavStackState<Route>; workerId: string; hint?: TerminalRouteSessionHint; brain?: boolean; active: () => boolean }) {
+export function Session(props: { nav: NavStackState<Route>; workerId: string; hint?: TerminalRouteSessionHint; brain?: boolean; active: () => boolean; /** The pane the page is in: chat and terminal side by side from 1600. */ pageWidth?: () => number }) {
   const server = untracked(current);
   const transport = untracked(currentTransport);
   if (!server || !transport) return <NavPage title="Session"><View class="flex-1 bg-background" /></NavPage>;
@@ -111,6 +112,11 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
     dismissedKey: dismissedBlock(),
   }));
   const mode = computed(() => (props.brain || !canChat() ? "terminal" : blocked().forceTerminal ? "terminal" : chosenMode()));
+  // A page wide enough for both (core/web/beside.ts, an ultrawide's beside pane): the chat at its left and the
+  // terminal beside it, no view switch; the terminal takes the keys only when it is focused (parity #27).
+  const duo = computed(() => showsSessionDuo({ desktop: !mobile, wide: wide(), chat: !props.brain && canChat(), width: props.pageWidth?.() ?? 0 }));
+  const terminalShown = () => mode() === "terminal" || duo();
+  const chatShown = () => mode() === "chat" || duo();
   const chooseMode = (next: "chat" | "terminal") => {
     if (next === "chat" && untracked(blocked).blockKey) dismissedBlock.set(untracked(blocked).blockKey);
     storedModes.set({ ...untracked(storedModes), [sessionKey]: next });
@@ -635,7 +641,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         </If>
         {/* Chat or terminal, remembered per Session (SPEC §4): one button showing the other view, only where the Session has a
             chat. Brain's chat is home's, so on Brain's terminal the button goes back there. */}
-        <If when={props.brain || canChat()}>
+        <If when={(props.brain || canChat()) && !duo()}>
           <Button testID="session-mode" accessibilityLabel={mode() === "chat" ? "Show terminal" : "Show chat"} onPress={() => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat"))}
             hitSlop={actionSlop} class={look} style={bar ? barStyle : actionStyle}>
             <Icon name={mode() === "chat" ? "terminal" : "chat"} size={bar ? head.actionIcon : 22} color="foreground" />
@@ -675,12 +681,12 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
   const header = capsuled ? capsuleHeader() : undefined;
 
   return (
-    <NavPage title={title()} column={mode() === "terminal" ? "full" : "reading"} capsule={header}
+    <NavPage title={title()} column={terminalShown() ? "full" : "reading"} capsule={header}
       // The side rail's: Stop while a turn runs, Git in a repository, the view, ⋯ (the capsule's actions, in its order).
       rail={[
         { id: "stop", transient: true, icon: "stop", label: stoppingFor() === activity()?.id ? "Stopping" : "Stop", onPress: () => void stop(), shown: () => activity()?.status === "running" && connection() === "connected" },
         { id: "session-git", icon: "git-branch", tone: gitChanged() ? "warning" : undefined, label: gitChanged() ? "Git, changes" : "Git", onPress: openGit, shown: () => isRepo() },
-        { id: "session-mode", icon: mode() === "chat" ? "terminal" : "chat", label: mode() === "chat" ? "Show terminal" : "Show chat", onPress: () => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")), shown: () => Boolean(props.brain) || canChat() },
+        { id: "session-mode", icon: mode() === "chat" ? "terminal" : "chat", label: mode() === "chat" ? "Show terminal" : "Show chat", onPress: () => (props.brain ? goHome() : chooseMode(untracked(mode) === "chat" ? "terminal" : "chat")), shown: () => !duo() && (Boolean(props.brain) || canChat()) },
         { id: "session-menu", icon: "more-horizontal", label: "Session menu", onPress: () => void menu(), shown: () => hasMenu(), ref: menuAnchor.ref },
       ]}
       // One row holds the text and the controls (SPEC §11 Session header), as wide as the bar: the title gets
@@ -706,9 +712,9 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         <View class="flex-1">
           {/* Under a capsule the terminal starts below the collapsed one: an expanded capsule floats over its top
               rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
-          <View class="absolute inset-0 flex-col" style={{ display: mode() === "terminal" ? "flex" : "none", top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
+          <View class={`absolute inset-0 flex-col ${duo() ? "border-l border-border" : ""}`} style={{ display: terminalShown() ? "flex" : "none", left: duo() ? besideBrainWidth : 0, top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
             onTouchStartCapture={capsuled ? () => capsule.collapse() : undefined}>
-            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} onOpenPath={(path) => openPath(path)} attach={terminalAttach}
+            <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && terminalShown()} onOpenPath={(path) => openPath(path)} attach={terminalAttach}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
             <View class="absolute left-3 right-3 top-3 gap-2" style={{ pointerEvents: "box-none" }}>
             <If when={fallback()}><View testID="terminal-offline" class="gap-1.5 rounded-xl border border-border bg-card px-3 py-3">
@@ -724,8 +730,8 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View></If>
             </View>
           </View>
-          <If when={mode() === "chat"}><FileDrop testID={`file-drop-session-${props.workerId}`} class="absolute inset-0 bg-background" onFiles={() => attachDropped}>
-              <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && mode() === "chat"}
+          <If when={chatShown()}><View class="absolute inset-y-0 left-0" style={duo() ? { width: besideBrainWidth } : { right: 0 }}><FileDrop testID={`file-drop-session-${props.workerId}`} class="absolute inset-0 bg-background" onFiles={() => attachDropped}>
+              <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && chatShown()}
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{
                   shown: () => requestsHere().length > 0 || sealedHere().length > 0,
@@ -734,7 +740,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 requests={() => requestsHere().length} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} attached={() => uploads.ready().length > 0} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
-                onStop={() => void stop()} active={() => props.active() && mode() === "chat"} onRecall={recall}
+                onStop={() => void stop()} active={() => props.active() && chatShown()} onRecall={recall}
                 onFiles={attachDropped}
                 attach={attach}
                 beside={{
@@ -752,7 +758,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 <Each of={dshRun() ? [dshRun()] : []} key={(run) => run}>{(run) => <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(run().split("|")[0]), startedAt: Number(run().split("|")[1]) }} />}</Each>
                 <If when={notice()}><Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text></If>
               </Composer>
-            </FileDrop></If>
+            </FileDrop></View></If>
         </View>
       </View>
       <ModelSheet open={modelOpen} onClose={() => modelOpen.set(false)} transport={transport} workerId={props.workerId} onRuntime={(selection) => runtime.set(selection)} />
