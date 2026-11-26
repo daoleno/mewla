@@ -1049,8 +1049,11 @@ func (o *Owner) failoverFor(profileID string) (failoverTarget, bool) {
 	entries, _ := o.modelsForConnection(fallback, false)
 	return failoverTarget{
 		GatewayUpstream: GatewayUpstreamFromProfile(compiled),
-		Model:           compiled.Model,
-		Listed:          standInCandidates(entries),
+		// Only a model the person set: compiled.Model of a connection without
+		// one is the agent's client default (gpt-5 for Codex), which the
+		// fallback may not serve.
+		Model:  normalizeSpace(fallback.Model),
+		Listed: standInCandidates(entries),
 	}, true
 }
 

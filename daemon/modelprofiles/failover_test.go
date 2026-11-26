@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelprofiles/translate"
 )
 
 func TestFailoverRest(t *testing.T) {
@@ -55,14 +57,27 @@ func TestConnectionRestsGrowAndClear(t *testing.T) {
 	if got := r.fail("a", restBusy, restLongest); got != 30*time.Second {
 		t.Fatalf("first rest %v", got)
 	}
+	// A request that was already on its way fails during the rest: the same
+	// outage, so the rest runs from it but does not double.
+	now = now.Add(2 * time.Second)
+	if got := r.fail("a", restBusy, restLongest); got != restBusy {
+		t.Fatalf("a failure during the rest made it %v", got)
+	}
+	now = now.Add(31 * time.Second)
 	if got := r.fail("a", restBusy, restLongest); got != time.Minute {
 		t.Fatalf("second rest %v", got)
 	}
 	for i := 0; i < 10; i++ {
+		now = now.Add(restLongest)
 		r.fail("a", restBusy, restLongest)
 	}
+	now = now.Add(restLongest)
 	if got := r.fail("a", restBusy, restLongest); got != restLongest {
 		t.Fatalf("rest grew to %v, want at most %v", got, restLongest)
+	}
+	// A rate limit naming a longer wait than the rest left lengthens it.
+	if got := r.fail("a", 20*time.Minute, 20*time.Minute); got != 20*time.Minute {
+		t.Fatalf("a longer Retry-After during the rest gave %v", got)
 	}
 	if !r.resting("A") {
 		t.Fatalf("connection ids are not case-sensitive")
@@ -322,5 +337,48 @@ func TestSetProviderFallbackRules(t *testing.T) {
 	}
 	if p, _ := owner.store.Get(a.ID); p.Fallback != "" {
 		t.Fatalf("fallback %q outlived its connection", p.Fallback)
+	}
+}
+
+// A fallback with no model of the person's and no model list yet takes the
+// agent's own model, not its client default (gpt-5 for Codex): seen on the
+// owner's Mac, where a fresh daemon had not listed the fallback's models.
+func TestAFallbackWithoutAModelKeepsTheAgents(t *testing.T) {
+	owner, _ := newDurableOwner(t, t.TempDir())
+	defer owner.Close()
+	ids := map[string]string{}
+	for _, name := range []string{"Main", "Spare"} {
+		cat, err := owner.UpsertProviderConnection(ProviderConnectionInput{
+			Name: name, Client: ClientCodex, PresetID: ProviderPresetCustom, BaseURL: "http://127.0.0.1:9/v1", Advanced: true,
+		}, "fixture-key-not-real", owner.Catalog().Revision, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range cat.Connections {
+			if c.Name == name {
+				ids[name] = c.ID
+			}
+		}
+	}
+	spare, err := owner.store.Get(ids["Spare"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	spare.UpstreamAPI = ProtocolAnthropicMessages
+	if _, err := owner.store.Update(spare, owner.store.Revision()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.SetProviderFallback(ids["Main"], ids["Spare"]); err != nil {
+		t.Fatal(err)
+	}
+	target, ok := owner.failoverFor(ids["Main"])
+	if !ok {
+		t.Fatal("no fallback")
+	}
+	if target.Model != "" || len(target.Listed) != 0 {
+		t.Fatalf("model=%q listed=%v", target.Model, target.Listed)
+	}
+	if got := failoverModel(translate.APIResponses, "claude-sonnet-5", target); got != "claude-sonnet-5" {
+		t.Fatalf("the request went as %q", got)
 	}
 }

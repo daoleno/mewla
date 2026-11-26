@@ -103,13 +103,23 @@ func (r *connectionRests) fail(id string, base, most time.Duration) time.Duratio
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	rest := r.byID[normalizeID(id)]
+	now := r.now()
+	if now.Before(rest.until) {
+		// A request that set out before the rest began (one that was
+		// retrying beside the first): the same outage, counted once.
+		if until := now.Add(min(base, most)); until.After(rest.until) {
+			rest.until = until
+			r.byID[normalizeID(id)] = rest
+		}
+		return rest.until.Sub(now)
+	}
 	wait := base
 	for i := 0; i < rest.strikes && wait < most; i++ {
 		wait *= 2
 	}
 	wait = min(wait, most)
 	rest.strikes++
-	rest.until = r.now().Add(wait)
+	rest.until = now.Add(wait)
 	r.byID[normalizeID(id)] = rest
 	return wait
 }
@@ -137,8 +147,8 @@ func (r *connectionRests) settle(id string, status int, header http.Header, body
 // failoverTarget is a fallback connection, ready to send to.
 type failoverTarget struct {
 	GatewayUpstream
-	// Model is the fallback connection's own model, "" when the request
-	// names it.
+	// Model is the model the person set on the fallback connection, ""
+	// when they set none (the request's own model goes then).
 	Model string
 	// Listed are the models the fallback's Provider listed.
 	Listed []string
