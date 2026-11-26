@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/statedir"
@@ -131,6 +132,18 @@ func runBootCommand(args []string, stderr io.Writer) error {
 			return bootTaskStatus(execBootRunner{}, os.Stdout)
 		}
 		return bootStatus(execBootRunner{}, os.Stdout)
+	case "give-back":
+		fs := flag.NewFlagSet("mewla boot give-back", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		stateDir := fs.String("state-dir", "", "daemon state directory (default: ~/.mewla)")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		dir, err := auth.ResolveStorageDir(*stateDir)
+		if err != nil {
+			return err
+		}
+		return bootGiveBack(dir, bootGiveBackWait, os.Stdout)
 	case "uninstall":
 		if len(args[1:]) > 0 {
 			if !isHelpArg(args[1]) {
@@ -158,7 +171,10 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "  install    Start this same mewla runtime at boot: a systemd user unit on Linux,")
 	fmt.Fprintln(w, "             a LaunchAgent on macOS, a per-user logon task on Windows")
 	fmt.Fprintln(w, "  status     Report the installed unit, its configuration, owner and /health")
-	fmt.Fprintln(w, "  uninstall  Stop, disable and remove only the unit this command installed")
+	fmt.Fprintln(w, "  uninstall  Stop, disable and remove only the unit this command installed, and give")
+	fmt.Fprintln(w, "             Codex and Claude Code back the settings they had before Mewla's gateway")
+	fmt.Fprintln(w, "  give-back  Once this computer's Mewla has stopped, give Codex and Claude Code back their")
+	fmt.Fprintln(w, "             own settings (Mewla for Mac's Stop Mewla on this Mac… runs it)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Install flags:")
 	fmt.Fprintln(w, "  -binary <path>      mewla or mewla-dev executable to run (default: this executable)")

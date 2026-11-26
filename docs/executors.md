@@ -222,7 +222,8 @@ own. It changes a value only while the value is still the one it wrote: a
 `model_provider` or `ANTHROPIC_BASE_URL` someone set since is left alone, and
 a daemon restart never takes a CLI back from another tool (choosing a Provider
 in Mewla does). Choosing Official login gives back what you had before, and so
-does `mewla boot uninstall`; a daemon that stops or restarts keeps both CLIs on
+does `mewla boot uninstall` (on Mewla for Mac, **Stop Mewla on this Mac…**); a
+daemon that stops or restarts by itself, or for an update, keeps both CLIs on
 the gateway, which comes back on the same address. If
 another tool later writes Mewla's gateway back while Mewla is not using it
 (it restores what it saw while it was on), Mewla notices within seconds and

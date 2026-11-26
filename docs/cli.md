@@ -26,6 +26,7 @@ mewla restart                 # restart Mewla running in the background; Session
 mewla restart -if-older       # the same, only when the running Mewla is older than this one (Mewla for Mac runs it after an update)
 mewla version [--json]        # version, commit and platform
 mewla boot install|status|uninstall   # start at login: systemd user service (Linux), LaunchAgent (macOS), scheduled task (Windows)
+mewla boot give-back                  # once Mewla has stopped: Codex and Claude Code get their own settings back
 ```
 
 `-state-dir DIR` selects a state directory other than `~/.mewla`. Pass the same

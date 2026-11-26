@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
 
@@ -136,5 +138,39 @@ func TestBootTaskStateDirReadsTheDaemonArguments(t *testing.T) {
 		if got := bootTaskStateDir(xml); got != want {
 			t.Errorf("bootTaskStateDir(%s) = %q, want %q", xml, got, want)
 		}
+	}
+}
+
+func TestBootGiveBackLeavesARunningDaemonItsProjection(t *testing.T) {
+	config, home := newBootTestEnvironment(t)
+	codexConfig, _ := releaseProjected(t, home, config.StateDir)
+	// A daemon that still runs keeps the projection; give-back says so.
+	bootHoldStateLock(t, config.StateDir)
+	var out bytes.Buffer
+	if err := bootGiveBack(config.StateDir, 300*time.Millisecond, &out); err == nil || !strings.Contains(out.String(), "still runs") {
+		t.Fatalf("give-back with the daemon running: %v, %q", err, out.String())
+	}
+	if raw, _ := os.ReadFile(codexConfig); !strings.Contains(string(raw), modelprofiles.GatewayProviderName) {
+		t.Fatalf("a running daemon's projection was given back:\n%s", raw)
+	}
+}
+
+// launchd and schtasks return before the daemon has exited: give-back waits for its state lock.
+func TestBootGiveBackWaitsForTheDaemonToStop(t *testing.T) {
+	config, home := newBootTestEnvironment(t)
+	codexConfig, claudeSettings := releaseProjected(t, home, config.StateDir)
+	lock, acquired, err := control.TryAcquireLifecycleLock(config.StateDir)
+	if err != nil || !acquired {
+		t.Fatalf("hold state lock: %t %v", acquired, err)
+	}
+	time.AfterFunc(300*time.Millisecond, func() { _ = lock.Close() })
+	if err := bootGiveBack(config.StateDir, 5*time.Second, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(codexConfig); !strings.Contains(string(raw), `model_provider = "freeride"`) {
+		t.Fatalf("Codex config after give-back:\n%s", raw)
+	}
+	if got := releaseClaudeBaseURL(t, claudeSettings); got != "https://mine.example" {
+		t.Fatalf("Claude Code base URL after give-back = %q", got)
 	}
 }

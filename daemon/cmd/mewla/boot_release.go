@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
@@ -39,6 +40,31 @@ func bootReleaseAgentConfigs(stateDir string, out io.Writer) {
 			fmt.Fprintf(out, "Note: Claude Code's settings (%s) were not given back: %v\n", claudeSettings, err)
 		}
 	}
+}
+
+// bootGiveBackWait is how long give-back waits for a stopping daemon to let go of its state.
+var bootGiveBackWait = 20 * time.Second
+
+// bootGiveBack gives the settings back once no daemon holds stateDir: launchd and schtasks stop a daemon after they
+// return, so it waits for the state lock. A daemon that still runs keeps them (it would point them at itself again).
+func bootGiveBack(stateDir string, wait time.Duration, out io.Writer) error {
+	deadline := time.Now().Add(wait)
+	for {
+		held, err := bootStateLockHeld(stateDir)
+		if err != nil {
+			return fmt.Errorf("inspect state lifecycle lock: %w", err)
+		}
+		if !held {
+			break
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintf(out, "Note: Mewla still runs on %s, so Codex and Claude Code keep its gateway\n", stateDir)
+			return fmt.Errorf("mewla still runs on %s", stateDir)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	bootReleaseAgentConfigs(stateDir, out)
+	return nil
 }
 
 var bootTaskStateDirArg = regexp.MustCompile(`-state-dir\s+(?:"([^"]*)"|(\S+))`)

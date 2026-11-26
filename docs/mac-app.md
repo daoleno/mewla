@@ -101,4 +101,6 @@ again. A Worker that needs your Chrome gets the same kind of card
 ## Remove it
 
 Choose **Stop Mewla on this Mac…** from the cat's menu, then move Mewla from
-Applications to the Trash. Your Sessions, Work and settings are in `~/.mewla`.
+Applications to the Trash. Stopping gives Codex and Claude Code back the
+settings they had before Mewla's gateway; opening Mewla again points them at it
+again. Your Sessions, Work and settings are in `~/.mewla`.
