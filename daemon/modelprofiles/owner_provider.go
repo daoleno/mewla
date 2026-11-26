@@ -485,6 +485,7 @@ func providerConnectionFromProfile(profile Profile, ready bool) ProviderConnecti
 		CredentialReady: ready,
 		Advanced:        advanced,
 		ImageModel:      profile.ImageModel,
+		FallbackID:      profile.Fallback,
 	}
 	if advanced {
 		conn.BaseURL = profile.BaseURL
@@ -560,6 +561,7 @@ func (o *Owner) UpsertProviderConnection(in ProviderConnectionInput, apiKey stri
 			profile.CredentialRef = previous.CredentialRef
 			// image_model is set outside the connection editor.
 			profile.ImageModel = previous.ImageModel
+			profile.Fallback = previous.Fallback
 			if strings.TrimRight(previous.BaseURL, "/") == strings.TrimRight(profile.BaseURL, "/") {
 				profile.UpstreamAPI = previous.UpstreamAPI
 			}
@@ -806,6 +808,15 @@ func (o *Owner) DeleteProviderConnection(id string, revision int64) (ProviderCat
 		if delErr == nil {
 			_, delErr = o.store.Delete(id, revision)
 		}
+		if delErr == nil || errors.Is(delErr, ErrPersistDirSync) {
+			// A connection that named the deleted one has no fallback now.
+			for _, other := range o.store.Catalog().Profiles {
+				if normalizeID(other.Fallback) == id {
+					other.Fallback = ""
+					_, _ = o.store.Update(other, o.store.Revision())
+				}
+			}
+		}
 	}
 	o.mu.Unlock()
 
@@ -948,6 +959,77 @@ func (o *Owner) SetProviderModelSupport(connectionID string, enabledIDs []string
 	o.mu.Unlock()
 	proj, _ := o.ProjectProviders()
 	return proj, persist, nil
+}
+
+// SetProviderFallback sets, or clears (empty fallbackID), the connection a
+// connection's model requests go to while it fails. Both serve the same
+// agent; a connection is not its own fallback.
+func (o *Owner) SetProviderFallback(connectionID, fallbackID string) (ProviderCatalogProjection, error) {
+	if o == nil || !o.started || o.store == nil {
+		return ProviderCatalogProjection{}, fmt.Errorf("%w: owner not started", ErrInvalid)
+	}
+	o.mu.Lock()
+	applyErr := func() error {
+		if err := o.ensureProviderSwitchJournalClearedLocked(); err != nil {
+			return fmt.Errorf("%w: resolve prior provider switch: %v", ErrInvalid, err)
+		}
+		profile, err := o.store.Get(normalizeID(connectionID))
+		if err != nil {
+			return err
+		}
+		fallbackID = normalizeID(fallbackID)
+		if fallbackID != "" {
+			if fallbackID == profile.ID {
+				return fmt.Errorf("%w: a connection cannot be its own fallback", ErrInvalid)
+			}
+			fallback, err := o.store.Get(fallbackID)
+			if err != nil {
+				return err
+			}
+			if !isAccountConnection(profile) || !isAccountConnection(fallback) ||
+				clientFromExecutor(fallback.Client) != clientFromExecutor(profile.Client) {
+				return fmt.Errorf("%w: the fallback must be a Provider connection of the same agent", ErrInvalid)
+			}
+		}
+		profile.Fallback = fallbackID
+		_, err = o.store.Update(profile, o.store.Revision())
+		return err
+	}()
+	o.mu.Unlock()
+	if applyErr != nil && !errors.Is(applyErr, ErrPersistDirSync) {
+		return ProviderCatalogProjection{}, applyErr
+	}
+	proj, perr := o.ProjectProviders()
+	if perr != nil {
+		return ProviderCatalogProjection{}, errors.Join(applyErr, perr)
+	}
+	return proj, applyErr
+}
+
+// failoverFor is the fallback of a connection, when it names one that is
+// ready to take requests.
+func (o *Owner) failoverFor(profileID string) (failoverTarget, bool) {
+	if o == nil || o.store == nil {
+		return failoverTarget{}, false
+	}
+	profile, err := o.store.Get(normalizeID(profileID))
+	if err != nil || profile.Fallback == "" {
+		return failoverTarget{}, false
+	}
+	fallback, err := o.store.Get(profile.Fallback)
+	if err != nil || !o.connectionReady(fallback) {
+		return failoverTarget{}, false
+	}
+	compiled, err := CompileConnectionTarget(fallback, clientFromExecutor(fallback.Client), "", "")
+	if err != nil {
+		return failoverTarget{}, false
+	}
+	entries, _ := o.modelsForConnection(fallback, false)
+	return failoverTarget{
+		GatewayUpstream: GatewayUpstreamFromProfile(compiled),
+		Model:           compiled.Model,
+		Listed:          standInCandidates(entries),
+	}, true
 }
 
 // SetProviderImageModel sets or clears (empty model) the image_model of one

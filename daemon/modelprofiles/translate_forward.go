@@ -50,6 +50,9 @@ type translatedForward struct {
 	// answered is told the upstream's status once it answered (0 when it
 	// could not be reached), before anything is written to the client.
 	answered func(status int)
+	// failover, when set, is offered a failure before the agent is told:
+	// it returns true when it answered the agent itself (see failover).
+	failover func(status int, header http.Header, body []byte, err error) bool
 }
 
 func (t translatedForward) serve(ctx context.Context, w http.ResponseWriter) {
@@ -92,11 +95,19 @@ func (t translatedForward) serve(ctx context.Context, w http.ResponseWriter) {
 	}
 	resp, err := sendUpstream(t.client, upReq, x.Body, true)
 	if err != nil {
+		if t.failover != nil && t.failover(0, nil, nil, err) {
+			return
+		}
 		status, typed := classifyUpstreamDoError(err)
 		writeRouteError(w, status, forProvider(typed, t.provider, upstreamReachReason(err)))
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 && t.failover != nil {
+		if t.failover(resp.StatusCode, resp.Header, peekFailure(resp), nil) {
+			return
+		}
+	}
 	answered(resp.StatusCode)
 	usage, replyErr := x.Reply(w, resp)
 	debuglog.Printf("translate: %s to %s status=%d in=%d out=%d cache_read=%d cache_write=%d err=%v",

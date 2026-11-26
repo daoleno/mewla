@@ -58,6 +58,8 @@ type ProviderConnection struct {
 	Advanced              bool   `json:"advanced,omitempty"`
 	// ImageModel replaces the model of Codex image_gen requests at the gateway.
 	ImageModel string `json:"image_model,omitempty"`
+	// FallbackID is the connection this one's requests go to while it fails.
+	FallbackID string `json:"fallback_connection_id,omitempty"`
 }
 
 // ProviderConnectionSelection is the future-launch connection selection for one product

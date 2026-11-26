@@ -13,11 +13,79 @@ import (
 )
 
 func runProvidersCommand(args []string, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "fallback" {
+		return runProvidersFallback(args[1:], stderr)
+	}
 	if len(args) == 0 || isHelpArg(args[0]) || args[0] != "image-model" {
 		fmt.Fprintln(stderr, "Usage: mewla providers image-model [show | set <model> | clear] [--connection <id>]")
+		fmt.Fprintln(stderr, "       mewla providers fallback [show | set <fallback-id> | clear] [--connection <id>]")
 		return flag.ErrHelp
 	}
 	return runProvidersImageModel(args[1:], stderr)
+}
+
+// runProvidersFallback shows or changes the connection each connection's
+// model requests go to while it fails.
+func runProvidersFallback(args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla providers fallback", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	var connectionID string
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+	fs.StringVar(&connectionID, "connection", "", "the connection whose fallback to set or clear")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "Usage: mewla providers fallback [show | set <fallback-id> | clear] [--connection <id>]")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "When a connection fails a request before the agent heard anything (unreachable,")
+		fmt.Fprintln(stderr, "busy, rate-limited, out of credit, key refused), the request goes to its fallback,")
+		fmt.Fprintln(stderr, "and the connection rests for a while before it is asked again.")
+		fmt.Fprintln(stderr, "")
+		fs.PrintDefaults()
+	}
+	action := "show"
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		action, args = args[0], args[1:]
+	}
+	positional, err := parseInterleaved(fs, args)
+	if err != nil {
+		return err
+	}
+	req := control.Request{Type: "provider_list"}
+	switch action {
+	case "show":
+	case "set":
+		if len(positional) != 1 || connectionID == "" {
+			return fmt.Errorf("usage: mewla providers fallback set <fallback-id> --connection <id>")
+		}
+		req = control.Request{Type: "provider_set_fallback", ConnectionID: connectionID, FallbackConnectionID: positional[0]}
+	case "clear":
+		if connectionID == "" {
+			return fmt.Errorf("usage: mewla providers fallback clear --connection <id>")
+		}
+		req = control.Request{Type: "provider_set_fallback", ConnectionID: connectionID}
+	default:
+		fs.Usage()
+		return fmt.Errorf("unknown fallback action: %s", action)
+	}
+	resp, err := callControl(cfg, req)
+	if err != nil {
+		return err
+	}
+	if !resp.OK || resp.Providers == nil {
+		return writeControlResponse(os.Stdout, resp, true)
+	}
+	type row struct {
+		ConnectionID string `json:"connection_id"`
+		Name         string `json:"name"`
+		Fallback     string `json:"fallback_connection_id"`
+	}
+	rows := []row{}
+	for _, conn := range resp.Providers.Connections {
+		rows = append(rows, row{ConnectionID: conn.ID, Name: conn.Name, Fallback: conn.FallbackID})
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(rows)
 }
 
 // runProvidersImageModel shows or changes the image_model of Codex

@@ -138,9 +138,12 @@ type Owner struct {
 	// upstreamAPIDetect finds the API a custom endpoint speaks when it is
 	// saved (detectUpstreamAPI; tests replace it).
 	upstreamAPIDetect func(executorID, baseURL, secret string) (string, bool)
-	verifier          ProfileContractVerifier
-	started           bool
-	closed            bool
+	// failover moves model requests from a failing connection to its
+	// fallback, for the router and the gateway alike.
+	failover *failover
+	verifier ProfileContractVerifier
+	started  bool
+	closed   bool
 	// idleListenerOwned is true when this Owner started the loopback listener
 	// from an inert (no live routes) state and may tear it down on failed first
 	// launch / last Abort when no routes remain.
@@ -338,6 +341,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		modelsDevPath = filepath.Join(filepath.Dir(cfg.DiscoveryPath), modelsDevCacheFile)
 	}
 	o.backgroundCtx, o.cancelBackground = context.WithCancel(context.Background())
+	o.failover = &failover{rests: newConnectionRests(), fallbackOf: o.failoverFor}
 	o.modelsDev = newModelsDevCatalog(modelsDevPath, cfg.ModelsDevURL)
 	_ = o.modelsDev.load()
 	o.codexModels = newCodexModelList(cfg.CodexModels)
@@ -345,7 +349,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		_ = o.Close()
 		return nil, err
 	}
-	o.router = NewRouter(o.table, WithRouterLookup(lookup), WithRouterCredentials(cfg.Credentials), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute))
+	o.router = NewRouter(o.table, WithRouterLookup(lookup), WithRouterCredentials(cfg.Credentials), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute), WithRouterFailover(o.failover))
 	if err := o.startGateway(cfg); err != nil {
 		_ = o.Close()
 		return nil, err
@@ -537,7 +541,7 @@ func (o *Owner) ensureListenerLocked(sticky bool) (PersistResult, error) {
 	}
 
 	if o.router == nil {
-		o.router = NewRouter(o.table, WithRouterLookup(o.lookup), WithRouterCredentials(o.creds), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute))
+		o.router = NewRouter(o.table, WithRouterLookup(o.lookup), WithRouterCredentials(o.creds), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute), WithRouterFailover(o.failover))
 	}
 	srv := &http.Server{
 		Handler:           o.router.Handler(),

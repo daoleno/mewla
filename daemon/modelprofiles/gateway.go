@@ -80,18 +80,21 @@ type GatewayRequestResolver func(protocol, modelID string) (GatewayUpstream, err
 // next request from every routed Codex process uses the new connection without
 // CLI restart, Session kill/resume, or model substitution.
 type Gateway struct {
-	mu             sync.RWMutex
-	upstream       GatewayUpstream
-	creds          CredentialStore
-	lookup         func(string) (string, bool)
-	client         *http.Client
-	maxBody        int64
-	addr           string
-	ln             net.Listener
-	server         *http.Server
-	statePath      string
-	ws             *wsConnRegistry
-	resolve        GatewayRequestResolver
+	mu        sync.RWMutex
+	upstream  GatewayUpstream
+	creds     CredentialStore
+	lookup    func(string) (string, bool)
+	client    *http.Client
+	maxBody   int64
+	addr      string
+	ln        net.Listener
+	server    *http.Server
+	statePath string
+	ws        *wsConnRegistry
+	resolve   GatewayRequestResolver
+	// failover moves a model request from a failing connection to its
+	// fallback (shared with the Session router).
+	failover       *failover
 	claudeStandIn  func(profileID, model string) (string, bool)
 	listenFallback bool
 	// requests counts HTTP model requests being answered now (a websocket
@@ -126,6 +129,12 @@ func WithGatewayRequestResolver(resolve GatewayRequestResolver) GatewayOption {
 
 // WithGatewayClaudeStandIn sets how a Claude id the chosen Claude connection
 // does not offer is replaced (see claudeStandIn).
+// WithGatewayFailover moves model requests from a failing connection to its
+// fallback (see failover).
+func WithGatewayFailover(f *failover) GatewayOption {
+	return func(g *Gateway) { g.failover = f }
+}
+
 func WithGatewayClaudeStandIn(standIn func(profileID, model string) (string, bool)) GatewayOption {
 	return func(g *Gateway) { g.claudeStandIn = standIn }
 }
@@ -474,6 +483,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			return
 		}
 	}
+	agentModel := "" // as the agent asked, before any stand-in
 	if g.resolve != nil && protocol == GatewayProtocolCodexTools {
 		upstream, err = g.resolve(protocol, "")
 		if err != nil {
@@ -493,6 +503,10 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		if parseErr != nil {
 			writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
 			return
+		}
+		agentModel = modelID
+		if normalized, ok := normalizeClaudeContextModel(modelID); ok && protocol == GatewayProtocolAnthropic {
+			agentModel = normalized
 		}
 		upstream, err = g.resolve(protocol, modelID)
 		if err != nil {
@@ -537,9 +551,37 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			req.ContentLength = int64(len(bodyBytes))
 		}
 	}
+	clientAPI := map[string]string{GatewayProtocolAnthropic: translate.APIAnthropic, GatewayProtocolResponses: translate.APIResponses}[protocol]
+	// A model request may go to the connection's fallback: straight away
+	// while the connection rests, or when it fails before the agent heard
+	// anything.
+	moveable := g.failover != nil && clientAPI != "" && req.Method == http.MethodPost && len(bodyBytes) > 0 && !strings.HasSuffix(req.URL.Path, "/count_tokens")
+	via := forwardVia{client: g.client, creds: g.creds, lookup: g.lookup}
+	moved := func() (failoverRequest, bool) {
+		plain, _, err := decodeBodyEncoding(req.Header.Get("Content-Encoding"), bodyBytes, maxBody)
+		if err != nil {
+			// Already opened on the way (the history strip or an adapter).
+			if trimmed := bytes.TrimSpace(bodyBytes); len(trimmed) == 0 || trimmed[0] != '{' {
+				return failoverRequest{}, false
+			}
+			plain = bodyBytes
+		}
+		return failoverRequest{from: upstream, clientAPI: clientAPI, apiPath: req.URL.Path, body: plain, model: agentModel, inbound: req.Header}, true
+	}
+	failure := func(status int, header http.Header, raw []byte, err error) bool {
+		if !moveable {
+			return false
+		}
+		r, ok := moved()
+		return ok && g.failover.fromFailure(req.Context(), w, via, r, status, header, raw, err)
+	}
+	if moveable && g.failover.resting(upstream.ProfileID) {
+		if r, ok := moved(); ok && g.failover.send(req.Context(), w, via, r) {
+			return
+		}
+	}
 	// A Provider that speaks another API than the agent: the request is
 	// translated and the reply comes back in the agent's API.
-	clientAPI := map[string]string{GatewayProtocolAnthropic: translate.APIAnthropic, GatewayProtocolResponses: translate.APIResponses}[protocol]
 	if upstreamAPI := apiOfProtocol(upstream.Protocol); clientAPI != "" && clientAPI != upstreamAPI && translate.Supported(clientAPI, upstreamAPI) {
 		plain, _, decodeErr := decodeBodyEncoding(req.Header.Get("Content-Encoding"), bodyBytes, maxBody)
 		if decodeErr != nil {
@@ -555,6 +597,12 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			client: g.client, clientAPI: clientAPI, upstreamAPI: upstreamAPI,
 			baseURL: upstream.BaseURL, provider: upstream.Name, inbound: inbound, body: plain,
 			applyAuth: func(h http.Header) error { return applyGatewayAuth(h, upstream, inbound, g.lookup, g.creds) },
+			answered: func(status int) {
+				if moveable && status >= 200 && status < 300 {
+					g.failover.rests.ok(upstream.ProfileID)
+				}
+			},
+			failover: failure,
 		}.serve(req.Context(), w)
 		return
 	}
@@ -652,11 +700,21 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	// image upstream, so tool endpoints are never replayed.
 	resp, err := sendUpstream(g.client, upReq, bodyBytes, protocol != GatewayProtocolCodexTools)
 	if err != nil {
+		if failure(0, nil, nil, err) {
+			return
+		}
 		status, typed := classifyUpstreamDoError(err)
 		writeRouteError(w, status, forProvider(typed, upstream.Name, upstreamReachReason(err)))
 		return
 	}
 	defer resp.Body.Close()
+	if moveable && resp.StatusCode >= 400 {
+		if failure(resp.StatusCode, resp.Header, peekFailure(resp), nil) {
+			return
+		}
+	} else if moveable && resp.StatusCode < 300 {
+		g.failover.rests.ok(upstream.ProfileID)
+	}
 	copySafeResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	if err := streamCopyFlush(w, resp.Body); err != nil {

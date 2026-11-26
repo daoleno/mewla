@@ -51,6 +51,8 @@ type Router struct {
 	// issued, so switched routes forward only thinking the new upstream can
 	// verify.
 	thinking *issuedThinkingLedger
+	// failover moves a request from a failing connection to its fallback.
+	failover *failover
 	// active counts HTTP model requests from arrival to their last byte.
 	active atomic.Int64
 }
@@ -129,6 +131,12 @@ func WithRouterModelSwitch(apply func(routeID, modelID, effort string, effortPre
 // source (the live-control app-server subscription snapshot). With it, a
 // fragment-less request whose model/effort differs from the binding is
 // checked against the native thread before deciding converge vs normalize.
+// WithRouterFailover moves model requests from a failing connection to its
+// fallback (see failover).
+func WithRouterFailover(f *failover) RouterOption {
+	return func(r *Router) { r.failover = f }
+}
+
 func WithRouterNativeSettings(lookup func(routeID string) (codexctl.NativeSettings, bool)) RouterOption {
 	return func(r *Router) {
 		r.nativeSettings = lookup
@@ -260,6 +268,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	rewritten := body
+	agentModel := "" // as the agent asked, before any stand-in
 	if len(body) > 0 && (parsed.Endpoint == EndpointResponses || parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointAnthropicCountTokens) {
 		requestModel, modelErr := requestModelFromBody(body)
 		if modelErr != nil {
@@ -280,6 +289,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 		}
+		agentModel = requestModel
 		if r.modelCatalog != nil || r.models != nil {
 			catalog := RouteModelCatalog{}
 			var catalogErr error
@@ -468,6 +478,24 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		rewritten = dropClaudeBillingLine(rewritten)
 	}
 
+	// A model request may go to the connection's fallback: straight away
+	// while the connection rests, or when it fails before the agent heard
+	// anything.
+	moveable := r.failover != nil && (parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointResponses)
+	via := forwardVia{client: r.client, creds: r.creds, lookup: r.credentialLookup()}
+	moved := func(body []byte) failoverRequest {
+		return failoverRequest{
+			from:      GatewayUpstream{ProfileID: binding.ProfileID, Name: binding.ProfileName, Protocol: binding.Protocol},
+			clientAPI: apiOfEndpoint(parsed.Endpoint), apiPath: parsed.APIPath, body: body, model: agentModel, inbound: req.Header,
+		}
+	}
+	if moveable && r.failover.resting(binding.ProfileID) && r.failover.send(req.Context(), w, via, moved(rewritten)) {
+		return
+	}
+	failure := func(status int, header http.Header, raw []byte, err error) bool {
+		return moveable && r.failover.fromFailure(req.Context(), w, via, moved(rewritten), status, header, raw, err)
+	}
+
 	// A Provider that speaks another API than the agent gets the request
 	// translated, and the agent its reply in its own API.
 	if clientAPI, upstreamAPI := apiOfEndpoint(parsed.Endpoint), apiOfProtocol(binding.Protocol); clientAPI != upstreamAPI && translate.Supported(clientAPI, upstreamAPI) {
@@ -484,7 +512,11 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			answered: func(status int) {
 				_ = r.table.EndRouteFlight(parsed.RouteID, flightToken, status >= 200 && status < 300)
 				completed = true
+				if moveable && status >= 200 && status < 300 {
+					r.failover.rests.ok(binding.ProfileID)
+				}
 			},
+			failover: failure,
 		}.serve(req.Context(), w)
 		return
 	}
@@ -538,11 +570,21 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	resp, err := sendUpstream(r.client, upReq, rewritten, true)
 	if err != nil {
+		if failure(0, nil, nil, err) {
+			return
+		}
 		status, typed := classifyUpstreamDoError(err)
 		writeRouteError(w, status, forProvider(typed, binding.ProfileName, upstreamReachReason(err)))
 		return
 	}
 	defer resp.Body.Close()
+	if moveable && resp.StatusCode >= 400 {
+		if failure(resp.StatusCode, resp.Header, peekFailure(resp), nil) {
+			return
+		}
+	} else if moveable && resp.StatusCode < 300 {
+		r.failover.rests.ok(binding.ProfileID)
+	}
 
 	// Only a successful 2xx upstream response may mark opaque history, and only
 	// after headers are about to be forwarded (never on local/network failure).

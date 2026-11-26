@@ -415,6 +415,7 @@ func normalizeProfile(profile Profile) Profile {
 	profile.ClientModelProvenance = normalizeID(profile.ClientModelProvenance)
 	profile.Model = normalizeSpace(profile.Model)
 	profile.ImageModel = normalizeSpace(profile.ImageModel)
+	profile.Fallback = normalizeID(profile.Fallback)
 	profile.UpstreamAPI = normalizeID(profile.UpstreamAPI)
 	profile.BaseURL = normalizeSpace(profile.BaseURL)
 	profile.AuthMode = normalizeID(profile.AuthMode)

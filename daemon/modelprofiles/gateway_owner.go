@@ -70,7 +70,7 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	if listenAddr != "" {
 		addr = listenAddr
 	}
-	gateway := NewGateway(addr, cfg.Credentials, WithGatewayRequestResolver(o.resolveGatewayRequestLive), WithGatewayClaudeStandIn(o.gatewayClaudeStandIn))
+	gateway := NewGateway(addr, cfg.Credentials, WithGatewayRequestResolver(o.resolveGatewayRequestLive), WithGatewayClaudeStandIn(o.gatewayClaudeStandIn), WithGatewayFailover(o.failover))
 	if stateDir != "" {
 		if err := os.MkdirAll(stateDir, 0o700); err != nil {
 			return fmt.Errorf("%w: create gateway state dir: %v", ErrInvalid, err)
