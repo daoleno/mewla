@@ -139,7 +139,7 @@ export function Providers(props: { nav: PageNav }) {
   // On a wide pane the agents and the Providers are the list, and the shown Provider's page scrolls on its own beside it.
   const split = () => listDetail() && Boolean(shownKey());
   const aside = (
-    <View testID="providers-shown" class="flex-1 border-l border-border bg-background" style={{ display: split() ? "flex" : "none" }}>
+    <View testID="providers-shown" class="flex-1 flex-col border-l border-border bg-background" style={{ display: split() ? "flex" : "none" }}>
       {keyed(() => (split() ? shownKey() : ""), (cid) => <If when={cid}><Scroll keyboardShouldPersistTaps="handled" testID="providers-shown-scroll" class="flex-1" contentClass="px-6 pt-2" contentStyle={{ paddingBottom: 40 }}>
           <View class="w-full" style={{ maxWidth: SPLIT_DETAIL }}>
             <DisplayTitle testID="provider-shown-title" title={snapshot()?.connections.find((c) => c.id === cid)?.name ?? ""} />
