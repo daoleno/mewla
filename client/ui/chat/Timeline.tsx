@@ -1,5 +1,5 @@
 import { cleanup, colorScheme, computed, effect, ErrorBoundary, List, platform, signal, Text, untracked, View, type JSX, type ListRef, type ViewRef } from "nsh";
-import { threadType } from "../kit/density";
+import { roomy, threadType } from "../kit/density";
 import { delayed } from "../kit/wait";
 import { derived } from "../kit/derived";
 import { motion } from "../../core/motion/tokens";
@@ -543,6 +543,22 @@ export function ChatTimeline(props: {
       });
     });
   }
+  // The type steps with the window (kit/density `roomy`, from 2560): every row changes height at once, further than
+  // NSH's List keeps its end through, so a list that was following its end goes back to it (3440 → 1920 → 3440, 11-26).
+  let typeStep = untracked(roomy);
+  effect(() => {
+    const step = roomy();
+    if (step === typeStep) return;
+    typeStep = step;
+    if (!last?.atEnd) return;
+    const back = () => list?.scrollToEnd({ animated: false });
+    const first = setTimeout(back, 0);
+    const settled = setTimeout(back, 120);
+    cleanup(() => {
+      clearTimeout(first);
+      clearTimeout(settled);
+    });
+  });
   let dragging = false;
   let lastTraced = Number.NaN;
   // With the side rail up (iPhone Duo) the window has no status bar at its top, yet UIKit keeps a tap region there

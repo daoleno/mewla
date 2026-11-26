@@ -1,4 +1,6 @@
-import { context, platform } from "nsh";
+import { computed, context, platform, windowSize } from "nsh";
+import { isAvailable as mobile } from "nsh/mobile";
+import { ROOMY_MIN_WIDTH } from "../../core/web/beside";
 
 /**
  * How tight a surface draws (DESIGN-MAC.md; RESULT-DESIGN-PAIRS 11-21): `phone` is the shipped phone and web app,
@@ -21,24 +23,37 @@ export function dense<T>(values: { phone: T; window: T; perch?: T }): T {
 }
 
 /**
+ * A browser window 2560 or wider (a 27" QHD, an ultrawide; Brain's review of #89): the thread's text and the composer
+ * a step larger, in a wider column (core/web/places.ts `roomy`). Reactive: the classes below are read in JSX, so a
+ * window crossing it restyles the rows it has without making them again. The phone and the Mac keep their sizes.
+ */
+export const roomy = computed(() => platform.os === "web" && !mobile && windowSize().width >= ROOMY_MIN_WIDTH);
+
+/**
  * The thread's type (RESULT-DESIGN-PAIRS #1): the phone's 17/25 stays on phones; the Mac's window reads 14.5/23 and
  * its perch 14/21. Read when the row is made.
  */
 export function threadType() {
+  const phone = density() === "phone";
+  const message = dense({ phone: "text-message", window: "text-[14.5px] leading-[23px]", perch: "text-[14px] leading-[21px]" });
+  const bubbleText = dense({ phone: "text-message", window: "text-[14.5px] leading-[21px]", perch: "text-[14px] leading-[20px]" });
+  const question = dense({ phone: "text-body", window: "text-[14.5px] leading-[21px]", perch: "text-[14px] leading-[20px]" });
+  const line = dense({ phone: "text-sub", window: "text-[12.5px] leading-[17px]", perch: "text-[12px] leading-[16px]" });
+  const big = () => phone && roomy();
   return {
-    /** Brain's text. */
-    message: dense({ phone: "text-message", window: "text-[14.5px] leading-[23px]", perch: "text-[14px] leading-[21px]" }),
+    /** Brain's text: 17/25, 18/28 in a roomy window. */
+    get message() { return big() ? "text-[18px] leading-[28px]" : message; },
     /** Your bubble's text, and the bubble around it. */
-    bubbleText: dense({ phone: "text-message", window: "text-[14.5px] leading-[21px]", perch: "text-[14px] leading-[20px]" }),
+    get bubbleText() { return big() ? "text-[18px] leading-[27px]" : bubbleText; },
     bubble: dense({ phone: "rounded-(--radius-bubble) px-4 py-3", window: "rounded-[18px] px-[13px] py-2", perch: "rounded-2xl px-3 py-[7px]" }),
     /** The time line under a message. */
     time: dense({ phone: "text-caption", window: "text-[11.5px] leading-[15px]", perch: "text-[11px] leading-[14px]" }),
     /** Sealed and tool-run lines, and a card's source row. */
-    line: dense({ phone: "text-sub", window: "text-[12.5px] leading-[17px]", perch: "text-[12px] leading-[16px]" }),
+    get line() { return big() ? "text-[16px] leading-[22px]" : line; },
     /** Their monospace (a command). */
     mono: dense({ phone: "text-code", window: "text-[12px] leading-[17px]", perch: "text-[11.5px] leading-[16px]" }),
     /** A card's question. */
-    question: dense({ phone: "text-body", window: "text-[14.5px] leading-[21px]", perch: "text-[14px] leading-[20px]" }),
+    get question() { return big() ? "text-[17px] leading-[25px]" : question; },
   };
 }
 
@@ -47,8 +62,9 @@ export function composerSize() {
   return dense({
     phone: {
       dock: "px-3 pt-2",
-      field: "min-h-[52px] rounded-[26px] pl-1 pr-1",
-      input: "max-h-[128px] min-h-[52px] px-1 py-3.5 text-body",
+      // A roomy window's composer (`roomy`): 60 high, its text a step up with the thread's.
+      get field() { return roomy() ? "min-h-[60px] rounded-[30px] pl-1.5 pr-1.5" : "min-h-[52px] rounded-[26px] pl-1 pr-1"; },
+      get input() { return roomy() ? "max-h-[200px] min-h-[60px] px-1 py-4 text-[17px] leading-[26px]" : "max-h-[128px] min-h-[52px] px-1 py-3.5 text-body"; },
       hit: "mb-0.5 size-12",
       circle: "size-9",
       arrow: 20,

@@ -4,7 +4,8 @@ import { railEdge } from "../../core/shell/rail";
 import { screenDockWidth } from "../../core/screen/float";
 import { clampPaneWidth, MAC_PANE_WIDTH, nextWide, WIDE_MIN_WIDTH, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 import { isMacApp } from "../mac/app";
-import { BESIDE_BRAIN_WIDTH, showsBeside } from "../../core/web/beside";
+import { BESIDE_BRAIN_WIDTH, ROOMY_BRAIN_WIDTH, showsBeside } from "../../core/web/beside";
+import { roomy } from "../kit/density";
 
 /**
  * The window's width less what the system draws at its sides (the iPhone Duo's 84 pt side bar, a phone's cutout
@@ -79,5 +80,5 @@ export const beside = computed(() => showsBeside({ desktop: !mobile, wide: wide(
 /** The beside pane's width, as laid out. */
 export const besidePaneWidth = signal(0);
 
-/** Brain's pane while the beside pane is up. */
-export const besideBrainWidth = isMacApp() ? BESIDE_BRAIN_WIDTH.mac : BESIDE_BRAIN_WIDTH.web;
+/** Brain's pane while the beside pane is up: 880 in a roomy window (ui/kit/density.ts `roomy`). */
+export const besideBrainWidth = () => (isMacApp() ? BESIDE_BRAIN_WIDTH.mac : roomy() ? ROOMY_BRAIN_WIDTH : BESIDE_BRAIN_WIDTH.web);

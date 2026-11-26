@@ -12,7 +12,7 @@ import { animateSwitch, Capsule, CapsulePage } from "./Capsule";
 import { rail, stackWidth, wide } from "./layout";
 import { bottomBarInset } from "./below";
 import { joinRail, type RailAction } from "./railPages";
-import { density, headerSize } from "../kit/density";
+import { density, headerSize, roomy } from "../kit/density";
 import { macLightsRow } from "../mac/local";
 import { lightsLead } from "../../core/mac/frame";
 
@@ -101,7 +101,7 @@ function Column(props: { width: () => number | null; children: JSX.Element }) {
 export function NavPage(props: AppNavPageProps) {
   joinRail(() => props.rail);
   const mac = density() !== "phone";
-  const width = () => (props.frame === false ? null : pageColumnWidth(props.column ?? "page", mac));
+  const width = () => (props.frame === false ? null : pageColumnWidth(props.column ?? "page", mac, roomy()));
   const stack = PageStack();
   /** Back's connection mark on a pushed page (SPEC §1.3); null when connected or on the stack's first page. */
   const mark = () => (stack.canGoBack() ? backMark(tray().state.kind) : null);
@@ -182,7 +182,7 @@ export function NavPage(props: AppNavPageProps) {
   // Read once each, into the one header: forwarded too, they would be made twice.
   const [own, rest] = split(props, ["rail", "header", "capsuleUnder", "capsuleControls", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
   const macColumn = density() !== "phone";
-  const headerWidth = () => pageColumnWidth(own.column ?? "page", macColumn);
+  const headerWidth = () => pageColumnWidth(own.column ?? "page", macColumn, roomy());
   return (
     <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
       header={own.header ?? <PageHeader title={props.title} titleView={own.headerTitle} left={own.headerLeft} right={own.headerRight} width={headerWidth} canGoBack={stack.canGoBack} back={stack.back} mark={mark} />}>

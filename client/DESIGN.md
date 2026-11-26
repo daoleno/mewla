@@ -404,7 +404,8 @@ reports no fold, so nothing snaps to it.
    column in 3440 of grey). On a desktop or browser window whose right
    pane is 1480 or wider (a 1920 window with any pane width; never iOS or
    Android, whose stack is the system's), the right pane splits:
-   Brain's thread in an 800 pane (740 on the Mac), and the beside pane
+   Brain's thread in an 800 pane (740 on the Mac; 880 on the web from a
+   2560 window, see Roomy), and the beside pane
    for what you open. A Session, a Work, a Work file or a file a chat
    names (its preview), from a card, a tray row, a link, the palette or a
    URL, opens there instead of over Brain. The Brain row, `G` then B and
@@ -416,13 +417,24 @@ reports no fold, so nothing snaps to it.
    Back finds the pane as it was (kept, `display: none`).
    - **The Work board** (`ui/work/WorkBoard.tsx`) shows Brain's Work by
      group (Needs you first, with any Work the tray's Needs you names),
-     one card each. The groups stand side by side
-     when each column would be 300–560 wide; otherwise they are stacked,
-     with the cards in a grid at least 320 wide (`core/work/board.ts`).
+     one card each. The groups stand side by side over the whole pane
+     (`core/work/board.ts`): the pane is cut into card tracks of at least
+     300, each group takes one, and the spare tracks go one at a time to the
+     longest group while that shortens it (13 Waiting take three tracks
+     beside one each). Tracks nothing needs widen every card, so two Works
+     never sit as two small cards in a corner. With more groups than tracks,
+     a column holds several. A card does not repeat its time as its line.
    - **A Session's split.** From a 1600 pane (an ultrawide), a Session that
      has a chat shows the chat in Brain's 800 and its terminal beside it,
      with no view switch. The terminal still takes keys only when it is
-     focused.
+     focused. Its column is the real terminal: until the computer attaches
+     it, the pane's own wait well; a page served without `/terminal/`
+     (headless `nsh test`) has no renderer and is no proof of it.
+   - **Roomy** (`roomy` in `ui/kit/density.ts`, the web only, from a 2560
+     window): Brain's pane is 880, a reading page 840, the thread's type a
+     step larger (18/28) and the composer taller (60). It follows the
+     window live; a thread following its newest row stays there across the
+     step (`ui/chat/Timeline.tsx`).
    - **Crossing the gate.** Narrowing puts what stood beside Brain on the
      stack over it. Widening moves the pages above Brain beside it again.
      URLs, the tab title and the left pane's selection read Brain › what

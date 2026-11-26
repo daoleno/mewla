@@ -413,6 +413,22 @@ describe("beside: a wide window opens what you pick next to Brain (core/web/besi
     expect(app.shows("id:home-header")).toBe(true);
   }, 20_000);
 
+  test("on an ultrawide the board is columns side by side, and from 2560 Brain's column and its type are a step larger", async () => {
+    const app = await open(APP, { ...big, width: 3440, height: 1440, host: webHost({ brain: { current_work: work }, worker_sessions: [running("w1", "api"), running("w2", "docs")], conversations: { w1: [], w2: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitFor("id:work-board-running");
+    await app.waitUntil(() => app.count("id:work-board-column") >= 2);
+    const columns = Array.from({ length: app.count("id:work-board-column") }, (_, i) => app.layout(`id:work-board-column >> nth=${i}`)!);
+    // Side by side, one top line, filling the pane: not one narrow column.
+    expect(new Set(columns.map((c) => Math.round(c.y))).size).toBe(1);
+    const pane = app.layout("id:beside-pane")!;
+    const used = columns.reduce((sum, c) => sum + c.width, 0);
+    expect(used / pane.width).toBeGreaterThan(0.85);
+    expect(Math.round(pane.x - app.layout("id:right-pane")!.x)).toBe(880);
+    await app.setViewport(1920, 1080);
+    await app.waitUntil(() => Math.round(app.layout("id:beside-pane")!.x - app.layout("id:right-pane")!.x) === 800);
+  }, 20_000);
+
   test("a row and a card open beside Brain; Back returns the pane to the board, and the URL names what is open", async () => {
     const app = await open(APP, { ...big, host: webHost({ brain: { current_work: work }, worker_sessions: [running("w1", "api"), running("w2", "docs")], conversations: { w1: [], w2: [] } }) });
     await app.waitFor("id:beside-pane", { timeout: 10_000 });

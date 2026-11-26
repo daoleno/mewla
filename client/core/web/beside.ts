@@ -10,6 +10,14 @@ export const BESIDE_MIN_WIDTH = 1480;
 /** Brain's pane while the beside pane stands next to it: its reading column (760, the Mac's 700) and 20 a side. */
 export const BESIDE_BRAIN_WIDTH = { web: 800, mac: 740 } as const;
 
+/**
+ * From this window width a browser is roomy (a 27" QHD, a 34" ultrawide; Brain's review of #89): the thread's type
+ * and the composer a step up (ui/kit/density.ts `roomy`), in an 840 reading column and an 880 Brain pane.
+ */
+export const ROOMY_MIN_WIDTH = 2560;
+export const ROOMY_READING_WIDTH = 840;
+export const ROOMY_BRAIN_WIDTH = 880;
+
 /** The pages that open beside Brain (a file a chat names: its preview); everything else (Settings, Calendar, the computer page) still covers both. */
 const BESIDE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "workFile", "files-preview"]);
 
