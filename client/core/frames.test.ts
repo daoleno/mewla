@@ -28,7 +28,8 @@ async function connected(): Promise<{ transport: Transport; socket: FakeSocket; 
   const heard: Frame[] = [];
   transport.on("brain_snapshot", (frame) => heard.push(frame));
   transport.connect();
-  await wait();
+  // The socket opens after the auth subprotocol is signed: a busy CI runner took longer than one short wait (main 11-27).
+  for (let waited = 0; sockets.length === 0 && waited < 2_000; waited += 5) await wait();
   const socket = sockets.at(-1)!;
   socket.open();
   return { transport, socket, heard };
