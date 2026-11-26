@@ -493,6 +493,11 @@ func providerConnectionFromProfile(profile Profile, ready bool) ProviderConnecti
 		conn.BaseURL = profile.BaseURL
 		conn.ManualModelID = normalizeSpace(profile.Model)
 	}
+	if isAccountConnection(profile) {
+		if compiled, err := CompileConnectionTarget(profile, clientFromExecutor(profile.Client), "", ""); err == nil {
+			conn.UpstreamAPI = compiled.Protocol
+		}
+	}
 	return conn
 }
 

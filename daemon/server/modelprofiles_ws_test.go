@@ -232,6 +232,51 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 	if delErr["code"] != modelprofiles.CodeProfileInUse && delErr["code"] != modelprofiles.CodeProfileConflict {
 		t.Fatalf("delete in-use=%#v", delErr)
 	}
+
+	// A fallback: two Responses endpoints for Codex are refused; once the
+	// other one speaks Chat it may take the requests, and "" clears it.
+	setFallback := func(id, fallback string) {
+		t.Helper()
+		if err := conn.WriteJSON(map[string]any{
+			"type": "set_provider_fallback", "request_id": "fb-" + fallback,
+			"connection_id": id, "fallback_connection_id": fallback,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setFallback("codex-main", "codex-alt")
+	if refused := readType("error"); refused["request_id"] != "fb-codex-alt" || !strings.Contains(fmt.Sprint(refused["message"]), "own API") {
+		t.Fatalf("own-API pair=%#v", refused)
+	}
+	alt, err := owner.Store().Get("codex-alt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	alt.UpstreamAPI = modelprofiles.ProtocolOpenAIChat
+	if _, err := owner.Store().Update(alt, owner.Store().Revision()); err != nil {
+		t.Fatal(err)
+	}
+	fallbackOf := func(payload map[string]any) (fallback, alsoAPI string) {
+		conns, _ := payload["connections"].([]any)
+		for _, c := range conns {
+			m, _ := c.(map[string]any)
+			if m["id"] == "codex-main" {
+				fallback, _ = m["fallback_connection_id"].(string)
+			}
+			if m["id"] == "codex-alt" {
+				alsoAPI, _ = m["upstream_api"].(string)
+			}
+		}
+		return fallback, alsoAPI
+	}
+	setFallback("codex-main", "codex-alt")
+	if fb, api := fallbackOf(readType("providers")); fb != "codex-alt" || api != modelprofiles.ProtocolOpenAIChat {
+		t.Fatalf("fallback=%q alt upstream_api=%q", fb, api)
+	}
+	setFallback("codex-main", "")
+	if fb, _ := fallbackOf(readType("providers")); fb != "" {
+		t.Fatalf("cleared fallback=%q", fb)
+	}
 }
 
 func TestSetThreadRuntimeCommitFailureKeepsPreviousRouteSendable(t *testing.T) {

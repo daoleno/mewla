@@ -534,6 +534,7 @@ type clientMessage struct {
 	PluginRevision     string                                 `json:"plugin_revision"`
 	ProfileID          string                                 `json:"profile_id"`
 	ConnectionID       string                                 `json:"connection_id"`
+	FallbackID         string                                 `json:"fallback_connection_id"`
 	ModelID            string                                 `json:"model_id"`
 	ModelIDs           []string                               `json:"model_ids"`
 	ReasoningEffort    string                                 `json:"reasoning_effort"`

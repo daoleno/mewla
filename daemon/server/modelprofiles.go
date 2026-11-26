@@ -54,6 +54,9 @@ func (s *Server) handleModelProfileMessage(conn *websocket.Conn, raw clientMessa
 	case "set_provider_models":
 		s.handleSetProviderModels(conn, raw)
 		return true
+	case "set_provider_fallback":
+		s.handleSetProviderFallback(conn, raw)
+		return true
 	case "discover_provider_models":
 		s.handleDiscoverProviderModels(conn, raw)
 		return true
@@ -228,6 +231,23 @@ func (s *Server) handleSetProviderModels(conn *websocket.Conn, raw clientMessage
 		return
 	}
 	s.sendJSON(conn, s.providersCatalogPayload(raw.RequestID, proj, persist, err))
+}
+
+// handleSetProviderFallback names (or, with an empty fallback_connection_id,
+// clears) the connection that takes a connection's requests while it fails.
+func (s *Server) handleSetProviderFallback(conn *websocket.Conn, raw clientMessage) {
+	owner := s.modelProfiles()
+	if owner == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
+		return
+	}
+	connectionID := strings.TrimSpace(raw.ConnectionID)
+	if connectionID == "" {
+		s.sendErrorWithRequestID(conn, raw.RequestID, modelprofiles.CodeProfileInvalid, "connection_id is required")
+		return
+	}
+	proj, err := owner.SetProviderFallback(connectionID, strings.TrimSpace(raw.FallbackID))
+	s.sendProvidersMutation(conn, raw.RequestID, proj, err)
 }
 
 func (s *Server) handleDiscoverProviderModels(conn *websocket.Conn, raw clientMessage) {

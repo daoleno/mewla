@@ -60,6 +60,10 @@ type ProviderConnection struct {
 	ImageModel string `json:"image_model,omitempty"`
 	// FallbackID is the connection this one's requests go to while it fails.
 	FallbackID string `json:"fallback_connection_id,omitempty"`
+	// UpstreamAPI is the API requests to this connection go out in
+	// (anthropic_messages, openai_chat, openai_responses); one that is not
+	// its agent's own is translated.
+	UpstreamAPI string `json:"upstream_api,omitempty"`
 }
 
 // ProviderConnectionSelection is the future-launch connection selection for one product
