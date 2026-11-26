@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { errorLine, localDay, parseProviderUsage, requestCostLabel, requestLine, usageCostLabel, usageSince, usageTotals } from "./usage";
+import { errorLine, localDay, parseProviderUsage, requestCostLabel, requestTokensLine, usageCostLabel, usageSince, usageTotals } from "./usage";
 
 const NOW = Date.UTC(2031, 5, 15, 12, 0, 0);
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
@@ -42,7 +42,8 @@ describe("Provider usage", () => {
 
   test("words a request and a failure", () => {
     const r = { at: NOW - 3 * 60_000, agent: "claude", model: "glm-5", input: 1200, cacheRead: 48_000, cacheWrite: 0, output: 350, cost: 0.0123, priced: true, ms: 2100 };
-    expect(requestLine(r, NOW)).toBe("Claude Code · 3m · 1.2K in · 48K cached · 350 out");
+    expect(requestTokensLine(r)).toBe("1.2K in · 48K cached · 350 out");
+    expect(requestTokensLine({ ...r, cacheRead: 0, cacheWrite: 2048 })).toBe("1.2K in · 2K to cache · 350 out");
     expect(requestCostLabel(r)).toBe("$0.0123");
     expect(requestCostLabel({ ...r, cost: 1.234 })).toBe("$1.23");
     expect(requestCostLabel({ ...r, cost: 0 })).toBe("Free");

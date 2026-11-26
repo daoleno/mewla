@@ -121,9 +121,9 @@ export function requestTokensLine(r: ProviderUsageRequest): string {
   return parts.join(" · ");
 }
 
-/** "Claude Code · 3m · 12K in · 1.2K out" */
-export function requestLine(r: ProviderUsageRequest, now: number): string {
-  return [usageAgentName(r.agent), relativeTime(r.at, now), requestTokensLine(r)].filter(Boolean).join(" · ");
+/** "now", "3m", "2h", "yesterday" */
+export function usageWhen(at: number, now: number): string {
+  return relativeTime(at, now);
 }
 
 /** "503 · Codex · gpt-5.5 · 3m" */

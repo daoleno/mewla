@@ -199,8 +199,9 @@ describe("Model Providers", () => {
     expect(texts).toContain("50.5K");
     expect(texts).toContain("1 failed");
     expect(texts).toContain("$0.0123");
-    expect(texts).toContain("Claude Code · 2m · 1.2K in · 48K cached · 350 out");
-    expect(texts).toContain("Codex · 9m · 900 in · 40 out");
+    expect(texts).toContain("1.2K in · 48K cached · 350 out");
+    expect(texts).toContain("900 in · 40 out");
+    expect(texts).toContain("2m");
     expect(texts).toContain("Rate limit reached for requests");
     expect(texts).toContain("429 · Codex · kimi-k2 · 5m");
     // Five rows, then the rest on request.

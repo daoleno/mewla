@@ -1,9 +1,11 @@
-import { cleanup, effect, lifecycle, signal, untracked, View } from "nsh";
+import { cleanup, effect, lifecycle, signal, Text, untracked, View } from "nsh";
 import { providerUsage } from "../../../core/providers/requests";
 import {
   errorLine,
   requestCostLabel,
-  requestLine,
+  requestTokensLine,
+  usageAgentName,
+  usageWhen,
   usageCostLabel,
   USAGE_DAYS,
   usageSince,
@@ -76,9 +78,14 @@ export function ProviderUsage(props: { connectionId: string }) {
                 testID={`provider-usage-request-${i}`}
                 lead={{ kind: "logo", node: <AgentIcon kind={r.agent === "codex" ? "codex" : "claude"} size={28} slot={LEAD_SLOT} /> }}
                 title={r.model || "Unknown model"}
-                subtitle={requestLine(r, now())}
-                subtitleOneLine
-                value={requestCostLabel(r) || undefined}
+                subtitle={requestTokensLine(r)}
+                accessibilityLabel={`${r.model || "Unknown model"}, ${usageAgentName(r.agent)}, ${usageWhen(r.at, now())}, ${requestTokensLine(r)}${requestCostLabel(r) ? `, ${requestCostLabel(r)}` : ""}`}
+                trailing={
+                  <View class="items-end gap-0.5">
+                    <If when={requestCostLabel(r)}><Text class="text-body text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{requestCostLabel(r)}</Text></If>
+                    <Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{usageWhen(r.at, now())}</Text>
+                  </View>
+                }
               />
             ))}
             <If when={usage()!.requests.length > FIRST_ROWS}><ShowMore testID="provider-usage-more" hidden={usage()!.requests.length - FIRST_ROWS} expanded={allRequests()} onToggle={() => allRequests.set(!allRequests())} /></If>
