@@ -82,14 +82,18 @@ const enhancedUIName = "AXEnhancedUserInterface"
 // setEnhancedUI sets AXEnhancedUserInterface on the app with pid: what
 // VoiceOver sets, on which Chrome builds its pages' tree (it no longer answers
 // AXManualAccessibility). Chrome then runs as for a screen reader, so it is set
-// only while Mewla needs a page and put back after. was is what it read before.
-// Chrome answers a set it made with "not implemented": the value read back is
-// the answer.
-func setEnhancedUI(pid int, on bool) (was bool, err error) {
+// only while Mewla needs a page and put back after; never off while VoiceOver
+// runs, whose setting it is too. Chrome answers a set it made with "not
+// implemented": the value read back is the answer.
+func setEnhancedUI(pid int, on bool) error {
 	if !loadApps() {
-		return false, ErrNoApps
+		return ErrNoApps
 	}
+	var err error
 	withPool(func() {
+		if !on && voiceOverRuns() {
+			return
+		}
 		app := appsLib.createApplication(int32(pid))
 		if app == 0 {
 			err = errors.New("no app")
@@ -100,8 +104,7 @@ func setEnhancedUI(pid int, on bool) (was bool, err error) {
 		if axLib.attrs[enhancedUIName] == 0 {
 			axLib.attrs[enhancedUIName] = axLib.createString(0, enhancedUIName, cfStringEncodingUTF8)
 		}
-		was = axBool(app, enhancedUIName, false)
-		if was == on {
+		if axBool(app, enhancedUIName, !on) == on {
 			return
 		}
 		value := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), on)
@@ -109,8 +112,15 @@ func setEnhancedUI(pid int, on bool) (was bool, err error) {
 			err = fmt.Errorf("refused (accessibility error %d)", code)
 		}
 	})
-	return was, err
+	return err
+}
+
+// voiceOverRuns says whether VoiceOver is running. It runs inside an
+// autorelease pool.
+func voiceOverRuns() bool {
+	apps := objc.ID(objc.GetClass("NSRunningApplication")).Send(objc.RegisterName("runningApplicationsWithBundleIdentifier:"), nsString("com.apple.VoiceOver"))
+	return apps != 0 && objc.Send[uint64](apps, objc.RegisterName("count")) > 0
 }
 
 // SetEnhancedUI is setEnhancedUI for the extension flow.
-func (b *macBackend) SetEnhancedUI(pid int, on bool) (bool, error) { return setEnhancedUI(pid, on) }
+func (b *macBackend) SetEnhancedUI(pid int, on bool) error { return setEnhancedUI(pid, on) }

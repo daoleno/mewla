@@ -26,9 +26,6 @@ type Element struct {
 	Frame   image.Rectangle
 	Enabled bool
 	Focused bool
-	// DOMID is a web page element's id attribute (a browser's AXDOMIdentifier),
-	// the same in every language the page is shown in.
-	DOMID string
 	// Actions are the element's own action names, when the backend reads
 	// them.
 	Actions []string

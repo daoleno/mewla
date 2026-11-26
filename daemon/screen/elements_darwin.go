@@ -136,7 +136,7 @@ func loadAX() bool {
 			axLib.attrs[name] = ref
 		}
 		loadBatchAX(libs)
-		axLib.walkSet = newAttrSet("AXRole", "AXTitle", "AXDescription", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXChildren", "AXSubrole", "AXDOMIdentifier")
+		axLib.walkSet = newAttrSet("AXRole", "AXTitle", "AXDescription", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXChildren", "AXSubrole")
 		axLib.printAppSet = newAttrSet("AXWindows", "AXFocusedWindow", "AXFocusedUIElement")
 		axLib.printWindowSet = newAttrSet("AXTitle", "AXChildren")
 		axLib.system = axLib.createSystemWide()
@@ -312,10 +312,9 @@ func walkElements(ctx context.Context, tree *ElementTree, root uintptr, limit in
 		axLib.setTimeout(element, elementTimeout(deadline))
 		slots, done := axReadMany(element, axLib.walkSet)
 		defer done()
-		const role, title, description, position, size, enabled, focused, children, subrole, domID = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+		const role, title, description, position, size, enabled, focused, children, subrole = 0, 1, 2, 3, 4, 5, 6, 7, 8
 		e := Element{Depth: depth, Role: cfStringOf(slots[role]), Subrole: cfStringOf(slots[subrole]), Title: cfStringOf(slots[title]),
-			Frame: cfFrame(slots[position], slots[size]), Enabled: cfBoolOf(slots[enabled], true), Focused: cfBoolOf(slots[focused], false),
-			DOMID: cfStringOf(slots[domID])}
+			Frame: cfFrame(slots[position], slots[size]), Enabled: cfBoolOf(slots[enabled], true), Focused: cfBoolOf(slots[focused], false)}
 		if e.Title == "" {
 			e.Title = cfStringOf(slots[description])
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -15,8 +16,8 @@ import (
 // is not in its store: it ignores chrome:// addresses handed to it, no longer
 // loads one from its command line, and its profile is not Mewla's to read or
 // write (macOS keeps one app out of another's data). The page and the panel
-// are found by what does not change with Chrome's language: the page's element
-// ids, roles, the focused field and keys; the folder goes into the panel's Go
+// are found by what does not change with Chrome's language: roles, the order
+// of the page's toolbar, the focused field and keys; the folder goes into the panel's Go
 // to Folder field as its value, never typed (an input method would take
 // typed keys). The person sees Mewla using the screen and can stop it.
 
@@ -31,12 +32,6 @@ var internalAgents = map[string]string{ChromeExtensionAgent: "Mewla, adding its 
 var errAgentDone = errors.New("Mewla is done with the screen")
 
 const chromeApp = "Google Chrome"
-
-// The extensions page's own element ids (chrome://extensions, its toolbar).
-const (
-	chromeDevModeID      = "devMode"
-	chromeLoadUnpackedID = "loadUnpacked"
-)
 
 // LoadUnpackedInChrome adds the extension in dir to the person's Chrome and
 // returns once loaded() says it is there, or why it could not be done.
@@ -87,51 +82,74 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 	if err := waitFor("the new window's address bar", address, "", 5); err != nil {
 		return err
 	}
+	// Mewla's tab closes when it is done, whatever happened, while it is the
+	// one in front.
+	defer func() {
+		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
+			return
+		}
+		if _, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) {
+			if a := frontAddress(t); !strings.HasPrefix(a, "chrome://extensions") {
+				return 0, fmt.Errorf("the tab in front shows %q", a)
+			}
+			return 0, nil
+		}); err != nil {
+			log.Printf("screen: Mewla's Chrome tab stays open: %v", err)
+			return
+		}
+		_, _ = s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "key", App: chromeApp, Text: "cmd+w"})
+	}()
 	if err := on("the extensions page's address", first(address), "set_value", "chrome://extensions/"); err != nil {
+		return err
+	}
+	// What Chrome adds to an address from the person's history goes; the
+	// address is Mewla's.
+	if err := appKey("only the extensions page's address", "delete"); err != nil {
 		return err
 	}
 	if err := appKey("open the extensions page", "Return"); err != nil {
 		return err
 	}
-	devMode := ElementMatch{DOMID: chromeDevModeID}
-	if err := waitFor("the extensions page", devMode, "", 4); err != nil {
-		// Chrome shows Mewla no page: asked as a screen reader asks, it
-		// builds them; only while Mewla needs it.
-		enhanced, ok := s.backend.(enhancedUISetter)
-		pid, perr := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return t.PID, nil })
-		if !ok || perr != nil || pid == 0 {
+	// Chrome shows an app its pages only while it thinks a screen reader
+	// reads them: asked as VoiceOver asks, for as long as Mewla needs one.
+	pid, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return t.PID, nil })
+	if err != nil {
+		return err
+	}
+	if enhanced, ok := s.backend.(enhancedUISetter); ok && pid != 0 {
+		if err := enhanced.SetEnhancedUI(pid, true); err != nil {
+			log.Printf("screen: Chrome's pages as for a screen reader: %v", err)
+		}
+		defer func() {
+			if err := enhanced.SetEnhancedUI(pid, false); err != nil {
+				log.Printf("screen: Chrome back from screen reader mode: %v", err)
+			}
+		}()
+	}
+	var page extensionsToolbar
+	if err := s.untilRead(ctx, "the extensions page", 15*time.Second, func(t ElementTree) error {
+		var err error
+		page, err = readExtensionsToolbar(t)
+		return err
+	}); err != nil {
+		return fmt.Errorf("step %d (the extensions page): %w", step, err)
+	}
+	// Load unpacked shows only in Developer mode.
+	if !page.developerMode {
+		if err := act("turn on Developer mode", AgentAction{Action: "element", Element: page.devMode, ElementAction: "press"}); err != nil {
 			return err
 		}
-		was, serr := enhanced.SetEnhancedUI(pid, true)
-		if serr != nil {
-			log.Printf("screen: Chrome's pages as for a screen reader: %v", serr)
+		if err := s.untilRead(ctx, "Load unpacked", 5*time.Second, func(t ElementTree) error {
+			var err error
+			if page, err = readExtensionsToolbar(t); err == nil && !page.developerMode {
+				err = errors.New("Developer mode is still off")
+			}
 			return err
-		}
-		if !was {
-			log.Printf("screen: Chrome (pid %d) showed no page; asked for its pages as a screen reader does", pid)
-			// Back as it was (VoiceOver's, if it had set it, stays).
-			defer func() {
-				if _, serr := enhanced.SetEnhancedUI(pid, false); serr != nil {
-					log.Printf("screen: Chrome back from screen reader mode: %v", serr)
-				}
-			}()
-		}
-		if err := waitFor("the extensions page", devMode, "", 10); err != nil {
-			return err
+		}); err != nil {
+			return fmt.Errorf("step %d (Load unpacked): %w", step, err)
 		}
 	}
-	loadUnpacked := ElementMatch{DOMID: chromeLoadUnpackedID}
-	// Load unpacked shows only in Developer mode; pressed while it shows, the
-	// switch would turn it off.
-	if _, err := s.internalPick(ChromeExtensionAgent, first(loadUnpacked)); err != nil {
-		if err := on("turn on Developer mode", first(devMode), "press", ""); err != nil {
-			return err
-		}
-		if err := waitFor("Load unpacked", loadUnpacked, "enabled", 5); err != nil {
-			return err
-		}
-	}
-	if err := on("Load unpacked", first(loadUnpacked), "press", ""); err != nil {
+	if err := act("Load unpacked", AgentAction{Action: "element", Element: page.loadUnpacked, ElementAction: "press"}); err != nil {
 		return err
 	}
 	// The open panel, a sheet on Chrome's window; its Go to Folder field.
@@ -148,19 +166,13 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 	if err := waitFor("the Go to Folder field", ElementMatch{Role: "AXSheet"}, "", 5); err != nil {
 		return err
 	}
-	var field func(ElementTree) (int, error) = focusedFieldInLastSheet
-	for tries := 0; ; tries++ {
-		if _, err := s.internalPick(ChromeExtensionAgent, field); err == nil || tries == 10 {
-			break
-		}
-		if err := waitFor("the Go to Folder field", sheet, "", 1); err != nil {
-			return err
-		}
-		if err := pause(ctx, 300*time.Millisecond); err != nil {
-			return err
-		}
+	if err := s.untilRead(ctx, "the Go to Folder field", 4*time.Second, func(t ElementTree) error {
+		_, err := focusedFieldInLastSheet(t)
+		return err
+	}); err != nil {
+		return fmt.Errorf("step %d: %w", step, err)
 	}
-	if err := on("the extension's folder", field, "set_value", dir); err != nil {
+	if err := on("the extension's folder", focusedFieldInLastSheet, "set_value", dir); err != nil {
 		return err
 	}
 	if err := key("go to the folder", "Return"); err != nil {
@@ -186,8 +198,6 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 			return err
 		}
 	}
-	// Mewla's window is done.
-	_ = appKey("close Mewla's window", "cmd+shift+w")
 	return nil
 }
 
@@ -222,10 +232,87 @@ func focusedFieldInLastSheet(t ElementTree) (int, error) {
 	return 0, errors.New("the sheet's field does not have the keyboard")
 }
 
-// enhancedUISetter sets an app's AXEnhancedUserInterface (macOS) and says
-// what it was.
+// enhancedUISetter sets an app's AXEnhancedUserInterface (macOS).
 type enhancedUISetter interface {
-	SetEnhancedUI(pid int, on bool) (was bool, err error)
+	SetEnhancedUI(pid int, on bool) error
+}
+
+// extensionsToolbar is the toolbar of Chrome's extensions page, by its
+// order, which is the same in every language: the search field, then the
+// Developer mode switch, then, in Developer mode, Load unpacked first.
+type extensionsToolbar struct {
+	devMode, loadUnpacked int
+	developerMode         bool
+}
+
+// readExtensionsToolbar finds the toolbar in the window in front (the first
+// one read), whose address is the extensions page.
+func readExtensionsToolbar(t ElementTree) (extensionsToolbar, error) {
+	page := -1
+	for i, e := range t.Elements {
+		if e.Role == "AXWebArea" {
+			page = i
+			break
+		}
+	}
+	if page < 0 {
+		return extensionsToolbar{}, errors.New("Chrome shows no page")
+	}
+	if address := frontAddress(t); !strings.HasPrefix(address, "chrome://extensions") {
+		return extensionsToolbar{}, fmt.Errorf("the window in front shows %q, not the extensions page", address)
+	}
+	search, devMode := -1, -1
+	for i := page + 1; i < len(t.Elements) && t.Elements[i].Depth > t.Elements[page].Depth; i++ {
+		e := t.Elements[i]
+		switch {
+		case search < 0:
+			if e.Role == "AXTextField" {
+				search = i
+			}
+		case devMode < 0:
+			if e.Role == "AXCheckBox" || e.Role == "AXSwitch" {
+				devMode = i
+				if e.Value != "1" {
+					return extensionsToolbar{devMode: t.id(i)}, nil
+				}
+			}
+		case e.Role == "AXButton":
+			return extensionsToolbar{devMode: t.id(devMode), loadUnpacked: t.id(i), developerMode: true}, nil
+		}
+	}
+	return extensionsToolbar{}, errors.New("the extensions page has no Developer mode switch yet")
+}
+
+// frontAddress is the address of the tab in front: the first window read is
+// the one in front, its address bar the first text field in it.
+func frontAddress(t ElementTree) string {
+	for _, e := range t.Elements {
+		if e.Role == "AXTextField" {
+			return e.Value
+		}
+	}
+	return ""
+}
+
+// untilRead reads the app the internal agent acts on until check accepts a
+// read, or says why the last one did not within d.
+func (s *Service) untilRead(ctx context.Context, what string, d time.Duration, check func(ElementTree) error) error {
+	deadline := time.Now().Add(d)
+	for {
+		_, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return 0, check(t) })
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s: %w", what, err)
+		}
+		if err := pause(ctx, 500*time.Millisecond); err != nil {
+			return err
+		}
+		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
+			return fmt.Errorf("%s: %w", what, err)
+		}
+	}
 }
 
 // internalPick chooses an element of an internal agent's latest read.
