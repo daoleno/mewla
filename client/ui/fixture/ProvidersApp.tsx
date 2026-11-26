@@ -21,7 +21,8 @@ const catalog = {
     { id: "conn_d", name: "Local GLM", preset_id: "custom", clients: ["codex"], credential_ready: true, advanced: true, base_url: "https://glm.example.org/v1", credential_hint: "sk-…3e8d", models_fetched_at: new Date().toISOString(), upstream_api: "openai_chat", fallback_connection_id: "conn_a" },
   ],
   defaults: { codex: { connection_id: "conn_a" }, claude: { connection_id: "conn_b" } },
-  presets: [],
+  // The daemon's presets, as it lists them.
+  presets: [{"id":"openai","label":"OpenAI","clients":["codex"]},{"id":"openrouter","label":"OpenRouter","clients":["codex","claude"]},{"id":"anthropic","label":"Anthropic","clients":["claude"]},{"id":"deepseek","label":"DeepSeek","clients":["codex","claude"]},{"id":"kimi","label":"Kimi","clients":["codex","claude"]},{"id":"kimi-cn","label":"Kimi (China)","clients":["codex","claude"]},{"id":"glm","label":"GLM (Z.ai)","clients":["codex","claude"]},{"id":"glm-cn","label":"GLM (China)","clients":["codex","claude"]},{"id":"minimax","label":"MiniMax","clients":["codex","claude"]},{"id":"minimax-cn","label":"MiniMax (China)","clients":["codex","claude"]},{"id":"ollama","label":"Ollama","clients":["codex","claude"],"local":true,"base_url":"http://localhost:11434"},{"id":"lmstudio","label":"LM Studio","clients":["codex","claude"],"local":true,"base_url":"http://localhost:1234"},{"id":"local","label":"Local server","clients":["codex","claude"],"local":true},{"id":"custom","label":"Custom Gateway","clients":["codex","claude"],"advanced":true}],
   models: { conn_a: codexModels, conn_b: claudeModels, conn_c: [], conn_d: ["glm-5", "glm-5-air"].map(model) },
   disabled_models: { conn_a: ["gpt-5.5"] },
   gateway: { running: true, address: "127.0.0.1:3425" },
@@ -32,6 +33,8 @@ const daemon = new FakeDaemon({
     ...base.replies,
     list_providers: { type: "providers", ...catalog },
     discover_provider_models: { type: "provider_models", connection_id: "conn_a", models: codexModels },
+    // A model server running on the computer.
+    detect_local_providers: { type: "local_providers", found: [{ preset_id: "ollama", label: "Ollama", base_url: "http://localhost:11434", models: 2, connection_ids: [] }] },
   },
 });
 installPlatform({ ...platform(), openSocket: () => daemon.open() });

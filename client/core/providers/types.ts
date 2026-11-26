@@ -41,6 +41,19 @@ export type ProviderPreset = {
   label: string;
   clients: string[];
   advanced: boolean;
+  /** A model server on the computer: no key, and an address (`base_url`, prefilled) the person may change. */
+  local?: boolean;
+  base_url?: string;
+};
+
+/** A model server found answering on the computer. */
+export type LocalProvider = {
+  preset_id: string;
+  label: string;
+  base_url: string;
+  models: number;
+  /** Connections that already point at it. */
+  connection_ids: string[];
 };
 
 export type ProviderConnectionSelection = {

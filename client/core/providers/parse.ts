@@ -3,6 +3,7 @@ import {
   isSupportedProviderClient,
   normalizeProviderClient,
   normalizeProviderId,
+  type LocalProvider,
   type ProviderConnection,
   type ProviderConnectionTestResult,
   type ProviderConnectionSelection,
@@ -145,7 +146,25 @@ export function parseProviderPreset(raw: unknown): ProviderPreset | null {
     label,
     clients,
     advanced: record.advanced === true,
+    local: record.local === true ? true : undefined,
+    base_url: record.local === true ? asString(record.base_url) || undefined : undefined,
   };
+}
+
+/** The daemon's `local_providers` reply; anything malformed is left out. */
+export function parseLocalProviders(raw: unknown): LocalProvider[] {
+  const found = asRecord(raw)?.found;
+  if (!Array.isArray(found)) return [];
+  const out: LocalProvider[] = [];
+  for (const item of found) {
+    const record = asRecord(item);
+    const preset = asString(record?.preset_id);
+    const baseUrl = asString(record?.base_url);
+    if (!record || !preset || !baseUrl) continue;
+    const ids = Array.isArray(record.connection_ids) ? record.connection_ids.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
+    out.push({ preset_id: preset, label: asString(record.label) || preset, base_url: baseUrl, models: typeof record.models === "number" ? record.models : 0, connection_ids: ids });
+  }
+  return out;
 }
 
 export function parseProviderModel(raw: unknown): ProviderModel | null {

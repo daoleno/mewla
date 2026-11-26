@@ -226,6 +226,7 @@ type Response struct {
 	BrainWorkEvents      []brain.WorkEvent                        `json:"brain_work_events,omitempty"`
 	BrainWorkTranscripts []brain.WorkTranscriptLink               `json:"brain_work_transcripts,omitempty"`
 	Providers            *modelprofiles.ProviderCatalogProjection `json:"providers,omitempty"`
+	LocalProviders       []modelprofiles.LocalProvider            `json:"local_providers,omitempty"`
 	ThreadRuntime        *modelprofiles.ThreadRuntimeSelection    `json:"thread_runtime,omitempty"`
 	SessionRoute         *modelprofiles.WireSessionSnapshot       `json:"session_route,omitempty"`
 	Binding              *modelprofiles.WireBinding               `json:"binding,omitempty"`

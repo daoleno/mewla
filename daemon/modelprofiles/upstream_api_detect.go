@@ -61,10 +61,14 @@ func probeUpstreamAPI(client *http.Client, baseURL, api, secret string) (served,
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if api == translate.APIAnthropic {
-		req.Header.Set("X-Api-Key", secret)
 		req.Header.Set("Anthropic-Version", "2023-06-01")
-	} else {
-		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+	if secret != "" { // a local server takes no key
+		if api == translate.APIAnthropic {
+			req.Header.Set("X-Api-Key", secret)
+		} else {
+			req.Header.Set("Authorization", "Bearer "+secret)
+		}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -90,11 +94,11 @@ func (o *Owner) detectSavedUpstreamAPIs(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if normalizeID(profile.ProviderID) != ProviderPresetCustom || !isAccountConnection(profile) || profile.UpstreamAPI != "" {
+		if !detectsUpstreamAPI(profile) || !isAccountConnection(profile) || profile.UpstreamAPI != "" {
 			continue
 		}
-		secret, ok, _ := o.creds.Get(activeCredentialRef(profile))
-		if secret = strings.TrimSpace(secret); !ok || secret == "" {
+		secret, _, _ := o.creds.Get(activeCredentialRef(profile))
+		if secret = strings.TrimSpace(secret); secret == "" && !keyless(profile) {
 			continue
 		}
 		api, sure := o.upstreamAPIDetect(executorFromClient(profile.Client), profile.BaseURL, secret)
@@ -117,4 +121,20 @@ func (o *Owner) detectSavedUpstreamAPIs(ctx context.Context) {
 	if found && ctx.Err() == nil {
 		o.refreshGateway("")
 	}
+}
+
+// detectsUpstreamAPI reports whether a connection's API is found by asking
+// it: a Custom Gateway's or a local server's. A curated vendor's is known.
+func detectsUpstreamAPI(profile Profile) bool {
+	if normalizeID(profile.ProviderID) == ProviderPresetCustom {
+		return true
+	}
+	spec, ok := lookupPreset(inferPresetID(profile))
+	return ok && spec.Local
+}
+
+// keyless reports whether a connection is a local server, which takes no key.
+func keyless(profile Profile) bool {
+	spec, ok := lookupPreset(inferPresetID(profile))
+	return ok && spec.Local
 }

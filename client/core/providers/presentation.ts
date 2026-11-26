@@ -2,6 +2,7 @@ import { invalidProviderReply } from "./errors";
 import type {
   ProviderConnection,
   ProviderConnectionInput,
+  ProviderPreset,
   ProvidersSnapshot,
 } from "./types";
 import {
@@ -218,4 +219,25 @@ export function fallbackChoices(snapshot: ProvidersSnapshot | null, connection: 
   return connectionsForClient(snapshot, client).filter(
     (candidate) => candidate.id !== connection.id && (connectionIsTranslated(connection) || connectionIsTranslated(candidate)),
   );
+}
+
+/**
+ * The presets Add Provider offers an agent, in the daemon's order: vendors first, then the local servers. Custom
+ * Gateway is offered on its own.
+ */
+export function presetsForClient(snapshot: ProvidersSnapshot | null, client: string): ProviderPreset[] {
+  if (!snapshot) return [];
+  const normalized = normalizeProviderClient(client);
+  const offered = snapshot.presets.filter((p) => p.id !== "custom" && p.clients.some((c) => normalizeProviderClient(c) === normalized));
+  return [...offered.filter((p) => !p.local), ...offered.filter((p) => p.local)];
+}
+
+/** A model server's address as its row says it: host and port. */
+export function localAddressLabel(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl);
+    return parsed.port ? `${parsed.hostname}:${parsed.port}` : parsed.hostname;
+  } catch {
+    return baseUrl;
+  }
 }

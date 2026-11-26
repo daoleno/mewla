@@ -5,10 +5,14 @@ import {
   providerEditorInitialName,
   providerEditorRequiresBaseUrl,
   type ProvidersEditorState,
+  providerEditorTakesKey,
 } from "./editorModel";
+import { parseLocalProviders } from "./parse";
 import {
   providerBaseUrlHostname,
   providerNameIssue,
+  localAddressLabel,
+  presetsForClient,
 } from "./presentation";
 import type { ProvidersSnapshot } from "./types";
 
@@ -181,5 +185,54 @@ describe("Provider display-name helpers", () => {
     expect(
       providerNameIssue({ name: "Beta gateway", snapshot: null }),
     ).toBeNull();
+  });
+});
+
+describe("Add Provider presets", () => {
+  const presets = [
+    { id: "kimi", label: "Kimi", clients: ["codex", "claude"], advanced: false },
+    { id: "anthropic", label: "Anthropic", clients: ["claude"], advanced: false },
+    { id: "ollama", label: "Ollama", clients: ["codex", "claude"], advanced: false, local: true, base_url: "http://localhost:11434" },
+    { id: "openai", label: "OpenAI", clients: ["codex"], advanced: false },
+    { id: "custom", label: "Custom Gateway", clients: ["codex", "claude"], advanced: true },
+  ];
+  const s = { revision: 1, connections: [], defaults: {}, presets, models: {} } as ProvidersSnapshot;
+
+  test("each agent is offered its presets, vendors before local servers, Custom Gateway apart", () => {
+    expect(presetsForClient(s, "claude").map((p) => p.id)).toEqual(["kimi", "anthropic", "ollama"]);
+    expect(presetsForClient(s, "codex").map((p) => p.id)).toEqual(["kimi", "openai", "ollama"]);
+    expect(presetsForClient(null, "codex")).toEqual([]);
+  });
+
+  test("a vendor asks for its key only; a local server for its address only", () => {
+    const vendor = { kind: "create" as const, client: "claude" as const, preset: presets[0] };
+    expect(providerEditorInitialName(vendor)).toBe("Kimi");
+    expect(providerEditorRequiresBaseUrl(vendor)).toBe(false);
+    expect(providerEditorTakesKey(vendor)).toBe(true);
+    const local = { kind: "create" as const, client: "claude" as const, preset: presets[2] };
+    expect(providerEditorInitialBaseUrl(local)).toBe("http://localhost:11434");
+    expect(providerEditorInitialBaseUrl({ ...local, baseUrl: "http://localhost:11500" })).toBe("http://localhost:11500");
+    expect(providerEditorRequiresBaseUrl(local)).toBe(true);
+    expect(providerEditorTakesKey(local)).toBe(false);
+    const fields = { mutating: false, name: "Ollama", baseUrl: "http://localhost:11434", apiKey: "", nameIssue: null, createMode: true, editMode: false, requiresBaseUrl: true };
+    expect(providerEditorCanSave({ ...fields, keyless: true })).toBe(true);
+    expect(providerEditorCanSave(fields)).toBe(false);
+    // A Custom Gateway is as before: an address and a key.
+    const custom = { kind: "create" as const, client: "codex" as const };
+    expect(providerEditorInitialName(custom)).toBe("");
+    expect(providerEditorRequiresBaseUrl(custom) && providerEditorTakesKey(custom)).toBe(true);
+    // Editing a saved local connection asks no key either.
+    const saved = { id: "c1", name: "Ollama", preset_id: "ollama", clients: ["claude"], credential_ready: true, advanced: true, base_url: "http://localhost:11434" };
+    expect(providerEditorTakesKey({ kind: "edit", connection: saved }, presets)).toBe(false);
+  });
+
+  test("the daemon's local servers are read, and a malformed one is left out", () => {
+    expect(parseLocalProviders({ type: "local_providers", found: [
+      { preset_id: "ollama", label: "Ollama", base_url: "http://localhost:11434", models: 2, connection_ids: ["c1"] },
+      { preset_id: "", base_url: "http://localhost:1" },
+      "nonsense",
+    ] })).toEqual([{ preset_id: "ollama", label: "Ollama", base_url: "http://localhost:11434", models: 2, connection_ids: ["c1"] }]);
+    expect(parseLocalProviders({ type: "error" })).toEqual([]);
+    expect(localAddressLabel("http://localhost:11434")).toBe("localhost:11434");
   });
 });

@@ -16,9 +16,13 @@ func runProvidersCommand(args []string, stderr io.Writer) error {
 	if len(args) > 0 && args[0] == "fallback" {
 		return runProvidersFallback(args[1:], stderr)
 	}
+	if len(args) > 0 && args[0] == "local" {
+		return runProvidersLocal(args[1:], stderr)
+	}
 	if len(args) == 0 || isHelpArg(args[0]) || args[0] != "image-model" {
 		fmt.Fprintln(stderr, "Usage: mewla providers image-model [show | set <model> | clear] [--connection <id>]")
 		fmt.Fprintln(stderr, "       mewla providers fallback [show | set <fallback-id> | clear] [--connection <id>]")
+		fmt.Fprintln(stderr, "       mewla providers local")
 		return flag.ErrHelp
 	}
 	return runProvidersImageModel(args[1:], stderr)
@@ -86,6 +90,33 @@ func runProvidersFallback(args []string, stderr io.Writer) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(rows)
+}
+
+// runProvidersLocal lists the model servers running on this computer (Ollama,
+// LM Studio, an OpenAI-style server on a usual port), as Add Provider offers
+// them.
+func runProvidersLocal(args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla providers local", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+	if _, err := parseInterleaved(fs, args); err != nil {
+		return err
+	}
+	resp, err := callControl(cfg, control.Request{Type: "provider_detect_local"})
+	if err != nil {
+		return err
+	}
+	if !resp.OK {
+		return writeControlResponse(os.Stdout, resp, true)
+	}
+	found := resp.LocalProviders
+	if found == nil {
+		found = []modelprofiles.LocalProvider{}
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(found)
 }
 
 // runProvidersImageModel shows or changes the image_model of Codex

@@ -282,6 +282,16 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 	if fb, _ := fallbackOf(readType("providers")); fb != "" {
 		t.Fatalf("cleared fallback=%q", fb)
 	}
+
+	// Local model servers: what runs here depends on the machine, so only
+	// the reply's shape is checked.
+	if err := conn.WriteJSON(map[string]any{"type": "detect_local_providers", "request_id": "local-1"}); err != nil {
+		t.Fatal(err)
+	}
+	local := readType("local_providers")
+	if _, isList := local["found"].([]any); local["request_id"] != "local-1" || !isList {
+		t.Fatalf("local providers reply=%#v", local)
+	}
 }
 
 func TestSetThreadRuntimeCommitFailureKeepsPreviousRouteSendable(t *testing.T) {

@@ -12,6 +12,15 @@ const (
 	ProviderPresetAnthropic  = "anthropic"
 	ProviderPresetDeepSeek   = "deepseek"
 	ProviderPresetCustom     = "custom"
+	ProviderPresetKimi       = "kimi"
+	ProviderPresetKimiCN     = "kimi-cn"
+	ProviderPresetGLM        = "glm"
+	ProviderPresetGLMCN      = "glm-cn"
+	ProviderPresetMiniMax    = "minimax"
+	ProviderPresetMiniMaxCN  = "minimax-cn"
+	ProviderPresetOllama     = "ollama"
+	ProviderPresetLMStudio   = "lmstudio"
+	ProviderPresetLocal      = "local"
 )
 
 // DiscoveryTTL is the bounded live-model refresh window.
@@ -24,6 +33,10 @@ type ProviderPreset struct {
 	Label    string   `json:"label"`
 	Clients  []string `json:"clients"`
 	Advanced bool     `json:"advanced,omitempty"`
+	// Local is a model server on this computer: it takes no key, and its
+	// address (BaseURL, prefilled) may be edited.
+	Local   bool   `json:"local,omitempty"`
+	BaseURL string `json:"base_url,omitempty"`
 }
 
 // ProviderConnection is one Settings-managed Provider account connection.

@@ -66,6 +66,10 @@ func (s *Server) handleModelProfileMessage(conn *websocket.Conn, raw clientMessa
 	case "test_provider_connection":
 		s.handleTestProviderConnection(conn, raw)
 		return true
+	// Asks local ports (up to 1.5 s), off the read loop.
+	case "detect_local_providers":
+		go s.handleDetectLocalProviders(conn, raw)
+		return true
 	// A Session's model is asked of its agent (Claude starts `claude -p` to
 	// list them; Codex asks its app-server), which can take seconds: off this
 	// connection's read loop, or the conversation asked for beside it waits as
@@ -231,6 +235,21 @@ func (s *Server) handleSetProviderModels(conn *websocket.Conn, raw clientMessage
 		return
 	}
 	s.sendJSON(conn, s.providersCatalogPayload(raw.RequestID, proj, persist, err))
+}
+
+// handleDetectLocalProviders answers with the model servers running on this
+// computer, for Add Provider to offer.
+func (s *Server) handleDetectLocalProviders(conn *websocket.Conn, raw clientMessage) {
+	owner := s.modelProfiles()
+	if owner == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
+		return
+	}
+	found := owner.DetectLocalProviders(context.Background())
+	if found == nil {
+		found = []modelprofiles.LocalProvider{}
+	}
+	s.sendJSON(conn, map[string]any{"type": "local_providers", "request_id": raw.RequestID, "found": found})
 }
 
 // handleSetProviderFallback names (or, with an empty fallback_connection_id,

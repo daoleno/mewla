@@ -24,6 +24,15 @@ type presetSpec struct {
 	// Variants says, per executor, where the preset differs from the shape
 	// above (one provider serving two protocols at two paths).
 	Variants map[string]presetVariant
+	// CatalogKey is the provider's key in the models.dev catalog, when it is
+	// not ProviderID (two regions of one vendor share one catalog).
+	CatalogKey string
+	// ModelsURL lists the vendor's models when its endpoint has no list of
+	// its own (an Anthropic endpoint beside an OpenAI one).
+	ModelsURL string
+	// Local is a model server on this computer: no key, an address the
+	// person may change, and its API found when it is saved.
+	Local bool
 }
 
 // presetVariant is how a preset differs for one client.
@@ -32,6 +41,8 @@ type presetVariant struct {
 	AuthMode string
 	// BasePath is appended to the base URL unless it already ends with it.
 	BasePath string
+	// BaseURL replaces the preset's own base URL for this client.
+	BaseURL string
 }
 
 var curatedPresets = []presetSpec{
@@ -51,15 +62,20 @@ var curatedPresets = []presetSpec{
 	{
 		Public: ProviderPreset{
 			ID: ProviderPresetOpenRouter, Label: "OpenRouter",
-			Clients: []string{ClientCodex},
+			Clients: []string{ClientCodex, ClientClaude},
 		},
 		ProviderID:     "openrouter",
 		DefaultBaseURL: "https://openrouter.ai/api/v1",
 		Protocol:       ProtocolOpenAIResponses,
 		AuthMode:       AuthModeBearerEnv,
 		CredentialEnv:  "OPENROUTER_API_KEY",
-		ClientModel:    map[string]string{ExecutorCodex: "gpt-5"},
+		ClientModel:    map[string]string{ExecutorCodex: "gpt-5", ExecutorClaude: "claude-sonnet-4-6"},
 		BuiltinModels:  map[string]string{ExecutorCodex: "openai/gpt-5"},
+		// Claude Code goes to OpenRouter's Anthropic API, one level up
+		// (Magpie: internal/provider/presets.go:602-603).
+		Variants: map[string]presetVariant{
+			ExecutorClaude: {Protocol: ProtocolAnthropicMessages, AuthMode: AuthModeXAPIKeyEnv, BaseURL: "https://openrouter.ai/api"},
+		},
 	},
 	{
 		Public: ProviderPreset{
@@ -98,6 +114,15 @@ var curatedPresets = []presetSpec{
 			ExecutorClaude: {Protocol: ProtocolAnthropicMessages, AuthMode: AuthModeXAPIKeyEnv, BasePath: "/anthropic"},
 		},
 	},
+	anthropicVendor(ProviderPresetKimi, "Kimi", "moonshot", "moonshotai", "https://api.moonshot.ai/anthropic", "https://api.moonshot.ai/v1/models", "MOONSHOT_API_KEY"),
+	anthropicVendor(ProviderPresetKimiCN, "Kimi (China)", "moonshot-cn", "moonshotai", "https://api.moonshot.cn/anthropic", "https://api.moonshot.cn/v1/models", "MOONSHOT_API_KEY"),
+	anthropicVendor(ProviderPresetGLM, "GLM (Z.ai)", "zai", "zai", "https://api.z.ai/api/anthropic", "https://api.z.ai/api/paas/v4/models", "ZAI_API_KEY"),
+	anthropicVendor(ProviderPresetGLMCN, "GLM (China)", "zhipu", "zhipuai", "https://open.bigmodel.cn/api/anthropic", "https://open.bigmodel.cn/api/paas/v4/models", "ZHIPU_API_KEY"),
+	anthropicVendor(ProviderPresetMiniMax, "MiniMax", "minimax", "minimax", "https://api.minimax.io/anthropic", "https://api.minimax.io/v1/models", "MINIMAX_API_KEY"),
+	anthropicVendor(ProviderPresetMiniMaxCN, "MiniMax (China)", "minimax-cn", "minimax", "https://api.minimaxi.com/anthropic", "https://api.minimaxi.com/v1/models", "MINIMAX_API_KEY"),
+	localServer(ProviderPresetOllama, "Ollama", "http://localhost:11434"),
+	localServer(ProviderPresetLMStudio, "LM Studio", "http://localhost:1234"),
+	localServer(ProviderPresetLocal, "Local server", ""),
 	{
 		Public: ProviderPreset{
 			ID: ProviderPresetCustom, Label: "Custom Gateway",
@@ -115,6 +140,59 @@ var curatedPresets = []presetSpec{
 		},
 		BuiltinModels: map[string]string{},
 	},
+}
+
+// anthropicVendor is a vendor serving the Anthropic Messages API beside its
+// OpenAI one, for both agents: Claude Code as it is, Codex translated (its
+// thinking and prompt cache survive Anthropic, not Chat). The key goes as
+// x-api-key, which each of these reads (MiniMax's refusal names it). URLs:
+// Magpie internal/provider/presets.go:250-297.
+func anthropicVendor(id, label, providerID, catalogKey, baseURL, modelsURL, env string) presetSpec {
+	return presetSpec{
+		Public:         ProviderPreset{ID: id, Label: label, Clients: []string{ClientCodex, ClientClaude}},
+		ProviderID:     providerID,
+		DefaultBaseURL: baseURL,
+		Protocol:       ProtocolAnthropicMessages,
+		AuthMode:       AuthModeXAPIKeyEnv,
+		CredentialEnv:  env,
+		ClientModel:    map[string]string{ExecutorCodex: "gpt-5", ExecutorClaude: "claude-sonnet-4-6"},
+		BuiltinModels:  map[string]string{},
+		CatalogKey:     catalogKey,
+		ModelsURL:      modelsURL,
+	}
+}
+
+// localServer is a model server on this computer (Magpie presets.go:794-800).
+// It takes no key; which API it speaks is found when it is saved, as for a
+// Custom Gateway.
+func localServer(id, label, baseURL string) presetSpec {
+	return presetSpec{
+		Public:         ProviderPreset{ID: id, Label: label, Clients: []string{ClientCodex, ClientClaude}, Local: true, BaseURL: baseURL},
+		ProviderID:     id,
+		DefaultBaseURL: baseURL,
+		AuthMode:       AuthModeNone,
+		ClientModel:    map[string]string{ExecutorCodex: "gpt-5", ExecutorClaude: "claude-sonnet-4-6"},
+		BuiltinModels:  map[string]string{},
+		Local:          true,
+	}
+}
+
+// catalogKeyOf is a connection's provider key in the models.dev catalog.
+func catalogKeyOf(profile Profile) string {
+	if spec, ok := lookupPreset(inferPresetID(profile)); ok && spec.CatalogKey != "" {
+		return spec.CatalogKey
+	}
+	return strings.ToLower(normalizeSpace(profile.ProviderID))
+}
+
+// presetModelsURL is where a curated connection's models are listed, when its
+// preset names a list of its own and the connection keeps the preset's URL.
+func presetModelsURL(profile Profile) string {
+	spec, ok := lookupPreset(inferPresetID(profile))
+	if !ok || spec.ModelsURL == "" || strings.TrimRight(profile.BaseURL, "/") != strings.TrimRight(spec.DefaultBaseURL, "/") {
+		return ""
+	}
+	return spec.ModelsURL
 }
 
 // ListProviderPresets returns curated public presets (no Base URL / auth / protocol).
@@ -184,6 +262,12 @@ func CompileProviderConnection(in ProviderConnectionInput) (Profile, error) {
 	baseURL := spec.DefaultBaseURL
 	credEnv := spec.CredentialEnv
 	advanced := in.Advanced || normalizeID(in.PresetID) == ProviderPresetCustom
+	if spec.Local && in.BaseURL == "" {
+		in.BaseURL = baseURL
+	}
+	if spec.Local {
+		advanced = true
+	}
 	if advanced {
 		if in.BaseURL == "" {
 			return Profile{}, fmt.Errorf("%w: advanced connection requires base_url", ErrInvalid)
@@ -273,11 +357,14 @@ func compileProviderConnectionForClient(in ProviderConnectionInput, executor str
 	}
 	if variant, ok := spec.Variants[executor]; ok {
 		protocol, authMode = variant.Protocol, variant.AuthMode
+		if variant.BaseURL != "" && strings.TrimRight(baseURL, "/") == strings.TrimRight(spec.DefaultBaseURL, "/") {
+			baseURL = variant.BaseURL
+		}
 		if root := strings.TrimRight(baseURL, "/"); variant.BasePath != "" && !strings.HasSuffix(root, variant.BasePath) {
 			baseURL = root + variant.BasePath
 		}
 	}
-	if normalizeID(in.PresetID) == ProviderPresetCustom || in.Advanced {
+	if normalizeID(in.PresetID) == ProviderPresetCustom || in.Advanced || spec.Local {
 		if baseURL == "" {
 			return Profile{}, fmt.Errorf("%w: advanced connection requires base_url", ErrInvalid)
 		}
@@ -290,6 +377,9 @@ func compileProviderConnectionForClient(in ProviderConnectionInput, executor str
 				protocol = ProtocolAnthropicMessages
 				authMode = AuthModeXAPIKeyEnv
 			}
+		}
+		if spec.Local {
+			authMode = AuthModeNone
 		}
 	}
 

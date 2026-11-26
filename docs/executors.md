@@ -201,7 +201,18 @@ test, its models and Delete.
 | --- | --- |
 | Official login | The provider, using the CLI's own sign-in on the computer |
 | OpenAI, Anthropic, DeepSeek, OpenRouter | That provider, with your API key |
+| Kimi, GLM (Z.ai), MiniMax, and their China regions | The vendor's Anthropic endpoint, with your API key |
+| Ollama, LM Studio, Local server | A model server on the computer, with no key |
 | Custom Gateway | Your endpoint, with your key |
+
+**Add Provider** first asks what you are adding. A model server already running
+on the computer (Ollama on port 11434, LM Studio on 1234, or an OpenAI-style
+server on 8000, 8080 or 1337) is listed at the top with how many models it has,
+and is added with one more tap. For a vendor you paste only the key: its address
+and API are known. Claude Code reaches the Anthropic endpoints as they are, and
+Codex through them too (translated, so its reasoning and prompt cache carry
+over). A local server takes no key; its address can be changed, and the API it
+speaks is found when it is saved, as for a Custom Gateway.
 
 Keys are stored on the daemon and never shown again; leaving the key field
 empty keeps the saved one. For a custom Claude gateway, enter the endpoint

@@ -11,10 +11,12 @@
 import type {
   ProviderClient,
   ProviderConnection,
+  ProviderPreset,
 } from "./types";
 
+/** `preset` absent is a Custom Gateway. */
 export type ProvidersEditorState =
-  | { kind: "create"; client: ProviderClient }
+  | { kind: "create"; client: ProviderClient; preset?: ProviderPreset; baseUrl?: string }
   | { kind: "edit"; connection: ProviderConnection; retry?: boolean }
   | null;
 
@@ -31,6 +33,8 @@ export type ProviderEditorFieldState = {
   editMode: boolean;
   /** Advanced/Custom connections always require a Base URL. */
   requiresBaseUrl: boolean;
+  /** A local model server: it takes no key. */
+  keyless?: boolean;
 };
 
 /**
@@ -47,7 +51,7 @@ export function providerEditorCanSave(
   if (input.name.trim().length === 0) return false;
   if (input.nameIssue !== null) return false;
   if (input.requiresBaseUrl && input.baseUrl.trim().length === 0) return false;
-  if (input.createMode && input.apiKey.trim().length === 0) return false;
+  if (input.createMode && !input.keyless && input.apiKey.trim().length === 0) return false;
   return input.createMode || input.editMode;
 }
 
@@ -58,7 +62,8 @@ export function providerEditorCanSave(
 export function providerEditorInitialName(
   editor: ProvidersEditorState,
 ): string {
-  return editor?.kind === "edit" ? editor.connection.name : "";
+  if (editor?.kind === "edit") return editor.connection.name;
+  return editor?.kind === "create" && editor.preset && editor.preset.id !== "custom" ? editor.preset.label : "";
 }
 
 /**
@@ -69,7 +74,16 @@ export function providerEditorInitialName(
 export function providerEditorInitialBaseUrl(
   editor: ProvidersEditorState,
 ): string {
-  return editor?.kind === "edit" ? (editor.connection.base_url ?? "") : "";
+  if (editor?.kind === "edit") return editor.connection.base_url ?? "";
+  return editor?.kind === "create" ? (editor.baseUrl ?? editor.preset?.base_url ?? "") : "";
+}
+
+/** Whether the form asks for a key: not for a local model server. */
+export function providerEditorTakesKey(editor: ProvidersEditorState, presets: ProviderPreset[] = []): boolean {
+  if (!editor) return false;
+  const presetId = editor.kind === "create" ? editor.preset?.id : editor.connection.preset_id;
+  const preset = editor.kind === "create" ? editor.preset : presets.find((p) => p.id === presetId);
+  return !preset?.local;
 }
 
 /**
@@ -81,6 +95,6 @@ export function providerEditorRequiresBaseUrl(
   editor: ProvidersEditorState,
 ): boolean {
   if (!editor) return false;
-  if (editor.kind === "create") return true;
+  if (editor.kind === "create") return !editor.preset || editor.preset.id === "custom" || Boolean(editor.preset.local);
   return Boolean(editor.connection.base_url);
 }
