@@ -57,13 +57,15 @@ export function Page(props: {
   scrollRef?: (ref: ScrollRef) => void;
   /** A panel beside the scrolling page (a wide screen's details), or nothing. */
   aside?: JSX.Element;
+  /** Beside `aside`, the scrolling page is a list this wide and the aside takes the rest (a list beside its detail). */
+  list?: number;
   /** Laid over the page, not scrolling with it (a toast). */
   overlay?: JSX.Element;
   children?: JSX.Element;
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
   const page = pageColumnWidth("page", density() !== "phone")!;
-  const width = () => (props.full ? (props.maxWidth ?? 1200) : wide() ? page : (props.maxWidth ?? 720));
+  const width = () => (props.list ? props.list : props.full ? (props.maxWidth ?? 1200) : wide() ? page : (props.maxWidth ?? 720));
   // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
   const display = untracked(() => Boolean(props.display));
   const titleAway = signal(!display);
@@ -75,7 +77,7 @@ export function Page(props: {
   const emptyAtRest = display && (!("headerRight" in props) || "rail" in props);
   const top = () => (rail() && emptyAtRest ? capsuleRailPageInset(safeArea().top) : capsulePageInset(safeArea().top));
   const scroll = (
-    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" contentClass="px-4 pt-2"
+    <Scroll keyboardShouldPersistTaps="handled" ref={props.scrollRef} class="flex-1 bg-background" style={props.list ? { flexGrow: 0, flexShrink: 0, flexBasis: props.list, width: props.list } : undefined} contentClass="px-4 pt-2"
       contentStyle={{ paddingTop: capsuled ? top() + 8 : undefined, paddingBottom: 40 + bottomBarInset() }} refreshing={props.refreshing} onRefresh={props.onRefresh}
       onScroll={display ? (e) => titleAway.set(e.offset.y > away) : undefined} scrollEventThrottle={display ? 64 : undefined}>
       <View class="w-full self-center" style={{ maxWidth: width() }}>
