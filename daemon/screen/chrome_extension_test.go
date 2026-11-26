@@ -114,16 +114,28 @@ func TestMewlasWindowIsTheOneThatWasNotThereBefore(t *testing.T) {
 	if _, _, err := newWindowAddress(tree, map[int]bool{40: true, 10: true}); err == nil {
 		t.Fatal("a window that was there was taken for Mewla's")
 	}
-	// Closed by its own close button, never another window's.
-	tree.Elements = append(tree.Elements, Element{Role: "AXButton", Subrole: "AXCloseButton", Depth: 1})
-	tree.IDs = append(tree.IDs, 12)
-	if _, err := closeButtonOf(tree, 40); err == nil {
-		t.Fatal("another window's close button was taken for Mewla's")
-	}
-	if id, err := closeButtonOf(tree, 10); err != nil || id != 12 {
+}
+
+// Mewla's window closes by its own close button: the window in front on the
+// extensions page while Chrome has one more window than before; never
+// another.
+func TestOnlyMewlasWindowCloses(t *testing.T) {
+	tree := ElementTree{Elements: []Element{
+		{Role: "AXWindow", Depth: 0},
+		{Role: "AXTextField", Value: "chrome://extensions", Depth: 8},
+		{Role: "AXButton", Subrole: "AXCloseButton", Depth: 1},
+		{Role: "AXWindow", Depth: 0},
+		{Role: "AXTextField", Value: "news.ycombinator.com", Depth: 8},
+		{Role: "AXButton", Subrole: "AXCloseButton", Depth: 1},
+	}}
+	if id, err := closeButtonOfMewlas(tree, 1); err != nil || id != 3 {
 		t.Fatalf("[%d] %v", id, err)
 	}
-	if _, err := closeButtonOf(tree, 99); err == nil {
-		t.Fatal("a window that is gone has a close button")
+	if _, err := closeButtonOfMewlas(tree, 2); err == nil {
+		t.Fatal("closed a window while Chrome had no more windows than before")
+	}
+	tree.Elements[1].Value = "https://mail.example.com/"
+	if _, err := closeButtonOfMewlas(tree, 1); err == nil {
+		t.Fatal("closed a window that shows another page")
 	}
 }

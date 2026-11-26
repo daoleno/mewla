@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -81,36 +82,38 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 	if err != nil {
 		return err
 	}
+	screenReaderOff := func() {}
 	if enhanced, ok := s.backend.(enhancedUISetter); ok && pid != 0 {
 		if err := enhanced.SetEnhancedUI(pid, true); err != nil {
 			log.Printf("screen: Chrome's pages as for a screen reader: %v", err)
 		}
-		defer func() {
+		screenReaderOff = sync.OnceFunc(func() {
 			if err := enhanced.SetEnhancedUI(pid, false); err != nil {
 				log.Printf("screen: Chrome back from screen reader mode: %v", err)
 			}
-		}()
+		})
+		defer screenReaderOff()
 	}
 	// A window of Mewla's own: the person's tabs stay as they are. It is the
 	// one that was not there before.
 	if err := appKey("a new window", "cmd+n"); err != nil {
 		return err
 	}
-	var window int
 	if err := s.untilRead(ctx, "Mewla's window", 5*time.Second, func(t ElementTree) error {
-		var err error
-		window, _, err = newWindowAddress(t, before)
+		_, _, err := newWindowAddress(t, before)
 		return err
 	}); err != nil {
 		return fmt.Errorf("step %d: %w", step, err)
 	}
 	// It closes when Mewla is done, whatever happened, by its own close
-	// button: no other window of the person's.
+	// button, while it is the one in front.
 	defer func() {
+		// Pages off first: a read of all of Chrome's then holds every window.
+		screenReaderOff()
 		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
 			return
 		}
-		button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOf(t, window) })
+		button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOfMewlas(t, len(before)) })
 		if err != nil {
 			log.Printf("screen: Mewla's Chrome window stays open: %v", err)
 			return
@@ -141,6 +144,13 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 			return err
 		}); err != nil {
 			return fmt.Errorf("step %d: %w", step, err)
+		}
+		// The keyboard is Chrome's only while it is in front.
+		if err := act("Chrome in front", AgentAction{Action: "bring_forward", App: chromeApp}); err != nil {
+			return err
+		}
+		if err := appKey("the address bar", "cmd+l"); err != nil {
+			return err
 		}
 		if err := act("the extensions page's address", AgentAction{Action: "element", Element: address, ElementAction: "set_value", Text: extensionsPage}); err != nil {
 			return err
@@ -355,18 +365,30 @@ func newWindowAddress(t ElementTree, before map[int]bool) (window, address int, 
 	return 0, 0, errors.New("the new window has no address bar yet")
 }
 
-// closeButtonOf is the close button of the window with id window.
-func closeButtonOf(t ElementTree, window int) (int, error) {
-	at := t.index(window)
-	if at < 0 {
-		return 0, errors.New("Mewla's window is gone")
+// closeButtonOfMewlas is the close button of Mewla's window: the one in
+// front, on the extensions page, while Chrome has one window more than the
+// windows it had before. A window's id does not last (Chrome gives it a new
+// element when its page changes), so it is known by these.
+func closeButtonOfMewlas(t ElementTree, windowsBefore int) (int, error) {
+	windows := 0
+	for _, e := range t.Elements {
+		if e.Role == "AXWindow" {
+			windows++
+		}
 	}
-	for i := at + 1; i < len(t.Elements) && t.Elements[i].Depth > t.Elements[at].Depth; i++ {
+	if windows != windowsBefore+1 {
+		return 0, fmt.Errorf("Chrome has %d windows, not the %d it had and Mewla's", windows, windowsBefore)
+	}
+	if a := frontAddress(t); !strings.HasPrefix(a, "chrome://extensions") {
+		return 0, fmt.Errorf("the window in front shows %q", a)
+	}
+	start, end := frontWindow(t)
+	for i := start; i < end; i++ {
 		if t.Elements[i].Subrole == "AXCloseButton" {
 			return t.id(i), nil
 		}
 	}
-	return 0, errors.New("Mewla's window has no close button")
+	return 0, errors.New("the window in front has no close button")
 }
 
 // frontWindow is where the window in front lies in a read: the first window
