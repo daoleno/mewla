@@ -26,8 +26,10 @@ func TestClaudeProviderSelectionRetargetsLiveRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, _ := owner.Table().Get("claude-session")
-	if caps := CapabilitiesFor(ExecutorClaude); len(caps.Protocols) != 1 || caps.Protocols[0].ActiveSwitch != "" {
-		t.Fatalf("Claude must not advertise native hot switching: %#v", caps)
+	for _, p := range CapabilitiesFor(ExecutorClaude).Protocols {
+		if p.ActiveSwitch != "" {
+			t.Fatalf("Claude must not advertise native hot switching: %#v", p)
+		}
 	}
 	if caps := owner.SessionRouteCapabilities("claude-session"); !caps.Managed || caps.ActiveSwitch {
 		t.Fatalf("managed Claude should be read-only: %#v", caps)

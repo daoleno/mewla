@@ -20,6 +20,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/listenhandoff"
+	"github.com/daoleno/mewla/daemon/modelprofiles/translate"
 )
 
 // DefaultGatewayListenAddr is the stable machine-level Codex gateway
@@ -91,6 +92,7 @@ type Gateway struct {
 	statePath      string
 	ws             *wsConnRegistry
 	resolve        GatewayRequestResolver
+	claudeStandIn  func(profileID, model string) (string, bool)
 	listenFallback bool
 	// requests counts HTTP model requests being answered now (a websocket
 	// stays open across turns, so it is not one).
@@ -120,6 +122,12 @@ func WithGatewayMaxBody(n int64) GatewayOption {
 
 func WithGatewayRequestResolver(resolve GatewayRequestResolver) GatewayOption {
 	return func(g *Gateway) { g.resolve = resolve }
+}
+
+// WithGatewayClaudeStandIn sets how a Claude id the chosen Claude connection
+// does not offer is replaced (see claudeStandIn).
+func WithGatewayClaudeStandIn(standIn func(profileID, model string) (string, bool)) GatewayOption {
+	return func(g *Gateway) { g.claudeStandIn = standIn }
 }
 
 func WithGatewayListenFallback(enabled bool) GatewayOption {
@@ -411,6 +419,12 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			writeRouteError(w, http.StatusNotImplemented, ErrRouteWebSocket)
 			return
 		}
+		// A Provider that does not speak Responses is translated per
+		// request over HTTP; 426 sends Codex there.
+		if selected, ok := g.Upstream(); ok && apiOfProtocol(selected.Protocol) != translate.APIResponses {
+			writeRouteError(w, http.StatusUpgradeRequired, ErrRouteWebSocket)
+			return
+		}
 		resolve := func(bool) (wsProxyTarget, error) {
 			selected, selectedOK := g.Upstream()
 			if !selectedOK {
@@ -492,6 +506,48 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	}
 	if upstream.BaseURL == "" {
 		writeRouteError(w, http.StatusServiceUnavailable, ErrUpstreamInvalid)
+		return
+	}
+	if protocol == GatewayProtocolAnthropic && g.claudeStandIn != nil && len(bodyBytes) > 0 {
+		if model, err := gatewayModelID(bodyBytes); err == nil {
+			if normalized, ok := normalizeClaudeContextModel(model); ok {
+				model = normalized
+			}
+			if standIn, ok := g.claudeStandIn(upstream.ProfileID, model); ok {
+				debuglog.Printf("gateway: %s stands in for %s, which %q does not offer", standIn, model, upstream.Name)
+				if bodyBytes, err = rewriteRequestModel(bodyBytes, standIn); err != nil {
+					writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+					return
+				}
+				req.ContentLength = int64(len(bodyBytes))
+			}
+		}
+	}
+	if protocol == GatewayProtocolAnthropic && len(bodyBytes) > 0 && req.Header.Get("Content-Encoding") == "" && !anthropicOwnAPI(upstream.BaseURL) {
+		if dropped := dropClaudeBillingLine(bodyBytes); len(dropped) != len(bodyBytes) {
+			bodyBytes = dropped
+			req.ContentLength = int64(len(bodyBytes))
+		}
+	}
+	// A Provider that speaks another API than the agent: the request is
+	// translated and the reply comes back in the agent's API.
+	clientAPI := map[string]string{GatewayProtocolAnthropic: translate.APIAnthropic, GatewayProtocolResponses: translate.APIResponses}[protocol]
+	if upstreamAPI := apiOfProtocol(upstream.Protocol); clientAPI != "" && clientAPI != upstreamAPI && translate.Supported(clientAPI, upstreamAPI) {
+		plain, _, decodeErr := decodeBodyEncoding(req.Header.Get("Content-Encoding"), bodyBytes, maxBody)
+		if decodeErr != nil {
+			writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+			return
+		}
+		if strings.HasSuffix(req.URL.Path, "/count_tokens") {
+			writeEstimatedTokenCount(w, plain)
+			return
+		}
+		inbound := req.Header
+		translatedForward{
+			client: g.client, clientAPI: clientAPI, upstreamAPI: upstreamAPI,
+			baseURL: upstream.BaseURL, provider: upstream.Name, inbound: inbound, body: plain,
+			applyAuth: func(h http.Header) error { return applyGatewayAuth(h, upstream, inbound, g.lookup, g.creds) },
+		}.serve(req.Context(), w)
 		return
 	}
 	// The request adapter the Provider's upstream needs runs here as it does

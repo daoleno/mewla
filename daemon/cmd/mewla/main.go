@@ -651,6 +651,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	codexConfigPath, claudeSettingsPath := machineConfigPaths()
 	profileOwner, err := modelprofiles.StartOwner(modelprofiles.OwnerConfig{
+		DetectUpstreamAPI:  true,
 		ProfilesPath:       profilesPath,
 		RoutesPath:         routesPath,
 		ListenerPath:       listenerPath,

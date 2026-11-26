@@ -606,3 +606,58 @@ func withRawQuery(upstreamURL, rawQuery string) (string, error) {
 	u.Fragment = ""
 	return u.String(), nil
 }
+
+// claudeBillingPrefix opens the first system block Claude Code sends:
+// "x-anthropic-billing-header: cc_version=…; cc_entrypoint=…; cch=…;". It is
+// for Anthropic's own API, and its cch changes every turn, so on any other
+// endpoint it changes the very start of the prompt and no turn reads the
+// cached prefix of the one before.
+const claudeBillingPrefix = "x-anthropic-billing-header:"
+
+// dropClaudeBillingLine removes that system block from an Anthropic
+// Messages request. A body without it, or one that cannot be read, is
+// returned as it is.
+func dropClaudeBillingLine(body []byte) []byte {
+	if !bytes.Contains(body, []byte(claudeBillingPrefix)) {
+		return body
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(body, &obj) != nil {
+		return body
+	}
+	var blocks []json.RawMessage
+	if json.Unmarshal(obj["system"], &blocks) != nil {
+		return body
+	}
+	kept := blocks[:0:0]
+	for _, raw := range blocks {
+		var b struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(raw, &b) == nil && b.Type == "text" && strings.HasPrefix(strings.TrimSpace(b.Text), claudeBillingPrefix) {
+			continue
+		}
+		kept = append(kept, raw)
+	}
+	if len(kept) == len(blocks) {
+		return body
+	}
+	system, err := json.Marshal(kept)
+	if err != nil {
+		return body
+	}
+	obj["system"] = system
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// anthropicOwnAPI reports whether a base URL is Anthropic's own API, the
+// one endpoint Claude Code's billing line is meant for.
+func anthropicOwnAPI(baseURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	return err == nil && strings.EqualFold(u.Hostname(), "api.anthropic.com")
+}

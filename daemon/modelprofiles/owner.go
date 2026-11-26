@@ -46,11 +46,15 @@ const (
 
 // OwnerConfig configures production Owner paths and seams.
 type OwnerConfig struct {
-	ProfilesPath  string
-	RoutesPath    string
-	ListenerPath  string
-	DiscoveryPath string // secret-free TTL/LKG model id cache
-	ModelsDevURL  string // models.dev metadata feed; empty disables refresh
+	// DetectUpstreamAPI probes a custom Provider endpoint when it is saved
+	// to learn which API it speaks (detectUpstreamAPI). The daemon turns it
+	// on; tests whose fake upstreams count requests leave it off.
+	DetectUpstreamAPI bool
+	ProfilesPath      string
+	RoutesPath        string
+	ListenerPath      string
+	DiscoveryPath     string // secret-free TTL/LKG model id cache
+	ModelsDevURL      string // models.dev metadata feed; empty disables refresh
 	// CodexModels lists the installed Codex's models (see
 	// codex_app_server_models.go). Nil leaves the Codex picker on Codex's
 	// models_cache.json and the pinned catalog.
@@ -131,9 +135,12 @@ type Owner struct {
 	preferAddr    string
 	lookup        func(string) (string, bool)
 	creds         CredentialStore
-	verifier      ProfileContractVerifier
-	started       bool
-	closed        bool
+	// upstreamAPIDetect finds the API a custom endpoint speaks when it is
+	// saved (detectUpstreamAPI; tests replace it).
+	upstreamAPIDetect func(executorID, baseURL, secret string) (string, bool)
+	verifier          ProfileContractVerifier
+	started           bool
+	closed            bool
 	// idleListenerOwned is true when this Owner started the loopback listener
 	// from an inert (no live routes) state and may tear it down on failed first
 	// launch / last Abort when no routes remain.
@@ -320,6 +327,11 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		restoreNotices:  notices,
 		codexControlDir: codexControlDir,
 		nativeMonitors:  map[string]*codexctl.Monitor{},
+	}
+	if cfg.DetectUpstreamAPI {
+		o.upstreamAPIDetect = func(executorID, baseURL, secret string) (string, bool) {
+			return detectUpstreamAPI(NewSafeHTTPClient(upstreamAPIProbeTimeout), executorID, baseURL, secret)
+		}
 	}
 	modelsDevPath := ""
 	if strings.TrimSpace(cfg.DiscoveryPath) != "" {
@@ -1140,7 +1152,7 @@ func (o *Owner) PrepareLaunchModel(executorID, profileID, modelOverride, baseCom
 	var launch ResolvedLaunch
 	listenPersist := PersistResult{Applied: true, Durable: true}
 	startedListener := false
-	if routeProto, needsRoute := RouteProtocolFor(profile.Protocol); needsRoute && routeProto != "" {
+	if routeProto, needsRoute := RouteProtocolForExecutor(profile.ExecutorID, profile.Protocol); needsRoute && routeProto != "" {
 		wasListening := o.ln != nil && strings.TrimSpace(o.addr) != ""
 		var listenErr error
 		listenPersist, listenErr = o.ensureListenerLocked(false)

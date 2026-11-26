@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/debuglog"
 	"github.com/daoleno/mewla/daemon/logonce"
+	"github.com/daoleno/mewla/daemon/modelprofiles/translate"
 )
 
 // Router is the Mewla-owned same-protocol loopback routing runtime.
@@ -308,6 +310,16 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 					}
 					served = catalogServesModel(catalog, requestModel)
 				}
+				if !served && (parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointAnthropicCountTokens) {
+					if standIn, ok := claudeStandIn(requestModel, standInCandidates(catalog.Entries), firstNonEmpty(binding.UpstreamModel, binding.ClientModel)); ok {
+						debuglog.Printf("model route %s: %s stands in for %s, which connection %q does not offer", binding.RouteID, standIn, requestModel, catalog.Connection)
+						if rewritten, err = rewriteRequestModel(rewritten, standIn); err != nil {
+							writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+							return
+						}
+						requestModel, served = standIn, true
+					}
+				}
 				if !served {
 					writeModelRefusal(w, requestModel, catalog.Connection, refreshErr != nil)
 					return
@@ -452,6 +464,31 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	if (parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointAnthropicCountTokens) && !anthropicOwnAPI(binding.UpstreamBaseURL) {
+		rewritten = dropClaudeBillingLine(rewritten)
+	}
+
+	// A Provider that speaks another API than the agent gets the request
+	// translated, and the agent its reply in its own API.
+	if clientAPI, upstreamAPI := apiOfEndpoint(parsed.Endpoint), apiOfProtocol(binding.Protocol); clientAPI != upstreamAPI && translate.Supported(clientAPI, upstreamAPI) {
+		if parsed.Endpoint == EndpointAnthropicCountTokens {
+			writeEstimatedTokenCount(w, rewritten)
+			return
+		}
+		translatedForward{
+			client: r.client, clientAPI: clientAPI, upstreamAPI: upstreamAPI,
+			baseURL: binding.UpstreamBaseURL, provider: binding.ProfileName, inbound: req.Header, body: rewritten,
+			applyAuth: func(h http.Header) error {
+				return applyUpstreamAuth(h, binding, inboundAuth, r.credentialLookup(), r.creds)
+			},
+			answered: func(status int) {
+				_ = r.table.EndRouteFlight(parsed.RouteID, flightToken, status >= 200 && status < 300)
+				completed = true
+			},
+		}.serve(req.Context(), w)
+		return
+	}
+
 	upstreamURL, err := UpstreamRequestURL(binding.UpstreamBaseURL, parsed.APIPath)
 	if err != nil {
 		writeRouteError(w, http.StatusBadGateway, ErrUpstreamInvalid)
@@ -565,6 +602,13 @@ func (r *Router) serveRouteWebSocket(w http.ResponseWriter, req *http.Request, p
 		// No client speaks WebSocket for other endpoints; keep the honest 501
 		// marker instead of silently accepting an unsupported upgrade.
 		writeRouteError(w, http.StatusNotImplemented, ErrRouteWebSocket)
+		return
+	}
+	// A Provider that does not speak Responses is translated per request
+	// over HTTP: 426 sends Codex to HTTP, as an upstream without WebSocket
+	// does.
+	if binding, ok := r.table.GetByRouteID(parsed.RouteID); ok && apiOfProtocol(binding.Protocol) != translate.APIResponses {
+		writeRouteError(w, http.StatusUpgradeRequired, ErrRouteWebSocket)
 		return
 	}
 	resolve := func(turn bool) (wsProxyTarget, error) {
@@ -765,6 +809,19 @@ func isLoopbackRemoteAddr(remoteAddr string) bool {
 	}
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	return ip != nil && ip.IsLoopback()
+}
+
+// standInCandidates are the models a stand-in may be picked from: those the
+// Provider itself listed. The connection's list also carries the agent's own
+// model id and bundled rows, which the Provider may not serve.
+func standInCandidates(entries []ProviderModelEntry) []string {
+	var ids []string
+	for _, entry := range entries {
+		if entry.Available && (entry.Source == ModelSourceDiscovered || entry.Source == ModelSourceLKG) {
+			ids = append(ids, normalizeSpace(entry.ID))
+		}
+	}
+	return ids
 }
 
 func catalogServesModel(catalog RouteModelCatalog, model string) bool {

@@ -19,6 +19,9 @@ const (
 	ProtocolOpenAINative      = "openai_native"
 	ProtocolOpenAIResponses   = "openai_responses"
 	ProtocolAnthropicMessages = "anthropic_messages"
+	// ProtocolOpenAIChat is OpenAI Chat Completions, which neither agent
+	// speaks: the route translates (package translate).
+	ProtocolOpenAIChat = "openai_chat"
 )
 
 // Route protocols spoken by the Mewla-owned loopback (same-protocol pass-through).
@@ -250,6 +253,12 @@ type Profile struct {
 	CredentialRef string `toml:"credential_ref,omitempty" json:"credential_ref,omitempty"`
 	// HistoryDomain is optional durable description only — never authorization.
 	HistoryDomain string `toml:"history_domain,omitempty" json:"history_domain,omitempty"`
+	// UpstreamAPI is the API a saved Provider connection's endpoint speaks
+	// when it is not its agent's own (openai_chat, anthropic_messages or
+	// openai_responses), found by probing the endpoint when it is tested or
+	// saved. Empty is the agent's own API. The route translates between the
+	// two.
+	UpstreamAPI string `toml:"upstream_api,omitempty" json:"upstream_api,omitempty"`
 }
 
 // Catalog is the secret-free view of the durable profile store (settings CRUD).
@@ -431,9 +440,9 @@ func SupportsExecutor(executorID string) bool {
 func SupportedProtocols(executorID string) []string {
 	switch normalizeID(executorID) {
 	case ExecutorCodex:
-		return []string{ProtocolOpenAINative, ProtocolOpenAIResponses}
+		return []string{ProtocolOpenAINative, ProtocolOpenAIResponses, ProtocolAnthropicMessages, ProtocolOpenAIChat}
 	case ExecutorClaude:
-		return []string{ProtocolAnthropicMessages}
+		return []string{ProtocolAnthropicMessages, ProtocolOpenAIChat}
 	default:
 		return nil
 	}
@@ -446,9 +455,37 @@ func RouteProtocolFor(profileProtocol string) (routeProtocol string, ok bool) {
 		return RouteProtocolResponses, true
 	case ProtocolAnthropicMessages:
 		return RouteProtocolAnthropicMessages, true
+	case ProtocolOpenAIChat:
+		// Routed, for whichever executor speaks to it (see
+		// RouteProtocolForExecutor).
+		return RouteProtocolResponses, true
 	default:
 		return "", false
 	}
+}
+
+// RouteProtocolForExecutor is the protocol an executor speaks on its route
+// to a profile of the given protocol: always its own (Codex speaks Responses,
+// Claude Code Anthropic Messages), whatever the upstream speaks; the route
+// translates when the two differ. ok is false for a protocol that needs no
+// route (openai_native) or that the executor cannot use.
+func RouteProtocolForExecutor(executorID, profileProtocol string) (routeProtocol string, ok bool) {
+	protocol := normalizeID(profileProtocol)
+	switch normalizeID(executorID) {
+	case ExecutorCodex:
+		switch protocol {
+		case ProtocolOpenAIResponses, ProtocolAnthropicMessages, ProtocolOpenAIChat:
+			return RouteProtocolResponses, true
+		}
+		return "", false
+	case ExecutorClaude:
+		switch protocol {
+		case ProtocolAnthropicMessages, ProtocolOpenAIChat:
+			return RouteProtocolAnthropicMessages, true
+		}
+		return "", false
+	}
+	return RouteProtocolFor(profileProtocol)
 }
 
 // ProfileHotSwitchable reports whether a profile class supports route activation.
@@ -479,7 +516,7 @@ func CapabilitiesFor(executorID string) ExecutorCapabilities {
 	}
 	for _, protocol := range protocols {
 		cap := ProtocolCapability{Protocol: protocol}
-		if routeProtocol, ok := RouteProtocolFor(protocol); ok {
+		if routeProtocol, ok := RouteProtocolForExecutor(executorID, protocol); ok {
 			cap.Routed = true
 			cap.RouteProtocol = routeProtocol
 			if executorID == ExecutorCodex {
@@ -542,7 +579,7 @@ func BindingDraftFromProfile(profile Profile, catalogRevision int64, activation 
 	if err := validateVerifiedProfileContract(admitted); err != nil {
 		return RouteBinding{}, err
 	}
-	routeProtocol, needsRoute := RouteProtocolFor(profile.Protocol)
+	routeProtocol, needsRoute := RouteProtocolForExecutor(profile.ExecutorID, profile.Protocol)
 	if needsRoute && normalizeSpace(profile.BaseURL) == "" {
 		return RouteBinding{}, fmt.Errorf("%w: upstream base_url required for routed protocol", ErrInvalid)
 	}

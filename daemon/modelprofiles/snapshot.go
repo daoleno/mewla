@@ -405,7 +405,7 @@ func validateRestorableState(state SessionRouteState) error {
 	if err := validateLaunchedAgainstCurrent(state); err != nil {
 		return err
 	}
-	routeProtocol, needsRoute := RouteProtocolFor(b.Protocol)
+	routeProtocol, needsRoute := RouteProtocolForExecutor(b.ExecutorID, b.Protocol)
 	if needsRoute {
 		if strings.TrimSpace(b.RouteID) == "" {
 			return fmt.Errorf("%w: routed binding missing route_id (will not allocate replacement)", ErrRouteSnapshotInvalid)

@@ -115,7 +115,7 @@ func AuthorizeProfileContract(profile Profile, auth ContractAuth) (VerifiedProfi
 	if normalizeID(admitted.ProviderID) != normalizeID(profile.ProviderID) {
 		return VerifiedProfileContract{}, fmt.Errorf("%w: verified provider mismatch", ErrContractUnverified)
 	}
-	wantRoute, needsRoute := RouteProtocolFor(profile.Protocol)
+	wantRoute, needsRoute := RouteProtocolForExecutor(profile.ExecutorID, profile.Protocol)
 	if needsRoute {
 		if admitted.RouteProtocol != wantRoute {
 			return VerifiedProfileContract{}, fmt.Errorf("%w: verified route_protocol mismatch", ErrContractUnverified)

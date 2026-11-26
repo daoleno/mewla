@@ -105,6 +105,17 @@ func CompileConnectionTarget(conn Profile, clientOrExecutor, modelOverride, effo
 	target.CredentialRef = conn.CredentialRef
 	target.ImageModel = conn.ImageModel
 	target.ReasoningEffort = effortOverride
+	if api := normalizeID(conn.UpstreamAPI); api != "" && api != target.Protocol && protocolAllowed(client, api) {
+		// The endpoint speaks another API than the agent; the route
+		// translates. Its key goes the way that API takes it.
+		target.Protocol = api
+		if target.AuthMode == AuthModeBearerEnv || target.AuthMode == AuthModeXAPIKeyEnv {
+			target.AuthMode = AuthModeBearerEnv
+			if api == ProtocolAnthropicMessages {
+				target.AuthMode = AuthModeXAPIKeyEnv
+			}
+		}
+	}
 	return target, nil
 }
 
@@ -166,6 +177,11 @@ func validateAccountConnection(profile Profile) error {
 	}
 	if err := validateCredentialRef(profile.CredentialRef); err != nil {
 		return err
+	}
+	switch normalizeID(profile.UpstreamAPI) {
+	case "", ProtocolOpenAIChat, ProtocolAnthropicMessages, ProtocolOpenAIResponses:
+	default:
+		return fmt.Errorf("%w: upstream_api %q is not an API Mewla speaks", ErrInvalid, profile.UpstreamAPI)
 	}
 	auth := normalizeID(profile.AuthMode)
 	if auth != "" && auth != AuthModeNone {
