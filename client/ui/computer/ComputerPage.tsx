@@ -220,9 +220,11 @@ export function ComputerPage(props: {
         });
       case "agent_use":
         return void act(row.key, async () => {
-          computerAgentUse.set(await changeAgentUse(server, { fix: action.fix }));
+          const next = await changeAgentUse(server, { fix: action.fix });
+          computerAgentUse.set(next);
           const where = server.name || "the computer";
-          if (action.fix === "install_extension") note(row.key, `Load the Mewla folder in Chrome on ${where}: Developer mode, then Load unpacked.`);
+          // A Mac with Accessibility adds it itself: the row says so.
+          if (action.fix === "install_extension" && next.browser.state === "no_extension") note(row.key, `Load the Mewla folder in Chrome on ${where}: Developer mode, then Load unpacked.`);
           if (action.fix === "open_settings") note(row.key, `Turn on Mewla in the settings that opened on ${where}.`);
         });
     }

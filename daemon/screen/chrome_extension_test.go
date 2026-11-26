@@ -94,3 +94,24 @@ func TestTheGoToFieldIsTheFocusedFieldOfTheLastSheet(t *testing.T) {
 		t.Fatal("the panel's own search field is not the Go to field")
 	}
 }
+
+// Owner's Mac, 11-26: his new tab page takes the keyboard from a new
+// window's address bar; Mewla's window is the one that was not there before.
+func TestMewlasWindowIsTheOneThatWasNotThereBefore(t *testing.T) {
+	tree := ElementTree{
+		Elements: []Element{
+			{Role: "AXWindow", Depth: 0},
+			{Role: "AXButton", Title: "返回", Depth: 7},
+			{Role: "AXTextField", Title: "地址和搜索栏", Depth: 8},
+			{Role: "AXWindow", Depth: 0},
+			{Role: "AXTextField", Title: "地址和搜索栏", Value: "news.ycombinator.com", Depth: 8},
+		},
+		IDs: []int{40, 41, 42, 10, 11},
+	}
+	if id, err := newWindowAddress(tree, map[int]bool{10: true}); err != nil || id != 42 {
+		t.Fatalf("[%d] %v", id, err)
+	}
+	if _, err := newWindowAddress(tree, map[int]bool{40: true, 10: true}); err == nil {
+		t.Fatal("a window that was there was taken for Mewla's")
+	}
+}
