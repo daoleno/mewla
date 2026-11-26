@@ -720,7 +720,10 @@ func (g *gate) walk(s *session) {
 	}{
 		{"new", targets[0], ""},
 		{"after first", targets[1], ""},
-		{"while working", targets[0], "Run this exact shell command, then reply with the word done: ping -c 15 127.0.0.1"},
+		// Codex runs a command in the background and answers at once unless
+		// told to wait for it (0.4.30 gate: its "while working" turn was over
+		// before the pick).
+		{"while working", targets[0], "Run this exact shell command and wait until it has finished, then reply with the word done: ping -c 15 127.0.0.1"},
 	}
 	for _, m := range moments {
 		if s.agent == "opencode" && m.name == "new" {
@@ -747,6 +750,12 @@ func (g *gate) moment(s *session, name string, want choice, during string) {
 		// as a person would.
 		if len(g.approvals(s)) > 0 || claudeAsks(g.screenText(s)) {
 			cl.moment = "waiting for answer"
+		}
+		if hasRecord(s.agent) && g.evidence(s).turns > before.turns {
+			// Not a pick while working: the turn was already over.
+			cl.note = "the turn ended before the pick"
+			g.add(cl)
+			return
 		}
 		cl.reply, cl.pass = g.pick(s, want)
 		if cl.pass && holdsMidTurn(s.agent) && !strings.HasPrefix(cl.reply, "pending") {
