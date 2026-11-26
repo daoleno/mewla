@@ -4,7 +4,8 @@
 # on 1234, 8000, 8080 or 1337. The connection is removed at the end.
 set -euo pipefail
 lane="${MEWLA_LANE_HOME:-$HOME/.mewla/lane}"
-sock="$lane/state/run/control.sock"
+# The release replay has no lane: its daemon's socket comes in MEWLA_CONTROL_SOCK (release-flows.sh).
+sock="${MEWLA_CONTROL_SOCK:-$lane/state/run/control.sock}"
 ctl() {
   python3 -I -c 'import json,socket,sys
 s = socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); s.settimeout(60)
