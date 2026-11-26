@@ -42,6 +42,7 @@ const snapshot = (overrides: Record<string, unknown> = {}) => ({
   defaults: { codex: { connection_id: "" } },
   presets: [],
   models: { c1: [{ id: "gpt-6", display_name: "GPT 6", available: true, source: "upstream" }, { id: "gpt-6-mini", available: false, source: "upstream" }] },
+  gateway: { running: true },
   ...overrides,
 });
 
@@ -103,9 +104,9 @@ describe("Model Providers", () => {
     expect(app.texts().join(" ")).toContain("gw.example.com · 1 model");
     expect(app.texts()).toContain("Key required");
     expect(app.texts()).toContain("Official login");
-    await app.press("id:provider-agent-codex");
-    await app.waitFor("id:provider-choose-c1");
-    await app.press("id:provider-choose-c1");
+    await app.press("id:provider-pick-codex");
+    await app.waitFor("id:provider-pick-codex-c1");
+    await app.press("id:provider-pick-codex-c1");
     await app.waitUntil(() => c.asked.some((a) => a.type === "set_provider_connection"));
     const sent = c.asked.find((a) => a.type === "set_provider_connection")!.body;
     expect(sent).toEqual({ client: "codex", executor_id: "codex", connection_id: "c1", revision: 3 });
@@ -120,7 +121,7 @@ describe("Model Providers", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:provider-c1");
     await app.press("id:provider-c1");
-    await app.waitFor("id:provider-detail");
+    await app.waitFor("id:provider-panel");
     await app.waitFor("id:model-gpt-6.2");
     expect(app.shows("id:provider-key-row")).toBe(true);
     expect(app.shows("id:provider-test-row")).toBe(true);
@@ -128,13 +129,38 @@ describe("Model Providers", () => {
     expect(c.asked.some((a) => a.type === "discover_provider_models")).toBe(true);
   });
 
+  test("each agent's chip has a dot for its state: none on its own login, green when ready", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot({ defaults: { codex: { connection_id: "c1" }, claude: { connection_id: "" } } }) : null));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-dot-codex-ok");
+    expect(app.texts()).toContain("Work gateway");
+    expect(app.shows("id:provider-dot-codex-ok")).toBe(true);
+    expect(app.shows("id:provider-dot-claude-off")).toBe(true);
+  });
+
+  test("on a wide pane the agents sit beside the shown Provider's page, and a Provider row shows it there instead of opening a page", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => {
+      if (type === "list_providers") return snapshot({ defaults: { codex: { connection_id: "c1" } }, connections: [...snapshot().connections, { id: "c3", name: "Home", clients: ["claude"], credential_ready: true, advanced: true, base_url: "https://home.example.com/v1" }] });
+      if (type === "discover_provider_models") return { reply: "provider_models", connection_id: "c1", models: [] };
+      return null;
+    }, { width: 1920, height: 1400 });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:providers-split");
+    await app.waitFor("id:provider-panel");
+    await app.waitFor("id:provider-c1-shown");
+    await app.press("id:provider-c3");
+    await app.waitFor("id:provider-c3-shown");
+    expect(app.shows("id:provider-detail")).toBe(false);
+    expect(app.texts()).toContain("home.example.com");
+  });
+
   test("a connection without a key opens its editor instead of being chosen", async () => {
     const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot() : null));
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Spare");
-    await app.press("id:provider-agent-codex");
-    await app.waitFor("id:provider-choose-c2");
-    await app.press("id:provider-choose-c2");
+    await app.press("id:provider-pick-codex");
+    await app.waitFor("id:provider-pick-codex-c2");
+    await app.press("id:provider-pick-codex-c2");
     await app.waitFor("id:provider-editor");
     expect(c.asked.some((a) => a.type === "set_provider_connection")).toBe(false);
   });

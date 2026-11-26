@@ -187,9 +187,9 @@ describe("Model Providers", () => {
     });
     const app = await open(HARNESS, s.options);
     await app.waitFor("id:provider-a");
-    await app.press("id:provider-agent-codex");
-    await app.waitFor("id:provider-choose-a");
-    await app.press("id:provider-choose-a");
+    await app.press("id:provider-pick-codex");
+    await app.waitFor("id:provider-pick-codex-a");
+    await app.press("id:provider-pick-codex-a");
     await app.waitUntil(() => s.asked.filter((a) => a.type === "list_providers").length === 2);
     await app.waitUntil(() => !app.shows("id:providers-locked"));
   });

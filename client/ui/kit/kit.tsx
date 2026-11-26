@@ -48,6 +48,11 @@ export function Page(props: {
   onRefresh?: () => void;
   /** The widest the content grows off wide, in points (720; a dashboard takes more). On wide every list page has the 680 column. */
   maxWidth?: number;
+  /**
+   * The whole right pane (NavPage's `"full"` column) for a page that lays itself out in columns there (a list beside its
+   * detail); its content still stops at `maxWidth` (1200), centered.
+   */
+  full?: boolean;
   /** The page's scroll view, for a page that brings something at its top into view. */
   scrollRef?: (ref: ScrollRef) => void;
   /** A panel beside the scrolling page (a wide screen's details), or nothing. */
@@ -58,7 +63,7 @@ export function Page(props: {
 }) {
   // Its column sits in a full-width scroll, so the scrollbar stays at the window's edge; the header row shares it.
   const page = pageColumnWidth("page", density() !== "phone")!;
-  const width = () => (wide() ? page : (props.maxWidth ?? 720));
+  const width = () => (props.full ? (props.maxWidth ?? 1200) : wide() ? page : (props.maxWidth ?? 720));
   // Whether the display title is on screen: the nav bar names the page once it has scrolled away.
   const display = untracked(() => Boolean(props.display));
   const titleAway = signal(!display);
@@ -82,7 +87,7 @@ export function Page(props: {
   // Whether the page has a side panel is fixed when it is made; what the panel shows is not.
   const withAside = untracked(() => props.aside !== undefined);
   return (
-    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} rail={props.rail} column="page" frame={false} capsuleUnder capsuleControls={"headerRight" in props}>
+    <NavPage title={titleAway() ? props.title : ""} testID={props.testID} headerRight={props.headerRight} rail={props.rail} column={props.full ? "full" : "page"} frame={false} capsuleUnder capsuleControls={"headerRight" in props}>
       <View class="flex-1 bg-background">
         <If when={withAside} else={<>{scroll}</>}><View class="flex-1 flex-row">{scroll}{props.aside}</View></If>
         {props.overlay ?? null}
