@@ -1,6 +1,12 @@
 {
   "releases": [
     {
+      "version": "0.4.34",
+      "date": "2026-11-27",
+      "highlights": [],
+      "fixes": []
+    },
+    {
       "version": "0.4.33",
       "date": "2026-11-27",
       "highlights": [],

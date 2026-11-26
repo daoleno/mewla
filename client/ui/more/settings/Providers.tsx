@@ -29,6 +29,7 @@ import {
 } from "../../../core/providers/requests";
 import type { LocalProvider, ProviderClient, ProviderConnection, ProviderModel, ProviderPreset, ProvidersSnapshot } from "../../../core/providers/types";
 import { AGENT_ASSETS } from "../../icons/agents/assets";
+import { ProviderUsage } from "./ProviderUsage";
 import { connected, daemon } from "../daemon";
 import { confirmDestructive, DisplayTitle, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
 import { LEAD_SLOT, RowTile, StateLine, tile, type Lead } from "../../kit/RowTile";
@@ -481,6 +482,7 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: 
             }
           />
         </Section></If>
+        <ProviderUsage connectionId={props.connectionId} />
         <Section testID="provider-models" title={`Models · ${on().length} of ${all().length}`} footer={changing().startsWith("model:") ? "Saving…" : undefined}>
           <>
             <If when={all().length > PROVIDER_SEARCH_THRESHOLD * 2}><Field testID="model-search" accessibilityLabel="Search models" value={search()} placeholder="Search models" onChange={(v) => search.set(v)} /></If>

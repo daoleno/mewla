@@ -211,6 +211,8 @@ type wsProxyTarget struct {
 	url     string
 	headers http.Header
 	done    func(bool)
+	// usage, when set, keeps the turn's tokens for the connection.
+	usage *usageRecorder
 }
 
 type wsProxyTargetResolver func(turn bool) (wsProxyTarget, error)
@@ -286,6 +288,18 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 	clientRead := startWSProxyReader(clientConn, clientStop)
 	var turnActive, completedForwarded, drainAfterTurn bool
 	var finishTurn func(bool)
+	// turnUsage reads the turn's events for its usage; endUsage records it.
+	var turnUsage *usageRecorder
+	endUsage := func(failure string) {
+		if turnUsage != nil {
+			if failure != "" && turnUsage.errMsg == "" {
+				turnUsage.errMsg = failure
+			}
+			turnUsage.finish()
+			turnUsage = nil
+		}
+	}
+	defer endUsage("")
 	drain := registry.drainSignal()
 	setTurn := func(active bool) {
 		if active != turnActive {
@@ -356,6 +370,10 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 				finishTurn = target.done
 				setTurn(true)
 				completedForwarded = false
+				endUsage("")
+				if turnUsage = target.usage; turnUsage != nil {
+					turnUsage.asked, _ = gatewayModelID(item.payload)
+				}
 			}
 			if kind == "response.processed" && leg == nil {
 				continue
@@ -381,6 +399,7 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 				if !turnActive || completedForwarded {
 					continue
 				}
+				endUsage("The connection closed before the reply finished")
 				if finishTurn != nil {
 					finishTurn(false)
 					finishTurn = nil
@@ -394,7 +413,11 @@ func proxyWebSocketToUpstream(ctx context.Context, w http.ResponseWriter, req *h
 				}
 				return
 			}
+			if turnUsage != nil && item.messageType == websocket.TextMessage {
+				turnUsage.event(append([]byte("data: "), item.payload...))
+			}
 			if wsJSONType(item.messageType, item.payload) == "response.completed" {
+				endUsage("")
 				completedForwarded = true
 				setTurn(false)
 				if finishTurn != nil {

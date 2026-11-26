@@ -27,6 +27,32 @@ const catalog = {
   disabled_models: { conn_a: ["gpt-5.5"] },
   gateway: { running: true, address: "127.0.0.1:3425" },
 };
+// What a Provider's requests used, relative to now: invented counts, one request unpriced, two failures.
+const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+const today = (() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+})();
+const request = (minutes: number, model: string, input: number, cacheRead: number, output: number, cost?: number) => ({
+  at: ago(minutes), agent: "codex", model, input_tokens: input, cache_read_tokens: cacheRead, output_tokens: output, ms: 2400,
+  ...(cost === undefined ? {} : { cost_usd: cost, priced: true }),
+});
+const usage = {
+  requests: [
+    request(1, "gpt-6-sol", 2_310, 61_440, 812, 0.0398),
+    request(3, "gpt-6-sol", 1_204, 58_112, 233, 0.0247),
+    request(6, "gpt-6-luna", 940, 0, 96),
+    request(11, "gpt-6-sol", 18_420, 0, 1_510, 0.0611),
+    request(14, "gpt-6-sol", 3_015, 40_960, 402, 0.0254),
+    request(22, "gpt-6-sol", 2_200, 38_400, 318, 0.0218),
+  ],
+  errors: [
+    { at: ago(8), agent: "codex", model: "gpt-6-sol", status: 429, message: "Rate limit reached for requests. Try again in 20s." },
+    { at: ago(95), agent: "codex", model: "gpt-6-sol", status: 0, message: "connection refused" },
+  ],
+  days: { [today]: { requests: 36, errors: 2, input_tokens: 96_400, cache_read_tokens: 1_420_000, output_tokens: 18_300, cost_usd: 1.84, unpriced: 1 } },
+};
+
 const daemon = new FakeDaemon({
   ...base,
   replies: {
@@ -35,6 +61,7 @@ const daemon = new FakeDaemon({
     discover_provider_models: { type: "provider_models", connection_id: "conn_a", models: codexModels },
     // A model server running on the computer.
     detect_local_providers: { type: "local_providers", found: [{ preset_id: "ollama", label: "Ollama", base_url: "http://localhost:11434", models: 2, connection_ids: [] }] },
+    provider_usage: { type: "provider_usage", connection_id: "conn_a", usage },
   },
 });
 installPlatform({ ...platform(), openSocket: () => daemon.open() });

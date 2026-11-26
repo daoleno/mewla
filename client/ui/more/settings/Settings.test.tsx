@@ -163,6 +163,56 @@ describe("Model Providers", () => {
     await app.waitUntil(() => app.texts().includes("Work gateway") && !app.texts().includes("None"));
   });
 
+  test("a Provider shows what its requests used and its last failures", async () => {
+    const now = Date.now();
+    const at = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
+    const d = new Date(now);
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const requests = [
+      { at: at(2), agent: "claude", model: "glm-5", input_tokens: 1200, cache_read_tokens: 48000, output_tokens: 350, cost_usd: 0.0123, priced: true, ms: 2100 },
+      { at: at(9), agent: "codex", model: "kimi-k2", input_tokens: 900, output_tokens: 40, ms: 800 },
+      ...Array.from({ length: 5 }, (_, i) => ({ at: at(20 + i), agent: "claude", model: "glm-5", input_tokens: 10, output_tokens: 1, cost_usd: 0.5, priced: true, ms: 100 })),
+    ];
+    const c = computer({ name: "settings-providers" }, (type, body) => {
+      if (type === "list_providers") return snapshot();
+      if (type === "discover_provider_models") return { reply: "provider_models", connection_id: "c1", models: [] };
+      if (type === "provider_usage") {
+        return {
+          reply: "provider_usage", connection_id: String(body.connection_id),
+          usage: {
+            requests,
+            errors: [{ at: at(5), agent: "codex", model: "kimi-k2", status: 429, message: "Rate limit reached for requests" }],
+            days: { [today]: { requests: 7, errors: 1, input_tokens: 2150, cache_read_tokens: 48000, output_tokens: 395, cost_usd: 2.5123, unpriced: 1 } },
+          },
+        };
+      }
+      return null;
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-c1");
+    await app.press("id:provider-c1");
+    await app.waitFor("id:provider-usage");
+    expect(c.asked.find((a) => a.type === "provider_usage")!.body).toEqual({ connection_id: "c1" });
+    const texts = app.texts();
+    // One request had no price: the cost is at least what is known.
+    expect(texts).toContain("$2.51+");
+    expect(texts).toContain("50.5K");
+    expect(texts).toContain("1 failed");
+    // Seven answered and one failed: eight requests.
+    expect(texts).toContain("8");
+    expect(texts).toContain("· 8 today");
+    expect(texts).toContain("$0.0123");
+    expect(texts).toContain("1.2K in · 48K cached · 350 out");
+    expect(texts).toContain("900 in · 40 out");
+    expect(texts).toContain("2m");
+    expect(texts).toContain("Rate limit reached for requests");
+    expect(texts).toContain("429 · Codex · kimi-k2 · 5m");
+    // Five rows, then the rest on request.
+    expect(app.shows("id:provider-usage-request-5")).toBe(false);
+    await app.press("id:provider-usage-more");
+    await app.waitFor("id:provider-usage-request-6");
+  });
+
   test("a Provider of its agent's own API is offered no fallback of that API", async () => {
     const c = computer({ name: "settings-providers" }, (type) => {
       if (type === "list_providers") return snapshot({ connections: snapshot().connections.map((x) => ({ ...x, upstream_api: "openai_responses" })) });

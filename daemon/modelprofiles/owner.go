@@ -141,6 +141,9 @@ type Owner struct {
 	// failover moves model requests from a failing connection to its
 	// fallback, for the router and the gateway alike.
 	failover *failover
+	// usage keeps what each connection's model requests used and the last
+	// ones that failed, for its Provider page.
+	usage    *usageLog
 	verifier ProfileContractVerifier
 	started  bool
 	closed   bool
@@ -342,6 +345,12 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 	}
 	o.backgroundCtx, o.cancelBackground = context.WithCancel(context.Background())
 	o.failover = &failover{rests: newConnectionRests(), fallbackOf: o.failoverFor}
+	usagePath := ""
+	if strings.TrimSpace(cfg.DiscoveryPath) != "" {
+		usagePath = filepath.Join(filepath.Dir(cfg.DiscoveryPath), providerUsageFile)
+	}
+	o.usage = newUsageLog(usagePath)
+	o.usage.prices = o.usagePrices
 	o.modelsDev = newModelsDevCatalog(modelsDevPath, cfg.ModelsDevURL)
 	_ = o.modelsDev.load()
 	o.codexModels = newCodexModelList(cfg.CodexModels)
@@ -349,7 +358,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		_ = o.Close()
 		return nil, err
 	}
-	o.router = NewRouter(o.table, WithRouterLookup(lookup), WithRouterCredentials(cfg.Credentials), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute), WithRouterFailover(o.failover))
+	o.router = NewRouter(o.table, WithRouterLookup(lookup), WithRouterCredentials(cfg.Credentials), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute), WithRouterFailover(o.failover), WithRouterUsage(o.usage))
 	if err := o.startGateway(cfg); err != nil {
 		_ = o.Close()
 		return nil, err
@@ -541,7 +550,7 @@ func (o *Owner) ensureListenerLocked(sticky bool) (PersistResult, error) {
 	}
 
 	if o.router == nil {
-		o.router = NewRouter(o.table, WithRouterLookup(o.lookup), WithRouterCredentials(o.creds), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute), WithRouterFailover(o.failover))
+		o.router = NewRouter(o.table, WithRouterLookup(o.lookup), WithRouterCredentials(o.creds), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute), WithRouterFailover(o.failover), WithRouterUsage(o.usage))
 	}
 	srv := &http.Server{
 		Handler:           o.router.Handler(),
@@ -701,6 +710,7 @@ func (o *Owner) Close() error {
 		o.cancelBackground()
 	}
 	o.background.Wait()
+	_ = o.usage.save()
 	return first
 }
 
