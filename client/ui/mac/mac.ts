@@ -83,18 +83,22 @@ export function startMac(): void {
   let wired: WindowRef | null = null;
   effect(() => {
     const main = Window.get("main");
-    if (!main || main === wired) return;
-    wired = main;
+    if (!main) return;
     untracked(() => {
-      main.set({ titleBar: MAC_TITLE_BAR, transparent: true, closeOnPress: false });
-      // The first time the person closes the window, the quick chat's shortcut is offered from the cat (§2.4,
-      // `m-shortcut`): its close button here, ⌘W in menus.ts. Their close, not the window's state, which also goes
-      // hidden when it is minimized or the app hidden (⌘H).
+      if (main !== wired) {
+        wired = main;
+        main.set({ titleBar: MAC_TITLE_BAR, transparent: true, closeOnPress: false });
+        reenterFullScreen(main);
+      }
+      // The close press's listener goes with this run of the effect, which runs again as the window hides and shows:
+      // registered on every run, so every close hides it (registered once, the Dock's reopen left the close button
+      // doing nothing: 0.4.30 gate, Mac run 45726960468). The first time the person closes the window, the quick
+      // chat's shortcut is offered from the cat (§2.4, `m-shortcut`): its close button here, ⌘W in menus.ts. Their
+      // close, not the window's state, which also goes hidden when it is minimized or the app hidden (⌘H).
       main.on("closePress", () => {
         main.hide();
         offerShortcutOnce();
       });
-      reenterFullScreen(main);
     });
   });
   // The Dock icon while the window shows; with it closed (⌘W hides it) only the menu bar cat stays.
