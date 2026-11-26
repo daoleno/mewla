@@ -1,7 +1,7 @@
 import { openUrl, untracked } from "nsh";
 import { recognizeSessionFileReference, sessionFileStartedAt, type SessionFileIdentity } from "../../core/files/sessionFilePreview";
 import { filePreviewRoute } from "../more/files/routes";
-import { nav } from "../shell/nav";
+import { push } from "../shell/nav";
 import { brain } from "../session";
 
 /**
@@ -40,7 +40,7 @@ export function openChatPath(path: string, files: ChatFiles): void {
   if (!reference) return;
   const identity = files.identity();
   if (!identity) return files.notice(NO_FILE_IDENTITY_NOTICE);
-  nav.push(filePreviewRoute(reference, identity));
+  push(filePreviewRoute(reference, identity));
 }
 
 /** A link pressed in a reply: a file path previews; a web page opens in the browser; anything else does nothing. */

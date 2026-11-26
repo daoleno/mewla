@@ -393,3 +393,144 @@ describe("Phone use's link", () => {
     await app.waitFor("id:phone-page");
   }, 20_000);
 });
+
+describe("beside: a wide window opens what you pick next to Brain (core/web/beside.ts)", () => {
+  const big = { platform: "web" as const, width: 1920, height: 1080, storage: paired };
+  const work = [
+    { work_id: "docsref", revision: 1, title: "docs-refresh", status: "running", progress_mode: "owned", unread_result: false, updated_at: new Date().toISOString() },
+    { work_id: "naming", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() },
+  ];
+
+  test("from 1920 the beside pane stands next to Brain with the Work board; 1440 keeps one page", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: { current_work: work } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitFor("id:work-board-needs");
+    expect(app.count("id:work-board-card")).toBe(2);
+    expect(app.texts()).toContain("Which name?");
+    expect(app.shows("id:home-header")).toBe(true);
+    await app.setViewport(1440, 900);
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    expect(app.shows("id:home-header")).toBe(true);
+  }, 20_000);
+
+  test("a row and a card open beside Brain; Back returns the pane to the board, and the URL names what is open", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: { current_work: work }, worker_sessions: [running("w1", "api"), running("w2", "docs")], conversations: { w1: [], w2: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") >= 2, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.waitFor("id:beside-pane >> id:session-status");
+    expect(app.layout("id:session-status")!.width).toBeGreaterThan(200);
+    // Brain stays: its composer and the pane's Session side by side, the row selected.
+    expect(app.shows("id:home-header")).toBe(true);
+    expect(app.count("id:tray-running >> id:selected-well")).toBe(1);
+    // Another row takes its place: never a deeper stack.
+    await app.press("id:tray-running >> text:docs");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w2");
+    // A Work card on the board opens its detail beside Brain.
+    await app.press("id:beside-pane >> id:page-back");
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => routes(app).join(" ") === "home");
+    await app.press("id:work-board-card >> text:Which name?");
+    await app.waitFor("id:beside-pane >> id:work-detail");
+    await app.waitUntil(() => last(app)?.path === "/work-detail/naming");
+  }, 30_000);
+
+  test("narrowed, what stood beside Brain goes on the stack over it; widened, it stands beside again", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.setViewport(1280, 800);
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    await app.waitFor("id:session-status");
+    expect(app.shows("id:home-header")).toBe(false);
+    expect(routes(app).join(" ")).toBe("home session:w1");
+    await app.setViewport(1920, 1080);
+    await app.waitFor("id:beside-pane >> id:session-status");
+    expect(app.shows("id:home-header")).toBe(true);
+    expect(routes(app).join(" ")).toBe("home session:w1");
+  }, 30_000);
+
+  test("a page that is not a Session or a Work (Settings) covers both; Back finds the pane as it was", async () => {
+    const app = await open(APP, { ...big, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    await app.press("id:home-cat");
+    await app.waitUntil(() => routes(app).join(" ") === "home computer");
+    expect(app.shows("id:home-header")).toBe(false);
+    // The pane is kept under the page (display none), so its own Back is still in the tree, laid out clipped to nothing.
+    expect(app.shows("id:beside-pane")).toBe(false);
+    await app.press("id:page-back >> nth=0");
+    await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
+    expect(app.shows("id:beside-pane >> id:session-status")).toBe(true);
+  }, 30_000);
+
+  test("on an ultrawide a Session shows its chat and its terminal side by side, with no view switch", async () => {
+    const app = await open(APP, { platform: "web", width: 3440, height: 1440, storage: paired, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    await app.press("id:tray-running >> text:api");
+    await app.waitFor("id:beside-pane >> id:session-chat");
+    await app.waitFor("id:beside-pane >> id:terminal-group");
+    expect(app.shows("id:session-mode")).toBe(false);
+    await app.setViewport(2560, 1440);
+    await app.waitFor("id:session-mode");
+    expect(app.shows("id:terminal-group")).toBe(false);
+  }, 30_000);
+
+  test("a tablet as wide as an ultrawide keeps its one stack: beside is the desktops' and the web's", async () => {
+    const app = await open(APP, { platform: "android", width: 2560, height: 1600, storage: paired, host: phoneHost({ brain: {} }) });
+    await app.waitFor("id:left-pane", { timeout: 10_000 });
+    await app.wait(300);
+    expect(app.shows("id:beside-pane")).toBe(false);
+  }, 20_000);
+
+  test("Back from what stood beside Brain returns the pane to the board; the Brain row and G then B do too", async () => {
+    const app = await open(APP, { ...big, clock: {}, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    const brain = locations(app)[0];
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    // The browser's Back to Brain's entry.
+    await app.host.send("web.popstate", { path: brain.path, state: brain.state });
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => last(app)?.path === "/");
+    expect(app.shows("id:session-status")).toBe(false);
+    // The Brain row.
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    await app.press("id:pane-brain");
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => last(app)?.path === "/");
+    expect(app.shows("id:pane-brain >> id:selected-well")).toBe(true);
+    // G then B.
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    await app.keyboard.press("g");
+    await app.keyboard.press("b");
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => last(app)?.path === "/");
+  }, 30_000);
+
+  test("a file Brain names opens its preview beside the thread", async () => {
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md)." };
+    const app = await open(APP, { ...big, host: webHost({ brain: { chat_thread_id: "t-now", host_worker }, conversations: { "brain-host": [reply] } }) });
+    await app.waitFor("text:the plan", { timeout: 10_000 });
+    await app.press("text:the plan");
+    await app.waitFor("id:beside-pane >> id:file-preview", { timeout: 10_000 });
+    expect(app.shows("id:home-header")).toBe(true);
+    await app.press("id:beside-pane >> id:page-back");
+    await app.waitFor("id:work-board");
+  }, 20_000);
+});

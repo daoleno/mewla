@@ -31,4 +31,23 @@ describe("the Mac fixture", () => {
     expect(app.count("id:tray-today >> id:tray-today-time")).toBe(app.count("id:tray-today >> id:tray-row"));
     expect(app.texts()).toContain("Photo archive sorting (09:50)");
   }, 30_000);
+
+  test("the default window keeps one page beside the pane; maximised on a big display, what you open stands beside Brain", async () => {
+    const app = await open("./MacFixtureApp.tsx", { platform: "macos", width: 1280, height: 800, storage, host: phoneHost({}), clock: { time: FIXTURE_NOW } });
+    await app.waitFor("id:left-pane", { timeout: 15_000 });
+    await app.waitFor("id:composer", { timeout: 10_000 });
+    expect(app.shows("id:beside-pane")).toBe(false);
+    await app.setViewport(2560, 1415);
+    await app.waitFor("id:beside-pane", { timeout: 5_000 });
+    await app.waitFor("id:work-board");
+    await app.waitFor("text:3 need you", { timeout: 10_000 });
+    await app.press("id:left-pane >> text:Cache layer for the catalogue API");
+    await app.waitFor("id:beside-pane >> id:session-status", { timeout: 5_000 });
+    expect(app.shows("id:home-header")).toBe(true);
+    // Brain's pane is the Mac's 700 reading column and its gutters.
+    expect(Math.round(app.layout("id:beside-pane")!.x - app.layout("id:right-pane")!.x)).toBe(740);
+    await app.setViewport(1280, 800);
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    await app.waitFor("id:session-status");
+  }, 30_000);
 });

@@ -400,11 +400,41 @@ reports no fold, so nothing snaps to it.
    (`listDetail`: a 1280 window with the default pane): Git review › diff,
    Git's files › file, Brain's workspace › file. Below that the item pushes,
    as on the phone. It follows the pane's width live, the handle included.
-9. **What else moves.** The floating screen stays in the right pane's
+9. **Beside** (`core/web/beside.ts`, 11-26: an ultrawide showed one 760
+   column in 3440 of grey). On a desktop or browser window whose right
+   pane is 1480 or wider (a 1920 window with any pane width; never iOS or
+   Android, whose stack is the system's), the right pane splits:
+   Brain's thread in an 800 pane (740 on the Mac), and the beside pane
+   for what you open. A Session, a Work, a Work file or a file a chat
+   names (its preview), from a card, a tray row, a link, the palette or a
+   URL, opens there instead of over Brain. The Brain row, `G` then B and
+   Back to Brain's entry return the pane to the board. Its
+   own stack (`besideNav` in `ui/shell/nav.ts`) has the Work board at its
+   root. Back on the first page returns to the board, and a row or card
+   replaces what stands there. Links inside the pane push onto it. Any
+   other page (the computer page, Settings, Calendar) covers both, and
+   Back finds the pane as it was (kept, `display: none`).
+   - **The Work board** (`ui/work/WorkBoard.tsx`) shows Brain's Work by
+     group (Needs you first, with any Work the tray's Needs you names),
+     one card each. The groups stand side by side
+     when each column would be 300–560 wide; otherwise they are stacked,
+     with the cards in a grid at least 320 wide (`core/work/board.ts`).
+   - **A Session's split.** From a 1600 pane (an ultrawide), a Session that
+     has a chat shows the chat in Brain's 800 and its terminal beside it,
+     with no view switch. The terminal still takes keys only when it is
+     focused.
+   - **Crossing the gate.** Narrowing puts what stood beside Brain on the
+     stack over it. Widening moves the pages above Brain beside it again.
+     URLs, the tab title and the left pane's selection read Brain › what
+     stands beside it (`shown` in `ui/shell/nav.ts`). Headless `nsh test`
+     cannot see a beside page drawn with no width;
+     `client/scripts/shots.sh scripts/shots/beside.js` checks the layout in
+     Chrome.
+10. **What else moves.** The floating screen stays in the right pane's
    bottom-right corner (`leftInset`). A page's toast belongs to its page, so
    it is centred in the right pane. First run and pairing have no left pane
    (they are not the shell).
-10. **Keys at any width** with a hardware keyboard (`ui/shell/desktop/`):
+11. **Keys at any width** with a hardware keyboard (`ui/shell/desktop/`):
     Ctrl/⌘ K the palette (from a field too, not from a focused terminal), `?`
     the shortcuts sheet, `N` New session, `/` the message box, `G` then B · S
     · C · M · X · E · T · R · , for Brain · All Sessions · Calendar · the
@@ -414,10 +444,10 @@ reports no fold, so nothing snaps to it.
     (New session, New chat, Open Brain's terminal, Browse workspace, Switch
     executor, Keyboard shortcuts), Go to, Work, Sessions. A focused terminal
     owns its keys; one on screen but not focused does not (parity #27).
-11. **Pointer.** Rows and icon buttons show the pressed well on hover; a
+12. **Pointer.** Rows and icon buttons show the pressed well on hover; a
     right-click on a row in All Sessions starts selecting (parity #28); what a
     key can reach has a 2 pt ring.
-12. **URLs and titles (web).** Every place has a URL (parity #47); Back,
+13. **URLs and titles (web).** Every place has a URL (parity #47); Back,
     Forward and reload return to it, and the tab reads "{page} · Mewla"
     (`core/web/places.ts`, `ui/shell/webLocation.ts`).
 
