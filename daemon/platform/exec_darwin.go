@@ -3,6 +3,7 @@ package platform
 import (
 	"log"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -23,7 +24,10 @@ import (
 // So the exec gets execStallAfter; past it, execve is called directly. That
 // is safe then: the stalled exec holds the exec lock, so the runtime sends no
 // new preemption signal, and the one left pending sits on a thread execve
-// ends.
+// ends. The watch runs on a thread of its own, started before the exec and
+// waiting in the system (nanosleep): a stalled exec also keeps the runtime
+// from starting a thread, so a Go timer could find no thread to run on (the
+// macOS CI runner, 11-26: the exec after dispatch callbacks never happened).
 const execStallAfter = 3 * time.Second
 
 func execve(path string, argv, env []string) error {
@@ -39,42 +43,64 @@ func execve(path string, argv, env []string) error {
 	if err != nil {
 		return err
 	}
-	// Resolved now: the stalled runtime should be asked for as little as can be.
-	fn := libcExecve()
-	timer := time.AfterFunc(execStallAfter, func() {
+	fns := libSystemCalls()
+	var exited atomic.Bool
+	watching := make(chan struct{})
+	go func() {
+		// Never unlocked: the thread ends with this goroutine, or with the
+		// process image when the exec happens.
+		runtime.LockOSThread()
+		close(watching)
+		fns.sleep(execStallAfter)
+		if exited.Load() {
+			return
+		}
 		log.Printf("mewla: exec of %s has not started after %s (the Go runtime waits for a preemption signal a system thread holds); calling execve directly", path, execStallAfter)
-		if errno := directExecve(fn, pathp, argvp, envp); errno != 0 {
+		if errno := fns.execve(pathp, argvp, envp); errno != 0 {
 			log.Printf("mewla: execve %s: %v", path, errno)
 		}
-	})
+	}()
+	<-watching
 	err = syscall.Exec(path, argv, env)
-	timer.Stop()
+	exited.Store(true)
 	runtime.KeepAlive(pathp)
 	runtime.KeepAlive(argvp)
 	runtime.KeepAlive(envp)
 	return err
 }
 
-// libcExecve is execve in libSystem, 0 if it cannot be found.
-func libcExecve() uintptr {
+// libSystem holds libc's execve and nanosleep, called outside the runtime's
+// exec hooks and timers.
+type libSystem struct{ execveFn, nanosleepFn uintptr }
+
+func libSystemCalls() libSystem {
 	lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_GLOBAL)
 	if err != nil {
-		return 0
+		return libSystem{}
 	}
-	fn, err := purego.Dlsym(lib, "execve")
-	if err != nil {
-		return 0
-	}
-	return fn
+	var calls libSystem
+	calls.execveFn, _ = purego.Dlsym(lib, "execve")
+	calls.nanosleepFn, _ = purego.Dlsym(lib, "nanosleep")
+	return calls
 }
 
-// directExecve calls execve (fn) outside the runtime's exec hooks. It returns
-// only on failure.
-func directExecve(fn uintptr, path *byte, argv, env []*byte) syscall.Errno {
-	if fn == 0 {
+// sleep waits d on this thread in the system; without nanosleep it returns
+// at once (the direct execve then follows the exec sooner, not never).
+func (l libSystem) sleep(d time.Duration) {
+	if l.nanosleepFn == 0 {
+		return
+	}
+	ts := syscall.NsecToTimespec(int64(d))
+	purego.SyscallN(l.nanosleepFn, uintptr(unsafe.Pointer(&ts)), 0)
+	runtime.KeepAlive(&ts)
+}
+
+// execve calls libc's execve; it returns only on failure.
+func (l libSystem) execve(path *byte, argv, env []*byte) syscall.Errno {
+	if l.execveFn == 0 {
 		return syscall.ENOSYS
 	}
-	_, _, errno := purego.SyscallN(fn, uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&env[0])))
+	_, _, errno := purego.SyscallN(l.execveFn, uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&env[0])))
 	if errno != 0 {
 		return syscall.Errno(errno)
 	}
