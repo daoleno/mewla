@@ -749,6 +749,12 @@ func (g *gate) moment(s *session, name string, want choice, during string) {
 			cl.moment = "waiting for answer"
 		}
 		cl.reply, cl.pass = g.pick(s, want)
+		if cl.pass && holdsMidTurn(s.agent) && !strings.HasPrefix(cl.reply, "pending") {
+			// Applied while the turn runs, the pick is not what that turn
+			// runs on (0.4.30 gate: Codex acknowledged it and went on on
+			// the old model).
+			cl.pass, cl.note = false, "applied while the turn ran, not held for its end"
+		}
 		stop := make(chan struct{})
 		go g.approveUntil(s, stop)
 		if hasRecord(s.agent) {
@@ -895,6 +901,12 @@ func (g *gate) waitTurn(s *session, turns int) (record, bool) {
 	return g.evidence(s), false
 }
 
+// holdsMidTurn: agents that take a model only between turns, so a pick
+// while one works must come back pending.
+func holdsMidTurn(agent string) bool {
+	return agent == "claude" || agent == "codex"
+}
+
 func hasRecord(agent string) bool {
 	switch agent {
 	case "claude", "codex", "opencode", "pi":
@@ -978,7 +990,7 @@ func claudeRecord(s *session) record {
 }
 
 // codexRecord reads the newest Codex rollout of the Session's folder: each
-// turn's turn_context model and effort.
+// finished turn's model and effort.
 func codexRecord(s *session) record {
 	codexHome := os.Getenv("CODEX_HOME")
 	if codexHome == "" {
@@ -1002,35 +1014,55 @@ func codexRecord(s *session) record {
 		if err != nil {
 			continue
 		}
-		var r record
-		mine := false
-		for _, line := range bytes.Split(raw, []byte("\n")) {
-			var entry struct {
-				Type    string `json:"type"`
-				Payload struct {
-					Cwd       string `json:"cwd"`
-					Model     string `json:"model"`
-					Effort    string `json:"effort"`
-					Timestamp string `json:"timestamp"`
-				} `json:"payload"`
-			}
-			if json.Unmarshal(line, &entry) != nil {
-				continue
-			}
-			switch entry.Type {
-			case "session_meta":
-				started, _ := time.Parse(time.RFC3339Nano, entry.Payload.Timestamp)
-				mine = entry.Payload.Cwd == s.cwd && !started.Before(s.created.Add(-time.Minute))
-			case "turn_context":
-				r.turns++
-				r.last = ran{entry.Payload.Model, entry.Payload.Effort}
-			}
-		}
-		if mine {
+		if r, mine := codexTurns(raw, s.cwd, s.created); mine {
 			return r
 		}
 	}
 	return record{}
+}
+
+// codexTurns reads one rollout: whether it is the Session's (its folder,
+// started with it), and its turns. A turn is counted at its end (Codex
+// writes task_complete, or turn_aborted for a stopped one), on the model and
+// effort of its own turn_context: Codex writes turn_context as the turn
+// starts, so counting that took a running turn for a finished one (0.4.30
+// gate: the next message went into the running turn).
+func codexTurns(raw []byte, cwd string, created time.Time) (record, bool) {
+	var r record
+	mine := false
+	turnOf := map[string]ran{}
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		var entry struct {
+			Type    string `json:"type"`
+			Payload struct {
+				Type      string `json:"type"`
+				Cwd       string `json:"cwd"`
+				Model     string `json:"model"`
+				Effort    string `json:"effort"`
+				Timestamp string `json:"timestamp"`
+				TurnID    string `json:"turn_id"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(line, &entry) != nil {
+			continue
+		}
+		switch entry.Type {
+		case "session_meta":
+			started, _ := time.Parse(time.RFC3339Nano, entry.Payload.Timestamp)
+			mine = entry.Payload.Cwd == cwd && !started.Before(created.Add(-time.Minute))
+		case "turn_context":
+			turnOf[entry.Payload.TurnID] = ran{entry.Payload.Model, entry.Payload.Effort}
+		case "event_msg":
+			if entry.Payload.Type != "task_complete" && entry.Payload.Type != "turn_aborted" {
+				continue
+			}
+			if turn, ok := turnOf[entry.Payload.TurnID]; ok {
+				r.turns++
+				r.last = turn
+			}
+		}
+	}
+	return r, mine
 }
 
 // opencodeRecord asks OpenCode's service for the session's messages: each
