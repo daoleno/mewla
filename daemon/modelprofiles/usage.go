@@ -438,7 +438,8 @@ func (r *usageRecorder) read(data []byte) {
 
 // addUsage folds one usage block in. Anthropic's input_tokens leave the cache
 // out and its counts grow through the stream (the last one stands); OpenAI
-// Responses' input_tokens hold the cached ones too.
+// Responses' input_tokens hold the cached ones too, and fields of another API
+// a relay adds there are not Codex's and are left out.
 func (r *usageRecorder) addUsage(raw json.RawMessage) {
 	if len(raw) == 0 || raw[0] != '{' {
 		return
@@ -456,9 +457,17 @@ func (r *usageRecorder) addUsage(raw json.RawMessage) {
 		return
 	}
 	r.usage.seen = true
-	if u.InputDetails != nil && u.Input != nil { // Responses
-		r.usage.input = max(*u.Input-u.InputDetails.Cached, 0)
-		r.usage.cacheRead = u.InputDetails.Cached
+	if r.agent == ClientCodex { // Responses: only its own fields, as Codex reads them
+		if u.Input == nil {
+			return
+		}
+		cached := int64(0)
+		if u.InputDetails != nil {
+			cached = u.InputDetails.Cached
+		}
+		r.usage.input = max(*u.Input-cached, 0)
+		r.usage.cacheRead = min(cached, *u.Input)
+		r.usage.cacheWrite = 0
 		if u.Output != nil {
 			r.usage.output = *u.Output
 		}

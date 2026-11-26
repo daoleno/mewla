@@ -14,10 +14,10 @@ import (
 
 // replay writes a reply through a recorder in small pieces, as a stream
 // arrives, and returns what was kept.
-func replay(t *testing.T, contentType string, status int, reply string) ConnectionUsage {
+func replay(t *testing.T, agent, contentType string, status int, reply string) ConnectionUsage {
 	t.Helper()
 	log := newUsageLog("")
-	rec := newUsageRecorder(httptest.NewRecorder(), log, ClientClaude, "conn-a")
+	rec := newUsageRecorder(httptest.NewRecorder(), log, agent, "conn-a")
 	rec.asked = "asked-model"
 	rec.Header().Set("Content-Type", contentType)
 	rec.WriteHeader(status)
@@ -43,25 +43,26 @@ func TestUsageIsReadFromEachAgentsReply(t *testing.T) {
 		`data: {"type":"response.output_text.delta","delta":"hi"}` + "\n\n" +
 		`data: {"type":"response.completed","response":{"model":"gpt-5.5","usage":{"input_tokens":900,"input_tokens_details":{"cached_tokens":600},"output_tokens":30}}}` + "\n\n"
 	for _, c := range []struct {
-		name, contentType string
-		status            int
-		reply             string
-		want              UsageRecord
-		wantErr           string
+		name, agent, contentType string
+		status                   int
+		reply                    string
+		want                     UsageRecord
+		wantErr                  string
 	}{
-		{"anthropic stream", "text/event-stream", 200, anthropicStream, UsageRecord{Model: "glm-5", Input: 12, CacheRead: 800, CacheWrite: 40, Output: 57}, ""},
-		{"responses stream", "text/event-stream; charset=utf-8", 200, responsesStream, UsageRecord{Model: "gpt-5.5", Input: 300, CacheRead: 600, Output: 30}, ""},
-		{"anthropic json", "application/json", 200, `{"model":"kimi-k2","usage":{"input_tokens":5,"output_tokens":9}}`, UsageRecord{Model: "kimi-k2", Input: 5, Output: 9}, ""},
-		{"no model named", "application/json", 200, `{"usage":{"input_tokens":5,"output_tokens":9}}`, UsageRecord{Model: "asked-model", Input: 5, Output: 9}, ""},
-		{"refused", "application/json", 401, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key sk-ant-api03-abcdefghijklmnop"}}`, UsageRecord{}, "invalid x-api-key sk-…"},
-		{"no words", "text/plain", 502, `Bad Gateway`, UsageRecord{}, "Bad Gateway"},
-		{"failed mid-stream", "text/event-stream", 200, `data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}` + "\n\n", UsageRecord{}, "Overloaded"},
-		{"responses failed", "text/event-stream", 200, `data: {"type":"response.failed","response":{"error":{"code":"server_error","message":"The model broke"}}}` + "\n\n", UsageRecord{}, "The model broke"},
-		{"responses error event", "text/event-stream", 200, `data: {"type":"error","code":"rate_limit_exceeded","message":"Slow down"}` + "\n\n", UsageRecord{}, "Slow down"},
+		{"anthropic stream", ClientClaude, "text/event-stream", 200, anthropicStream, UsageRecord{Model: "glm-5", Input: 12, CacheRead: 800, CacheWrite: 40, Output: 57}, ""},
+		{"responses stream", ClientCodex, "text/event-stream; charset=utf-8", 200, responsesStream, UsageRecord{Model: "gpt-5.5", Input: 300, CacheRead: 600, Output: 30}, ""},
+		{"anthropic json", ClientClaude, "application/json", 200, `{"model":"kimi-k2","usage":{"input_tokens":5,"output_tokens":9}}`, UsageRecord{Model: "kimi-k2", Input: 5, Output: 9}, ""},
+		{"no model named", ClientClaude, "application/json", 200, `{"usage":{"input_tokens":5,"output_tokens":9}}`, UsageRecord{Model: "asked-model", Input: 5, Output: 9}, ""},
+		{"refused", ClientClaude, "application/json", 401, `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key sk-ant-api03-abcdefghijklmnop"}}`, UsageRecord{}, "invalid x-api-key sk-…"},
+		{"no words", ClientClaude, "text/plain", 502, `Bad Gateway`, UsageRecord{}, "Bad Gateway"},
+		{"failed mid-stream", ClientClaude, "text/event-stream", 200, `data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}` + "\n\n", UsageRecord{}, "Overloaded"},
+		{"responses failed", ClientCodex, "text/event-stream", 200, `data: {"type":"response.failed","response":{"error":{"code":"server_error","message":"The model broke"}}}` + "\n\n", UsageRecord{}, "The model broke"},
+		{"responses from a relay", ClientCodex, "application/json", 200, `{"model":"m","usage":{"input_tokens":12415,"cache_creation_input_tokens":12382,"output_tokens":174}}`, UsageRecord{Model: "m", Input: 12415, Output: 174}, ""},
+		{"responses error event", ClientCodex, "text/event-stream", 200, `data: {"type":"error","code":"rate_limit_exceeded","message":"Slow down"}` + "\n\n", UsageRecord{}, "Slow down"},
 	} {
-		got := replay(t, c.contentType, c.status, c.reply)
+		got := replay(t, c.agent, c.contentType, c.status, c.reply)
 		if c.wantErr != "" {
-			if len(got.Errors) != 1 || len(got.Requests) != 0 || got.Errors[0].Message != c.wantErr || got.Errors[0].Agent != ClientClaude {
+			if len(got.Errors) != 1 || len(got.Requests) != 0 || got.Errors[0].Message != c.wantErr || got.Errors[0].Agent != c.agent {
 				t.Errorf("%s: %+v", c.name, got)
 			}
 			continue
