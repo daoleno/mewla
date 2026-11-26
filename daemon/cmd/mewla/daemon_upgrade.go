@@ -176,7 +176,8 @@ var errAppHostRestart = errors.New("restarting Mewla: launchd starts it again fr
 // installed app: a new host, from the app an update just put in place (an
 // exec would leave the old app's host, whose permissions are not the new
 // app's: app_host.go), and the session host and its Sessions run on. It also
-// never meets the exec that could stall on macOS (platform/exec_darwin.go).
+// never meets the exec that can stall on macOS (restartInPlace in
+// daemon_restart.go says how).
 func restartsThroughAppHost(host, ppid int) bool {
 	return host > 1 && ppid == host
 }

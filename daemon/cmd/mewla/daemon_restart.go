@@ -425,9 +425,13 @@ func (rt daemonRuntime) restartInPlace(stateDir string, daemon runningDaemon, wa
 		}
 		// A daemon that has let go of its state (its lifecycle lock, the last
 		// thing it releases before the exec) but goes on as the same process
-		// is stuck before its new image runs: the macOS exec stall
-		// (platform/exec_darwin.go), which no daemon up to 0.4.32 gets out
-		// of by itself. Stopped, its launchd job starts the installed one.
+		// is stuck before its new image runs: the macOS exec stall. Go's
+		// syscall.Exec first waits for every preemption signal the runtime
+		// sent to be received, and one sent to a Go callback on a system
+		// (dispatch queue) thread can stay pending there for good; the
+		// daemon's ScreenCaptureKit and Accessibility code gets such
+		// callbacks (the owner's Mac, 11-26: 12 minutes). Stopped, its launchd
+		// job starts the installed one.
 		if rt.goos != "darwin" || rt.lockHeld == nil {
 			return false
 		}
