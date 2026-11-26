@@ -1,0 +1,21 @@
+{
+  "version": "0.4.34",
+  "date": "2026-11-27",
+  "highlights": [
+    {
+      "id": "0.4.34-provider-presets",
+      "title": "Kimi, GLM, MiniMax and local models",
+      "line": "Add a Provider by pasting its key, or a model server running here with no key at all.",
+      "media": {"scene": "provider-presets"},
+      "try": {"kind": "open", "target": "settings"}
+    },
+    {
+      "id": "0.4.34-provider-usage",
+      "title": "What each Provider used",
+      "line": "A Provider's page shows its requests, tokens, cache and cost, and its last errors.",
+      "media": {"scene": "provider-usage"},
+      "try": {"kind": "open", "target": "settings"}
+    }
+  ],
+  "fixes": []
+}

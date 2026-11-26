@@ -1206,6 +1206,68 @@ function AnyProvider() {
   );
 }
 
+/** Add Provider: a model server running on the computer comes first and is added without a key; vendors below. */
+function ProviderPresets() {
+  const added = loop(appear(0.34, 0));
+  const Row = (props: { name: string; glyph: IconName; children?: JSX.Element }) => (
+    <View class="relative flex-row items-center gap-2 px-2.5 py-[3px]">
+      <View class="size-[18px] items-center justify-center rounded-[5px] bg-track"><Icon name={props.glyph} size={11} tone="soft" /></View>
+      <Text class="flex-1 text-[11px] text-foreground">{props.name}</Text>
+      {props.children}
+    </View>
+  );
+  return (
+    <Card class="h-[150px] w-[250px] gap-1 py-2.5">
+      <View class="px-2.5"><Line width={70} /></View>
+      <Row name="Ollama" glyph="desktop">
+        <View class="flex-row items-center gap-1" style={added}>
+          <Dot tone="ok" />
+          <Text class="text-[10px] text-muted-foreground">Added</Text>
+        </View>
+        <Press at={0.2} style={{ left: 2, top: 0 }} />
+      </Row>
+      <View class="mt-1.5 px-2.5"><Line width={56} /></View>
+      <Row name="Kimi" glyph="key" />
+      <Row name="GLM" glyph="key" />
+      <Row name="MiniMax" glyph="key" />
+    </Card>
+  );
+}
+
+/** A Provider's page: its tiles, and a request coming in at the top of its recent ones with its tokens and cost. */
+function ProviderUsage() {
+  const fresh = loop(appear(0.3, -6));
+  const Tile = (props: { label: string; value: string }) => (
+    <View class="flex-1 gap-0.5 rounded-[10px] bg-background px-2 py-1.5">
+      <Text class="text-[9px] font-semibold text-muted-foreground">{props.label}</Text>
+      <Text class="text-[14px] font-bold text-foreground" style={{ fontVariant: ["tabular-nums"] }}>{props.value}</Text>
+    </View>
+  );
+  const Request = (props: { cost: string; style?: Record<string, unknown> }) => (
+    <View class="flex-row items-center gap-2" style={props.style}>
+      <Icon name="terminal" size={11} tone="soft" />
+      <View class="flex-1 gap-1"><Line width={62} strong /><Line width={96} /></View>
+      <Text class="text-[10px] text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{props.cost}</Text>
+    </View>
+  );
+  return (
+    <Card class="h-[150px] w-[250px] gap-2 px-2.5 py-2.5">
+      <View class="flex-row gap-1.5">
+        <Tile label="Cost" value="$1.84" />
+        <Tile label="Tokens" value="1.5M" />
+        <Tile label="Requests" value="38" />
+      </View>
+      <Request cost="$0.04" style={fresh} />
+      <Request cost="$0.02" />
+      <View class="flex-row items-center gap-2">
+        <Icon name="warning" size={11} tone="soft" />
+        <View class="flex-1"><Line width={110} /></View>
+        <View class="size-[7px] rounded-full bg-del" />
+      </View>
+    </Card>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -1235,6 +1297,8 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "long-chat": LongChat,
   "tool-ledger": ToolLedger,
   "any-provider": AnyProvider,
+  "provider-presets": ProviderPresets,
+  "provider-usage": ProviderUsage,
   "wide-beside": WideBeside,
 };
 
