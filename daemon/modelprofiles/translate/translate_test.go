@@ -98,19 +98,22 @@ func TestClaudeCodeOnAChatUpstream(t *testing.T) {
 	}
 	events := clientEvents(t, w.Body.String())
 	got := strings.Join(types(events), " ")
-	want := "message_start content_block_start content_block_delta content_block_stop content_block_start content_block_delta content_block_stop " +
+	want := "message_start content_block_start content_block_delta content_block_delta content_block_stop content_block_start content_block_delta content_block_stop " +
 		"content_block_start content_block_delta content_block_stop content_block_start content_block_delta content_block_stop message_delta message_stop"
 	if got != want {
 		t.Fatalf("events:\n%s\nwant:\n%s", got, want)
 	}
 	// Interleaved argument pieces of two parallel calls stay with their call.
-	if d := events[8]["delta"].(map[string]any); d["partial_json"] != `{"cmd":"ls"}` {
+	if d := events[3]["delta"].(map[string]any); d["signature"] != UnsignedThinkingSignature {
+		t.Fatalf("thinking signature = %v: a Chat model's reasoning gets Mewla's own", d)
+	}
+	if d := events[9]["delta"].(map[string]any); d["partial_json"] != `{"cmd":"ls"}` {
 		t.Fatalf("first call args = %v", d["partial_json"])
 	}
-	if d := events[11]["delta"].(map[string]any); d["partial_json"] != `{"cmd":"pwd"}` {
+	if d := events[12]["delta"].(map[string]any); d["partial_json"] != `{"cmd":"pwd"}` {
 		t.Fatalf("second call args = %v", d["partial_json"])
 	}
-	md := events[13]
+	md := events[14]
 	if md["delta"].(map[string]any)["stop_reason"] != "tool_use" {
 		t.Fatalf("stop = %v", md["delta"])
 	}

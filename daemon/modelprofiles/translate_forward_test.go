@@ -1,14 +1,19 @@
 package modelprofiles
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelprofiles/translate"
 )
 
 // oneAPIUpstream speaks a single API at path: every other POST is 404, as a
@@ -322,14 +327,20 @@ func TestStartFindsTheAPIOfConnectionsSavedBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner, err := StartOwner(OwnerConfig{
-		ProfilesPath:      filepath.Join(root, "model-profiles.toml"),
-		RoutesPath:        filepath.Join(root, "route-bindings.json"),
-		ListenerPath:      filepath.Join(root, "route-listener.json"),
-		DiscoveryPath:     filepath.Join(root, "provider-discovery.json"),
-		Lookup:            func(string) (string, bool) { return "", false },
-		Verifier:          BuiltinEnvelopeVerifier{},
-		Credentials:       creds,
-		DetectUpstreamAPI: true,
+		ProfilesPath:  filepath.Join(root, "model-profiles.toml"),
+		RoutesPath:    filepath.Join(root, "route-bindings.json"),
+		ListenerPath:  filepath.Join(root, "route-listener.json"),
+		DiscoveryPath: filepath.Join(root, "provider-discovery.json"),
+		// The takeover and gateway run as on a daemon, so the refresh the
+		// finding triggers meets the start's own projection (scratch files).
+		GatewayAddr:        "127.0.0.1:0",
+		GatewayStateDir:    filepath.Join(root, "gateway"),
+		CodexConfigPath:    filepath.Join(root, "codex", "config.toml"),
+		ClaudeSettingsPath: filepath.Join(root, "claude", "settings.json"),
+		Lookup:             func(string) (string, bool) { return "", false },
+		Verifier:           BuiltinEnvelopeVerifier{},
+		Credentials:        creds,
+		DetectUpstreamAPI:  true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -345,5 +356,61 @@ func TestStartFindsTheAPIOfConnectionsSavedBefore(t *testing.T) {
 			t.Fatalf("upstream_api = %q (err %v) after start, want openai_chat", p.UpstreamAPI, err)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// After the person moves an agent from a translated Provider to one that
+// speaks its own API, the agent still sends what the translation left in its
+// history. A native upstream must never see it: it would refuse every turn.
+func TestANativeProviderNeverSeesTranslatedHistory(t *testing.T) {
+	var got atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got.Store(string(b))
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer srv.Close()
+	g := NewGateway("127.0.0.1:0", NewMemoryCredentialStore(), WithGatewayRequestResolver(func(string, string) (GatewayUpstream, error) {
+		return GatewayUpstream{ProfileID: "p", BaseURL: srv.URL, Protocol: ProtocolOpenAIResponses, AuthMode: AuthModeNone}, nil
+	}))
+	codex := `{"model":"gpt-5.5","input":[{"type":"message","role":"user","content":"hi"},{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"mewla.anthropic-thinking.v1:eyJzIjoiU0lHIn0"}]}`
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3425/v1/responses", strings.NewReader(codex))
+	req.RemoteAddr = "127.0.0.1:1234"
+	res := httptest.NewRecorder()
+	g.ServeHTTP(res, req)
+	if sent, _ := got.Load().(string); res.Code != 200 || strings.Contains(sent, "mewla.anthropic-thinking") || !strings.Contains(sent, `"content":"hi"`) {
+		t.Fatalf("status=%d upstream got %s", res.Code, sent)
+	}
+
+	// Compressed, the body is opened, cleaned and sent plain.
+	var zipped bytes.Buffer
+	zw := gzip.NewWriter(&zipped)
+	_, _ = zw.Write([]byte(codex))
+	_ = zw.Close()
+	var encoding atomic.Value
+	zsrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got.Store(string(b))
+		encoding.Store(r.Header.Get("Content-Encoding"))
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer zsrv.Close()
+	zg := NewGateway("127.0.0.1:0", NewMemoryCredentialStore(), WithGatewayRequestResolver(func(string, string) (GatewayUpstream, error) {
+		return GatewayUpstream{ProfileID: "p", BaseURL: zsrv.URL, Protocol: ProtocolOpenAIResponses, AuthMode: AuthModeNone}, nil
+	}))
+	zreq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3425/v1/responses", bytes.NewReader(zipped.Bytes()))
+	zreq.Header.Set("Content-Encoding", "gzip")
+	zreq.RemoteAddr = "127.0.0.1:1234"
+	zres := httptest.NewRecorder()
+	zg.ServeHTTP(zres, zreq)
+	if sent, _ := got.Load().(string); zres.Code != 200 || encoding.Load() != "" || strings.Contains(sent, "mewla.anthropic-thinking") || !strings.Contains(sent, `"content":"hi"`) {
+		t.Fatalf("status=%d encoding=%v upstream got %q", zres.Code, encoding.Load(), sent)
+	}
+
+	up := &scripted{replies: []func(http.ResponseWriter){status(200, nil, `{"type":"message","content":[]}`)}}
+	_, _, root, _ := routeFixture(t, up)
+	claude := `{"model":"claude-test","max_tokens":2,"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"thinking","thinking":"from chat","signature":"` + translate.UnsignedThinkingSignature + `"},{"type":"text","text":"hello"}]},{"role":"user","content":"again"}]}`
+	if status, _ := post(t, root+"/v1/messages", claude, nil); status != 200 || strings.Contains(up.bodies[0], translate.UnsignedThinkingSignature) || !strings.Contains(up.bodies[0], `"text":"hello"`) {
+		t.Fatalf("status=%d upstream got %v", status, up.bodies)
 	}
 }
