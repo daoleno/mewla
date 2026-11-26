@@ -178,6 +178,12 @@ function Stack() {
   );
 }
 
+/** A beside page: the board at the root (a route never changes its page), else the page the route names. */
+function besidePage(route: BesideRoute, index: () => number): JSX.Element {
+  if (route.name === "board") return <WorkBoard />;
+  return page(route, index, BESIDE);
+}
+
 /**
  * The beside pane (core/web/beside.ts): the Work board at its root, then what a card, a row or a link opened. Its
  * pages have a Back: to the page under, and from the first one to the board.
@@ -186,7 +192,7 @@ function BesideStack() {
   return (
     <PageStack.Provider value={{ canGoBack: () => besideNav.routes().length > 1, back: () => besideNav.pop() }}>
       <NavStack testID="beside-stack" state={besideNav} style={{ flex: 1 }}>
-        {(route, index) => <If when={route.name === "board"} else={page(route as Route, index, BESIDE)}><WorkBoard /></If>}
+        {besidePage}
       </NavStack>
     </PageStack.Provider>
   );
@@ -274,7 +280,7 @@ export function Shell() {
           <View class="flex-1 flex-row">
             <View class="h-full" style={besideShown() ? { width: besideBrainWidth } : { flex: 1 }}><Stack /></View>
             {/* Kept while the split is up, so what it shows keeps its state under a page that covers both (Settings). */}
-            <If when={beside()}><View testID="beside-pane" onLayout={({ bounds }) => besidePaneWidth.set(bounds.size.width)} class="h-full flex-1 flex-col overflow-hidden border-l border-border" style={{ display: besideShown() ? "flex" : "none" }}><BesideStack /></View></If>
+            <If when={beside()}><View testID="beside-pane" onLayout={({ bounds }) => besidePaneWidth.set(bounds.size.width)} class="h-full flex-1 flex-row overflow-hidden border-l border-border" style={{ display: besideShown() ? "flex" : "none" }}><BesideStack /></View></If>
           </View>
         </View>
       </View>

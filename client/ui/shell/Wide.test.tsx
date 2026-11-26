@@ -421,6 +421,7 @@ describe("beside: a wide window opens what you pick next to Brain (core/web/besi
     await app.press("id:tray-running >> text:api");
     await app.waitUntil(() => routes(app).join(" ") === "home session:w1");
     await app.waitFor("id:beside-pane >> id:session-status");
+    expect(app.layout("id:session-status")!.width).toBeGreaterThan(200);
     // Brain stays: its composer and the pane's Session side by side, the row selected.
     expect(app.shows("id:home-header")).toBe(true);
     expect(app.count("id:tray-running >> id:selected-well")).toBe(1);
