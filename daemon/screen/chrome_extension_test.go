@@ -108,10 +108,22 @@ func TestMewlasWindowIsTheOneThatWasNotThereBefore(t *testing.T) {
 		},
 		IDs: []int{40, 41, 42, 10, 11},
 	}
-	if id, err := newWindowAddress(tree, map[int]bool{10: true}); err != nil || id != 42 {
+	if window, address, err := newWindowAddress(tree, map[int]bool{10: true}); err != nil || window != 40 || address != 42 {
+		t.Fatalf("[%d] [%d] %v", window, address, err)
+	}
+	if _, _, err := newWindowAddress(tree, map[int]bool{40: true, 10: true}); err == nil {
+		t.Fatal("a window that was there was taken for Mewla's")
+	}
+	// Closed by its own close button, never another window's.
+	tree.Elements = append(tree.Elements, Element{Role: "AXButton", Subrole: "AXCloseButton", Depth: 1})
+	tree.IDs = append(tree.IDs, 12)
+	if _, err := closeButtonOf(tree, 40); err == nil {
+		t.Fatal("another window's close button was taken for Mewla's")
+	}
+	if id, err := closeButtonOf(tree, 10); err != nil || id != 12 {
 		t.Fatalf("[%d] %v", id, err)
 	}
-	if _, err := newWindowAddress(tree, map[int]bool{40: true, 10: true}); err == nil {
-		t.Fatal("a window that was there was taken for Mewla's")
+	if _, err := closeButtonOf(tree, 99); err == nil {
+		t.Fatal("a window that is gone has a close button")
 	}
 }

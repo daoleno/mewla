@@ -70,57 +70,14 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 	if err := act("open Chrome", AgentAction{Action: "open_app", App: chromeApp}); err != nil {
 		return err
 	}
-	// A window of Mewla's own: the person's tabs stay as they are. It is the
-	// one that was not there before; its address bar the first field in it
-	// (a new tab page may take the keyboard from it).
-	var before map[int]bool
-	_ = waitFor("Chrome's windows", ElementMatch{Role: "AXWindow"}, "", 2)
-	_, _ = s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) {
-		before = windowIDs(t)
-		return 0, nil
-	})
-	if err := appKey("a new window", "cmd+n"); err != nil {
-		return err
-	}
-	var address int
-	if err := s.untilRead(ctx, "the new window's address bar", 5*time.Second, func(t ElementTree) error {
-		var err error
-		address, err = newWindowAddress(t, before)
-		return err
-	}); err != nil {
-		return fmt.Errorf("step %d: %w", step, err)
-	}
-	// Mewla's tab closes when it is done, whatever happened, while it is the
-	// one in front.
-	defer func() {
-		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
-			return
-		}
-		if _, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) {
-			if a := frontAddress(t); !strings.HasPrefix(a, "chrome://extensions") {
-				return 0, fmt.Errorf("the tab in front shows %q", a)
-			}
-			return 0, nil
-		}); err != nil {
-			log.Printf("screen: Mewla's Chrome tab stays open: %v", err)
-			return
-		}
-		_, _ = s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "key", App: chromeApp, Text: "cmd+w"})
-	}()
-	if err := act("the extensions page's address", AgentAction{Action: "element", Element: address, ElementAction: "set_value", Text: "chrome://extensions/"}); err != nil {
-		return err
-	}
-	// What Chrome adds to an address from the person's history goes; the
-	// address is Mewla's.
-	if err := appKey("only the extensions page's address", "delete"); err != nil {
-		return err
-	}
-	if err := appKey("open the extensions page", "Return"); err != nil {
-		return err
-	}
 	// Chrome shows an app its pages only while it thinks a screen reader
 	// reads them: asked as VoiceOver asks, for as long as Mewla needs one.
-	pid, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return t.PID, nil })
+	var before map[int]bool
+	_ = waitFor("Chrome's windows", ElementMatch{Role: "AXWindow"}, "", 2)
+	pid, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) {
+		before = windowIDs(t)
+		return t.PID, nil
+	})
 	if err != nil {
 		return err
 	}
@@ -133,6 +90,87 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 				log.Printf("screen: Chrome back from screen reader mode: %v", err)
 			}
 		}()
+	}
+	// A window of Mewla's own: the person's tabs stay as they are. It is the
+	// one that was not there before.
+	if err := appKey("a new window", "cmd+n"); err != nil {
+		return err
+	}
+	var window int
+	if err := s.untilRead(ctx, "Mewla's window", 5*time.Second, func(t ElementTree) error {
+		var err error
+		window, _, err = newWindowAddress(t, before)
+		return err
+	}); err != nil {
+		return fmt.Errorf("step %d: %w", step, err)
+	}
+	// It closes when Mewla is done, whatever happened, by its own close
+	// button: no other window of the person's.
+	defer func() {
+		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
+			return
+		}
+		button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOf(t, window) })
+		if err != nil {
+			log.Printf("screen: Mewla's Chrome window stays open: %v", err)
+			return
+		}
+		_, _ = s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "element", Element: button, ElementAction: "press"})
+	}()
+	// Its new tab page loads and may take the keyboard (the person's may be
+	// any page): once it shows, the address bar takes it back, and the
+	// extensions page's address goes in only while it has it.
+	_ = s.untilRead(ctx, "Mewla's window's page", 5*time.Second, func(t ElementTree) error {
+		start, end := frontWindow(t)
+		for i := start; i < end; i++ {
+			if t.Elements[i].Role == "AXWebArea" {
+				return nil
+			}
+		}
+		return errors.New("no page yet")
+	})
+	if err := pause(ctx, time.Second); err != nil {
+		return err
+	}
+	const extensionsPage = "chrome://extensions/"
+	for tries := 1; ; tries++ {
+		var address int
+		if err := s.untilRead(ctx, "Mewla's window's address bar", 3*time.Second, func(t ElementTree) error {
+			var err error
+			_, address, err = newWindowAddress(t, before)
+			return err
+		}); err != nil {
+			return fmt.Errorf("step %d: %w", step, err)
+		}
+		if err := act("the extensions page's address", AgentAction{Action: "element", Element: address, ElementAction: "set_value", Text: extensionsPage}); err != nil {
+			return err
+		}
+		// What Chrome adds to an address from the person's history goes;
+		// the address is Mewla's.
+		if err := appKey("only the extensions page's address", "delete"); err != nil {
+			return err
+		}
+		ready := s.untilRead(ctx, "the extensions page's address", time.Second, func(t ElementTree) error {
+			start, end := frontWindow(t)
+			for i := start; i < end; i++ {
+				if e := t.Elements[i]; e.Role == "AXTextField" {
+					if !e.Focused || e.Value != extensionsPage {
+						return fmt.Errorf("the address bar has %q and the keyboard %v", e.Value, e.Focused)
+					}
+					return nil
+				}
+			}
+			return errors.New("no address bar")
+		})
+		if ready == nil {
+			break
+		}
+		if tries == 3 {
+			return fmt.Errorf("step %d: %w", step, ready)
+		}
+	}
+	if err := appKey("open the extensions page", "Return"); err != nil {
+		return err
 	}
 	var page extensionsToolbar
 	if err := s.untilRead(ctx, "the extensions page", 15*time.Second, func(t ElementTree) error {
@@ -299,22 +337,36 @@ func readExtensionsToolbar(t ElementTree) (extensionsToolbar, error) {
 	return extensionsToolbar{}, errors.New("the extensions page has no Developer mode switch yet")
 }
 
-// newWindowAddress is the address bar of the window in front when that window
-// is not one of before.
-func newWindowAddress(t ElementTree, before map[int]bool) (int, error) {
+// newWindowAddress is the window in front and its address bar when that
+// window is not one of before.
+func newWindowAddress(t ElementTree, before map[int]bool) (window, address int, err error) {
 	start, end := frontWindow(t)
 	if start >= end || t.Elements[start].Role != "AXWindow" {
-		return 0, errors.New("Chrome shows no window")
+		return 0, 0, errors.New("Chrome shows no window")
 	}
 	if before[t.id(start)] {
-		return 0, errors.New("no new window is in front yet")
+		return 0, 0, errors.New("no new window is in front yet")
 	}
 	for i := start; i < end; i++ {
 		if t.Elements[i].Role == "AXTextField" {
+			return t.id(start), t.id(i), nil
+		}
+	}
+	return 0, 0, errors.New("the new window has no address bar yet")
+}
+
+// closeButtonOf is the close button of the window with id window.
+func closeButtonOf(t ElementTree, window int) (int, error) {
+	at := t.index(window)
+	if at < 0 {
+		return 0, errors.New("Mewla's window is gone")
+	}
+	for i := at + 1; i < len(t.Elements) && t.Elements[i].Depth > t.Elements[at].Depth; i++ {
+		if t.Elements[i].Subrole == "AXCloseButton" {
 			return t.id(i), nil
 		}
 	}
-	return 0, errors.New("the new window has no address bar yet")
+	return 0, errors.New("Mewla's window has no close button")
 }
 
 // frontWindow is where the window in front lies in a read: the first window
