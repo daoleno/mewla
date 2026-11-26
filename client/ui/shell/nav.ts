@@ -82,8 +82,8 @@ export function openSession(workerId: string, hint?: TerminalRouteSessionHint): 
   push({ name: "session", workerId, hint });
 }
 
-/** Pushes a page: on the beside pane while it shows (a link inside it, a new Session), else on the one stack. */
-function push(route: Route): void {
+/** Pushes a page: on the beside pane while it shows (a link inside it, a new Session, a file a chat names), else on the one stack. */
+export function push(route: Route): void {
   if (untracked(besideShown) && opensBeside(route)) besideNav.push(route);
   else nav.push(route);
 }

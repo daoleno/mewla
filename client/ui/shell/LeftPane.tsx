@@ -16,7 +16,7 @@ import { currentBrain } from "../brain";
 import { isMacApp, isThisMac, localProblem, macLightsRow } from "../mac/local";
 import { paletteOpen } from "./desktop/Overlays";
 import { paneRange, paneWidth, setPaneWidth } from "./layout";
-import { goHome, nav, openPage, shown } from "./nav";
+import { closeBeside, goHome, nav, openPage, shown } from "./nav";
 import { MaterialTint } from "../mac/materials";
 
 /** A left-pane row replaces the right pane's page above Brain (SPEC §14.1): Brain › that page › what it pushed. */
@@ -78,7 +78,10 @@ function BrainRow() {
   const line = () => brainRowLine(brainThread().conversation?.events);
   return (
     <View class={MAC ? "mx-2.5 overflow-hidden rounded-[10px]" : "mx-4 overflow-hidden rounded-(--radius-group) bg-sheet-surface"}>
-      <Button testID="pane-brain" accessibilityLabel={line() ? `Brain, ${line()}` : "Brain"} selected={on()} onPress={() => goHome()}
+      <Button testID="pane-brain" accessibilityLabel={line() ? `Brain, ${line()}` : "Brain"} selected={on()} onPress={() => {
+        closeBeside();
+        goHome();
+      }}
         class={`${MAC ? "min-h-[44px] gap-2.5 px-2.5 py-1.5" : "min-h-[68px] gap-3.5 px-4 py-3"} flex-row items-center hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
         <If when={on()}><SelectedWell /></If>
         <View class={`${MAC ? "size-[26px] rounded-[7px]" : "size-[28px] rounded-lg"} items-center justify-center bg-foreground`}><Icon name="brain" size={MAC ? 16 : 18} tone="canvas" /></View>

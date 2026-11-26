@@ -15,3 +15,18 @@ export function boardColumns(width: number, groups: number): { side: boolean; ca
   const perRow = Math.max(1, Math.floor((inner + BOARD_GAP) / (CARD_MIN + BOARD_GAP)));
   return { side: false, card: Math.floor((inner - (perRow - 1) * BOARD_GAP) / perRow) };
 }
+
+/** What a request in the tray names, as the board reads it. */
+export type BoardRequest = { workId?: string; workerId?: string; title: string };
+
+/**
+ * The request that asks something of a Work, if any: one naming the Work, or one of its Sessions (a Worker's
+ * permission prompt). The tray lists it under Needs you, so the board puts the Work there too.
+ */
+export function workRequest(
+  slip: { workId: string; sessionId?: string; workerSessions?: readonly { session_id: string }[] },
+  requests: readonly BoardRequest[],
+): BoardRequest | undefined {
+  const sessions = new Set([slip.sessionId, ...(slip.workerSessions ?? []).map((w) => w.session_id)].filter(Boolean));
+  return requests.find((r) => r.workId === slip.workId || (r.workerId !== undefined && sessions.has(r.workerId)));
+}

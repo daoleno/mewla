@@ -1106,6 +1106,36 @@ function LongChat() {
   );
 }
 
+/** A wide screen: a card pressed in Brain's thread opens beside it, and Brain stays where it is. */
+function WideBeside() {
+  const beside = loop(appear(0.3, 4));
+  const board = loop([{ offset: 0, opacity: 1 }, { offset: 0.26, opacity: 1 }, { offset: 0.3, opacity: 0 }, { offset: 0.94, opacity: 0 }, { offset: 1, opacity: 1 }]);
+  return (
+    <Card class="h-[150px] w-[264px] flex-row overflow-hidden border border-border">
+      <View class="w-[44px] gap-1.5 border-r border-border p-2">
+        <Line width={28} strong /><Line width={24} /><Line width={30} /><Line width={22} />
+      </View>
+      <View class="w-[110px] justify-end gap-1.5 border-r border-border p-2">
+        <Line width={80} /><Line width={92} />
+        <View class="relative gap-1 rounded-[8px] bg-background p-1.5">
+          <Line width={56} strong /><Line width={74} />
+          <Press at={0.2} style={{ right: 6, top: 4 }} />
+        </View>
+        <View class="h-[14px] rounded-full border border-border" />
+      </View>
+      <View class="relative flex-1 p-2">
+        <View class="absolute inset-2 flex-row flex-wrap gap-1.5" style={board}>
+          <View class="h-[30px] w-[42px] rounded-[6px] bg-track" /><View class="h-[30px] w-[42px] rounded-[6px] bg-track" />
+          <View class="h-[30px] w-[42px] rounded-[6px] bg-track" />
+        </View>
+        <View class="absolute inset-2 gap-1.5" style={beside}>
+          <Line width={60} strong /><Line width={86} /><Line width={70} /><Line width={80} /><Line width={52} />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -1133,6 +1163,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "image-drop": ImageDrop,
   "page-zoom": PageZoom,
   "long-chat": LongChat,
+  "wide-beside": WideBeside,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */

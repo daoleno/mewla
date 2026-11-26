@@ -405,15 +405,18 @@ reports no fold, so nothing snaps to it.
    pane is 1480 or wider (a 1920 window with any pane width; never iOS or
    Android, whose stack is the system's), the right pane splits:
    Brain's thread in an 800 pane (740 on the Mac), and the beside pane
-   for what you open. A Session, a Work or a Work file (from a card, a
-   tray row, the palette, a URL) opens there instead of over Brain. Its
+   for what you open. A Session, a Work, a Work file or a file a chat
+   names (its preview), from a card, a tray row, a link, the palette or a
+   URL, opens there instead of over Brain. The Brain row, `G` then B and
+   Back to Brain's entry return the pane to the board. Its
    own stack (`besideNav` in `ui/shell/nav.ts`) has the Work board at its
    root. Back on the first page returns to the board, and a row or card
    replaces what stands there. Links inside the pane push onto it. Any
    other page (the computer page, Settings, Calendar) covers both, and
    Back finds the pane as it was (kept, `display: none`).
    - **The Work board** (`ui/work/WorkBoard.tsx`) shows Brain's Work by
-     group (Needs you first), one card each. The groups stand side by side
+     group (Needs you first, with any Work the tray's Needs you names),
+     one card each. The groups stand side by side
      when each column would be 300–560 wide; otherwise they are stacked,
      with the cards in a grid at least 320 wide (`core/work/board.ts`).
    - **A Session's split.** From a 1600 pane (an ultrawide), a Session that
@@ -423,7 +426,10 @@ reports no fold, so nothing snaps to it.
    - **Crossing the gate.** Narrowing puts what stood beside Brain on the
      stack over it. Widening moves the pages above Brain beside it again.
      URLs, the tab title and the left pane's selection read Brain › what
-     stands beside it (`shown` in `ui/shell/nav.ts`).
+     stands beside it (`shown` in `ui/shell/nav.ts`). Headless `nsh test`
+     cannot see a beside page drawn with no width;
+     `client/scripts/shots.sh scripts/shots/beside.js` checks the layout in
+     Chrome.
 10. **What else moves.** The floating screen stays in the right pane's
    bottom-right corner (`leftInset`). A page's toast belongs to its page, so
    it is centred in the right pane. First run and pairing have no left pane

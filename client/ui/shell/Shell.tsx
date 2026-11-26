@@ -90,6 +90,8 @@ function followBrainHost(host: string) {
 export function openPlace(place: WebPlace) {
   const routes = routesOfPlace(place);
   if (untracked(beside) && opensBeside(routes[0])) return openPage(...routes);
+  // Brain itself (G then B, the palette): Brain alone, the beside pane back to the board.
+  if (routes.length === 0) closeBeside();
   nav.setRoutes([{ name: "home" }, ...routes]);
 }
 
@@ -110,6 +112,8 @@ function restore(page: PoppedPage<PageSnapshot>) {
     if (untracked(nav.routes).length > 1) nav.popToRoot();
     return setBesidePages(reuseRoutes(untracked(besidePages) as unknown[], routes.slice(1)) as Route[]);
   }
+  // An entry of Brain alone (Back from what stood beside it): the pane back to the board.
+  if (routes.length === 1) closeBeside();
   nav.setRoutes(reuseRoutes(untracked(nav.routes) as unknown[], routes) as Route[]);
 }
 

@@ -2,7 +2,8 @@ import { computed, Scroll, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { BRAIN_WORK_GROUP_LABELS, BRAIN_WORK_GROUP_ORDER, type BrainWorkGroup, type BrainWorkSlip } from "../../core/work/surface";
 import { workRow } from "../../core/tray/model";
-import { boardColumns } from "../../core/work/board";
+import { boardColumns, workRequest } from "../../core/work/board";
+import { tray } from "../tray/state";
 import { NavPage } from "../shell/NavPage";
 import { openWorkDetail } from "../shell/nav";
 import { RowTile } from "../tray/rowParts";
@@ -11,10 +12,14 @@ import { clock } from "../calendar/clock";
 import { workers } from "../session";
 import { workSurface } from "./state";
 
+/** What the tray's Needs you asks of a Work (its own question, or one of its Sessions'): the board files it there too. */
+const asked = (slip: BrainWorkSlip) => workRequest(slip, tray().needs);
+const groupOf = (slip: BrainWorkSlip): BrainWorkGroup => (slip.group !== "needs" && asked(slip) ? "needs" : slip.group);
+
 /** The board's groups that hold Work, in the surface's order (Needs you first). */
 const groups = computed(() => {
   const slips = workSurface().slips.filter((slip) => !slip.mergedInto);
-  return BRAIN_WORK_GROUP_ORDER.map((group) => ({ group, slips: slips.filter((slip) => slip.group === group) })).filter((g) => g.slips.length > 0);
+  return BRAIN_WORK_GROUP_ORDER.map((group) => ({ group, slips: slips.filter((slip) => groupOf(slip) === group) })).filter((g) => g.slips.length > 0);
 });
 
 /**
@@ -65,7 +70,8 @@ function GroupLabel(props: { group: BrainWorkGroup; count: number }) {
 /** One Work: its Worker's logo (Brain's mark for several), the title, where it stands, and what it asks of you. */
 function BoardCard(props: { slip: () => BrainWorkSlip; sessions: () => ReadonlyMap<string, ReturnType<typeof workers>[number]> }) {
   const row = computed(() => workRow(props.slip(), props.sessions(), clock().now));
-  const asks = () => (props.slip().group === "needs" ? props.slip().question ?? "" : "");
+  const needs = () => groupOf(props.slip()) === "needs";
+  const asks = () => (needs() ? props.slip().question ?? asked(props.slip())?.title ?? "" : "");
   return (
     <Button testID="work-board-card" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} onPress={() => openWorkDetail(props.slip().workId)}
       class="min-h-[112px] gap-2 rounded-(--radius-group) bg-sheet-surface px-4 py-3.5 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
@@ -73,7 +79,7 @@ function BoardCard(props: { slip: () => BrainWorkSlip; sessions: () => ReadonlyM
         <RowTile tile={() => row().tile} mark={() => row().mark} />
         <Text class={`min-w-0 flex-1 text-body line-clamp-1 ${row().done ? "" : "font-semibold"}`}>{row().title}</Text>
         <View class="flex-row items-center gap-2">
-          <If when={props.slip().group === "needs"} else={<If when={row().live}><View class="size-2 rounded-full bg-foreground" /></If>}><View class="size-2 rounded-full bg-seal" /></If>
+          <If when={needs()} else={<If when={row().live}><View class="size-2 rounded-full bg-foreground" /></If>}><View class="size-2 rounded-full bg-seal" /></If>
           <If when={row().end}><Text class="text-sub text-muted-foreground" style={{ fontVariant: ["tabular-nums"] }}>{row().end}</Text></If>
         </View>
       </View>

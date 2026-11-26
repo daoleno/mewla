@@ -492,4 +492,45 @@ describe("beside: a wide window opens what you pick next to Brain (core/web/besi
     await app.wait(300);
     expect(app.shows("id:beside-pane")).toBe(false);
   }, 20_000);
+
+  test("Back from what stood beside Brain returns the pane to the board; the Brain row and G then B do too", async () => {
+    const app = await open(APP, { ...big, clock: {}, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
+    await app.waitFor("id:beside-pane", { timeout: 10_000 });
+    await app.waitUntil(() => app.count("id:tray-running >> id:tray-row") === 1, { timeout: 10_000 });
+    await settle(app);
+    const brain = locations(app)[0];
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    // The browser's Back to Brain's entry.
+    await app.host.send("web.popstate", { path: brain.path, state: brain.state });
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => last(app)?.path === "/");
+    expect(app.shows("id:session-status")).toBe(false);
+    // The Brain row.
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    await app.press("id:pane-brain");
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => last(app)?.path === "/");
+    expect(app.shows("id:pane-brain >> id:selected-well")).toBe(true);
+    // G then B.
+    await app.press("id:tray-running >> text:api");
+    await app.waitUntil(() => last(app)?.path === "/sessions/w1");
+    await app.keyboard.press("g");
+    await app.keyboard.press("b");
+    await app.waitFor("id:work-board");
+    await app.waitUntil(() => last(app)?.path === "/");
+  }, 30_000);
+
+  test("a file Brain names opens its preview beside the thread", async () => {
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md)." };
+    const app = await open(APP, { ...big, host: webHost({ brain: { chat_thread_id: "t-now", host_worker }, conversations: { "brain-host": [reply] } }) });
+    await app.waitFor("text:the plan", { timeout: 10_000 });
+    await app.press("text:the plan");
+    await app.waitFor("id:beside-pane >> id:file-preview", { timeout: 10_000 });
+    expect(app.shows("id:home-header")).toBe(true);
+    await app.press("id:beside-pane >> id:page-back");
+    await app.waitFor("id:work-board");
+  }, 20_000);
 });

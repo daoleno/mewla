@@ -17,7 +17,7 @@ describe("beside", () => {
   });
 
   test("a Session, a Work and a Work file open beside; Settings and Calendar cover both", () => {
-    expect([session, work, { name: "workFile", id: "f" }].every(opensBeside)).toBe(true);
+    expect([session, work, { name: "workFile", id: "f" }, { name: "files-preview" }].every(opensBeside)).toBe(true);
     expect([settings, { name: "calendar" }, { name: "computer" }, undefined].some(opensBeside)).toBe(false);
   });
 

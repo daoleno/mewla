@@ -1,10 +1,18 @@
 {
   "version": "0.4.33",
   "date": "2026-11-26",
-  "highlights": [],
+  "highlights": [
+    {
+      "id": "0.4.33-wide-beside",
+      "title": "Wide screens open things beside Brain",
+      "line": "From 1920 wide, a card or a row opens next to the chat, with your Work board beside it.",
+      "media": {"scene": "wide-beside"},
+      "try": {"kind": "open", "target": "brain"},
+      "platforms": ["web", "macos"]
+    }
+  ],
   "fixes": [
     "Codex keeps working after Magpie is turned off, and with models a Provider adds later.",
-    "Uninstalling Mewla gives Codex and Claude Code back their own settings.",
-    "Wide screens: what you open stands beside Brain, and a Work board fills the rest."
+    "Uninstalling Mewla gives Codex and Claude Code back their own settings."
   ]
 }

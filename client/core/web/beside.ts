@@ -10,8 +10,8 @@ export const BESIDE_MIN_WIDTH = 1480;
 /** Brain's pane while the beside pane stands next to it: its reading column (760, the Mac's 700) and 20 a side. */
 export const BESIDE_BRAIN_WIDTH = { web: 800, mac: 740 } as const;
 
-/** The pages that open beside Brain; everything else (Settings, Calendar, the computer page) still covers both. */
-const BESIDE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "workFile"]);
+/** The pages that open beside Brain (a file a chat names: its preview); everything else (Settings, Calendar, the computer page) still covers both. */
+const BESIDE_PAGES: ReadonlySet<string> = new Set(["session", "workDetail", "workFile", "files-preview"]);
 
 /** Whether a page opens in the beside pane (when it is up). */
 export function opensBeside(route: { name: string } | undefined): boolean {
