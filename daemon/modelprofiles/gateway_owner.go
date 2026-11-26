@@ -1,6 +1,7 @@
 package modelprofiles
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -66,7 +67,7 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	if listenAddr != "" {
 		addr = listenAddr
 	}
-	gateway := NewGateway(addr, cfg.Credentials, WithGatewayRequestResolver(o.resolveGatewayRequest))
+	gateway := NewGateway(addr, cfg.Credentials, WithGatewayRequestResolver(o.resolveGatewayRequestLive))
 	if stateDir != "" {
 		if err := os.MkdirAll(stateDir, 0o700); err != nil {
 			return fmt.Errorf("%w: create gateway state dir: %v", ErrInvalid, err)
@@ -135,6 +136,46 @@ func (o *Owner) GatewayServesCodexModel(model string) bool {
 	return err == nil
 }
 
+// resolveGatewayRequestLive is what the gateway asks for each request. A model
+// no cached list offers gets one live look at the Codex connections' lists
+// before the gateway refuses it: a list fetched weeks ago does not know a
+// model the Provider added since (11-26: gpt-6.2-astra answered 404 from a
+// list cached on 10-15 while the Provider served it). The look is the
+// per-Session router's: shared per connection and at most once per
+// routeRefreshMinAge, so junk model names cannot turn into upstream traffic.
+func (o *Owner) resolveGatewayRequestLive(protocol, modelID string) (GatewayUpstream, error) {
+	up, err := o.resolveGatewayRequest(protocol, modelID)
+	if err == nil || protocol != GatewayProtocolResponses || !errors.Is(err, ErrNotFound) || strings.TrimSpace(modelID) == "" {
+		return up, err
+	}
+	wantSlug, _ := splitGatewayModelID(modelID)
+	refreshed := false
+	for _, profile := range o.store.Catalog().Profiles {
+		if clientFromExecutor(profile.Client) != ClientCodex || !o.connectionReady(profile) {
+			continue
+		}
+		if wantSlug != "" && !strings.EqualFold(profile.Slug, wantSlug) {
+			continue
+		}
+		if _, rerr := o.refreshRouteModelCatalog(profile.ID); rerr == nil {
+			refreshed = true
+		}
+	}
+	if !refreshed {
+		return up, err
+	}
+	return o.resolveGatewayRequest(protocol, modelID)
+}
+
+func splitGatewayModelID(modelID string) (slug, model string) {
+	modelID = strings.TrimSpace(modelID)
+	parts := strings.SplitN(modelID, "/", 2)
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	}
+	return "", modelID
+}
+
 func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream, error) {
 	if o == nil || o.store == nil {
 		return GatewayUpstream{}, ErrNotFound
@@ -150,11 +191,7 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 		return o.selectedClaudeGatewayUpstream()
 	}
 	wantClient := ClientCodex
-	parts := strings.SplitN(modelID, "/", 2)
-	wantSlug, wantModel := "", modelID
-	if len(parts) == 2 {
-		wantSlug, wantModel = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-	}
+	wantSlug, wantModel := splitGatewayModelID(modelID)
 	var matches []Profile
 	for _, profile := range o.store.Catalog().Profiles {
 		if clientFromExecutor(profile.Client) != wantClient || !o.connectionReady(profile) {
