@@ -1,6 +1,15 @@
 {
   "releases": [
     {
+      "version": "0.4.31",
+      "date": "2026-11-26",
+      "highlights": [],
+      "fixes": [
+        "Download works for files of any size, and on the Mac.",
+        "Codex: a model picked while it works is set when the turn ends."
+      ]
+    },
+    {
       "version": "0.4.30",
       "date": "2026-11-26",
       "highlights": [],
