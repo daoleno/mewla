@@ -50,13 +50,13 @@ connection's models.
 | Agent | The list | A switch |
 | --- | --- | --- |
 | Claude Code | Its model picker (the `initialize` answer of `claude -p`), with each model's effort levels, each named with the version Claude gives it ("Opus 5.5"; Default with the model it runs on now) | Made in Claude's own picker with its "use this session only" key: the conversation goes on, and your default for new sessions stays as it is. After a turn Claude asks whether to switch (the next answer re-reads the conversation); your pick is that answer. Whether the switch was made is read from Claude's own record of it (its answer to `/model` in the conversation file), so a Session switched many times reports each one rightly |
-| Codex | `model/list` of the Session's own app-server, with each model's efforts | Applied to the thread, before its first message too (its first turn runs on it) |
+| Codex | `model/list` of the Session's own app-server, with each model's efforts | Applied to the thread, before its first message too (its first turn runs on it). Codex reads the thread's model as a turn starts, so a pick while it works is made when that turn ends; a message you send while it works joins the running turn, on the model it started with |
 | OpenCode | The service's models of the providers you signed in to, with their variants as efforts | `session.switchModel`: the next turn uses it. Until its first message OpenCode's own screen holds the model, so the choice appears once that message is sent |
 | Pi | The models Pi can use with your keys (your scoped ones when you scoped some), with the thinking levels Pi takes for each (no Default: Pi always thinks at one of them) | `pi.setModel` and `pi.setThinkingLevel` through Mewla's extension: the conversation goes on, your default stays |
 | Cursor Agent, Grok | `cursor-agent models`, `grok models` | Their own `/model <id>`, typed into the Session |
 | DSH, Antigravity | The agent's own models | Applied at once |
 
-Claude, Cursor Agent and Grok take a switch between turns: a pick made while
+Claude, Codex, Cursor Agent and Grok take a switch between turns: a pick made while
 the agent works, or waits for your answer, shows with an hourglass, the Model
 sheet says "Opus 5.5 after this turn", and it is made when the turn ends. The
 sheet, if still open, then shows the new model checked. A pick the agent did

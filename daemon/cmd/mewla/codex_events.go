@@ -42,10 +42,14 @@ type codexEvents struct {
 	// gatewayServes says whether Mewla's machine gateway answers a model, for
 	// a Session whose Codex sends its turns there.
 	gatewayServes func(model string) bool
+	// later holds a model choice made while a turn runs: Codex takes a
+	// thread's settings at the start of a turn, so one changed mid-turn
+	// leaves the running turn on the old model.
+	later *turnPending
 }
 
 func newCodexEvents(ctx context.Context, hub *agentevents.Hub) *codexEvents {
-	return &codexEvents{ctx: ctx, hub: hub, now: time.Now, sessions: map[string]*codexSession{}}
+	return &codexEvents{ctx: ctx, hub: hub, now: time.Now, sessions: map[string]*codexSession{}, later: newTurnPending(hub)}
 }
 
 // SetSocketSource installs where a Worker's app-server socket is looked up

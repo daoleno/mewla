@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -56,7 +57,9 @@ func (c *codexEvents) Models(ctx context.Context, worker *classifier.Worker) (se
 	} else if status.Config != nil {
 		current, effort = status.Config.Model, status.Config.Effort
 	}
-	return codexAgentModels(c.servedModels(models, provider), current, effort), nil
+	out := codexAgentModels(c.servedModels(models, provider), current, effort)
+	out.Pending, out.Failed = c.later.of(worker.ID), c.later.failure(worker.ID)
+	return out, nil
 }
 
 // servedModels keeps the models a Session's turns can reach. A Codex on
@@ -92,40 +95,105 @@ func (c *codexEvents) ModelsAvailable(worker *classifier.Worker) bool {
 	return client != nil && thread != ""
 }
 
-// SetModel applies the model and effort to the running thread.
+// SetModel applies the model and effort to the Session's thread. Codex
+// reads a thread's settings when a turn starts, so a choice made while a turn
+// runs (or waits for an answer) is held and applied when the turn ends, as
+// Claude's is: applied mid-turn, Codex acknowledged it while the running turn
+// went on on the old model (0.4.30 gate).
 func (c *codexEvents) SetModel(ctx context.Context, worker *classifier.Worker, model, effort string) (server.AgentModels, error) {
 	s := c.session(worker.ID)
 	if s == nil {
 		return server.AgentModels{}, ErrNoCodexStatus
 	}
-	_, thread := s.connection()
+	client, thread := s.connection()
 	if thread == "" {
 		return server.AgentModels{}, errCodexNoThread
+	}
+	effort = strings.TrimSpace(effort)
+	if client != nil {
+		// A choice Codex does not list is refused now, not when the turn ends.
+		if models, err := client.ListModels(ctx); err == nil {
+			if err := codexChoiceListed(models, model, effort); err != nil {
+				return server.AgentModels{}, err
+			}
+		}
+	}
+	workerID := worker.ID
+	apply := func(ctx context.Context) error { return c.applyModel(ctx, workerID, model, effort) }
+	if c.later.busy(workerID) {
+		c.later.hold(workerID, server.AgentChoice{Model: model, Effort: effort}, apply)
+		return c.Models(ctx, worker)
+	}
+	c.later.drop(workerID)
+	if err := apply(ctx); err != nil {
+		return server.AgentModels{}, err
+	}
+	return c.Models(ctx, worker)
+}
+
+// Settle makes a choice held during the turn that just ended before the next
+// message is sent, so that message's turn runs on it.
+func (c *codexEvents) Settle(ctx context.Context, worker *classifier.Worker) error {
+	if worker == nil {
+		return nil
+	}
+	return c.later.settle(ctx, worker.ID)
+}
+
+// applyModel sets the thread's model and effort through the Session's
+// app-server, on the thread it runs at that moment.
+func (c *codexEvents) applyModel(ctx context.Context, workerID, model, effort string) error {
+	s := c.session(workerID)
+	if s == nil {
+		return ErrNoCodexStatus
+	}
+	_, thread := s.connection()
+	if thread == "" {
+		return errCodexNoThread
 	}
 	// A connection of its own: the settings acknowledgement goes to the
 	// connections attached to the thread, and the events connection keeps
 	// its own reading of it.
 	live, err := codexctl.Open(ctx, s.socket, codexctl.DialOptions{ClientName: "mewla-models"})
 	if err != nil {
-		return server.AgentModels{}, err
+		return err
 	}
 	defer live.Close()
 	var target *string
-	if effort = strings.TrimSpace(effort); effort != "" {
+	if effort != "" {
 		target = &effort
 	}
 	if _, err := live.ApplySettings(ctx, thread, model, target, codexctl.Settings{}, codexctl.DefaultAckTimeout); err != nil {
 		if !codexctl.ThreadNotStarted(err) {
-			return server.AgentModels{}, err
+			return err
 		}
 		// Before the first message the thread has no rollout to attach to;
 		// its settings are set directly and its first turn runs on them.
 		if err := live.UpdateSettings(ctx, thread, model, target); err != nil {
-			return server.AgentModels{}, err
+			return err
 		}
 		s.setFirstTurnSettings(thread, model, effort)
 	}
-	return c.Models(ctx, worker)
+	return nil
+}
+
+// codexChoiceListed refuses a model Codex does not list, or an effort the
+// model does not take.
+func codexChoiceListed(models []codexctl.Model, model, effort string) error {
+	for _, listed := range models {
+		if listed.ID != model {
+			continue
+		}
+		if effort != "" && len(listed.Efforts) > 0 && !containsString(listed.Efforts, effort) {
+			name := listed.DisplayName
+			if name == "" {
+				name = listed.ID
+			}
+			return fmt.Errorf("%s takes no %s effort", name, effort)
+		}
+		return nil
+	}
+	return fmt.Errorf("Codex has no model %q", model)
 }
 
 // codexAgentModels is the menu of Codex's list with the thread's model

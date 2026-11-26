@@ -31,6 +31,9 @@ type Mapper struct {
 	// delivered, so the turn is named by the first message that carries its id.
 	activeSince time.Time
 	turn        string
+	// finished is the turn that ended last: a notification of it that comes
+	// after its end (or again, on an attach) never starts it anew.
+	finished string
 	// decisions remembers, per pending approval, the exact value each offered
 	// option stands for.
 	decisions map[string]map[string]any
@@ -137,7 +140,7 @@ func (m *Mapper) Notification(method string, params json.RawMessage, at time.Tim
 		default:
 			done.Status = agentevents.TurnCompleted
 		}
-		m.turn, m.activeSince = "", time.Time{}
+		m.turn, m.activeSince, m.finished = "", time.Time{}, p.Turn.ID
 		return append(events, done)
 	case "error":
 		var p struct {
@@ -186,6 +189,15 @@ func (m *Mapper) Notification(method string, params json.RawMessage, at time.Tim
 		if json.Unmarshal(params, &p) != nil || p.ThreadID != m.thread || p.TurnID == "" {
 			return nil
 		}
+		// A usage report names the turn it counted, also one that is over:
+		// Codex sends the last one again to a connection that attaches
+		// (thread/resume), so after a daemon restart it opened the finished
+		// turn as running and the Session read as working until its next
+		// turn ended (0.4.30 gate). It starts a turn only while the thread is
+		// known to be running one.
+		if method == "thread/tokenUsage/updated" && p.TurnID != m.turn && !m.Active() {
+			return nil
+		}
 		events := m.begin(p.TurnID, at)
 		if method == "item/started" && p.Item.Type == "userMessage" {
 			var text strings.Builder
@@ -210,7 +222,7 @@ func (m *Mapper) Notification(method string, params json.RawMessage, at time.Tim
 // begin starts the turn id names, once, at the time the thread went active if
 // that was earlier than now.
 func (m *Mapper) begin(turnID string, at time.Time) []agentevents.Event {
-	if turnID == "" || turnID == m.turn {
+	if turnID == "" || turnID == m.turn || turnID == m.finished {
 		return nil
 	}
 	started := agentevents.Event{WorkerID: m.workerID, Kind: agentevents.KindTurnStarted, At: at, TurnID: turnID, Status: agentevents.TurnRunning}
