@@ -14,13 +14,15 @@ const claudeModels = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"
 const catalog = {
   revision: 11,
   connections: [
-    { id: "conn_a", name: "Team gateway", preset_id: "custom", clients: ["codex"], credential_ready: true, advanced: true, base_url: "https://gw.example.com", credential_hint: "sk-…a1f2", models_fetched_at: new Date().toISOString() },
-    { id: "conn_b", name: "Team gateway Claude", preset_id: "custom", clients: ["claude"], credential_ready: true, advanced: true, base_url: "https://gw.example.com", credential_hint: "sk-…7c09", models_fetched_at: new Date().toISOString() },
-    { id: "conn_c", name: "Spare relay", preset_id: "custom", clients: ["codex"], credential_ready: false, advanced: true, base_url: "https://relay.example.net/v1" },
+    { id: "conn_a", name: "Team gateway", preset_id: "custom", clients: ["codex"], credential_ready: true, advanced: true, base_url: "https://gw.example.com", credential_hint: "sk-…a1f2", models_fetched_at: new Date().toISOString(), upstream_api: "openai_responses" },
+    { id: "conn_b", name: "Team gateway Claude", preset_id: "custom", clients: ["claude"], credential_ready: true, advanced: true, base_url: "https://gw.example.com", credential_hint: "sk-…7c09", models_fetched_at: new Date().toISOString(), upstream_api: "anthropic_messages" },
+    { id: "conn_c", name: "Spare relay", preset_id: "custom", clients: ["codex"], credential_ready: false, advanced: true, base_url: "https://relay.example.net/v1", upstream_api: "openai_responses" },
+    // A Chat-only endpoint: Codex's requests are translated, and the gateway takes them while it fails.
+    { id: "conn_d", name: "Local GLM", preset_id: "custom", clients: ["codex"], credential_ready: true, advanced: true, base_url: "https://glm.example.org/v1", credential_hint: "sk-…3e8d", models_fetched_at: new Date().toISOString(), upstream_api: "openai_chat", fallback_connection_id: "conn_a" },
   ],
   defaults: { codex: { connection_id: "conn_a" }, claude: { connection_id: "conn_b" } },
   presets: [],
-  models: { conn_a: codexModels, conn_b: claudeModels, conn_c: [] },
+  models: { conn_a: codexModels, conn_b: claudeModels, conn_c: [], conn_d: ["glm-5", "glm-5-air"].map(model) },
   disabled_models: { conn_a: ["gpt-5.5"] },
   gateway: { running: true, address: "127.0.0.1:3425" },
 };

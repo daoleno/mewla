@@ -253,9 +253,11 @@ are answered so that neither agent spends minutes retrying them. A Provider on
 another of your computers over Tailscale is reached like one on your LAN.
 
 **A fallback for a Provider.** A connection can name another connection of
-the same agent to take its requests while it fails:
+the same agent to take its requests while it fails: Fallback on its page in
+Model Providers, which offers only connections that can take them, or
 `mewla providers fallback set <fallback-id> --connection <id>` (and `clear`;
-`mewla providers fallback` lists them). When the connection cannot be reached,
+`mewla providers fallback` lists them). The page's API row names the API the
+connection's requests go out in. When the connection cannot be reached,
 stays busy after the retries above, is rate-limited, is out of credit or quota,
 or refuses its key, the request goes to the fallback before the agent sees an
 error, and the connection rests: 30 seconds at first, longer each time it

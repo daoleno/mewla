@@ -127,6 +127,8 @@ export function parseProviderConnection(
     models_fetched_at: asString(record.models_fetched_at) || undefined,
     models_stale: record.models_stale === true ? true : undefined,
     models_warning: asString(record.models_warning) || undefined,
+    fallback_connection_id: asString(record.fallback_connection_id) || undefined,
+    upstream_api: asString(record.upstream_api) || undefined,
   };
 }
 

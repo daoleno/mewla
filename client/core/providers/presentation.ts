@@ -186,3 +186,36 @@ export function createdConnectionFromMutation(
   }
   return added[0];
 }
+
+/** The API each agent speaks itself: a connection on another one is translated. */
+const AGENT_API: Record<string, string> = { claude: "anthropic_messages", codex: "openai_responses" };
+
+const API_LABEL: Record<string, string> = {
+  anthropic_messages: "Anthropic Messages",
+  openai_chat: "Chat Completions",
+  openai_responses: "Responses",
+};
+
+/** The API a connection's requests go out in, as the page names it; "" when the daemon did not say. */
+export function upstreamApiLabel(connection: ProviderConnection): string {
+  return API_LABEL[connection.upstream_api ?? ""] ?? "";
+}
+
+/** Whether requests to a connection are translated from its agent's own API. */
+export function connectionIsTranslated(connection: ProviderConnection): boolean {
+  const own = AGENT_API[normalizeProviderClient(connection.clients[0] ?? "")];
+  return Boolean(connection.upstream_api && own && connection.upstream_api !== own);
+}
+
+/**
+ * The connections that may take `connection`'s requests while it fails: the same agent's others, never two that
+ * both speak the agent's own API (the daemon refuses that pair: neither could read what the other left in the
+ * conversation).
+ */
+export function fallbackChoices(snapshot: ProvidersSnapshot | null, connection: ProviderConnection): ProviderConnection[] {
+  if (!snapshot) return [];
+  const client = connection.clients[0] ?? "";
+  return connectionsForClient(snapshot, client).filter(
+    (candidate) => candidate.id !== connection.id && (connectionIsTranslated(connection) || connectionIsTranslated(candidate)),
+  );
+}

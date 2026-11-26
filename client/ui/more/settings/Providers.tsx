@@ -9,14 +9,17 @@ import {
   connectionsForClient,
   createdConnectionFromMutation,
   enabledModelIds,
+  fallbackChoices,
   modelSupportToggleTurnsOff,
   providerBaseUrlHostname,
   providerNameIssue,
   toggleModelSupport,
+  upstreamApiLabel,
 } from "../../../core/providers/presentation";
 import {
   deleteProviderConnection,
   setProviderConnection,
+  setProviderFallback,
   setProviderModels,
   testProviderConnection,
   upsertProviderConnection,
@@ -385,6 +388,21 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: 
     }
   }
 
+  const fallbackId = () => connection()?.fallback_connection_id ?? "";
+  const fallbackName = () => snapshot()?.connections.find((c) => c.id === fallbackId())?.name ?? "None";
+  const choices = () => (connection() ? fallbackChoices(snapshot(), connection()!) : []);
+
+  async function pickFallback(id: string): Promise<void> {
+    const current = daemon();
+    if (!current || id === fallbackId()) return;
+    failure.set(null);
+    try {
+      await change(`fallback:${id}`, () => setProviderFallback(current, props.connectionId, id));
+    } catch (error) {
+      failure.set({ title: presentProviderError(error).title, detail: failureWords(error) });
+    }
+  }
+
   async function remove(): Promise<void> {
     const current = daemon();
     const s = snapshot();
@@ -405,6 +423,7 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: 
         <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
         <Section>
           <Row testID="provider-endpoint" title="Endpoint" value={whereOf(snapshot(), connection()!)} />
+          <If when={upstreamApiLabel(connection()!)}><Row testID="provider-api" title="API" value={upstreamApiLabel(connection()!)} /></If>
           <Row
             testID="provider-key-row"
             title="API key"
@@ -420,6 +439,40 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: 
             trailing={<If when={tested()}><StateLine testID="provider-test-state" tone={tested()!.tone} label={tested()!.label} /></If>}
           />
         </Section>
+        {/* The connection that takes this one's requests while it fails; only pairs the daemon can move are offered. */}
+        <If when={choices().length > 0 || fallbackId()}><Section>
+          <Row
+            testID="provider-fallback"
+            title="Fallback"
+            trailing={
+              <Menu
+                trigger={
+                  <View testID="provider-fallback-pick" role="button" accessibilityLabel={`Fallback ${fallbackName()}. Change`} class="min-w-0 max-w-[240px] shrink flex-row items-center gap-2 rounded-xl bg-muted px-3 py-2">
+                    <Text class="shrink text-body line-clamp-1">{fallbackName()}</Text>
+                    <If when={changing().startsWith("fallback:")} else={<Icon name="chevron-down" size={14} tone="faint" />}><Spinner size={14} /></If>
+                  </View>
+                }
+                align="end"
+                popupClass={wide() ? `${MENU_POPUP} w-[288px]` : MENU_POPUP}
+                backdropClass="bg-scrim"
+              >
+                <MenuItem testID="provider-fallback-none" disabled={Boolean(changing())} onSelect={() => void pickFallback("")} class={MENU_ITEM}>
+                  <Text class="flex-1 text-body">None</Text>
+                  <If when={fallbackId() === ""}><Icon name="check" size={18} tone="ink" /></If>
+                </MenuItem>
+                {choices().map((c) => (
+                  <MenuItem testID={`provider-fallback-${c.id}`} disabled={Boolean(changing())} onSelect={() => void pickFallback(c.id)} class={MENU_ITEM}>
+                    <View class="min-w-0 flex-1">
+                      <Text class="text-body line-clamp-1">{c.name}</Text>
+                      <Text class="text-sub text-muted-foreground line-clamp-1">{c.credential_ready ? whereOf(snapshot(), c) : "Key required"}</Text>
+                    </View>
+                    <If when={fallbackId() === c.id}><Icon name="check" size={18} tone="ink" /></If>
+                  </MenuItem>
+                ))}
+              </Menu>
+            }
+          />
+        </Section></If>
         <Section testID="provider-models" title={`Models · ${on().length} of ${all().length}`} footer={changing().startsWith("model:") ? "Saving…" : undefined}>
           <>
             <If when={all().length > PROVIDER_SEARCH_THRESHOLD * 2}><Field testID="model-search" accessibilityLabel="Search models" value={search()} placeholder="Search models" onChange={(v) => search.set(v)} /></If>

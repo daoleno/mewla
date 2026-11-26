@@ -129,6 +129,54 @@ describe("Model Providers", () => {
     expect(c.asked.some((a) => a.type === "discover_provider_models")).toBe(true);
   });
 
+  test("a Provider names the API it speaks, and its Fallback picks one that can take its requests", async () => {
+    const pair = (fallback = "") => snapshot({
+      revision: fallback ? 5 : 4,
+      connections: [
+        { ...snapshot().connections[0], upstream_api: "openai_responses" },
+        { ...snapshot().connections[1], upstream_api: "openai_responses" },
+        { id: "c3", name: "Local GLM", clients: ["codex"], credential_ready: true, advanced: true, base_url: "https://glm.example.com/v1", upstream_api: "openai_chat", fallback_connection_id: fallback || undefined },
+      ],
+    });
+    let current = pair();
+    const c = computer({ name: "settings-providers" }, (type, body) => {
+      if (type === "list_providers") return current;
+      if (type === "discover_provider_models") return { reply: "provider_models", connection_id: String(body.connection_id), models: [] };
+      if (type === "set_provider_fallback") {
+        current = pair(String(body.fallback_connection_id));
+        return { ...current, persistence_outcome: "applied", persistence_durable: true };
+      }
+      return null;
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-c3");
+    await app.press("id:provider-c3");
+    await app.waitFor("id:provider-detail");
+    expect(app.texts()).toContain("Chat Completions");
+    expect(app.texts()).toContain("None");
+    await app.press("id:provider-fallback-pick");
+    await app.waitFor("id:provider-fallback-c1");
+    expect(app.shows("id:provider-fallback-c3")).toBe(false);
+    await app.press("id:provider-fallback-c1");
+    await app.waitUntil(() => c.asked.some((a) => a.type === "set_provider_fallback"));
+    expect(c.asked.find((a) => a.type === "set_provider_fallback")!.body).toEqual({ connection_id: "c3", fallback_connection_id: "c1" });
+    await app.waitUntil(() => app.texts().includes("Work gateway") && !app.texts().includes("None"));
+  });
+
+  test("a Provider of its agent's own API is offered no fallback of that API", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => {
+      if (type === "list_providers") return snapshot({ connections: snapshot().connections.map((x) => ({ ...x, upstream_api: "openai_responses" })) });
+      if (type === "discover_provider_models") return { reply: "provider_models", connection_id: "c1", models: [] };
+      return null;
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-c1");
+    await app.press("id:provider-c1");
+    await app.waitFor("id:provider-detail");
+    expect(app.texts()).toContain("Responses");
+    expect(app.shows("id:provider-fallback")).toBe(false);
+  });
+
   test("each agent's chip has a dot for its state: none on its own login, green when ready", async () => {
     const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot({ defaults: { codex: { connection_id: "c1" }, claude: { connection_id: "" } } }) : null));
     const app = await open(HARNESS, c.options);

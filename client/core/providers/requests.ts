@@ -74,6 +74,11 @@ export function setProviderModels(daemon: Daemon, connectionId: string, modelIds
   return catalog(daemon, "set_provider_models", { connection_id: connectionId, model_ids: modelIds }, false);
 }
 
+/** Names the connection that takes `connectionId`'s requests while it fails; "" clears it. */
+export function setProviderFallback(daemon: Daemon, connectionId: string, fallbackId: string): Promise<ProvidersMutationResult> {
+  return catalog(daemon, "set_provider_fallback", { connection_id: connectionId, fallback_connection_id: fallbackId }, false);
+}
+
 export async function discoverProviderModels(daemon: Daemon, connectionId: string): Promise<ProviderModelsResult> {
   if (daemon.state !== "connected") throw offlineProviderError();
   const frame = await daemon.request("discover_provider_models", { connection_id: connectionId }, { reply: "provider_models", timeoutMs: 20_000 }).catch((error) => {
