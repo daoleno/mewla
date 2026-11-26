@@ -489,6 +489,12 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// An upstream that speaks the agent's own API must not see what a
+	// translated Provider left in the agent's history.
+	if api := apiOfEndpoint(parsed.Endpoint); api != "" && api == apiOfProtocol(binding.Protocol) {
+		rewritten = translate.NativeHistory(api, rewritten)
+	}
+
 	upstreamURL, err := UpstreamRequestURL(binding.UpstreamBaseURL, parsed.APIPath)
 	if err != nil {
 		writeRouteError(w, http.StatusBadGateway, ErrUpstreamInvalid)

@@ -141,6 +141,15 @@ func (a *anthropicEncoder) close() {
 	if !a.blockOpen {
 		return
 	}
+	// A Chat model's reasoning has no Anthropic signature. It gets Mewla's
+	// own, which Claude Code keeps and sends back, so the block can be told
+	// apart and left out on the way to an endpoint that checks signatures
+	// (NativeHistory).
+	if a.blockType == "thinking" {
+		if last := a.content[len(a.content)-1]; last["signature"] == "" {
+			a.delta(map[string]any{"type": "signature_delta", "signature": UnsignedThinkingSignature})
+		}
+	}
 	if a.stream {
 		a.sse.event("content_block_stop", map[string]any{"type": "content_block_stop", "index": a.blocks})
 	}

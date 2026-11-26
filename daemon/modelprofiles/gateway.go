@@ -481,7 +481,15 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			return
 		}
 	} else if g.resolve != nil && req.Method == http.MethodPost {
-		modelID, parseErr := gatewayModelID(bodyBytes)
+		// The model is read from the plain body; a compressed one still
+		// goes on as it came.
+		modelBody := bodyBytes
+		if encoding := req.Header.Get("Content-Encoding"); encoding != "" {
+			if plain, _, decodeErr := decodeBodyEncoding(encoding, bodyBytes, maxBody); decodeErr == nil {
+				modelBody = plain
+			}
+		}
+		modelID, parseErr := gatewayModelID(modelBody)
 		if parseErr != nil {
 			writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
 			return
@@ -571,6 +579,23 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		}
 		bodyBytes, decodedEncoding = adapted, decoded
 		req.ContentLength = int64(len(bodyBytes))
+	}
+	// An upstream that speaks the agent's own API must not see what a
+	// translated Provider left in the agent's history (Codex Sessions come
+	// this way too while the takeover is on).
+	if api := clientAPI; api != "" && api == apiOfProtocol(upstream.Protocol) && len(bodyBytes) > 0 {
+		encoding := req.Header.Get("Content-Encoding")
+		if decodedEncoding {
+			encoding = ""
+		}
+		if plain, decoded, decodeErr := decodeBodyEncoding(encoding, bodyBytes, maxBody); decodeErr == nil {
+			// Compressed bytes go on as they came unless something was
+			// left out; then the plain body goes, without the encoding.
+			if cleaned := translate.NativeHistory(api, plain); len(cleaned) != len(plain) {
+				bodyBytes, decodedEncoding = cleaned, decodedEncoding || decoded
+				req.ContentLength = int64(len(bodyBytes))
+			}
+		}
 	}
 	target, err := gatewayUpstreamRequestURL(upstream.BaseURL, req.URL)
 	if err != nil {

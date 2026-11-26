@@ -232,7 +232,10 @@ does not serve it, a model the Provider does serve answers instead. For any
 model that is not Claude, the billing line Claude Code puts at the start of
 its prompt is dropped: it changes every turn and would keep the Provider from
 reusing its cache. Codex on a translated endpoint uses HTTP, not
-WebSocket.
+WebSocket. Moving an agent back to a Provider that speaks its own API keeps the
+conversation going: what only the translation wrote into its history (Claude's
+sealed thinking for Codex, a Chat model's reasoning for Claude Code) is left
+out of what that Provider is sent.
 
 **When a Provider fails.** A Provider that is busy (a 5xx or 529 status, or a
 dropped connection) is asked twice more, after 1 and 2 seconds. A rate limit is
