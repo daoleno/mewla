@@ -1,5 +1,4 @@
 import { effect, signal, Text, untracked, View } from "nsh";
-import { Button, Menu, MenuItem } from "nsh/base";
 import { presentProviderError } from "../../../core/providers/errors";
 import { providerEditorCanSave, providerEditorInitialBaseUrl, providerEditorInitialName, providerEditorRequiresBaseUrl, type ProvidersEditorState } from "../../../core/providers/editorModel";
 import {
@@ -22,16 +21,13 @@ import {
 import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapshot } from "../../../core/providers/types";
 import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
-import { Icon } from "../../kit/Icon";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
 import { LEAD_SLOT, StateLine, tile, type Lead } from "../../kit/RowTile";
 import { AgentIcon } from "../../icons/AgentIcon";
 import { officialLoginLead, providerLead, type ProviderLead } from "../../../core/providers/lead";
 import { Segmented } from "../../kit/Segmented";
-import { createTabPager, TabPages } from "../../kit/TabPager";
 import type { PageNav } from "../routes";
 import { change, changing, discover, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
-import { writeClipboard } from "../../kit/clipboard";
 
 const CLIENTS = [
   { key: "codex", label: "Codex", mark: AGENT_ASSETS.codex },
@@ -41,7 +37,6 @@ const CLIENTS = [
 /** Search earns its place only once the list is long enough to scan. */
 export const PROVIDER_SEARCH_THRESHOLD = 6;
 
-const agent = signal<ProviderClient>("codex");
 const query = signal("");
 const rowNote = signal<Record<string, string>>({});
 /** Models a connection reported on its last discovery, for the model access page. */
@@ -60,7 +55,27 @@ function whereOf(s: ProvidersSnapshot | null, c: ProviderConnection): string {
   return c.base_url ? providerBaseUrlHostname(c.base_url) : s?.presets.find((p) => p.id === c.preset_id)?.label ?? "Official endpoint";
 }
 
-/** Model Providers: which endpoint each agent uses on the current computer, and the keys and models of each. */
+/** The client a connection serves (each connection serves one). */
+function clientOf(c: ProviderConnection): ProviderClient {
+  return c.clients.includes("claude") ? "claude" : "codex";
+}
+
+/** What an agent uses now: the official login or one connection's name. */
+function chosenName(client: ProviderClient): string {
+  const id = snapshot()?.defaults[client]?.connection_id ?? "";
+  return id ? snapshot()?.connections.find((c) => c.id === id)?.name ?? "Official login" : "Official login";
+}
+
+function modelCount(c: ProviderConnection): string {
+  const n = enabledModelIds(snapshot(), c.id).length;
+  return `${n} ${n === 1 ? "model" : "models"}`;
+}
+
+/**
+ * Model Providers, learned from Magpie's Agents / Providers split: each agent once, with
+ * what it uses (one choice, made on its own page), then every Provider once, each opening
+ * one page with its key, its test and its models.
+ */
 export function Providers(props: { nav: PageNav }) {
   let forServer = "";
   effect(() => {
@@ -78,9 +93,6 @@ export function Providers(props: { nav: PageNav }) {
     });
   });
 
-  // Each agent's Providers are a page; the pages follow the finger (kit/TabPager.tsx).
-  const pager = createTabPager({ keys: CLIENTS.map((c) => c.key), value: agent, onChange: (key) => agent.set(key) });
-
   return (
     <Page display title="Model Providers" testID="providers" refreshing={providers().loading && Boolean(snapshot())} onRefresh={refreshProviders}>
       <>
@@ -88,14 +100,8 @@ export function Providers(props: { nav: PageNav }) {
             <If when={locked()}><Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /></If>
             <If when={warning()}><Notice testID="providers-warning" title="Saved with a warning" detail={warning()} /></If>
             <If when={providers().error}><Notice tone="failed" title={presentProviderError(providers().error).title === "Providers" ? "Refresh required" : presentProviderError(providers().error).title} detail={failureWords(providers().error)} action="Refresh" onAction={refreshProviders} /></If>
-            <View class="mt-3">
-              <Segmented testID="provider-agent" accessibilityLabel="Agent" options={CLIENTS} value={agent()} onChange={(key) => agent.set(key as ProviderClient)} pager={pager} />
-            </View>
-            <TabPages testID="provider-pages" pager={pager} pages={{
-              codex: () => <AgentProviders client="codex" nav={props.nav} />,
-              claude: () => <AgentProviders client="claude" nav={props.nav} />,
-            }} />
-            <If when={snapshot()!.gateway}><Gateway /></If>
+            <Agents nav={props.nav} />
+            <ProviderList nav={props.nav} />
           </View>}><EmptyState busy title="Loading Providers" /></If>}><If when={providers().error!.kind === "unavailable"} else={<EmptyState
               testID="providers-failed"
               icon="alert"
@@ -109,13 +115,65 @@ export function Providers(props: { nav: PageNav }) {
   );
 }
 
-/** One agent's Providers: the official login and each connection, one of them chosen. A page of Model Providers. */
-function AgentProviders(props: { client: ProviderClient; nav: PageNav }) {
-  const client = () => props.client;
-  const all = () => (snapshot() ? connectionsForClient(snapshot()!, client()) : []);
+/** Each agent and what it uses now; a row opens its choice. */
+function Agents(props: { nav: PageNav }) {
+  return (
+    <Section title="Agents">
+      {CLIENTS.map((c) => (
+        <Row
+          testID={`provider-agent-${c.key}`}
+          lead={{ kind: "logo", node: <AgentIcon kind={c.key} size={28} slot={LEAD_SLOT} /> }}
+          title={c.label}
+          value={chosenName(c.key)}
+          chevron
+          accessibilityLabel={`${c.label} uses ${chosenName(c.key)}`}
+          onPress={() => props.nav.push({ name: "settings-provider-agent", client: c.key })}
+        />
+      ))}
+    </Section>
+  );
+}
+
+/** Every Provider once: where it points and how many models it gives. */
+function ProviderList(props: { nav: PageNav }) {
+  const all = () => snapshot()?.connections ?? [];
   const q = () => query().trim().toLowerCase();
   const list = () => all().filter((c) => !q() || `${c.name} ${whereOf(snapshot(), c)}`.toLowerCase().includes(q()));
   const showSearch = () => all().length >= PROVIDER_SEARCH_THRESHOLD || q().length > 0;
+  return (
+    <View>
+      <If when={showSearch()}><Section>
+          <Field testID="provider-search" accessibilityLabel="Search Providers" value={query()} placeholder="Search Providers" onChange={(v) => query.set(v)} />
+        </Section></If>
+      <Section title="Providers" footer={list().length === 0 && q() ? "No Providers match this search." : undefined}>
+        {list().map((c) => (
+          <Row
+            testID={`provider-${c.id}`}
+            lead={lead(providerLead(c))}
+            title={c.name}
+            subtitle={`${whereOf(snapshot(), c)} · ${modelCount(c)}`}
+            subtitleOneLine
+            accessibilityLabel={`${c.name}, ${whereOf(snapshot(), c)}, for ${CLIENTS.find((k) => k.key === clientOf(c))!.label}${c.credential_ready ? "" : ", API key required"}`}
+            chevron
+            onPress={() => props.nav.push(c.credential_ready ? { name: "settings-provider", connectionId: c.id } : { name: "settings-provider-editor", client: clientOf(c), connectionId: c.id })}
+            trailing={
+              <View class="flex-row items-center gap-2">
+                <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
+                <AgentIcon kind={clientOf(c)} size={16} slot={24} />
+              </View>
+            }
+          />
+        ))}
+        <Row testID="provider-add" lead={tile("add")} title="Add Provider" disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: "codex", choose: true })} />
+      </Section>
+    </View>
+  );
+}
+
+/** What one agent uses: its official login or one of its Providers. */
+export function AgentProviders(props: { client: ProviderClient; nav: PageNav }) {
+  const client = () => props.client;
+  const all = () => (snapshot() ? connectionsForClient(snapshot()!, client()) : []);
   const selectedId = () => snapshot()?.defaults[client()]?.connection_id ?? "";
   const label = () => CLIENTS.find((c) => c.key === client())!.label;
 
@@ -130,81 +188,34 @@ function AgentProviders(props: { client: ProviderClient; nav: PageNav }) {
       await change(`select:${id}`, () => setProviderConnection(current, { client: client(), connectionId: id, revision: s.revision }));
     } catch (error) {
       const kind = presentProviderError(error).kind;
-      note(id || "official", kind === "busy" || kind === "offline" || kind === "conflict" ? failureWords(error) : "Could not select this Provider connection. Retry.");
+      note(id || "official", kind === "busy" || kind === "offline" || kind === "conflict" ? failureWords(error) : "Could not select this Provider. Retry.");
     }
   }
-
-  async function openModels(connection: ProviderConnection): Promise<void> {
-    note(connection.id, "");
-    try {
-      const result = await discover(connection.id);
-      discovered.set({ ...discovered(), [connection.id]: { models: result.models, warning: result.discoveryWarning } });
-      if (result.models.length === 0) note(connection.id, "The upstream model list is unavailable. Mewla is using its local model catalog; Sync can refresh it.");
-      props.nav.push({ name: "settings-provider-models", connectionId: connection.id });
-    } catch (error) {
-      note(connection.id, failureWords(error));
-    }
-  }
-
-  async function test(connection: ProviderConnection): Promise<void> {
-    const current = daemon();
-    if (!current) return;
-    note(connection.id, "Testing connection…");
-    try {
-      const result = await testProviderConnection(current, { connectionId: connection.id, client: client() });
-      note(connection.id, `Connected · ${result.latencyMs} ms · ${result.modelCount} models found`);
-    } catch (error) {
-      note(connection.id, failureWords(error) || "Connection test failed.");
-    }
-  }
-
-  async function remove(connection: ProviderConnection): Promise<void> {
-    const current = daemon();
-    const s = snapshot();
-    if (!current || !s) return;
-    if (!(await confirmDestructive(`Delete ${connection.name}?`, "This can't be undone.", "Delete"))) return;
-    try {
-      await change(`delete:${connection.id}`, () => deleteProviderConnection(current, connection.id, s.revision));
-    } catch (error) {
-      note(connection.id, failureWords(error));
-    }
-  }
-
-  const subtitle = (c: ProviderConnection) => {
-    const models = enabledModelIds(snapshot(), c.id).length;
-    return `${whereOf(snapshot(), c)} · ${models} ${models === 1 ? "model" : "models"} · ${modelsAge(c.models_fetched_at, c.models_stale)}`;
-  };
 
   return (
-    <View>
-      <If when={showSearch()}><Section>
-          <Field testID="provider-search" accessibilityLabel="Search Providers" value={query()} placeholder={`Search ${label()} Providers`} onChange={(v) => query.set(v)} />
-        </Section></If>
-      <Section
-        title={`${label()} uses`}
-        footer={list().length === 0 && q() ? "No Providers match this search." : undefined}
-      >
+    <Page display title={label()} testID={`provider-agent-page-${client()}`}>
+      <If when={locked()}><Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /></If>
+      <Section title="Uses">
         <Row
           testID="provider-official"
           lead={lead(officialLoginLead(client()))}
           title="Official login"
-          subtitle="Direct · uses the native account"
           check={selectedId() === ""}
           role="radio"
           selected={selectedId() === ""}
-          accessibilityLabel="Official login, Direct · uses the native account"
           trailing={<If when={changing() === "select:"}><Spinner size={16} /></If>}
           disabled={Boolean(changing()) || selectedId() === ""}
           onPress={() => void select(null)}
         />
         <If when={rowNote().official}><View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote().official}</Text></View></If>
-        {list().map((c) => (
+        {all().map((c) => (
           <View>
             <Row
-              testID={`provider-${c.id}`}
+              testID={`provider-choose-${c.id}`}
               lead={lead(providerLead(c))}
               title={c.name}
-              subtitle={subtitle(c)}
+              subtitle={`${whereOf(snapshot(), c)} · ${modelCount(c)}`}
+              subtitleOneLine
               check={selectedId() === c.id}
               role="radio"
               selected={selectedId() === c.id}
@@ -213,29 +224,17 @@ function AgentProviders(props: { client: ProviderClient; nav: PageNav }) {
               onPress={() => void select(c)}
               trailing={
                 <View class="flex-row items-center gap-2">
-                  <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
-                  <If when={changing() === `select:${c.id}` || changing() === `discover:${c.id}`}><Spinner size={16} /></If>
-                  <Menu
-                    trigger={<View testID={`provider-menu-${c.id}`} accessibilityLabel={`${c.name} actions`} class="p-1"><Icon name="more-horizontal" size={18} /></View>}
-                    popupClass="rounded-2xl bg-popover p-2"
-                    backdropClass="bg-black/30"
-                  >
-                    <MenuItem disabled={!c.credential_ready} onSelect={() => void openModels(c)} class="rounded-lg px-4 py-3 active:bg-accent disabled:opacity-50">
-                      <Text class="text-base">{`Model access · ${enabledModelIds(snapshot(), c.id).length} of ${(snapshot()?.models[c.id] ?? []).length} on`}</Text>
-                    </MenuItem>
-                    <MenuItem onSelect={() => void test(c)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Test connection</Text></MenuItem>
-                    <MenuItem onSelect={() => props.nav.push({ name: "settings-provider-editor", client: client(), connectionId: c.id })} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Edit</Text></MenuItem>
-                    <MenuItem onSelect={() => void remove(c)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base text-destructive">Delete</Text></MenuItem>
-                  </Menu>
+                  <If when={!c.credential_ready}><StateLine tone="warn" label="Key required" /></If>
+                  <If when={changing() === `select:${c.id}`}><Spinner size={16} /></If>
                 </View>
               }
             />
-            <If when={rowNote()[c.id]}><View class="px-4 pb-3"><Text class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View></If>
+            <If when={rowNote()[c.id]}><View class="px-4 pb-3"><Text class="text-sm text-destructive" android={{ accessibilityLiveRegion: "polite" }}>{rowNote()[c.id]}</Text></View></If>
           </View>
         ))}
-        <Row testID="provider-add" lead={tile("add")} title={`Add ${label()} Provider`} disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
+        <Row testID={`provider-add-${client()}`} lead={tile("add")} title="Add Provider" disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: client() })} />
       </Section>
-    </View>
+    </Page>
   );
 }
 
@@ -245,28 +244,135 @@ function lead(l: ProviderLead): Lead {
   return l;
 }
 
-function Gateway() {
-  const copied = signal(false);
-  const g = () => snapshot()!.gateway!;
+/**
+ * One Provider: where it points, its key, a test, and which of its models agents may use.
+ * Opening it asks the Provider for its model list again, so a model it added since shows.
+ */
+export function ProviderDetail(props: { connectionId: string; nav: PageNav }) {
+  const search = signal("");
+  const failure = signal<{ title: string; detail: string } | null>(null);
+  const tested = signal<{ tone: "ok" | "error" | "off"; label: string } | null>(null);
+  const connection = () => snapshot()?.connections.find((c) => c.id === props.connectionId) ?? null;
+  const all = () => {
+    const live = snapshot()?.models[props.connectionId] ?? [];
+    const found = discovered()[props.connectionId]?.models ?? [];
+    const byId = new Map(live.map((m) => [m.id, m]));
+    for (const m of found) if (!byId.has(m.id)) byId.set(m.id, m);
+    return [...byId.values()];
+  };
+  const models = () => {
+    const q = search().trim().toLowerCase();
+    return all().filter((m) => !q || m.id.toLowerCase().includes(q) || (m.display_name ?? "").toLowerCase().includes(q));
+  };
+  const on = () => enabledModelIds(snapshot(), props.connectionId);
+
+  let asked = false;
+  effect(() => {
+    if (asked || !connection()?.credential_ready || !connected()) return;
+    asked = true;
+    untracked(() => {
+      discover(props.connectionId)
+        .then((result) => discovered.set({ ...discovered(), [props.connectionId]: { models: result.models, warning: result.discoveryWarning } }))
+        .catch(() => undefined);
+    });
+  });
+
+  async function test(): Promise<void> {
+    const current = daemon();
+    const c = connection();
+    if (!current || !c) return;
+    tested.set({ tone: "off", label: "Testing…" });
+    try {
+      const result = await testProviderConnection(current, { connectionId: c.id, client: clientOf(c) });
+      tested.set({ tone: "ok", label: `${result.latencyMs} ms` });
+    } catch (error) {
+      tested.set({ tone: "error", label: "Failed" });
+      failure.set({ title: "Test failed", detail: failureWords(error) });
+    }
+  }
+
+  async function flip(model: ProviderModel): Promise<void> {
+    const current = daemon();
+    if (!current) return;
+    const turnsOff = modelSupportToggleTurnsOff(snapshot(), props.connectionId, model.id);
+    if (turnsOff && !(await confirmDestructive(`Turn off ${model.display_name || model.id}?`, "Sessions using it will start failing.", "Turn off"))) return;
+    const next = toggleModelSupport(snapshot(), props.connectionId, model.id);
+    failure.set(null);
+    try {
+      await change(`model:${model.id}`, () => setProviderModels(current, props.connectionId, next));
+    } catch (error) {
+      failure.set({ title: presentProviderError(error).title, detail: failureWords(error) });
+    }
+  }
+
+  async function remove(): Promise<void> {
+    const current = daemon();
+    const s = snapshot();
+    const c = connection();
+    if (!current || !s || !c) return;
+    if (!(await confirmDestructive(`Delete ${c.name}?`, "This can't be undone.", "Delete"))) return;
+    try {
+      await change(`delete:${c.id}`, () => deleteProviderConnection(current, c.id, s.revision));
+      props.nav.pop();
+    } catch (error) {
+      failure.set({ title: presentProviderError(error).title, detail: failureWords(error) });
+    }
+  }
+
   return (
-    <Section title="Gateway" footer={`${g().protocols.length ? g().protocols.join(" / ") : "No protocols"} · ${g().model_count} exposed models`}>
-      <Row
-        lead={tile("server")}
-        title="Mewla Provider Gateway"
-        subtitle={copied() ? "Endpoint copied" : g().endpoint || g().address}
-        mono={false}
-        trailing={<StateLine testID="gateway-state" tone={g().running ? "ok" : "off"} label={g().running ? "Ready" : "Unavailable"} />}
-        accessibilityLabel={g().endpoint ? "Copy gateway endpoint" : undefined}
-        onPress={g().endpoint ? () => void writeClipboard(g().endpoint!).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); }) : undefined}
-      />
-    </Section>
+    <Page display title={connection()?.name ?? "Provider"} testID="provider-detail">
+      <If when={connection()} else={<EmptyState icon="key" title="Provider removed" />}>
+        <View>
+          <If when={warning()}><Notice title="Saved with a warning" detail={warning()} /></If>
+          <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
+          <Section>
+            <Row testID="provider-endpoint" title="Endpoint" value={whereOf(snapshot(), connection()!)} />
+            <Row
+              testID="provider-key-row"
+              title="API key"
+              value={connection()!.credential_ready ? connection()!.credential_hint || "Saved" : "Required"}
+              chevron
+              onPress={() => props.nav.push({ name: "settings-provider-editor", client: clientOf(connection()!), connectionId: connection()!.id })}
+            />
+            <Row
+              testID="provider-test-row"
+              title="Test connection"
+              disabled={!connection()!.credential_ready || tested()?.label === "Testing…"}
+              onPress={() => void test()}
+              trailing={<If when={tested()}><StateLine testID="provider-test-state" tone={tested()!.tone} label={tested()!.label} /></If>}
+            />
+          </Section>
+          <Section testID="provider-models" title={`Models · ${on().length} of ${all().length}`} footer={changing().startsWith("model:") ? "Saving…" : undefined}>
+            <>
+              <If when={all().length > PROVIDER_SEARCH_THRESHOLD * 2}><Field testID="model-search" accessibilityLabel="Search models" value={search()} placeholder="Search models" onChange={(v) => search.set(v)} /></If>
+              <If when={models().length === 0} else={<>{models().map((m) => (
+                  <SwitchRow
+                    testID={`model-${m.id}`}
+                    title={m.display_name || m.id}
+                    accessibilityLabel={`${m.display_name || m.id} access`}
+                    subtitle={m.display_name && m.display_name !== m.id ? m.id : undefined}
+                    checked={on().includes(m.id)}
+                    busy={changing() === `model:${m.id}`}
+                    disabled={Boolean(changing()) && changing() !== `model:${m.id}`}
+                    onChange={() => void flip(m)}
+                  />
+                ))}</>}><View class="px-4 py-4"><Text class="text-sm text-muted-foreground">{search() ? "No models match." : "No models reported."}</Text></View></If>
+            </>
+          </Section>
+          <Section>
+            <Row testID="provider-delete" title="Delete Provider" destructive disabled={Boolean(changing())} onPress={() => void remove()} />
+          </Section>
+        </View>
+      </If>
+    </Page>
   );
 }
 
 /** Add or edit one Provider: its name, its endpoint (custom ones) and its key, saved together. */
-export function ProviderEditor(props: { client: ProviderClient; connectionId?: string; retry?: boolean; nav: PageNav }) {
+export function ProviderEditor(props: { client: ProviderClient; connectionId?: string; retry?: boolean; choose?: boolean; nav: PageNav }) {
+  const forClient = signal<ProviderClient>(props.client);
   const existing = () => (props.connectionId ? snapshot()?.connections.find((c) => c.id === props.connectionId) ?? null : null);
-  const editor = (): ProvidersEditorState => (existing() ? { kind: "edit", connection: existing()!, retry: props.retry } : { kind: "create", client: props.client });
+  const editor = (): ProvidersEditorState => (existing() ? { kind: "edit", connection: existing()!, retry: props.retry } : { kind: "create", client: forClient() });
   const name = signal(providerEditorInitialName(editor()));
   const baseUrl = signal(providerEditorInitialBaseUrl(editor()));
   const apiKey = signal("");
@@ -314,8 +420,8 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
     const editing = existing();
     try {
       const connection = editing
-        ? advancedConnectionInput({ existingId: editing.id, name: name(), client: props.client, baseUrl: baseUrl(), presetId: editing.preset_id, advanced: Boolean(editing.base_url) })
-        : advancedConnectionInput({ name: name(), client: props.client, baseUrl: baseUrl() });
+        ? advancedConnectionInput({ existingId: editing.id, name: name(), client: forClient(), baseUrl: baseUrl(), presetId: editing.preset_id, advanced: Boolean(editing.base_url) })
+        : advancedConnectionInput({ name: name(), client: forClient(), baseUrl: baseUrl() });
       const result = await change("save", () =>
         upsertProviderConnection(current, { connection, revision: before.revision, operation: editing ? "update" : "create", credential: key }),
       );
@@ -332,11 +438,11 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
         // Saved, but the key did not take: the same form again, on that connection.
         refreshProviders();
         props.nav.pop();
-        return props.nav.push({ name: "settings-provider-editor", client: props.client, connectionId: saved.id, retry: true });
+        return props.nav.push({ name: "settings-provider-editor", client: forClient(), connectionId: saved.id, retry: true });
       }
       if (!editing && saved?.credential_ready && (await discoverNew(saved))) {
         props.nav.pop();
-        return props.nav.push({ name: "settings-provider-models", connectionId: saved.id });
+        return props.nav.push({ name: "settings-provider", connectionId: saved.id });
       }
       refreshProviders();
       props.nav.pop();
@@ -353,8 +459,8 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
     testLine.set("Testing connection…");
     try {
       const result = existing() && !apiKey().trim()
-        ? await testProviderConnection(current, { connectionId: existing()!.id, client: props.client })
-        : await testProviderConnection(current, { client: props.client, baseUrl: baseUrl() || existing()?.base_url || "", apiKey: apiKey() });
+        ? await testProviderConnection(current, { connectionId: existing()!.id, client: forClient() })
+        : await testProviderConnection(current, { client: forClient(), baseUrl: baseUrl() || existing()?.base_url || "", apiKey: apiKey() });
       testLine.set(`Connected · ${result.latencyMs} ms · ${result.modelCount} models found`);
     } catch (error) {
       testLine.set(failureWords(error) || "Connection test failed.");
@@ -364,6 +470,9 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
   return (
     <Page display title={existing() ? "Edit Provider" : "Add Provider"} testID="provider-editor">
       <If when={props.retry}><Notice testID="provider-retry" tone="failed" title="The API key was not saved. Check it and try again." /></If>
+      <If when={props.choose && !existing()}><View class="mt-3">
+          <Segmented testID="provider-for" accessibilityLabel="For" options={CLIENTS} value={forClient()} onChange={(key) => forClient.set(key as ProviderClient)} />
+        </View></If>
       <Section footer={nameIssue() ?? undefined}>
         <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => edit(name, v)} />
         <If when={requiresBaseUrl()}><Field testID="provider-url" label="Base URL" mono keyboardType="url" value={baseUrl()} placeholder="https://api.example.com/v1" onChange={(v) => edit(baseUrl, v)} /></If>
@@ -376,64 +485,6 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
         <PillButton testID="provider-save" filled title={changing() === "save" ? "Saving…" : existing() ? "Save changes" : "Add Provider"} busy={changing() === "save"} disabled={!canSave()} onPress={() => void save()} />
         <PillButton testID="provider-test" title="Test connection" disabled={!(baseUrl().trim() || existing()) || (!existing() && !apiKey().trim())} onPress={() => void test()} />
       </View>
-    </Page>
-  );
-}
-
-/** Which of a connection's models agents may use. Turning one off asks first: Sessions using it start failing. */
-export function ProviderModels(props: { connectionId: string }) {
-  const search = signal("");
-  const failure = signal<{ title: string; detail: string } | null>(null);
-  const connection = () => snapshot()?.connections.find((c) => c.id === props.connectionId) ?? null;
-  const models = () => {
-    const live = snapshot()?.models[props.connectionId] ?? [];
-    const found = discovered()[props.connectionId]?.models ?? [];
-    const byId = new Map(live.map((m) => [m.id, m]));
-    for (const m of found) if (!byId.has(m.id)) byId.set(m.id, m);
-    const q = search().trim().toLowerCase();
-    return [...byId.values()].filter((m) => !q || m.id.toLowerCase().includes(q) || (m.display_name ?? "").toLowerCase().includes(q) || m.source.toLowerCase().includes(q));
-  };
-  const on = () => enabledModelIds(snapshot(), props.connectionId);
-
-  async function flip(model: ProviderModel): Promise<void> {
-    const current = daemon();
-    if (!current) return;
-    const turnsOff = modelSupportToggleTurnsOff(snapshot(), props.connectionId, model.id);
-    if (turnsOff && !(await confirmDestructive(`Turn off ${model.display_name || model.id}?`, "Sessions using it will start failing.", "Turn off"))) return;
-    const next = toggleModelSupport(snapshot(), props.connectionId, model.id);
-    failure.set(null);
-    try {
-      await change(`model:${model.id}`, () => setProviderModels(current, props.connectionId, next));
-    } catch (error) {
-      failure.set({ title: presentProviderError(error).title, detail: failureWords(error) });
-    }
-  }
-
-  return (
-    <Page display title="Model access" testID="provider-models">
-      <View class="mt-3 px-1"><Text class="text-sm text-muted-foreground">{`${connection()?.name ?? ""} · ${on().length} of ${(snapshot()?.models[props.connectionId] ?? []).length} on`}</Text></View>
-      <If when={discovered()[props.connectionId] && discovered()[props.connectionId].models.length === 0}><Notice title="Upstream models are unavailable" detail="Showing the local model catalog; Sync can refresh it." /></If>
-      <If when={warning()}><Notice title="Saved with a warning" detail={warning()} /></If>
-      <If when={failure()}><Notice tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
-      <Section>
-        <Field testID="model-search" accessibilityLabel="Search model IDs or names" value={search()} placeholder="Search model IDs or names" onChange={(v) => search.set(v)} />
-      </Section>
-      <Section footer={changing().startsWith("model:") ? "Saving…" : undefined}>
-        <>
-          <If when={models().length === 0} else={<>{models().map((m) => (
-              <SwitchRow
-                testID={`model-${m.id}`}
-                title={m.display_name || m.id}
-                accessibilityLabel={`${m.display_name || m.id} access`}
-                subtitle={[m.id, m.source, m.context_window_tokens ? `${Math.round(m.context_window_tokens / 1000)}k ctx` : ""].filter(Boolean).join(" · ")}
-                checked={on().includes(m.id)}
-                busy={changing() === `model:${m.id}`}
-                disabled={Boolean(changing()) && changing() !== `model:${m.id}`}
-                onChange={() => void flip(m)}
-              />
-            ))}</>}><View class="px-4 py-4"><Text class="text-sm text-muted-foreground">{search() ? "No models match this search." : "No models were reported by this endpoint."}</Text></View></If>
-        </>
-      </Section>
     </Page>
   );
 }

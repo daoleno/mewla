@@ -9,8 +9,9 @@ export type MorePage =
   | { name: "settings" }
   | { name: "settings-computer"; id: string }
   | { name: "settings-providers" }
-  | { name: "settings-provider-editor"; client: "codex" | "claude"; connectionId?: string; retry?: boolean }
-  | { name: "settings-provider-models"; connectionId: string }
+  | { name: "settings-provider-editor"; client: "codex" | "claude"; connectionId?: string; retry?: boolean; choose?: boolean }
+  | { name: "settings-provider-agent"; client: "codex" | "claude" }
+  | { name: "settings-provider"; connectionId: string }
   | { name: "settings-agents" }
   | { name: "settings-friends" }
   | { name: "settings-iphone" }

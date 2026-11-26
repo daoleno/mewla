@@ -88,7 +88,7 @@ describe("Pet", () => {
 });
 
 describe("Model Providers", () => {
-  test("lists the agent's connections, and choosing one routes the agent through it", async () => {
+  test("each agent shows what it uses; its page chooses, and choosing routes the agent through it", async () => {
     let current = snapshot();
     const c = computer({ name: "settings-providers" }, (type, body) => {
       if (type === "list_providers") return current;
@@ -102,29 +102,39 @@ describe("Model Providers", () => {
     await app.waitFor("text:Work gateway");
     expect(app.texts().join(" ")).toContain("gw.example.com · 1 model");
     expect(app.texts()).toContain("Key required");
-    await app.press("id:provider-c1");
+    expect(app.texts()).toContain("Official login");
+    await app.press("id:provider-agent-codex");
+    await app.waitFor("id:provider-choose-c1");
+    await app.press("id:provider-choose-c1");
     await app.waitUntil(() => c.asked.some((a) => a.type === "set_provider_connection"));
     const sent = c.asked.find((a) => a.type === "set_provider_connection")!.body;
     expect(sent).toEqual({ client: "codex", executor_id: "codex", connection_id: "c1", revision: 3 });
   });
 
-  test("Codex and Claude Code follow the finger on a phone (owner 11-13 20:05): a swipe shows Claude Code's Providers, a tap goes back", async () => {
-    const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot() : null), { platform: "android" });
+  test("a Provider opens one page with its key, its test and its models, and asks for its models again", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => {
+      if (type === "list_providers") return snapshot();
+      if (type === "discover_provider_models") return { reply: "provider_models", connection_id: "c1", models: [{ id: "gpt-6", display_name: "GPT 6", available: true, source: "upstream" }, { id: "gpt-6.2", available: true, source: "upstream" }] };
+      return null;
+    });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("text:Work gateway");
-    expect(app.texts()).not.toContain("Claude Code uses");
-    await app.drag("id:provider-pages-codex", { x: -260 });
-    await app.waitFor("text:Claude Code uses");
-    await app.waitUntil(() => !app.shows("text:Work gateway"));
-    await app.press("id:provider-agent-codex");
-    await app.waitFor("text:Work gateway");
+    await app.waitFor("id:provider-c1");
+    await app.press("id:provider-c1");
+    await app.waitFor("id:provider-detail");
+    await app.waitFor("id:model-gpt-6.2");
+    expect(app.shows("id:provider-key-row")).toBe(true);
+    expect(app.shows("id:provider-test-row")).toBe(true);
+    expect(app.shows("id:provider-delete")).toBe(true);
+    expect(c.asked.some((a) => a.type === "discover_provider_models")).toBe(true);
   });
 
   test("a connection without a key opens its editor instead of being chosen", async () => {
     const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot() : null));
     const app = await open(HARNESS, c.options);
     await app.waitFor("text:Spare");
-    await app.press("id:provider-c2");
+    await app.press("id:provider-agent-codex");
+    await app.waitFor("id:provider-choose-c2");
+    await app.press("id:provider-choose-c2");
     await app.waitFor("id:provider-editor");
     expect(c.asked.some((a) => a.type === "set_provider_connection")).toBe(false);
   });
