@@ -15,6 +15,7 @@
 #   phone.sh restore     back to the snapshot's state (paired, Brain open). About 11 s, but about 1 in 20 takes 50-150 s (see README)
 #   phone.sh shot [F]    screenshot to F (default: a fresh png under $TMPDIR), prints the path
 #   phone.sh tap REGEX   tap the first node whose text, description or class matches (uiautomator), waits up to 20 s
+#   phone.sh scroll      one swipe up through the middle of the screen (a row below the fold comes in)
 #   phone.sh shows REGEX [SECS]  exit 0 once the screen has such a node (waits up to SECS, default 10)
 #   phone.sh dump        the screen as text, one line per node with an id, text or description (what to read instead of a screenshot or the XML)
 #   phone.sh share-file PATH [MIME]   share a file into Mewla (ACTION_SEND of a MediaStore content:// URI; about 1 s; open-with: untested)
@@ -53,7 +54,7 @@ pkg="com.daoleno.mewla.preview.debug"
 apk="$client/android/app/build/outputs/apk/preview/debug/app-preview-debug.apk"
 # PHONE_EXTERNAL=1: the phone, the app and the test daemon are the caller's (the release gate's emulator and the exact signed APK,
 # release-flows.sh): PHONE_PKG is the app's package, ANDROID_SERIAL its device, and only the verbs that act on a booted, paired app
-# work (reset, wait-connected, shot, tap, shows, dump, type, flow, share-file, share-text, open-with).
+# work (reset, wait-connected, shot, tap, scroll, shows, dump, type, flow, share-file, share-text, open-with).
 external="${PHONE_EXTERNAL:-}"
 if [[ -n "$external" ]]; then pkg="${PHONE_PKG:?PHONE_EXTERNAL needs PHONE_PKG}"; serial="${ANDROID_SERIAL:?PHONE_EXTERNAL needs ANDROID_SERIAL}"; fi
 export ANDROID_SERIAL="$serial"
@@ -379,7 +380,7 @@ flows() {
 verb() {
   local v="$1"; shift
   if [[ -n "$external" ]]; then
-    case "$v" in reset|wait-connected|shot|tap|shows|dump|type|flow|share-file|share-text|open-with) ;; *) die "$v is not available with PHONE_EXTERNAL (the device, app and daemon are not this script's)" ;; esac
+    case "$v" in reset|wait-connected|shot|tap|scroll|shows|dump|type|flow|share-file|share-text|open-with) ;; *) die "$v is not available with PHONE_EXTERNAL (the device, app and daemon are not this script's)" ;; esac
   fi
   case "$v" in
     up) emu_up; daemon_up; dev_up
@@ -403,6 +404,9 @@ verb() {
     shot) shot "$@" ;;
     tap) tap "$@" || die "no node matches $1" ;;
     shows) shows "$@" ;;
+    # One swipe up through the middle of the screen: a row below the fold (the release replay's emulator is 320x640) comes in.
+    scroll) read -r w h <<< "$(adb -s "$serial" shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')"
+      adb -s "$serial" shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h * 3 / 10)) 300 ;;
     dump) dump ;;
     type) tap '^Tell Brain$' > /dev/null || die "no composer on the screen"; adb -s "$serial" shell input text "${1// /%s}" ;;
     flow) flows "$@" ;;
