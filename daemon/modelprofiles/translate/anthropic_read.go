@@ -103,7 +103,11 @@ func ReadAnthropic(body []byte) (*Request, error) {
 		if err != nil {
 			return nil, fmt.Errorf("anthropic message %d: %w", i, err)
 		}
-		msg := Message{Role: m.Role}
+		msg := Message{Role: RoleUser}
+		switch m.Role {
+		case RoleAssistant, RoleSystem:
+			msg.Role = m.Role
+		}
 		for _, b := range blocks {
 			if part, ok := anthropicPart(b); ok {
 				msg.Parts = append(msg.Parts, part)

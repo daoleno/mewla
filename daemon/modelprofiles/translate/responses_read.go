@@ -99,10 +99,10 @@ func ReadResponses(body []byte) (*Request, error) {
 					req.System = append(req.System, parts...)
 					continue
 				}
-				role = RoleUser
+				role = RoleSystem
 			}
 			started = true
-			if role != RoleAssistant {
+			if role != RoleAssistant && role != RoleSystem {
 				role = RoleUser
 			}
 			req.add(role, parts...)

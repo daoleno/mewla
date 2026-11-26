@@ -97,6 +97,11 @@ type anthropicMsg struct {
 func anthropicMessages(msgs []Message) []anthropicMsg {
 	var out []anthropicMsg
 	for _, m := range msgs {
+		if m.Role == RoleSystem {
+			// Not every Anthropic-compatible endpoint takes a system role
+			// inside messages: it is told as the user's text, in place.
+			m.Role = RoleUser
+		}
 		var blocks, thinking []map[string]any
 		for _, p := range m.Parts {
 			b := anthropicBlockOf(p, m.Role)

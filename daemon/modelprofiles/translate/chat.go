@@ -20,6 +20,12 @@ func WriteChat(r *Request) ([]byte, error) {
 			msgs = append(msgs, chatAssistant(m))
 			continue
 		}
+		if m.Role == RoleSystem {
+			if text := joinText(m.Parts); text != "" {
+				msgs = append(msgs, map[string]any{"role": "system", "content": text})
+			}
+			continue
+		}
 		// A user turn's tool results come first, each its own tool
 		// message right after the assistant's calls; what else the user
 		// gave follows in one user message.
@@ -209,9 +215,25 @@ func pairToolCalls(msgs []Message) []Message {
 			out = append(out, Message{Role: RoleUser, Parts: parts})
 		}
 	}
+	// A system message that comes while calls wait for their answers goes
+	// after the answers: Chat wants them right after the calls.
+	var held []Message
+	release := func() {
+		out = append(out, held...)
+		held = nil
+	}
 	for _, m := range msgs {
+		if m.Role == RoleSystem {
+			if len(pending) > 0 {
+				held = append(held, m)
+			} else {
+				out = append(out, m)
+			}
+			continue
+		}
 		if m.Role == RoleAssistant {
 			closePending()
+			release()
 			for _, p := range m.Parts {
 				if p.Kind == PartToolCall {
 					open[p.CallID] = true
@@ -255,7 +277,9 @@ func pairToolCalls(msgs []Message) []Message {
 		if parts := append(results, rest...); len(parts) > 0 {
 			out = append(out, Message{Role: RoleUser, Parts: parts})
 		}
+		release()
 	}
+	release()
 	return out
 }
 

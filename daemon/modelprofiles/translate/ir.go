@@ -54,6 +54,10 @@ type Request struct {
 const (
 	RoleUser      = "user"
 	RoleAssistant = "assistant"
+	// RoleSystem is a system message inside the conversation, after it
+	// began: Claude Code sends one ({"role":"system"}) after the person's
+	// prompt with context for the turn, and Codex a developer message.
+	RoleSystem = "system"
 )
 
 // Message is one turn of the conversation.

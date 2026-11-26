@@ -369,3 +369,62 @@ func TestCodexKeepsASignatureWithoutThinkingText(t *testing.T) {
 		t.Fatalf("sealed = %q %+v %v", sig, part, ok)
 	}
 }
+
+// 11-27 Mac: Claude Code 2.1.236 sends its turn's context as a
+// {"role":"system"} message after the person's prompt. Told as a user
+// message, it became the last thing the model was asked, and the model
+// answered "What would you like me to work on?" instead of doing the task.
+func TestASystemMessageInTheConversationStaysOne(t *testing.T) {
+	req := `{"model":"glm-5","max_tokens":100,"stream":true,
+	 "system":[{"type":"text","text":"You are Claude Code."}],
+	 "messages":[
+	  {"role":"user","content":[{"type":"text","text":"<system-reminder>ctx</system-reminder>"},{"type":"text","text":"Create hello.txt"}]},
+	  {"role":"system","content":[{"type":"text","text":"Available agent types: …","cache_control":{"type":"ephemeral"}}]}]}`
+	x, err := Prepare(APIAnthropic, APIChat, []byte(req), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	_ = json.Unmarshal(x.Body, &sent)
+	var roles []string
+	for _, m := range sent.Messages {
+		roles = append(roles, m["role"].(string))
+	}
+	if strings.Join(roles, ",") != "system,user,system" || sent.Messages[2]["content"] != "Available agent types: …" {
+		t.Fatalf("messages = %v: want the turn's context kept as a system message after the prompt", sent.Messages)
+	}
+
+	// While a call waits for its answer, the system message goes after it.
+	held := []Message{
+		{Role: RoleAssistant, Parts: []Part{{Kind: PartToolCall, CallID: "c1", Name: "Bash", Args: "{}"}}},
+		{Role: RoleSystem, Parts: []Part{{Kind: PartText, Text: "note"}}},
+		{Role: RoleUser, Parts: []Part{{Kind: PartToolResult, CallID: "c1", Result: []Part{{Kind: PartText, Text: "ok"}}}}},
+	}
+	var order []string
+	for _, m := range pairToolCalls(held) {
+		order = append(order, m.Role)
+	}
+	if strings.Join(order, ",") != "assistant,user,system" {
+		t.Fatalf("order = %v: Chat wants a call's answer right after it", order)
+	}
+
+	// Toward Anthropic it is the user's text, in place.
+	x, err = Prepare(APIResponses, APIAnthropic, []byte(`{"model":"claude-sonnet-5","input":[
+	  {"type":"message","role":"user","content":"hi"},
+	  {"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]},
+	  {"type":"message","role":"developer","content":"be brief"}]}`), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var anth struct {
+		Messages []struct {
+			Role string `json:"role"`
+		} `json:"messages"`
+	}
+	_ = json.Unmarshal(x.Body, &anth)
+	if len(anth.Messages) != 3 || anth.Messages[2].Role != "user" {
+		t.Fatalf("anthropic messages = %+v", anth.Messages)
+	}
+}
