@@ -39,6 +39,8 @@ describe("a step's title (owner 11-27 note 1: never a bare verb)", () => {
     expect(commandTitle("tmux -S /tmp/s capture-pane -t main:0.0 -p")).toBe("tmux capture-pane");
     expect(commandTitle('"$MEWLA_WORKER_PROGRESS_CMD" worker progress --status running')).toBe("Report progress");
     expect(commandTitle("adb shell input tap 320 1950")).toBe("Run adb");
+    expect(commandTitle("mkdir -p /tmp/flight/after")).toBe("Create folder after");
+    expect(commandTitle("for f in before-phone.png after.png; do echo $f; done")).toBe("Run a shell loop");
   });
 
   test("the agent's own words lead when it gave some", () => {

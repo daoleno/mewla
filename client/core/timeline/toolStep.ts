@@ -254,7 +254,17 @@ export function commandTitle(command: string): string {
     case "rsync":
       return "Copy files";
     case "mkdir":
-      return `Make ${shortPath(arg(1)) || "a folder"}`;
+      return arg(1) ? `Create folder ${shortPath(arg(1))}` : "Create a folder";
+    // A shell keyword is no program: the command is a loop or a script of its own.
+    case "for":
+    case "while":
+    case "until":
+      return "Run a shell loop";
+    case "if":
+    case "case":
+    case "{":
+    case "(":
+      return "Run a shell script";
     case "rm":
       return `Remove ${shortPath(arg(1)) || "files"}`;
     case "cp":
