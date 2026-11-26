@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,10 +77,21 @@ func (t *ClaudeTakeover) Enabled() bool {
 	return err == nil && state.Enabled
 }
 
+// SettingsPath is the Claude Code settings file the takeover projects into.
+func (t *ClaudeTakeover) SettingsPath() string {
+	if t == nil {
+		return ""
+	}
+	return t.settingsPath
+}
+
 // Project points Claude Code at baseURL (the gateway root, no /v1). withToken
 // also writes the loopback placeholder token so the CLI never asks for a login;
-// the gateway injects the Provider's real credential. Idempotent.
-func (t *ClaudeTakeover) Project(baseURL string, withToken bool) error {
+// the gateway injects the Provider's real credential. Idempotent. A key Mewla
+// wrote that someone else changed since (another tool such as Magpie pointing
+// Claude Code at its own gateway, or the person) is theirs: it is left as it
+// is unless explicit, the person choosing a Claude Provider in Mewla now.
+func (t *ClaudeTakeover) Project(baseURL string, withToken bool, explicit bool) error {
 	if t == nil || t.settingsPath == "" {
 		return fmt.Errorf("%w: claude settings path is required", ErrInvalid)
 	}
@@ -115,13 +127,24 @@ func (t *ClaudeTakeover) Project(baseURL string, withToken bool) error {
 	if state.Prior == nil {
 		state.Prior = map[string]json.RawMessage{}
 	}
+	if state.Enabled && !explicit {
+		if current, has := fieldValue(env, EnvAnthropicBaseURL); has {
+			if written, owned := state.Written[EnvAnthropicBaseURL]; owned && !bytes.Equal(compactJSON(current), compactJSON(written)) {
+				// Someone else points Claude Code elsewhere now; Mewla is back
+				// in front once they give it back (or the person picks again).
+				return nil
+			}
+		}
+	}
 	for _, key := range []string{EnvAnthropicBaseURL, EnvAnthropicAuthToken} {
 		current, has := fieldValue(env, key)
-		_, owned := state.Written[key]
+		written, owned := state.Written[key]
 		value, wanted := want[key]
 		if wanted {
-			if !owned && has {
+			if has && (!owned || !bytes.Equal(compactJSON(current), compactJSON(written))) {
 				state.Prior[key] = current
+			} else if !has && !owned {
+				delete(state.Prior, key)
 			}
 			raw := encodeJSONString(value)
 			env = setField(env, key, raw)
@@ -175,7 +198,56 @@ func (t *ClaudeTakeover) Release() error {
 	if err := writeClaudeSettings(path, fields, mode); err != nil {
 		return err
 	}
-	return t.persistState(claudeTakeoverState{SettingsPath: t.settingsPath, BackupPath: state.BackupPath})
+	// The gateway address and the user's own values stay known after release,
+	// for Heal.
+	return t.persistState(claudeTakeoverState{SettingsPath: t.settingsPath, BaseURL: state.BaseURL, Prior: state.Prior, BackupPath: state.BackupPath})
+}
+
+// Heal gives Claude Code its own values back when, with the takeover off, its
+// settings point at Mewla's gateway again: another tool (Magpie) restoring the
+// address it saw while it was connected. A value naming anything else is never
+// touched.
+func (t *ClaudeTakeover) Heal() {
+	if t == nil || t.settingsPath == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state, err := t.loadState()
+	if err != nil || state.Enabled || strings.TrimSpace(state.BaseURL) == "" {
+		return
+	}
+	path := resolveSettingsPath(t.settingsPath)
+	fields, mode, err := readClaudeSettings(path)
+	if err != nil {
+		return
+	}
+	env, err := settingsEnv(fields)
+	if err != nil {
+		return
+	}
+	ours := encodeJSONString(state.BaseURL)
+	current, has := fieldValue(env, EnvAnthropicBaseURL)
+	if !has || !bytes.Equal(compactJSON(current), compactJSON(ours)) {
+		return
+	}
+	stale := claudeTakeoverState{
+		Written: map[string]json.RawMessage{EnvAnthropicBaseURL: ours, EnvAnthropicAuthToken: encodeJSONString(LoopbackAuthPlaceholder)},
+		Prior:   state.Prior,
+	}
+	for _, key := range []string{EnvAnthropicBaseURL, EnvAnthropicAuthToken} {
+		env = restoreField(env, key, stale)
+	}
+	if len(env) == 0 {
+		fields = deleteField(fields, "env")
+	} else {
+		fields = setField(fields, "env", encodeFields(env))
+	}
+	if err := writeClaudeSettings(path, fields, mode); err != nil {
+		log.Printf("WARN claude settings: Claude Code points at Mewla's gateway while it is off; could not give it back: %v", err)
+		return
+	}
+	log.Printf("claude settings: Claude Code pointed at Mewla's gateway while it is off (another tool put it back); gave its own values back")
 }
 
 // backupSettings keeps the exact pre-takeover bytes (0600, daemon state dir).

@@ -834,7 +834,7 @@ func (o *Owner) SetProviderConnection(clientOrExecutor, connectionID string, rev
 	o.mu.Unlock()
 	// The machine-level gateway follows the default Codex connection: every
 	// Provider-selection mutation must retarget it atomically.
-	o.refreshGatewayUpstream()
+	o.refreshGatewayUpstream(client)
 	projection, projectionErr := o.ProjectProviders()
 	if projectionErr != nil {
 		return ProviderCatalogProjection{}, projectionErr
@@ -855,7 +855,7 @@ func (o *Owner) SwitchProvider(clientOrExecutor, connectionID string, revision i
 	if !persist.Applied {
 		return ProviderCatalogProjection{}, err
 	}
-	o.refreshGatewayUpstream()
+	o.refreshGatewayUpstream(clientOrExecutor)
 	projection, projectionErr := o.ProjectProviders()
 	if projectionErr != nil {
 		return ProviderCatalogProjection{}, projectionErr

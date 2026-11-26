@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -30,7 +32,11 @@ type TakeoverState struct {
 	ListenAddr            string `json:"listen_addr"`
 	ProviderName          string `json:"provider_name"`
 	OriginalProviderValue string `json:"original_provider_value,omitempty"`
-	EnabledAt             string `json:"enabled_at,omitempty"`
+	// OriginalProviderHadTable: Codex could use the saved value when Mewla
+	// saved it (a built-in, or a table was there). Disconnect does not write
+	// back a value whose table has gone since.
+	OriginalProviderHadTable bool   `json:"original_provider_had_table,omitempty"`
+	EnabledAt                string `json:"enabled_at,omitempty"`
 }
 
 // TakeoverStatus is the truthful control-plane view of takeover state.
@@ -60,6 +66,7 @@ const (
 // exact pre-takeover bytes in a durable backup and only ever writes the
 // marked Mewla-owned projection.
 type Takeover struct {
+	mu         sync.Mutex
 	statePath  string
 	backupDir  string
 	configPath string
@@ -152,6 +159,33 @@ func projectedProviderLine() string {
 	return "model_provider = \"" + GatewayProviderName + "\""
 }
 
+// How the takeover shares ~/.codex/config.toml with the user and with other
+// tools that point Codex at a gateway of their own (Magpie, CC Switch),
+// learned from Magpie (github.com/yetone/magpie, MIT: internal/agent/codex.go
+// unroute/Unwire, internal/agent/stash.go):
+//
+//   - Ownership is by value, not by line format: model_provider is Mewla's
+//     while it names mewla-gateway, and the table is Mewla's by its name.
+//   - Connect (Enable) saves the user's own model_provider only when Codex is
+//     not on Mewla already, so a second connect never saves Mewla's own value.
+//   - Disconnect (Disable) gives model_provider back only while it still names
+//     Mewla; a value someone set since is theirs and stays.
+//   - The user's value is given back only when Codex can still use it: a
+//     provider whose table was there when Mewla saved it and is gone now is
+//     not written back (Codex would refuse to start: "Model provider ... not
+//     found"); the line goes, and Codex uses its own login.
+//   - A restart (Repair) never takes Codex back from another tool: it puts
+//     Mewla's table back and names it only when model_provider is empty.
+//   - Heal covers what Magpie does not: a tool that remembered "mewla-gateway"
+//     while it was connected writes it back after Mewla's gateway is off, and
+//     Codex then names a table that is gone. While the takeover is off, a
+//     model_provider naming Mewla is given back to the user's own value.
+//   - Codex lists and resumes a thread only on the provider it names, so the
+//     threads follow the provider (codex_threads.go), as Magpie lends them.
+
+// codexBuiltinProviders are the providers Codex knows without a table.
+var codexBuiltinProviders = map[string]bool{"openai": true, "oss": true, "ollama": true, "lmstudio": true}
+
 // Enable activates the machine-level takeover: exact backup, then an atomic
 // surgical projection that preserves every unrelated byte of the user's
 // config. Idempotent: re-enabling an already-matching projection is a no-op.
@@ -160,13 +194,12 @@ func (t *Takeover) Enable(listenAddr string) (TakeoverStatus, error) {
 	if t == nil {
 		return TakeoverStatus{}, fmt.Errorf("%w: takeover not configured", ErrInvalid)
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	listenAddr = strings.TrimSpace(listenAddr)
 	if listenAddr == "" {
 		listenAddr = DefaultGatewayListenAddr
 	}
-	projection := t.Projection(listenAddr)
-	providerLine := projectedProviderLine()
-
 	current, missing, err := readConfigBytes(t.configPath)
 	if err != nil {
 		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
@@ -176,25 +209,22 @@ func (t *Takeover) Enable(listenAddr string) (TakeoverStatus, error) {
 			return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, err
 		}
 	}
-
 	state, err := t.LoadState()
 	if err != nil {
 		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 	}
-	originalValue := strings.TrimSpace(state.OriginalProviderValue)
-	if originalValue == "" && !missing {
-		originalValue = topLevelProviderValue(current)
-	}
-
-	projected, conflict, err := projectConfig(current, projection, providerLine)
-	if err != nil {
-		return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, err
-	}
-	if conflict != "" {
+	top := readTopProvider(string(current))
+	if top.count > 1 {
+		conflict := "multiple model_provider assignments exist; refusing to clobber"
 		return TakeoverStatus{State: TakeoverStateDrifted, Detail: conflict, ConfigPath: t.configPath}, fmt.Errorf("%w: %s", ErrInvalid, conflict)
 	}
+	if top.value != GatewayProviderName {
+		// Codex is not on Mewla: what it names now is the user's own.
+		state.OriginalProviderValue = top.value
+		state.OriginalProviderHadTable = top.value == "" || codexProviderUsable(current, top.value)
+	}
+	projected := projectConfig(current, t.Projection(listenAddr), GatewayProviderName)
 	if bytes.Equal(projected, current) {
-		// Already projected: idempotent no-op.
 		state.Enabled = true
 		state.ConfigPath = t.configPath
 		state.ListenAddr = listenAddr
@@ -204,7 +234,9 @@ func (t *Takeover) Enable(listenAddr string) (TakeoverStatus, error) {
 		}
 		return t.Status(), nil
 	}
-
+	if err := validateConfigTOML(projected); err != nil {
+		return TakeoverStatus{State: TakeoverStateBroken, Detail: "projection produced invalid TOML: " + err.Error(), ConfigPath: t.configPath}, err
+	}
 	backupPath := ""
 	if state.BackupPath != "" {
 		if _, statErr := os.Stat(state.BackupPath); statErr == nil {
@@ -220,93 +252,166 @@ func (t *Takeover) Enable(listenAddr string) (TakeoverStatus, error) {
 			return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 		}
 	}
-
 	if err := writeAtomicFile(t.configPath, projected, 0o600); err != nil {
 		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 	}
-	if err := validateConfigTOML(projected); err != nil {
-		// Never leave a broken projection: roll the exact backup back.
-		_ = writeAtomicFile(t.configPath, current, 0o600)
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: "projection produced invalid TOML: " + err.Error(), ConfigPath: t.configPath}, err
+	state.Enabled = true
+	state.ConfigPath = t.configPath
+	state.BackupPath = backupPath
+	state.ListenAddr = listenAddr
+	state.ProviderName = GatewayProviderName
+	state.EnabledAt = time.Now().UTC().Format(time.RFC3339)
+	if err := t.persistState(state); err != nil {
+		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 	}
+	t.moveThreads(state.OriginalProviderValue, GatewayProviderName)
+	return t.Status(), nil
+}
 
-	state = TakeoverState{
-		Enabled:               true,
-		ConfigPath:            t.configPath,
-		BackupPath:            backupPath,
-		ListenAddr:            listenAddr,
-		ProviderName:          GatewayProviderName,
-		OriginalProviderValue: originalValue,
-		EnabledAt:             time.Now().UTC().Format(time.RFC3339),
+// Disable removes Mewla's table and gives model_provider back while it still
+// names Mewla. A value someone else set since (another tool connected after
+// Mewla, or the user) is theirs and stays; Heal gives it back later should
+// that tool restore "mewla-gateway" after Mewla let go.
+func (t *Takeover) Disable() (TakeoverStatus, error) {
+	if t == nil {
+		return TakeoverStatus{}, fmt.Errorf("%w: takeover not configured", ErrInvalid)
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state, err := t.LoadState()
+	if err != nil {
+		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
+	}
+	status, err := t.giveBack(state)
+	if err != nil {
+		return status, err
+	}
+	state.Enabled = false
 	if err := t.persistState(state); err != nil {
 		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 	}
 	return t.Status(), nil
 }
 
-// Disable removes only the Mewla-owned projection: the marked block and the
-// projected model_provider line (restoring the pre-takeover value when it was
-// recorded). Unrelated user changes are preserved. A user-edited projected
-// line is a conflict and is left in place, reported as drifted.
-func (t *Takeover) Disable() (TakeoverStatus, error) {
-	if t == nil {
-		return TakeoverStatus{}, fmt.Errorf("%w: takeover not configured", ErrInvalid)
-	}
-	current, _, err := readConfigBytes(t.configPath)
+// giveBack removes Mewla's table and, while model_provider names Mewla, puts
+// the user's own value back. It moves the threads started on Mewla to
+// whatever Codex names afterwards.
+func (t *Takeover) giveBack(state TakeoverState) (TakeoverStatus, error) {
+	current, missing, err := readConfigBytes(t.configPath)
 	if err != nil {
 		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 	}
-	state, err := t.LoadState()
-	if err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
+	if missing {
+		return TakeoverStatus{State: TakeoverStateInactive, ConfigPath: t.configPath}, nil
 	}
-	providerLine := projectedProviderLine()
-	conflicts := []string{}
-	withoutBlock := removeProjectionBlock(string(current))
-	restored, conflict := restoreProviderLine(withoutBlock, providerLine, strings.TrimSpace(state.OriginalProviderValue))
-	if conflict != "" {
-		conflicts = append(conflicts, conflict)
-	}
-	if bytes.Equal([]byte(restored), current) {
-		// Nothing to remove; the projection was already gone.
-		state.Enabled = false
-		if err := t.persistState(state); err != nil {
-			return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
-		}
-		status := t.Status()
-		if len(conflicts) > 0 {
-			status.State = TakeoverStateDrifted
-			status.Detail = strings.Join(conflicts, "; ")
-		}
-		return status, nil
-	}
-	if err := validateConfigTOML([]byte(restored)); err != nil {
+	if err := validateConfigTOML(current); err != nil {
 		return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, err
 	}
-	if err := writeAtomicFile(t.configPath, []byte(restored), 0o600); err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
+	content := removeOwnTables(string(current))
+	top := readTopProvider(content)
+	if top.count > 1 {
+		conflict := "multiple model_provider assignments exist; refusing to clobber"
+		return TakeoverStatus{State: TakeoverStateDrifted, Detail: conflict, ConfigPath: t.configPath}, fmt.Errorf("%w: %s", ErrInvalid, conflict)
 	}
-	state.Enabled = false
-	if err := t.persistState(state); err != nil {
-		return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
+	if top.value == GatewayProviderName {
+		content = setTopProvider(content, t.restoreTarget(state, []byte(content)))
 	}
-	status := t.Status()
-	if len(conflicts) > 0 {
-		status.State = TakeoverStateDrifted
-		status.Detail = strings.Join(conflicts, "; ")
+	if content != string(current) {
+		if err := validateConfigTOML([]byte(content)); err != nil {
+			return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, err
+		}
+		if err := writeAtomicFile(t.configPath, []byte(content), 0o600); err != nil {
+			return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
+		}
 	}
-	return status, nil
+	to := readTopProvider(content).value
+	if to == "" {
+		to = "openai"
+	}
+	t.moveThreads(GatewayProviderName, to)
+	return TakeoverStatus{State: TakeoverStateInactive, ConfigPath: t.configPath}, nil
 }
 
-// Repair re-applies the Mewla-owned projection over the current config while
-// preserving unrelated user changes. It is used at daemon restart when the
-// durable state claims takeover but the live config drifted (or the daemon
-// crashed mid-write). Never creates a second backup.
+// restoreTarget is the model_provider value disconnect writes back: the
+// user's own, unless it had a table when Mewla saved it and has none now.
+func (t *Takeover) restoreTarget(state TakeoverState, content []byte) string {
+	original := strings.TrimSpace(state.OriginalProviderValue)
+	if original == "" || original == GatewayProviderName {
+		return ""
+	}
+	if state.OriginalProviderHadTable && !codexProviderUsable(content, original) {
+		return ""
+	}
+	return original
+}
+
+// Heal keeps the config honest about Mewla between its own changes. While the
+// takeover is off, a model_provider naming Mewla (another tool restoring what
+// it saw while connected) is given back to the user's own value, a leftover
+// Mewla table goes, and threads left on Mewla follow. While it is on and Codex
+// names Mewla, a missing table is put back. A value naming anyone else is
+// never touched. Cheap when there is nothing to do: one read of the config.
+func (t *Takeover) Heal() {
+	if t == nil || t.configPath == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state, err := t.LoadState()
+	if err != nil {
+		return
+	}
+	current, missing, err := readConfigBytes(t.configPath)
+	if err != nil || missing || validateConfigTOML(current) != nil {
+		return
+	}
+	content := string(current)
+	top := readTopProvider(content)
+	if !state.Enabled {
+		if top.value != GatewayProviderName && !hasOwnTable(content) {
+			t.moveThreads(GatewayProviderName, providerOrOpenAI(top.value))
+			return
+		}
+		if _, err := t.giveBack(state); err != nil {
+			log.Printf("WARN codex config: Codex names Mewla's gateway while it is off; could not give it back: %v", err)
+			return
+		}
+		log.Printf("codex config: Codex named Mewla's gateway while it is off (another tool put it back); gave Codex %q back", providerOrOpenAI(t.restoreTarget(state, current)))
+		return
+	}
+	if top.value != GatewayProviderName || hasOwnTable(content) {
+		return
+	}
+	listenAddr := state.ListenAddr
+	if t.gateway != nil && t.gateway.ActualAddr() != "" {
+		listenAddr = t.gateway.ActualAddr()
+	}
+	projected := projectConfig(current, t.Projection(listenAddr), GatewayProviderName)
+	if validateConfigTOML(projected) != nil {
+		return
+	}
+	if err := writeAtomicFile(t.configPath, projected, 0o600); err == nil {
+		log.Printf("codex config: Codex named Mewla's gateway without its table; put the table back")
+	}
+}
+
+func providerOrOpenAI(value string) string {
+	if value == "" {
+		return "openai"
+	}
+	return value
+}
+
+// Repair re-applies Mewla's table at daemon start (the listener may have moved
+// to another port). It names Mewla in model_provider only when that is empty:
+// a value another tool or the user set while the daemon was down stays, and
+// Mewla is in front again once that tool gives Codex back to it.
 func (t *Takeover) Repair(listenAddr string) (TakeoverStatus, error) {
 	if t == nil {
 		return TakeoverStatus{}, fmt.Errorf("%w: takeover not configured", ErrInvalid)
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	listenAddr = strings.TrimSpace(listenAddr)
 	if listenAddr == "" {
 		listenAddr = DefaultGatewayListenAddr
@@ -317,18 +422,22 @@ func (t *Takeover) Repair(listenAddr string) (TakeoverStatus, error) {
 	}
 	if !missing {
 		if err := validateConfigTOML(current); err != nil {
-			return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, err
+			return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, nil
 		}
 	}
-	projected, conflict, err := projectConfig(current, t.Projection(listenAddr), projectedProviderLine())
-	if err != nil || conflict != "" {
-		detail := err.Error()
-		if conflict != "" {
-			detail = conflict
-		}
-		return TakeoverStatus{State: TakeoverStateDrifted, Detail: detail, ConfigPath: t.configPath}, nil
+	top := readTopProvider(string(current))
+	if top.count > 1 {
+		return TakeoverStatus{State: TakeoverStateDrifted, Detail: "multiple model_provider assignments exist; refusing to clobber", ConfigPath: t.configPath}, nil
 	}
+	name := GatewayProviderName
+	if top.value != "" {
+		name = top.value
+	}
+	projected := projectConfig(current, t.Projection(listenAddr), name)
 	if !bytes.Equal(projected, current) {
+		if err := validateConfigTOML(projected); err != nil {
+			return TakeoverStatus{State: TakeoverStateDrifted, Detail: err.Error(), ConfigPath: t.configPath}, nil
+		}
 		if err := writeAtomicFile(t.configPath, projected, 0o600); err != nil {
 			return TakeoverStatus{State: TakeoverStateBroken, Detail: err.Error(), ConfigPath: t.configPath}, err
 		}
@@ -401,91 +510,198 @@ func (t *Takeover) Status() TakeoverStatus {
 		status.Detail = "Mewla projection block is missing or edited"
 		return status
 	}
-	if !hasExactProviderLine(current, projectedProviderLine()) {
+	top := readTopProvider(string(current))
+	if top.count != 1 || top.value != GatewayProviderName {
 		status.State = TakeoverStateDrifted
-		status.Detail = "model_provider line was changed outside Mewla"
+		if top.value != "" && top.value != GatewayProviderName {
+			status.Detail = "Codex is on " + top.value + ", set outside Mewla"
+		} else {
+			status.Detail = "model_provider was changed outside Mewla"
+		}
 		return status
 	}
 	status.State = TakeoverStateActive
 	return status
 }
 
-// projectConfig returns current with the Mewla projection block and the
-// top-level model_provider line installed, preserving every other byte exactly
-// (no blank lines are invented, so disable can restore byte-for-byte).
-// conflict reports a fail-safe condition (multiple uncommented model_provider
-// lines).
-func projectConfig(current []byte, projection, providerLine string) ([]byte, string, error) {
-	content := string(current)
-	withoutBlock := removeProjectionBlock(content)
-	lines := strings.Split(withoutBlock, "\n")
-	// A trailing newline yields a final empty split element; the final join
-	// re-emits exactly one trailing newline, so trailing empties are not part
-	// of the content model (interior blank lines are preserved untouched).
+// topProvider is the top-level model_provider assignment: lines before the
+// first table header. A model_provider inside a table ([profiles.x]) is that
+// table's and not Codex's choice.
+type topProvider struct {
+	value string
+	index int // line index of the first assignment, -1 when none
+	count int
+}
+
+func readTopProvider(content string) topProvider {
+	out := topProvider{index: -1}
+	for index, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if isTableHeader(trimmed) {
+			break
+		}
+		key, value, ok := strings.Cut(trimmed, "=")
+		if !ok || strings.TrimSpace(key) != "model_provider" {
+			continue
+		}
+		out.count++
+		if out.index < 0 {
+			out.index = index
+			out.value = unquoteTOMLScalar(value)
+		}
+	}
+	return out
+}
+
+func isTableHeader(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "[")
+}
+
+// unquoteTOMLScalar reads a basic or literal TOML string value, dropping a
+// trailing comment.
+func unquoteTOMLScalar(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if quote := raw[0]; quote == '"' || quote == '\'' {
+		if end := strings.IndexByte(raw[1:], quote); end >= 0 {
+			return raw[1 : end+1]
+		}
+	}
+	if hash := strings.IndexByte(raw, '#'); hash >= 0 {
+		raw = raw[:hash]
+	}
+	return strings.TrimSpace(raw)
+}
+
+// setTopProvider sets (or, for "", removes) the top-level model_provider.
+func setTopProvider(content, value string) string {
+	top := readTopProvider(content)
+	lines := strings.Split(content, "\n")
+	if top.index >= 0 {
+		if value == "" {
+			lines = append(lines[:top.index], lines[top.index+1:]...)
+		} else {
+			lines[top.index] = "model_provider = " + quoteTOMLValue(value)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if value == "" {
+		return content
+	}
+	at := topInsertIndex(lines)
+	lines = append(lines[:at], append([]string{"model_provider = " + quoteTOMLValue(value)}, lines[at:]...)...)
+	return strings.Join(lines, "\n")
+}
+
+// topInsertIndex is where a new top-level key goes: before the first table,
+// walking back over the blank lines that separate it.
+func topInsertIndex(lines []string) int {
+	firstSection := -1
+	for index, line := range lines {
+		if isTableHeader(strings.TrimSpace(line)) {
+			firstSection = index
+			break
+		}
+	}
+	if firstSection < 0 {
+		end := len(lines)
+		for end > 0 && lines[end-1] == "" {
+			end--
+		}
+		return end
+	}
+	at := firstSection
+	for at > 0 && strings.TrimSpace(lines[at-1]) == "" {
+		at--
+	}
+	return at
+}
+
+// projectConfig returns current with Mewla's table in place (any older copy of
+// it, marked or not, replaced) and model_provider naming provider, preserving
+// every other byte (no blank lines are invented, so disable can restore
+// byte-for-byte).
+func projectConfig(current []byte, projection, provider string) []byte {
+	content := removeOwnTables(string(current))
+	lines := strings.Split(content, "\n")
 	for len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
-	providerIndex := -1
-	uncommented := 0
-	firstSection := -1
-	for index, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") && !strings.HasPrefix(trimmed, "[[") {
-			if firstSection < 0 {
-				firstSection = index
-			}
-			continue
-		}
-		if strings.HasPrefix(trimmed, "model_provider") {
-			key := trimmed
-			if eq := strings.Index(key, "="); eq >= 0 {
-				key = strings.TrimSpace(key[:eq])
-			}
-			if key != "model_provider" {
-				continue
-			}
-			uncommented++
-			if providerIndex < 0 {
-				providerIndex = index
-			}
-		}
-	}
-	if uncommented > 1 {
-		return nil, "multiple model_provider assignments exist; refusing to clobber", nil
-	}
-	// Canonical block position: directly before the first section, walking
-	// back over the blank separator so the block lands right after the last
-	// top-level key. Deterministic across repeated enables (idempotency).
-	insertAt := firstSection
-	for insertAt > 0 && strings.TrimSpace(lines[insertAt-1]) == "" {
-		insertAt--
-	}
-	if insertAt < 0 {
-		insertAt = len(lines)
-	}
+	top := readTopProvider(strings.Join(lines, "\n"))
 	blockLines := strings.Split(strings.TrimRight(projection, "\n"), "\n")
 	var merged []string
-	if uncommented == 1 {
-		// Replace the existing top-level line in place; the block goes at the
-		// canonical position.
-		lines[providerIndex] = providerLine
-		merged = make([]string, 0, len(lines)+len(blockLines))
-		merged = append(merged, lines[:insertAt]...)
+	if top.index >= 0 {
+		lines[top.index] = "model_provider = " + quoteTOMLValue(provider)
+		at := topInsertIndex(lines)
+		merged = append(merged, lines[:at]...)
 		merged = append(merged, blockLines...)
-		merged = append(merged, lines[insertAt:]...)
+		merged = append(merged, lines[at:]...)
 	} else {
-		// Insert the top-level provider line at the canonical position,
-		// followed by the projection block.
-		merged = make([]string, 0, len(lines)+len(blockLines)+1)
-		merged = append(merged, lines[:insertAt]...)
-		merged = append(merged, providerLine)
+		at := topInsertIndex(lines)
+		merged = append(merged, lines[:at]...)
+		merged = append(merged, "model_provider = "+quoteTOMLValue(provider))
 		merged = append(merged, blockLines...)
-		merged = append(merged, lines[insertAt:]...)
+		merged = append(merged, lines[at:]...)
 	}
-	// Exactly one trailing newline, preserving the original byte-for-byte on
-	// disable (the split/join of a trailing newline yields a final empty
-	// element, so a bare +"\n" would double it).
-	return []byte(strings.TrimRight(strings.Join(merged, "\n"), "\n") + "\n"), "", nil
+	return []byte(strings.TrimRight(strings.Join(merged, "\n"), "\n") + "\n")
+}
+
+// removeOwnTables strips Mewla's marked block and any other table under
+// Mewla's provider name (a copy another tool wrote back without the markers),
+// preserving everything else byte-for-byte.
+func removeOwnTables(content string) string {
+	content = removeProjectionBlock(content)
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines))
+	inside := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if isTableHeader(trimmed) {
+			inside = isOwnTableHeader(trimmed)
+			if inside {
+				continue
+			}
+		}
+		if inside {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+func isOwnTableHeader(trimmed string) bool {
+	name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(trimmed, "["), "]"))
+	if hash := strings.IndexByte(trimmed, '#'); hash >= 0 {
+		name = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(trimmed[:hash], "[")), "]"))
+	}
+	switch name {
+	case "model_providers." + GatewayProviderName, `model_providers."` + GatewayProviderName + `"`, "model_providers.'" + GatewayProviderName + "'":
+		return true
+	}
+	return false
+}
+
+func hasOwnTable(content string) bool {
+	return codexProviderUsable([]byte(content), GatewayProviderName)
+}
+
+// codexProviderUsable reports whether Codex can start on name: a built-in
+// provider, or one with a [model_providers.<name>] table.
+func codexProviderUsable(content []byte, name string) bool {
+	if codexBuiltinProviders[name] {
+		return true
+	}
+	var doc struct {
+		ModelProviders map[string]any `toml:"model_providers"`
+	}
+	if _, err := toml.Decode(string(content), &doc); err != nil {
+		return false
+	}
+	_, ok := doc.ModelProviders[name]
+	return ok
 }
 
 // removeProjectionBlock strips the marked Mewla-owned block (by marker lines),
@@ -511,84 +727,20 @@ func removeProjectionBlock(content string) string {
 	return strings.Join(out, "\n")
 }
 
-// restoreProviderLine replaces the projected model_provider line with the
-// original value (or removes it), unless the line was edited outside Mewla.
-func restoreProviderLine(content, projectedLine, originalValue string) (string, string) {
-	lines := strings.Split(content, "\n")
-	providerIndex := -1
-	uncommented := 0
-	for index, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == projectedLine {
-			providerIndex = index
-			uncommented++
-			continue
-		}
-		if strings.HasPrefix(trimmed, "model_provider") {
-			key := trimmed
-			if eq := strings.Index(key, "="); eq >= 0 {
-				key = strings.TrimSpace(key[:eq])
-			}
-			if key == "model_provider" {
-				uncommented++
-			}
-		}
-	}
-	if uncommented > 1 {
-		return content, "model_provider was changed outside Mewla; refusing to clobber"
-	}
-	if providerIndex < 0 {
-		return content, ""
-	}
-	if originalValue != "" && originalValue != GatewayProviderName {
-		lines[providerIndex] = "model_provider = " + quoteTOMLValue(originalValue)
-	} else {
-		lines = append(lines[:providerIndex], lines[providerIndex+1:]...)
-	}
-	return strings.Join(lines, "\n"), ""
-}
-
 // hasExactProviderLine reports whether content contains exactly the projected
 // uncommented model_provider line.
 func hasExactProviderLine(content []byte, projectedLine string) bool {
-	uncommented := 0
-	exact := false
-	for _, line := range strings.Split(string(content), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "model_provider") {
-			key := trimmed
-			if eq := strings.Index(key, "="); eq >= 0 {
-				key = strings.TrimSpace(key[:eq])
-			}
-			if key != "model_provider" {
-				continue
-			}
-			uncommented++
-			exact = exact || trimmed == projectedLine
-		}
+	top := readTopProvider(string(content))
+	if top.count != 1 {
+		return false
 	}
-	return uncommented == 1 && exact
+	return strings.TrimSpace(strings.Split(string(content), "\n")[top.index]) == projectedLine
 }
 
 // topLevelProviderValue returns the current uncommented top-level
 // model_provider value ("" when none).
 func topLevelProviderValue(content []byte) string {
-	for _, line := range strings.Split(string(content), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "model_provider") {
-			continue
-		}
-		eq := strings.Index(trimmed, "=")
-		if eq < 0 {
-			continue
-		}
-		key := strings.TrimSpace(trimmed[:eq])
-		if key != "model_provider" {
-			continue
-		}
-		return strings.Trim(strings.TrimSpace(trimmed[eq+1:]), `"'`)
-	}
-	return ""
+	return readTopProvider(string(content)).value
 }
 
 func quoteTOMLValue(value string) string {

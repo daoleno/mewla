@@ -42,7 +42,7 @@ func TestClaudeTakeoverPreservesAndRestoresUserSettings(t *testing.T) {
 	}
 	takeover := NewClaudeTakeover(settings, filepath.Join(root, "state"))
 
-	if err := takeover.Project("http://127.0.0.1:3425", true); err != nil {
+	if err := takeover.Project("http://127.0.0.1:3425", true, true); err != nil {
 		t.Fatal(err)
 	}
 	env := readSettingsEnv(t, settings)
@@ -66,7 +66,7 @@ func TestClaudeTakeoverPreservesAndRestoresUserSettings(t *testing.T) {
 	}
 
 	// Port fallback moves the gateway: re-projection keeps the user's prior.
-	if err := takeover.Project("http://127.0.0.1:3426", false); err != nil {
+	if err := takeover.Project("http://127.0.0.1:3426", false, true); err != nil {
 		t.Fatal(err)
 	}
 	env = readSettingsEnv(t, settings)
@@ -96,7 +96,7 @@ func TestClaudeTakeoverReleaseKeepsUserEditsAndCreatesMissingFile(t *testing.T) 
 	root := t.TempDir()
 	settings := filepath.Join(root, "claude", "settings.json")
 	takeover := NewClaudeTakeover(settings, filepath.Join(root, "state"))
-	if err := takeover.Project("http://127.0.0.1:3425", true); err != nil {
+	if err := takeover.Project("http://127.0.0.1:3425", true, true); err != nil {
 		t.Fatal(err)
 	}
 	if env := readSettingsEnv(t, settings); env[EnvAnthropicBaseURL] != "http://127.0.0.1:3425" {
@@ -125,7 +125,7 @@ func TestClaudeTakeoverRefusesMalformedSettingsAndFollowsSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	takeover := NewClaudeTakeover(settings, filepath.Join(root, "state"))
-	if err := takeover.Project("http://127.0.0.1:3425", true); !errors.Is(err, ErrInvalid) {
+	if err := takeover.Project("http://127.0.0.1:3425", true, true); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("malformed settings error = %v", err)
 	}
 	if raw, _ := os.ReadFile(settings); string(raw) != `{"env": [` {
@@ -147,7 +147,7 @@ func TestClaudeTakeoverRefusesMalformedSettingsAndFollowsSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	linked := NewClaudeTakeover(link, filepath.Join(root, "state-linked"))
-	if err := linked.Project("http://127.0.0.1:3425", true); err != nil {
+	if err := linked.Project("http://127.0.0.1:3425", true, true); err != nil {
 		t.Fatal(err)
 	}
 	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
