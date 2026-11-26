@@ -331,6 +331,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	defer lifecycleLock.Close()
 	restrictLogOutputs()
+	captureDiscardedStderr(authManager.StorageDir())
 	if releaseBuild == "1" {
 		// A handover cut short by a power loss or reboot left the databases
 		// as the new version migrated them; put them back before opening any.
@@ -392,7 +393,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if logWriter, logErr := logfile.Open(logfile.Path(stateDir), logfile.DefaultMaxBytes); logErr != nil {
 		log.Printf("WARN daemon log file unavailable: %v", logErr)
 	} else {
-		log.SetOutput(io.MultiWriter(os.Stderr, logWriter))
+		if stderrCaptured {
+			log.SetOutput(logWriter)
+		} else {
+			log.SetOutput(io.MultiWriter(os.Stderr, logWriter))
+		}
 		defer func() {
 			log.SetOutput(os.Stderr)
 			_ = logWriter.Close()

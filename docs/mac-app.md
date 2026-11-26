@@ -66,10 +66,17 @@ When a newer release exists, **Settings → General** shows **Update to X** besi
 the version, and so does the cat's menu. One click downloads it (checked against
 the update key built into the app), replaces the app, restarts the daemon onto
 the new version and opens Mewla again. Sessions keep running, and the paired
-devices and the login item stay as they were. If the daemon is still running
-under the replaced app, macOS checks its permissions against that old copy, so
-they read as **Restart Mewla** until it restarts. Mewla notices this and
-restarts its daemon from the installed app at the next quiet moment, once.
+devices and the login item stay as they were. Once any Worker's model reply has
+finished, the daemon stops and macOS starts it again from the installed app,
+so the phone and Brain are back within seconds. A daemon from Mewla 0.4.32 or
+earlier can stall at that restart; the new app stops it after 15 seconds so
+macOS starts the new one. What the daemon writes outside its log (a crash, a
+stall's details) is kept in `~/.mewla/logs/daemon-stderr.log`.
+
+If the daemon is still running under the replaced app, macOS checks its
+permissions against that old copy, so they read as **Restart Mewla** until it
+restarts. Mewla notices this and restarts its daemon from the installed app at
+the next quiet moment, once.
 
 ## Permissions
 

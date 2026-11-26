@@ -41,7 +41,7 @@ func WithoutConsoleWindow(cmd *exec.Cmd) *exec.Cmd { return cmd }
 // ExecReplace replaces this process with path: the same PID runs the new
 // image.
 func ExecReplace(path string, argv, env []string) error {
-	return syscall.Exec(path, argv, env)
+	return execve(path, argv, env)
 }
 
 // ExecInPlace runs path in place of this process, with argv and env, in dir:
@@ -52,7 +52,7 @@ func ExecInPlace(path string, argv, env []string, dir string, _ <-chan os.Signal
 	if dir != "" {
 		_ = os.Chdir(dir)
 	}
-	return syscall.Exec(path, argv, env)
+	return execve(path, argv, env)
 }
 
 // ProcessAlive reports whether pid exists.

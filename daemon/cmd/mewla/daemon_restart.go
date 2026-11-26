@@ -61,6 +61,9 @@ type daemonRuntime struct {
 	upgrade func(stateDir, version string) error
 	kill    func(pid int) error
 	alive   func(pid int) bool
+	// lockHeld: some process holds the state directory's lifecycle lock (a
+	// daemon owns it).
+	lockHeld func(stateDir string) (bool, error)
 	// startDirect starts the daemon the logon task would, for a desktop
 	// session where the task does not run (installed over SSH).
 	startDirect func(config bootConfig) error
@@ -73,6 +76,13 @@ type daemonRuntime struct {
 	// runWait is how long one run of the logon task gets before it is run
 	// again.
 	runWait time.Duration
+	// stallWait is how long a daemon that has shut down for an in-place
+	// restart may stay without running its executable again before it is
+	// stopped (macOS: restartInPlace).
+	stallWait time.Duration
+	// notes, when set, gets a line for what a restart had to do besides
+	// asking.
+	notes io.Writer
 }
 
 var defaultDaemonRuntime = func() daemonRuntime {
@@ -88,12 +98,14 @@ var defaultDaemonRuntime = func() daemonRuntime {
 		upgrade:     requestInPlaceRestart,
 		kill:        killProcess,
 		alive:       platform.ProcessAlive,
+		lockHeld:    bootStateLockHeld,
 		startDirect: bootTaskStartDirect,
 		wait:        30 * time.Second,
 		// The daemon first waits for model replies (restartDrainCap).
 		inPlaceWait: restartDrainCap + restartStartAllowance,
 		poll:        250 * time.Millisecond,
 		runWait:     3 * time.Second,
+		stallWait:   15 * time.Second,
 	}
 }
 
@@ -391,7 +403,7 @@ func (rt daemonRuntime) restartInPlace(stateDir string, daemon runningDaemon, wa
 	if err := rt.upgrade(stateDir, want); err != nil {
 		return fmt.Errorf("%s did not restart onto %s: %w", name, onto, err)
 	}
-	stopped, gap := false, false
+	stopped, gap, killed := false, false, false
 	restarted := func() bool {
 		if !sameVersion {
 			return true
@@ -402,21 +414,57 @@ func (rt daemonRuntime) restartInPlace(stateDir string, daemon runningDaemon, wa
 		}
 		return gap
 	}
+	var shutDownSince time.Time
 	answered := rt.waitFor(func() bool {
 		if rt.answersAs(stateDir, daemon.Addr, want) {
 			return restarted()
 		}
 		gap = true
-		stopped = !rt.alive(daemon.PID)
-		return stopped
+		if stopped = !rt.alive(daemon.PID); stopped {
+			return true
+		}
+		// A daemon that has let go of its state (its lifecycle lock, the last
+		// thing it releases before the exec) but goes on as the same process
+		// is stuck before its new image runs: the macOS exec stall
+		// (platform/exec_darwin.go), which no daemon up to 0.4.32 gets out
+		// of by itself. Stopped, its launchd job starts the installed one.
+		if rt.goos != "darwin" || rt.lockHeld == nil {
+			return false
+		}
+		if held, err := rt.lockHeld(stateDir); err != nil || held {
+			shutDownSince = time.Time{}
+			return false
+		}
+		if shutDownSince.IsZero() {
+			shutDownSince = time.Now()
+			return false
+		}
+		if time.Since(shutDownSince) < rt.stallWait {
+			return false
+		}
+		if rt.notes != nil {
+			fmt.Fprintf(rt.notes, "%s shut down but did not start %s within %s; stopping it so launchd starts it again.\n", name, onto, rt.stallWait)
+		}
+		if err := rt.kill(daemon.PID); err != nil && rt.alive(daemon.PID) {
+			return false
+		}
+		killed, stopped = true, true
+		return true
 	}, rt.inPlaceWait)
 	if answered && !stopped {
 		return nil
 	}
-	if cause, err := os.ReadFile(inPlaceRestartFailurePath(stateDir)); err == nil && len(strings.TrimSpace(string(cause))) > 0 {
+	cause, causeErr := os.ReadFile(inPlaceRestartFailurePath(stateDir))
+	if causeErr == nil && len(strings.TrimSpace(string(cause))) > 0 && !killed {
 		return fmt.Errorf("%s stopped and did not restart onto %s: %s", name, onto, strings.TrimSpace(string(cause)))
 	}
 	if stopped {
+		// A daemon that restarts by ending (under Mewla for Mac's host,
+		// daemon_upgrade.go) or was stopped above is started again by its
+		// launchd job, as a new process.
+		if rt.waitFor(func() bool { return rt.answersAs(stateDir, daemon.Addr, want) }, rt.wait) {
+			return nil
+		}
 		return fmt.Errorf("%s stopped and did not start again; its window says why", name)
 	}
 	if health, err := rt.health(daemon.Addr); err == nil && health.Version == daemon.Version {
@@ -595,6 +643,7 @@ func restartOntoInstalled(rt daemonRuntime, resolved, stateDirFlag string, ifOld
 		fmt.Fprintf(out, "Mewla %s is running.\n", daemon.Version)
 		return nil
 	}
+	rt.notes = out
 	if err := rt.restart(resolved, daemon, Version); err != nil {
 		return err
 	}
