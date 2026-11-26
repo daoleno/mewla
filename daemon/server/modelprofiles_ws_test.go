@@ -270,8 +270,13 @@ func TestModelProfilesWebSocketCRUDActivateAndErrors(t *testing.T) {
 		return fallback, alsoAPI
 	}
 	setFallback("codex-main", "codex-alt")
-	if fb, api := fallbackOf(readType("providers")); fb != "codex-alt" || api != modelprofiles.ProtocolOpenAIChat {
+	set := readType("providers")
+	if fb, api := fallbackOf(set); fb != "codex-alt" || api != modelprofiles.ProtocolOpenAIChat {
 		t.Fatalf("fallback=%q alt upstream_api=%q", fb, api)
+	}
+	// The app takes a change only with its persistence outcome.
+	if set["request_id"] != "fb-codex-alt" || set["persistence_outcome"] == nil {
+		t.Fatalf("fallback reply=%#v", set)
 	}
 	setFallback("codex-main", "")
 	if fb, _ := fallbackOf(readType("providers")); fb != "" {

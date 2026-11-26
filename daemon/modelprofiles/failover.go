@@ -287,8 +287,9 @@ func (f *failover) send(ctx context.Context, w http.ResponseWriter, via forwardV
 }
 
 // failoverModel is the model a request goes to the fallback as: the one the
-// agent asked for when the fallback lists it (or lists nothing); for a
-// Claude id it does not list, a Claude stand-in; else the fallback's own.
+// agent asked for when the fallback lists it (or lists nothing yet); for a
+// Claude id it does not list, a Claude stand-in; else the model the person set
+// on the fallback, else the first it lists.
 func failoverModel(clientAPI, asked string, target failoverTarget) string {
 	if len(target.Listed) == 0 {
 		return firstNonEmpty(target.Model, asked)
@@ -303,7 +304,7 @@ func failoverModel(clientAPI, asked string, target failoverTarget) string {
 			return standIn
 		}
 	}
-	return firstNonEmpty(target.Model, asked)
+	return firstNonEmpty(target.Model, target.Listed[0])
 }
 
 func failureWords(status int, err error) string {

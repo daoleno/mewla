@@ -382,3 +382,24 @@ func TestAFallbackWithoutAModelKeepsTheAgents(t *testing.T) {
 		t.Fatalf("the request went as %q", got)
 	}
 }
+
+// A fallback that lists models but not the one asked for gets one it serves.
+func TestFailoverModelIsOneTheFallbackServes(t *testing.T) {
+	glm := failoverTarget{Listed: []string{"glm-5", "glm-5-air"}}
+	for _, tc := range []struct {
+		api, asked string
+		target     failoverTarget
+		want       string
+	}{
+		{translate.APIResponses, "glm-5-air", glm, "glm-5-air"},                                                // listed
+		{translate.APIResponses, "gpt-6", glm, "glm-5"},                                                        // not listed, nothing set
+		{translate.APIResponses, "gpt-6", failoverTarget{Model: "glm-5-air", Listed: glm.Listed}, "glm-5-air"}, // the person's
+		{translate.APIAnthropic, "claude-opus-5-5", glm, "glm-5"},                                              // a Claude stand-in
+		{translate.APIAnthropic, "claude-haiku-5-5", failoverTarget{Listed: []string{"claude-haiku-4-5", "glm-5"}}, "claude-haiku-4-5"},
+		{translate.APIResponses, "claude-sonnet-5", failoverTarget{}, "claude-sonnet-5"}, // nothing listed yet
+	} {
+		if got := failoverModel(tc.api, tc.asked, tc.target); got != tc.want {
+			t.Errorf("%s %q → %q, want %q", tc.api, tc.asked, got, tc.want)
+		}
+	}
+}
