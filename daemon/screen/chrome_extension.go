@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -93,8 +94,27 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 		return err
 	}
 	devMode := ElementMatch{DOMID: chromeDevModeID}
-	if err := waitFor("the extensions page", devMode, "", 10); err != nil {
-		return err
+	if err := waitFor("the extensions page", devMode, "", 4); err != nil {
+		// Chrome shows Mewla no page: asked as a screen reader asks, it
+		// builds them; only while Mewla needs it.
+		enhanced, ok := s.backend.(enhancedUISetter)
+		pid, perr := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return t.PID, nil })
+		if !ok || perr != nil || pid == 0 {
+			return err
+		}
+		if serr := enhanced.SetEnhancedUI(pid, true); serr != nil {
+			log.Printf("screen: Chrome's pages as for a screen reader: %v", serr)
+			return err
+		}
+		log.Printf("screen: Chrome (pid %d) showed no page; asked for its pages as a screen reader does", pid)
+		defer func() {
+			if serr := enhanced.SetEnhancedUI(pid, false); serr != nil {
+				log.Printf("screen: Chrome back from screen reader mode: %v", serr)
+			}
+		}()
+		if err := waitFor("the extensions page", devMode, "", 10); err != nil {
+			return err
+		}
 	}
 	loadUnpacked := ElementMatch{DOMID: chromeLoadUnpackedID}
 	// Load unpacked shows only in Developer mode; pressed while it shows, the
@@ -196,6 +216,11 @@ func focusedFieldInLastSheet(t ElementTree) (int, error) {
 		}
 	}
 	return 0, errors.New("the sheet's field does not have the keyboard")
+}
+
+// enhancedUISetter sets an app's AXEnhancedUserInterface (macOS).
+type enhancedUISetter interface {
+	SetEnhancedUI(pid int, on bool) error
 }
 
 // internalPick chooses an element of an internal agent's latest read.

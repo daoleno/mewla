@@ -258,6 +258,9 @@ func readApp(ctx context.Context, pid int, limit int) (ElementTree, error) {
 	}
 	walk()
 	// A browser's windows without a single page: it stopped building them.
+	if appBundle(pid).chromium && axLib.arrayCount(windows) > 0 && !hasWebArea(tree) {
+		webAX.noteNoPages(pid, len(tree.Elements), tree.Truncated)
+	}
 	if appBundle(pid).chromium && axLib.arrayCount(windows) > 0 && !tree.Truncated && !hasWebArea(tree) &&
 		webAX.reassert(ctx, pid, macWebOps, time.Now, time.Sleep) {
 		for _, e := range tree.Elements {

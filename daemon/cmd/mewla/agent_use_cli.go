@@ -27,7 +27,9 @@ giving Mewla its key once.
 
   status          What agents can use now, and the one thing to fix if not
   on | off        The same switch as the app's "Agents can use this computer"
-  fix             Do the fix status names (opens Chrome on this computer)
+  fix [name]      Do the fix status names, or the one named (install_extension,
+                  open_extension, retry, open_settings), through the running
+                  Mewla: on a Mac with Accessibility it adds the extension itself
   key [-clear]    Paste the Playwright extension's key (shown on its page in
                   Chrome) from stdin; -clear forgets it
   need <permission> --reason "..."
@@ -76,8 +78,23 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 {
-		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	if fs.NArg() > 1 || (fs.NArg() == 1 && action != "fix") {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(fs.NArg()-1))
+	}
+	if action == "fix" {
+		// The running daemon does the fix, as the app's button does: only it
+		// holds this screen's permissions (it may add the extension itself).
+		resp, err := callControl(cliConfig{stateDir: resolveCLIStateDir(stateDir)}, control.Request{Type: "agent_use", Name: agentUseFixName(fs.Arg(0))})
+		switch {
+		case err == nil && !resp.OK && resp.Error != nil:
+			return errors.New(resp.Error.Message)
+		case err == nil && resp.OK && resp.AgentUse != nil:
+			if outputJSON {
+				return json.NewEncoder(os.Stdout).Encode(*resp.AgentUse)
+			}
+			printAgentUse(os.Stdout, *resp.AgentUse)
+			return nil
+		}
 	}
 	service, err := agentuse.New(resolveCLIStateDir(stateDir), false)
 	if err != nil {
@@ -92,11 +109,15 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 		status, err = service.SetEnabled(action == "on")
 	case "fix":
 		current := service.Refresh()
-		if current.Browser.Fix == "" {
+		fix := current.Browser.Fix
+		if fs.Arg(0) != "" {
+			fix = fs.Arg(0)
+		}
+		if fix == "" {
 			status = current
 			break
 		}
-		status, err = service.Fix(current.Browser.Fix)
+		status, err = service.Fix(fix)
 	case "key":
 		key := ""
 		if !clear {
@@ -144,6 +165,15 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	}
 	printAgentUse(os.Stdout, status)
 	return nil
+}
+
+// agentUseFixName is what `fix` asks the daemon for: the named fix, or the
+// one its status names ("fix").
+func agentUseFixName(fix string) string {
+	if fix == "" {
+		return "fix"
+	}
+	return "fix:" + fix
 }
 
 // daemonAgentUse is the running daemon's status, which a command's own look

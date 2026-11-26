@@ -5,6 +5,7 @@ package screen
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ebitengine/purego/objc"
@@ -47,7 +48,7 @@ var macWebOps = webAccessOps{
 		axLib.setTimeout(app, 1)
 		yes := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), true)
 		if code := appsLib.setAttribute(app, manualAXName(), uintptr(yes)); code != 0 {
-			return errors.New("refused")
+			return fmt.Errorf("refused (accessibility error %d)", code)
 		}
 		return nil
 	},
@@ -74,3 +75,37 @@ var macWebOps = webAccessOps{
 		return len(tree.Elements)
 	},
 }
+
+// enhancedUIName is the attribute VoiceOver sets on an app it reads.
+const enhancedUIName = "AXEnhancedUserInterface"
+
+// setEnhancedUI sets AXEnhancedUserInterface on the app with pid: what
+// VoiceOver sets, on which Chrome builds its pages' tree whatever else it
+// answers. Chrome then runs as for a screen reader, so it is set only while
+// Mewla needs a page and put back after.
+func setEnhancedUI(pid int, on bool) error {
+	if !loadApps() {
+		return ErrNoApps
+	}
+	var err error
+	withPool(func() {
+		app := appsLib.createApplication(int32(pid))
+		if app == 0 {
+			err = errors.New("no app")
+			return
+		}
+		defer axLib.release(app)
+		axLib.setTimeout(app, 1)
+		if axLib.attrs[enhancedUIName] == 0 {
+			axLib.attrs[enhancedUIName] = axLib.createString(0, enhancedUIName, cfStringEncodingUTF8)
+		}
+		value := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), on)
+		if code := appsLib.setAttribute(app, axLib.attrs[enhancedUIName], uintptr(value)); code != 0 {
+			err = fmt.Errorf("refused (accessibility error %d)", code)
+		}
+	})
+	return err
+}
+
+// SetEnhancedUI is setEnhancedUI for the extension flow.
+func (b *macBackend) SetEnhancedUI(pid int, on bool) error { return setEnhancedUI(pid, on) }
