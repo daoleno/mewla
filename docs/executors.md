@@ -228,10 +228,10 @@ token usage come through. Toward Anthropic, Codex keeps Claude's thinking
 from one turn to the next, and the prompt is marked for caching, so a long
 Session reads most of each prompt from cache. When Claude Code asks for its
 own Haiku or Opus (for titles, summaries, Explore subagents) and the Provider
-does not serve it, a model the Provider does serve answers instead. On any
-endpoint that is not Anthropic's own, the billing line Claude Code puts at the
-start of its prompt is dropped: it changes every turn and would keep the
-Provider from reusing its cache. Codex on a translated endpoint uses HTTP, not
+does not serve it, a model the Provider does serve answers instead. For any
+model that is not Claude, the billing line Claude Code puts at the start of
+its prompt is dropped: it changes every turn and would keep the Provider from
+reusing its cache. Codex on a translated endpoint uses HTTP, not
 WebSocket.
 
 **When a Provider fails.** A Provider that is busy (a 5xx or 529 status, or a

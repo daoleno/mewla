@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // oneAPIUpstream speaks a single API at path: every other POST is 404, as a
@@ -275,32 +276,74 @@ func TestClaudeStandIn(t *testing.T) {
 	}
 }
 
-func TestClaudeBillingLineStaysWithAnthropic(t *testing.T) {
-	body := `{"model":"m","system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.332.0b8; cc_entrypoint=cli; cch=1f2e3;"},{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}}],"messages":[]}`
-	out := string(dropClaudeBillingLine([]byte(body)))
+func TestClaudeBillingLineOnlyGoesToClaude(t *testing.T) {
+	line := `{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.332.0b8; cc_entrypoint=cli; cch=1f2e3;"}`
+	body := func(model string) string {
+		return `{"model":"` + model + `","max_tokens":2,"system":[` + line + `,{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":"hi"}]}`
+	}
+	out := string(dropClaudeBillingLine([]byte(body("glm-5"))))
 	if strings.Contains(out, "billing") || !strings.Contains(out, `"You are Claude Code."`) || !strings.Contains(out, `"cache_control":{"type":"ephemeral"}`) {
 		t.Fatalf("got %s: want only the billing block gone", out)
 	}
-	plain := `{"model":"m","system":"x-anthropic-billing-header in a string is the person's own text","messages":[]}`
-	if got := string(dropClaudeBillingLine([]byte(plain))); got != plain {
-		t.Fatalf("a string system was changed: %s", got)
+	for _, model := range []string{"claude-opus-5-5", "us.anthropic.claude-sonnet-5", "anthropic/claude-haiku-5-5"} {
+		if got := string(dropClaudeBillingLine([]byte(body(model)))); got != body(model) {
+			t.Fatalf("%s lost the line: a Claude model is served by Anthropic or a relay of it", model)
+		}
 	}
-	if anthropicOwnAPI("http://127.0.0.1:9/v1") || !anthropicOwnAPI("https://api.anthropic.com") {
-		t.Fatalf("anthropicOwnAPI is wrong")
+	joined := `{"model":"glm-5","system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=1; cch=2;\nYou are Claude Code."}],"messages":[]}`
+	if got := string(dropClaudeBillingLine([]byte(joined))); !strings.Contains(got, `"text":"You are Claude Code."`) || strings.Contains(got, "billing") {
+		t.Fatalf("got %s: want the rest of a block that starts with the line kept", got)
 	}
 
-	// A Session on another Anthropic-compatible Provider gets the prompt
-	// without it, so each turn reads the cache the last one wrote.
+	// A Session's Claude model on an Anthropic-compatible relay keeps it.
 	up := &scripted{replies: []func(http.ResponseWriter){status(200, nil, `{"type":"message","content":[]}`)}}
 	_, _, root, _ := routeFixture(t, up)
-	req, _ := http.NewRequest(http.MethodPost, root+"/v1/messages", strings.NewReader(strings.Replace(body, `"model":"m"`, `"model":"claude-test","max_tokens":2`, 1)))
-	req.Header.Set("Authorization", "Bearer "+LoopbackAuthPlaceholder)
-	resp, err := http.DefaultClient.Do(req)
+	if status, _ := post(t, root+"/v1/messages", body("claude-test"), nil); status != 200 || !strings.Contains(up.bodies[0], "billing-header") {
+		t.Fatalf("status=%d upstream got %v: want the request as Claude Code sent it", status, up.bodies)
+	}
+}
+
+// A connection saved by an older Mewla has no upstream_api: the first start
+// that can look finds it, without the person saving it again.
+func TestStartFindsTheAPIOfConnectionsSavedBefore(t *testing.T) {
+	up := &oneAPIUpstream{path: "/v1/chat/completions", models: `{"data":[{"id":"glm-5"}]}`}
+	srv := httptest.NewServer(up)
+	defer srv.Close()
+	root := t.TempDir()
+	older, _ := newDurableOwner(t, root) // no detection, as before this build
+	saved := addConnection(t, older, ClientClaude, "Saved Earlier", srv.URL+"/v1", "glm-5")
+	if saved.UpstreamAPI != "" {
+		t.Fatalf("upstream_api = %q before any detection", saved.UpstreamAPI)
+	}
+	_ = older.Close()
+
+	creds, err := NewFileCredentialStore(filepath.Join(root, "credentials.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
-	if up.calls() != 1 || strings.Contains(up.bodies[0], "billing-header") || !strings.Contains(up.bodies[0], "You are Claude Code.") {
-		t.Fatalf("status=%d upstream got %v", resp.StatusCode, up.bodies)
+	owner, err := StartOwner(OwnerConfig{
+		ProfilesPath:      filepath.Join(root, "model-profiles.toml"),
+		RoutesPath:        filepath.Join(root, "route-bindings.json"),
+		ListenerPath:      filepath.Join(root, "route-listener.json"),
+		DiscoveryPath:     filepath.Join(root, "provider-discovery.json"),
+		Lookup:            func(string) (string, bool) { return "", false },
+		Verifier:          BuiltinEnvelopeVerifier{},
+		Credentials:       creds,
+		DetectUpstreamAPI: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer owner.Close()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		p, err := owner.store.Get(saved.ID)
+		if err == nil && p.UpstreamAPI == ProtocolOpenAIChat {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("upstream_api = %q (err %v) after start, want openai_chat", p.UpstreamAPI, err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

@@ -50,7 +50,7 @@ func types(events []map[string]any) []string {
 
 func TestClaudeCodeOnAChatUpstream(t *testing.T) {
 	req := `{"model":"glm-5","max_tokens":1000,"stream":true,
-	 "system":[{"type":"text","text":"You are Claude Code."}],
+	 "system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.332.0b8; cc_entrypoint=cli; cch=9a8b7;"},{"type":"text","text":"You are Claude Code."}],
 	 "tools":[{"name":"Bash","description":"run","input_schema":{"type":"object","properties":{"cmd":{"type":"string"}}}},{"type":"web_search_20250305","name":"web_search"}],
 	 "messages":[
 	  {"role":"user","content":"list files"},
@@ -74,6 +74,9 @@ func TestClaudeCodeOnAChatUpstream(t *testing.T) {
 	}
 	if strings.Join(roles, ",") != "system,user,assistant,tool,user" || len(sent.Tools) != 1 || !sent.Stream {
 		t.Fatalf("roles=%v tools=%d stream=%v: want system,user,assistant,tool,user with Bash only (server tools dropped)", roles, len(sent.Tools), sent.Stream)
+	}
+	if sent.Messages[0]["content"] != "You are Claude Code." {
+		t.Fatalf("system = %v: Claude Code's billing line must not reach another API", sent.Messages[0])
 	}
 	if sent.Messages[2]["reasoning_content"] != "use ls" || sent.Messages[3]["tool_call_id"] != "toolu_1" {
 		t.Fatalf("assistant=%v tool=%v: want reasoning back and the call answered", sent.Messages[2], sent.Messages[3])

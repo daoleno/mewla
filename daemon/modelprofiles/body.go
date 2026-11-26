@@ -609,14 +609,30 @@ func withRawQuery(upstreamURL, rawQuery string) (string, error) {
 
 // claudeBillingPrefix opens the first system block Claude Code sends:
 // "x-anthropic-billing-header: cc_version=…; cc_entrypoint=…; cch=…;". It is
-// for Anthropic's own API, and its cch changes every turn, so on any other
-// endpoint it changes the very start of the prompt and no turn reads the
-// cached prefix of the one before.
+// for Claude models (Anthropic's API, or a relay or cloud serving Claude),
+// and its cch changes every turn. Another vendor's model reads it as the
+// first words of the prompt, so no turn reads the cached prefix of the one
+// before.
 const claudeBillingPrefix = "x-anthropic-billing-header:"
 
-// dropClaudeBillingLine removes that system block from an Anthropic
-// Messages request. A body without it, or one that cannot be read, is
-// returned as it is.
+// withoutBillingLine is text with a leading billing line cut off, and
+// whether it had one.
+func withoutBillingLine(text string) (string, bool) {
+	trimmed := strings.TrimLeft(text, " \t\r\n")
+	if !strings.HasPrefix(trimmed, claudeBillingPrefix) {
+		return text, false
+	}
+	if nl := strings.IndexByte(trimmed, '\n'); nl >= 0 {
+		return strings.TrimLeft(trimmed[nl+1:], "\r\n"), true
+	}
+	return "", true
+}
+
+// dropClaudeBillingLine removes Claude Code's billing line from an
+// Anthropic Messages request for a model that is not Claude: a system block
+// that is only the line goes, and a block that starts with it keeps the rest.
+// A request for a Claude model, one without the line, or one that cannot be
+// read is returned as it is.
 func dropClaudeBillingLine(body []byte) []byte {
 	if !bytes.Contains(body, []byte(claudeBillingPrefix)) {
 		return body
@@ -625,22 +641,40 @@ func dropClaudeBillingLine(body []byte) []byte {
 	if json.Unmarshal(body, &obj) != nil {
 		return body
 	}
-	var blocks []json.RawMessage
+	var model string
+	if json.Unmarshal(obj["model"], &model) != nil || strings.Contains(strings.ToLower(model), "claude") {
+		return body
+	}
+	var blocks []map[string]json.RawMessage
 	if json.Unmarshal(obj["system"], &blocks) != nil {
 		return body
 	}
-	kept := blocks[:0:0]
-	for _, raw := range blocks {
-		var b struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		}
-		if json.Unmarshal(raw, &b) == nil && b.Type == "text" && strings.HasPrefix(strings.TrimSpace(b.Text), claudeBillingPrefix) {
+	kept := make([]map[string]json.RawMessage, 0, len(blocks))
+	changed := false
+	for _, b := range blocks {
+		var typ, text string
+		_ = json.Unmarshal(b["type"], &typ)
+		if typ != "text" || json.Unmarshal(b["text"], &text) != nil {
+			kept = append(kept, b)
 			continue
 		}
-		kept = append(kept, raw)
+		rest, had := withoutBillingLine(text)
+		if !had {
+			kept = append(kept, b)
+			continue
+		}
+		changed = true
+		if strings.TrimSpace(rest) == "" {
+			continue
+		}
+		raw, err := json.Marshal(rest)
+		if err != nil {
+			return body
+		}
+		b["text"] = raw
+		kept = append(kept, b)
 	}
-	if len(kept) == len(blocks) {
+	if !changed {
 		return body
 	}
 	system, err := json.Marshal(kept)
@@ -653,11 +687,4 @@ func dropClaudeBillingLine(body []byte) []byte {
 		return body
 	}
 	return out
-}
-
-// anthropicOwnAPI reports whether a base URL is Anthropic's own API, the
-// one endpoint Claude Code's billing line is meant for.
-func anthropicOwnAPI(baseURL string) bool {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
-	return err == nil && strings.EqualFold(u.Hostname(), "api.anthropic.com")
 }

@@ -523,7 +523,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			}
 		}
 	}
-	if protocol == GatewayProtocolAnthropic && len(bodyBytes) > 0 && req.Header.Get("Content-Encoding") == "" && !anthropicOwnAPI(upstream.BaseURL) {
+	if protocol == GatewayProtocolAnthropic && len(bodyBytes) > 0 && req.Header.Get("Content-Encoding") == "" {
 		if dropped := dropClaudeBillingLine(bodyBytes); len(dropped) != len(bodyBytes) {
 			bodyBytes = dropped
 			req.ContentLength = int64(len(bodyBytes))

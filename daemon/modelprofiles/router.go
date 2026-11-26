@@ -464,7 +464,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	if (parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointAnthropicCountTokens) && !anthropicOwnAPI(binding.UpstreamBaseURL) {
+	if parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointAnthropicCountTokens {
 		rewritten = dropClaudeBillingLine(rewritten)
 	}
 

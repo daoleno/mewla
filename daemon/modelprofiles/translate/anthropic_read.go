@@ -85,12 +85,16 @@ func ReadAnthropic(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("anthropic system: %w", err)
 	}
 	for _, b := range system {
-		// Claude Code's billing line is for Anthropic's API alone, and it
-		// changes every turn at the very start of the prompt.
-		if b.Type == "text" && strings.HasPrefix(strings.TrimSpace(b.Text), "x-anthropic-billing-header:") {
-			continue
-		}
 		if b.Type == "text" {
+			// Claude Code's billing line is for Anthropic's Messages API
+			// alone, and it changes every turn at the very start of the
+			// prompt, where it would spoil the upstream's cache.
+			if text := strings.TrimLeft(b.Text, " \t\r\n"); strings.HasPrefix(text, "x-anthropic-billing-header:") {
+				_, rest, _ := strings.Cut(text, "\n")
+				if b.Text = strings.TrimLeft(rest, "\r\n"); strings.TrimSpace(b.Text) == "" {
+					continue
+				}
+			}
 			req.System = append(req.System, Part{Kind: PartText, Text: b.Text, Cache: cacheMark(b.Cache)})
 		}
 	}

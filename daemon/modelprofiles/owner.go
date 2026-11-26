@@ -405,6 +405,11 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		_ = o.Close()
 		return nil, listenErr
 	}
+	// Not joined by Close (which holds o.mu while it waits): it takes no
+	// owner lock and stops with the background context.
+	if o.upstreamAPIDetect != nil {
+		go o.detectSavedUpstreamAPIs(o.backgroundCtx)
+	}
 	return o, nil
 }
 
