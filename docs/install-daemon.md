@@ -499,7 +499,8 @@ A source build serves a placeholder instead of the web UI unless you first run
 ## Uninstall
 
 1. Run `mewla boot uninstall` if you installed the service, and stop `mewla`.
-   On macOS this also removes `~/Applications/Mewla.app`. It keeps the signing
+   It gives Codex and Claude Code back the settings they had before Mewla's
+   gateway. On macOS this also removes `~/Applications/Mewla.app`. It keeps the signing
    identity, so a later install keeps your permissions. To remove the identity
    too, run
    `security delete-keychain ~/Library/Keychains/mewla-signing.keychain-db`
@@ -512,7 +513,9 @@ A source build serves a placeholder instead of the web UI unless you first run
 
 On Windows:
 
-1. Run `mewla boot uninstall`. It stops Mewla and removes the scheduled task.
+1. Run `mewla boot uninstall`. It stops Mewla, removes the scheduled task and
+   gives Codex and Claude Code back the settings they had before Mewla's
+   gateway.
    Your Sessions keep running in the session host until you sign out or
    restart, and Windows can't delete `mewla.exe` while they do.
 2. After signing out or restarting, delete `%LOCALAPPDATA%\Programs\Mewla`

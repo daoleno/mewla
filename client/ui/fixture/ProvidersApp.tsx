@@ -22,6 +22,7 @@ const catalog = {
   presets: [],
   models: { conn_a: codexModels, conn_b: claudeModels, conn_c: [] },
   disabled_models: { conn_a: ["gpt-5.5"] },
+  gateway: { running: true, address: "127.0.0.1:3425" },
 };
 const daemon = new FakeDaemon({
   ...base,

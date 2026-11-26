@@ -7,7 +7,7 @@
 //! - `app.pairing`: `mewla pair -json` of this computer's daemon (the phone QR, and the link the app pairs itself
 //!   with, silently: it is this computer);
 //! - `app.dock`: the Dock icon shown while the window is, hidden with only the menu bar cat;
-//! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered);
+//! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered, then `mewla boot give-back`);
 //! - `link.start` / `link.stop` / `link.stopAll` / `link.events`: Mewla Relay's pinned tunnels (link.rs);
 //! - `app.permissionGuide`: System Settings on a permission's list with the panel to drag Mewla in (permissions.rs).
 //!
@@ -196,12 +196,18 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
 
     // `app.stop`: Stop Mewla on this Mac… (the app quits after it): the release's LaunchAgent is unregistered; Mewla
     // Dev's daemon, the app's child, stops as the app quits.
+    // Then Codex and Claude Code get their own settings back (agent::give_back).
+    let stop_cli = config.cli.clone();
     host.handle("app.stop", move |call| {
         let Some(reply) = call.into_reply() else { return };
+        let cli = stop_cli.clone();
         std::thread::spawn(move || {
             let result = if release { agent::unregister() } else { Ok("the daemon stops with the app".into()) };
             if let Ok(line) = &result {
                 log::warn!("stop: {line}");
+                if release {
+                    log::warn!("stop: {}", agent::give_back(&cli));
+                }
             }
             reply.reply(result.map(Value::String));
         });

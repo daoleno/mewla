@@ -535,3 +535,23 @@ pub fn unregister() -> Result<String, String> {
     unregister_label(if migrated { INSTALLED_LABEL } else { LABEL })?;
     Ok("unregistered the daemon's LaunchAgent".into())
 }
+
+/// After Stop Mewla on this Mac…: Codex and Claude Code get back the settings they had before Mewla's gateway
+/// (`mewla boot give-back`, which waits for the daemon to let go of its state), so a Mac whose Mewla is stopped and
+/// then moved to the Trash leaves neither pointing at a gateway that no longer runs. The next launch points them at
+/// the gateway again. Another Mewla's variables are left out, so it never reaches that one.
+pub fn give_back(cli: &Path) -> String {
+    let mut command = Command::new(cli);
+    command.args(["boot", "give-back"]);
+    for (key, _) in std::env::vars_os() {
+        let name = key.to_string_lossy();
+        if name.starts_with("MEWLA_") || name == "XPC_SERVICE_NAME" {
+            command.env_remove(&key);
+        }
+    }
+    match command.output() {
+        Ok(out) if out.status.success() => "gave Codex and Claude Code their own settings back".into(),
+        Ok(out) => format!("give-back: {}", String::from_utf8_lossy(&out.stdout).trim()),
+        Err(err) => format!("give-back: {err}"),
+    }
+}
