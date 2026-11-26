@@ -36,8 +36,6 @@ const (
 	// (gpt-image-2) or none, so they go to the selected Codex connection
 	// instead of being resolved by model.
 	GatewayProtocolCodexTools = "codex_tools"
-	GatewayRetryAttempts      = 2
-	GatewayRetryBackoff       = 100 * time.Millisecond
 )
 
 // MaxGatewayRequestBodyBytes is the loopback DoS ceiling for Codex request
@@ -54,7 +52,12 @@ const GatewayProviderName = "mewla-gateway"
 // gateway. It is derived from one Mewla Provider connection (profile) and never
 // carries secrets.
 type GatewayUpstream struct {
-	ProfileID     string
+	ProfileID string
+	// Name is the connection's name, for errors the person reads.
+	Name string
+	// ProviderID is the preset the connection came from; it selects the
+	// request adapter its upstream needs (upstreamAdapters).
+	ProviderID    string
 	BaseURL       string
 	Protocol      string
 	AuthMode      string
@@ -348,6 +351,8 @@ func GatewayUpstreamFromProfile(profile Profile) GatewayUpstream {
 	}
 	return GatewayUpstream{
 		ProfileID:     normalizeSpace(profile.ID),
+		Name:          normalizeSpace(profile.Name),
+		ProviderID:    normalizeID(profile.ProviderID),
 		BaseURL:       normalizeSpace(profile.BaseURL),
 		Protocol:      normalizeID(profile.Protocol),
 		AuthMode:      normalizeID(profile.AuthMode),
@@ -384,7 +389,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	upstream, ok := g.Upstream()
 	if !ok && g.resolve == nil {
 		// Honest connection failure: never silently bypass to an old upstream.
-		writeRouteError(w, http.StatusServiceUnavailable, fmt.Errorf("%w: gateway has no selected Provider", ErrUpstreamInvalid))
+		writeRouteError(w, http.StatusServiceUnavailable, fmt.Errorf("%w: gateway has no selected Provider", ErrNoProviderSelected))
 		return
 	}
 	protocol, endpointOK := gatewayProtocolForPath(req.URL.Path)
@@ -458,7 +463,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	if g.resolve != nil && protocol == GatewayProtocolCodexTools {
 		upstream, err = g.resolve(protocol, "")
 		if err != nil {
-			writeGatewayResolutionError(w, err)
+			writeGatewayResolutionError(w, "", err)
 			return
 		}
 	} else if g.resolve != nil && req.Method == http.MethodPost {
@@ -469,7 +474,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		}
 		upstream, err = g.resolve(protocol, modelID)
 		if err != nil {
-			writeGatewayResolutionError(w, err)
+			writeGatewayResolutionError(w, modelID, err)
 			return
 		}
 		// Claude Code marks its one-million context choice with a "[1m]"
@@ -488,6 +493,28 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	if upstream.BaseURL == "" {
 		writeRouteError(w, http.StatusServiceUnavailable, ErrUpstreamInvalid)
 		return
+	}
+	// The request adapter the Provider's upstream needs runs here as it does
+	// on Session routes (DeepSeek's Responses endpoint takes a subset of what
+	// Codex sends): a Codex started in a plain terminal gets the same fit.
+	decodedEncoding := false
+	if adapt := upstreamAdapters[upstream.ProviderID].Responses; protocol == GatewayProtocolResponses && adapt != nil && len(bodyBytes) > 0 {
+		plain, decoded, decodeErr := decodeBodyEncoding(req.Header.Get("Content-Encoding"), bodyBytes, maxBody)
+		if decodeErr != nil {
+			writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+			return
+		}
+		adapted, adaptErr := adapt(plain)
+		if adaptErr != nil {
+			if errors.Is(adaptErr, ErrResponsesFeatureUnsupported) {
+				writeRouteError(w, http.StatusBadRequest, forProvider(adaptErr, upstream.Name, ""))
+				return
+			}
+			writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+			return
+		}
+		bodyBytes, decodedEncoding = adapted, decoded
+		req.ContentLength = int64(len(bodyBytes))
 	}
 	target, err := gatewayUpstreamRequestURL(upstream.BaseURL, req.URL)
 	if err != nil {
@@ -524,8 +551,11 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		return
 	}
 	copyInboundHeaders(upReq.Header, req.Header)
+	if decodedEncoding {
+		upReq.Header.Del("Content-Encoding")
+	}
 	if err := applyGatewayAuth(upReq.Header, upstream, req.Header, g.lookup, g.creds); err != nil {
-		writeRouteError(w, http.StatusBadGateway, ErrCredentialNotReady)
+		writeRouteError(w, http.StatusBadGateway, forProvider(ErrCredentialNotReady, upstream.Name, ""))
 		return
 	}
 	if req.ContentLength >= 0 {
@@ -539,37 +569,10 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 
 	// Image generation is billed per call: a 5xx may still have produced an
 	// image upstream, so tool endpoints are never replayed.
-	attempts := GatewayRetryAttempts
-	if protocol == GatewayProtocolCodexTools {
-		attempts = 1
-	}
-	var resp *http.Response
-	for attempt := 0; attempt < attempts; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-req.Context().Done():
-				writeRouteError(w, http.StatusGatewayTimeout, req.Context().Err())
-				return
-			case <-time.After(GatewayRetryBackoff):
-			}
-			upReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		}
-		resp, err = g.client.Do(upReq)
-		if err == nil && resp.StatusCode < 500 {
-			break
-		}
-		// The final attempt's response is the client's answer; keep its body.
-		if attempt == attempts-1 {
-			break
-		}
-		if resp != nil {
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-		}
-	}
+	resp, err := sendUpstream(g.client, upReq, bodyBytes, protocol != GatewayProtocolCodexTools)
 	if err != nil {
 		status, typed := classifyUpstreamDoError(err)
-		writeRouteError(w, status, typed)
+		writeRouteError(w, status, forProvider(typed, upstream.Name, upstreamReachReason(err)))
 		return
 	}
 	defer resp.Body.Close()
@@ -630,16 +633,21 @@ func gatewayModelID(body []byte) (string, error) {
 	return model, nil
 }
 
-func writeGatewayResolutionError(w http.ResponseWriter, err error) {
-	status := http.StatusBadRequest
-	if errors.Is(err, ErrCredentialNotReady) {
-		status = http.StatusBadGateway
-	} else if errors.Is(err, ErrNotFound) || errors.Is(err, ErrModelUnsupported) {
-		status = http.StatusNotFound
-	} else if errors.Is(err, ErrConflict) {
-		status = http.StatusBadRequest
+func writeGatewayResolutionError(w http.ResponseWriter, modelID string, err error) {
+	switch {
+	case errors.Is(err, ErrCredentialNotReady):
+		writeRouteError(w, http.StatusBadGateway, err)
+	case errors.Is(err, ErrNotFound):
+		// No Codex connection offers the model: name it, as the Session
+		// router does.
+		writeModelRefusal(w, modelID, "", false)
+	case errors.Is(err, ErrConflict):
+		writeRouteError(w, http.StatusBadRequest, err)
+	case errors.Is(err, ErrModelUnsupported):
+		writeRouteError(w, http.StatusNotFound, err)
+	default:
+		writeRouteError(w, http.StatusBadRequest, err)
 	}
-	writeRouteError(w, status, err)
 }
 
 // applyGatewayAuth injects the upstream credential per AuthMode. It mirrors the

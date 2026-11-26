@@ -484,7 +484,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		upReq.Header.Del("Accept-Encoding")
 	}
 	if err := applyUpstreamAuth(upReq.Header, binding, inboundAuth, r.credentialLookup(), r.creds); err != nil {
-		writeRouteError(w, http.StatusBadGateway, ErrCredentialNotReady)
+		writeRouteError(w, http.StatusBadGateway, forProvider(ErrCredentialNotReady, binding.ProfileName, ""))
 		return
 	}
 	if len(rewritten) > 0 {
@@ -493,10 +493,10 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		upReq.ContentLength = int64(len(rewritten))
 	}
 
-	resp, err := r.client.Do(upReq)
+	resp, err := sendUpstream(r.client, upReq, rewritten, true)
 	if err != nil {
 		status, typed := classifyUpstreamDoError(err)
-		writeRouteError(w, status, typed)
+		writeRouteError(w, status, forProvider(typed, binding.ProfileName, upstreamReachReason(err)))
 		return
 	}
 	defer resp.Body.Close()
@@ -801,45 +801,6 @@ func writeModelRefusal(w http.ResponseWriter, model, connection string, listStal
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write(payload)
-}
-
-func writeRouteError(w http.ResponseWriter, status int, err error) {
-	code := "route_error"
-	switch {
-	case errors.Is(err, ErrRouteNotFound):
-		code = "route_not_found"
-	case errors.Is(err, ErrRouteAdmissionDenied):
-		code = "route_admission_denied"
-	case errors.Is(err, ErrRoutePathMismatch):
-		code = "route_path_mismatch"
-	case errors.Is(err, ErrRouteProtocolMismatch):
-		code = "route_protocol_mismatch"
-	case errors.Is(err, ErrRouteMethodMismatch):
-		code = "route_method_mismatch"
-	case errors.Is(err, ErrRouteWebSocket):
-		code = "route_websocket_rejected"
-	case errors.Is(err, ErrRequestBodyTooLarge):
-		code = "request_body_too_large"
-	case errors.Is(err, ErrRequestBodyMalformed):
-		code = "request_body_malformed"
-	case errors.Is(err, ErrRequestBodyNotPortable):
-		code = "request_body_not_portable"
-	case errors.Is(err, ErrResponsesFeatureUnsupported):
-		code = "responses_feature_unsupported"
-	case errors.Is(err, ErrCredentialNotReady):
-		code = "credential_not_ready"
-	case errors.Is(err, ErrUpstreamInvalid):
-		code = "upstream_invalid"
-	case errors.Is(err, ErrUpstreamSSRF):
-		code = "upstream_ssrf"
-	case errors.Is(err, ErrUpstreamRedirect):
-		code = "upstream_redirect"
-	case errors.Is(err, ErrBindingBusy):
-		code = "route_busy"
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = io.WriteString(w, `{"error":{"type":"`+code+`","message":"request failed"}}`)
 }
 
 func classifyUpstreamDoError(err error) (int, error) {

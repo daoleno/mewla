@@ -140,6 +140,7 @@ func TestProviderGatewayAllowsOnlyResponsesAndAnthropicEndpoints(t *testing.T) {
 }
 
 func TestProviderGatewayPreservesFinalUpstreamStatusAfterBoundedRetry(t *testing.T) {
+	stubRetrySleep(t)
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -157,8 +158,8 @@ func TestProviderGatewayPreservesFinalUpstreamStatusAfterBoundedRetry(t *testing
 	req.RemoteAddr = "127.0.0.1:1234"
 	res := httptest.NewRecorder()
 	g.ServeHTTP(res, req)
-	if res.Code != http.StatusBadGateway || calls.Load() != GatewayRetryAttempts {
-		t.Fatalf("status=%d calls=%d, want final 502 after %d attempts", res.Code, calls.Load(), GatewayRetryAttempts)
+	if want := int32(1 + upstreamBusyRetries); res.Code != http.StatusBadGateway || calls.Load() != want {
+		t.Fatalf("status=%d calls=%d, want final 502 after %d attempts", res.Code, calls.Load(), want)
 	}
 }
 
@@ -214,6 +215,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestProviderGatewayRetryBackoffIsBounded(t *testing.T) {
+	pauses := stubRetrySleep(t)
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -230,14 +232,9 @@ func TestProviderGatewayRetryBackoffIsBounded(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "http://"+g.ActualAddr()+"/v1/responses", strings.NewReader(`{"model":"gpt-5"}`))
 	req.RemoteAddr = "127.0.0.1:1234"
 	res := httptest.NewRecorder()
-	start := time.Now()
 	g.ServeHTTP(res, req)
-	elapsed := time.Since(start)
-	// The gateway sleeps GatewayRetryBackoff between the (GatewayRetryAttempts-1)
-	// retries. Derive a generous wall-clock ceiling from those constants so the
-	// assertion catches runaway backoff without depending on runner load.
-	budget := GatewayRetryBackoff*time.Duration(GatewayRetryAttempts-1)*4 + 2*time.Second
-	if elapsed > budget || calls.Load() != GatewayRetryAttempts {
-		t.Fatalf("elapsed=%s budget=%s calls=%d, want bounded retry", elapsed, budget, calls.Load())
+	// A busy upstream is asked twice more, after 1 s and then 2 s.
+	if got := *pauses; calls.Load() != 3 || len(got) != 2 || got[0] != time.Second || got[1] != 2*time.Second {
+		t.Fatalf("calls=%d pauses=%v, want 3 calls with pauses [1s 2s]", calls.Load(), got)
 	}
 }

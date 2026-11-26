@@ -499,6 +499,7 @@ func isAllowedResponseHeader(name string) bool {
 		strings.HasPrefix(lower, "ratelimit-"),
 		strings.HasPrefix(lower, "openai-"),
 		strings.HasPrefix(lower, "anthropic-"),
+		strings.HasPrefix(lower, "x-codex-"),
 		lower == "request-id",
 		lower == "x-openai-request-id":
 		return true
