@@ -71,7 +71,8 @@ finished, the daemon stops and macOS starts it again from the installed app,
 so the phone and Brain are back within seconds. A daemon from Mewla 0.4.32 or
 earlier can stall at that restart; the new app stops it after 15 seconds so
 macOS starts the new one. What the daemon writes outside its log (a crash, a
-stall's details) is kept in `~/.mewla/logs/daemon-stderr.log`.
+stall's details) is kept in `~/.mewla/logs/daemon-stderr.log`, and what the
+app's background host writes in `~/.mewla/logs/host-stderr.log`.
 
 If the daemon is still running under the replaced app, macOS checks its
 permissions against that old copy, so they read as **Restart Mewla** until it

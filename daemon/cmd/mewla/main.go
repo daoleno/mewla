@@ -1499,6 +1499,32 @@ func daemonSupervised() bool {
 	return mewlaLaunchdJob() || os.Getenv("INVOCATION_ID") != ""
 }
 
+// lifecycleLockRetry is how long a daemon under Mewla for Mac's host tries for
+// the lifecycle lock before it says another daemon owns the state. The CLI
+// that waits for a restart probes that lock by taking it for a moment
+// (restartInPlace), so the new image of a daemon restarting in place can meet
+// the probe; under launchd that would cost a restart's throttle. Anywhere
+// else a daemon answers at once.
+func lifecycleLockRetry() time.Duration {
+	if os.Getenv(stopWithHostEnv) != "" {
+		return time.Second
+	}
+	return 0
+}
+
+// tryLifecycleLock takes stateDir's lifecycle lock, trying again for up to
+// retry while another process holds it.
+func tryLifecycleLock(stateDir string, retry time.Duration, sleep func(time.Duration)) (*control.LifecycleLock, bool, error) {
+	const every = 100 * time.Millisecond
+	for waited := time.Duration(0); ; waited += every {
+		lock, acquired, err := control.TryAcquireLifecycleLock(stateDir)
+		if err != nil || acquired || waited >= retry {
+			return lock, acquired, err
+		}
+		sleep(every)
+	}
+}
+
 func acquireDaemonAuthOwner(
 	stateDir string,
 ) (*control.LifecycleLock, *auth.Manager, error) {
@@ -1506,9 +1532,7 @@ func acquireDaemonAuthOwner(
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve auth storage directory: %w", err)
 	}
-	lifecycleLock, acquired, err := control.TryAcquireLifecycleLock(
-		resolvedStateDir,
-	)
+	lifecycleLock, acquired, err := tryLifecycleLock(resolvedStateDir, lifecycleLockRetry(), time.Sleep)
 	if err != nil {
 		return nil, nil, fmt.Errorf("acquire daemon lifecycle owner: %w", err)
 	}

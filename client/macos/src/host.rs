@@ -13,7 +13,7 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
 use std::sync::atomic::{AtomicI32, Ordering};
 
 /// The first argument that makes the executable the daemon's host rather than the app.
@@ -24,6 +24,7 @@ static CHILD: AtomicI32 = AtomicI32::new(0);
 unsafe extern "C" {
     fn signal(signum: i32, handler: extern "C" fn(i32)) -> usize;
     fn kill(pid: i32, sig: i32) -> i32;
+    fn dup2(from: i32, to: i32) -> i32;
 }
 
 const SIGHUP: i32 = 1;
@@ -47,8 +48,36 @@ pub fn helper() -> Option<PathBuf> {
     Some(exe.parent()?.parent()?.join("Helpers/mewla"))
 }
 
+/// launchd's job names no file for output, so whatever the host writes (its own errors, a panic) went to /dev/null.
+/// It goes to `~/.mewla/logs/host-stderr.log` instead (a file past 1 MB moves to `.1` first). Says whether it did; the
+/// daemon is then given /dev/null and keeps its own (`daemon-stderr.log`, stderr_capture.go), so neither file holds
+/// the other's lines.
+fn capture_stderr() -> bool {
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    // SAFETY: fd 2 stays open; ManuallyDrop never closes it.
+    let current = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(2) });
+    let (Ok(now), Ok(null)) = (current.metadata(), std::fs::metadata("/dev/null")) else { return false };
+    if now.dev() != null.dev() || now.ino() != null.ino() {
+        return false;
+    }
+    let Some(home) = std::env::var_os("HOME") else { return false };
+    let logs = PathBuf::from(home).join(".mewla/logs");
+    if std::fs::create_dir_all(&logs).is_err() {
+        return false;
+    }
+    let path = logs.join("host-stderr.log");
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > 1 << 20) {
+        let _ = std::fs::rename(&path, logs.join("host-stderr.log.1"));
+    }
+    let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).mode(0o600).open(&path) else { return false };
+    // SAFETY: both descriptors are open; dup2 leaves fd 2 a copy of the file.
+    unsafe { dup2(file.as_raw_fd(), 2) == 2 }
+}
+
 /// Runs the daemon with `args` (after `--daemon`) and ends with it.
 pub fn run(args: Vec<OsString>) -> ExitCode {
+    let captured = capture_stderr();
     let Some(helper) = helper() else {
         eprintln!("mewla host: cannot find the app's daemon");
         return ExitCode::from(78);
@@ -59,6 +88,9 @@ pub fn run(args: Vec<OsString>) -> ExitCode {
     }
     let mut command = Command::new(&helper);
     command.args(&args).env("MEWLA_STOP_WITH_HOST", std::process::id().to_string());
+    if captured {
+        command.stderr(Stdio::null());
+    }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(err) => {
