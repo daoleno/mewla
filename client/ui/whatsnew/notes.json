@@ -23,7 +23,8 @@
       ],
       "fixes": [
         "Codex keeps working after Magpie is turned off, and with models a Provider adds later.",
-        "Uninstalling Mewla gives Codex and Claude Code back their own settings."
+        "Uninstalling Mewla gives Codex and Claude Code back their own settings.",
+        "On an ultrawide the Work board fills the screen, and from 2560 wide the chat reads larger."
       ]
     },
     {
