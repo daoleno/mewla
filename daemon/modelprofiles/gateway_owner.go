@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // gatewayOwnerFile groups the Owner integration of the machine-level gateway
@@ -87,7 +88,7 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 		// Non-fatal: takeover status reports broken; honest connection
 		// failures reach every routed Codex process. Claude settings get the
 		// user's own values back rather than a dead endpoint.
-		o.syncClaudeTakeover()
+		o.syncClaudeTakeover("")
 		return nil
 	}
 	// Restore the same listener address / upstream profile across restarts.
@@ -102,7 +103,7 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	}
 	// Re-project on every start: the listener may have fallen back to another
 	// port, and the Claude selection may have changed while the daemon was down.
-	o.syncClaudeTakeover()
+	o.syncClaudeTakeover("")
 	if o.takeover != nil {
 		state, err := o.takeover.LoadState()
 		if err != nil {
@@ -122,9 +123,69 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 				return repairErr
 			}
 		}
-		o.refreshGatewayUpstream()
+		o.refreshGateway("")
 	}
+	o.startClientConfigWatch()
 	return nil
+}
+
+// clientConfigWatchInterval is how often the daemon looks at the client
+// configs it projects into, for a change another tool made.
+var clientConfigWatchInterval = 3 * time.Second
+
+// startClientConfigWatch heals the Codex config and Claude settings whenever
+// they change: another tool (Magpie) restoring what it remembered can name
+// Mewla's gateway after Mewla let go of it. One stat per file per interval;
+// Heal reads a file only after it changed.
+func (o *Owner) startClientConfigWatch() {
+	if o == nil || (o.takeover == nil && o.claudeTakeover == nil) || o.backgroundCtx == nil {
+		return
+	}
+	codex, claude := o.takeover, o.claudeTakeover
+	heal := func() {
+		codex.Heal()
+		claude.Heal()
+	}
+	stamp := func(path string) string {
+		if path == "" {
+			return ""
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return "missing"
+		}
+		return fmt.Sprintf("%d.%d", info.ModTime().UnixNano(), info.Size())
+	}
+	paths := []string{codex.ConfigPath(), claude.SettingsPath()}
+	// Stamped before the first heal: a write from now on is seen.
+	seen := map[string]string{}
+	for _, path := range paths {
+		seen[path] = stamp(path)
+	}
+	heal()
+	o.background.Add(1)
+	go func() {
+		defer o.background.Done()
+		ticker := time.NewTicker(clientConfigWatchInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-o.backgroundCtx.Done():
+				return
+			case <-ticker.C:
+			}
+			changed := false
+			for _, path := range paths {
+				if now := stamp(path); now != seen[path] {
+					seen[path] = now
+					changed = true
+				}
+			}
+			if changed {
+				heal()
+			}
+		}
+	}()
 }
 
 // GatewayServesCodexModel reports whether the machine gateway answers a Codex
@@ -331,13 +392,29 @@ func gatewayStateFilePath(stateDir string) string {
 
 // refreshGatewayUpstream points the gateway at the currently selected Codex
 // Provider connection when takeover is active. Called after Provider switches
-// and default changes.
-func (o *Owner) refreshGatewayUpstream() {
-	o.syncClaudeTakeover()
+// and default changes; client names the client whose selection the person
+// changed ("" when unknown), which may take that client back from another
+// tool.
+func (o *Owner) refreshGatewayUpstream(client ...string) {
+	which := ""
+	if len(client) > 0 {
+		which = clientFromExecutor(client[0])
+	}
+	if which == "" {
+		which = "any"
+	}
+	o.refreshGateway(which)
+}
+
+// refreshGateway is refreshGatewayUpstream; explicit is the client the person
+// just chose a Provider for ("any" for every client, "" for a background
+// look, such as daemon start, which never takes a client from another tool).
+func (o *Owner) refreshGateway(explicit string) {
+	o.syncClaudeTakeover(explicit)
 	if o == nil || o.gateway == nil || o.takeover == nil {
 		return
 	}
-	o.syncCodexTakeover()
+	o.syncCodexTakeover(explicit)
 	state, err := o.takeover.LoadState()
 	if err != nil || !state.Enabled {
 		return
@@ -357,15 +434,16 @@ func (o *Owner) refreshGatewayUpstream() {
 // Provider connection is selected and the gateway listens, with no opt-in.
 // Official login (no selection) gives the config back so Codex uses its own
 // login. A config Mewla cannot safely project stays untouched and is logged.
-func (o *Owner) syncCodexTakeover() {
+func (o *Owner) syncCodexTakeover(explicit string) {
 	state, err := o.takeover.LoadState()
 	if err != nil {
 		log.Printf("WARN codex config takeover: %v", err)
 		return
 	}
 	selected := o.store != nil && normalizeID(o.store.DefaultProfileID(ExecutorCodex)) != ""
+	chosen := explicit == "any" || explicit == ClientCodex
 	switch {
-	case selected && !state.Enabled && o.gateway.Listening():
+	case selected && (!state.Enabled || chosen) && o.gateway.Listening():
 		_, err = o.takeover.Enable(o.gateway.ActualAddr())
 	case !selected && state.Enabled:
 		_, err = o.takeover.Disable()
@@ -379,13 +457,13 @@ func (o *Owner) syncCodexTakeover() {
 // while a Claude connection is selected and the gateway listens, and puts the
 // user's own values back otherwise. Failures leave the settings untouched and
 // are logged: a projection problem must never block a Provider switch.
-func (o *Owner) syncClaudeTakeover() {
+func (o *Owner) syncClaudeTakeover(explicit string) {
 	if o == nil || o.claudeTakeover == nil || o.store == nil {
 		return
 	}
 	var err error
 	if addr, withToken, ok := o.claudeTakeoverTarget(); ok {
-		err = o.claudeTakeover.Project("http://"+addr, withToken)
+		err = o.claudeTakeover.Project("http://"+addr, withToken, explicit == "any" || explicit == ClientClaude)
 	} else {
 		err = o.claudeTakeover.Release()
 	}

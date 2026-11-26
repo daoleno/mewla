@@ -958,7 +958,7 @@ func (o *Owner) SetDefault(executorID, profileID string, expectedRevision int64)
 	if err != nil && !errors.Is(err, ErrPersistDirSync) {
 		return CatalogProjection{}, err
 	}
-	o.refreshGatewayUpstream()
+	o.refreshGatewayUpstream(executorID)
 	catalog, views := o.store.Projection()
 	return CatalogProjection{Catalog: catalog, Views: views}, err
 }
