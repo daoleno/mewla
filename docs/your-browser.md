@@ -34,7 +34,9 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
    does, so you see it and can stop it. It opens a window of its own on
    Chrome's extensions page, turns on Developer mode, chooses Load unpacked,
    picks the folder and closes that window once the extension connects.
-   Your tabs stay as they are.
+   Your tabs stay as they are. Chrome only shows its pages to another app
+   when it thinks a screen reader is on, so Mewla turns that on while it
+   works and off again after (unless VoiceOver is running).
 
 macOS keeps Mewla out of Chrome's own folder. On a Mac, Mewla therefore knows
 the extension is there because it connected, not by reading Chrome's files.
