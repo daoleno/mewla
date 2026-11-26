@@ -712,7 +712,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
         <View class="flex-1">
           {/* Under a capsule the terminal starts below the collapsed one: an expanded capsule floats over its top
               rows and never resizes it, and the next touch in the terminal folds it again (seen, not taken). */}
-          <View class={`absolute inset-0 flex-col ${duo() ? "border-l border-border" : ""}`} style={{ display: terminalShown() ? "flex" : "none", left: duo() ? besideBrainWidth : 0, top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
+          <View class={`absolute inset-0 flex-col ${duo() ? "border-l border-border" : ""}`} style={{ display: terminalShown() ? "flex" : "none", left: duo() ? besideBrainWidth() : 0, top: capsuled ? (cramped() ? safeArea().top : capsuleTerminalInset(safeArea().top)) : 0 }}
             onTouchStartCapture={capsuled ? () => capsule.collapse() : undefined}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && terminalShown()} onOpenPath={(path) => openPath(path)} attach={terminalAttach}
               program={() => (props.brain ? brain()?.host_worker?.provider || brain()?.host_executor?.provider : undefined) || (kind() === "terminal" ? undefined : kind())} />
@@ -730,7 +730,7 @@ export function Session(props: { nav: NavStackState<Route>; workerId: string; hi
                 class="rounded-xl border border-border bg-card px-3 py-2.5"><Text class="text-sm text-foreground">{notice()}</Text></View></If>
             </View>
           </View>
-          <If when={chatShown()}><View class="absolute inset-y-0 left-0" style={duo() ? { width: besideBrainWidth } : { right: 0 }}><FileDrop testID={`file-drop-session-${props.workerId}`} class="absolute inset-0 bg-background" onFiles={() => attachDropped}>
+          <If when={chatShown()}><View class="absolute inset-y-0 left-0" style={duo() ? { width: besideBrainWidth() } : { right: 0 }}><FileDrop testID={`file-drop-session-${props.workerId}`} class="absolute inset-0 bg-background" onFiles={() => attachDropped}>
               <ChatTimeline testID="session-chat" items={shownItems} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} shown={() => props.active() && chatShown()}
                 capsule={capsuled ? { top: inset, reading: capsule.reading } : undefined}
                 foot={{

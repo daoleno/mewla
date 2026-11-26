@@ -1,18 +1,45 @@
 import { describe, expect, test } from "bun:test";
-import { boardColumns } from "./board";
+import { boardLayout, BOARD_GAP, BOARD_PADDING } from "./board";
+
+const groups = (layout: ReturnType<typeof boardLayout>) => layout.columns.map((c) => c.groups);
+const tracks = (layout: ReturnType<typeof boardLayout>) => layout.columns.map((c) => c.tracks);
+/** What the columns and their gaps take of the pane: all of it but the padding and what rounding leaves. */
+const filled = (layout: ReturnType<typeof boardLayout>, width: number) =>
+  layout.columns.reduce((sum, c) => sum + c.width, 0) + (layout.columns.length - 1) * BOARD_GAP + 2 * BOARD_PADDING > width - layout.columns.length * 2 - 4;
+
+// Brain's Work groups (Needs you, Running, Back, Waiting, Queued) with invented counts: one long group, and a desk with every group.
+const evening = [0, 13, 3, 4, 0];
+const desk = [3, 12, 1, 3, 0];
 
 describe("the Work board's layout", () => {
-  test("a 1920 window's pane: two cards a row; 2560: the groups side by side; 3440: six cards a row", () => {
-    expect(boardColumns(1600 - 800, 3)).toEqual({ side: false, card: 370 });
-    expect(boardColumns(2240 - 800, 3).side).toBe(true);
-    const ultrawide = boardColumns(3120 - 800, 3);
-    expect(ultrawide.side).toBe(false);
-    expect(Math.floor((2320 - 48 + 12) / (ultrawide.card + 12))).toBe(6);
+  test("an ultrawide's pane: the long column takes the spare tracks, so the columns end near one line", () => {
+    const width = 3440 - 320 - 880;
+    const layout = boardLayout(width, evening);
+    expect(groups(layout)).toEqual([[1], [2], [3]]);
+    expect(tracks(layout)).toEqual([4, 1, 1]);
+    expect(layout.cardWidth).toBeGreaterThanOrEqual(300);
+    expect(filled(layout, width)).toBe(true);
+    expect(tracks(boardLayout(width, desk))).toEqual([1, 3, 1, 1]);
   });
 
-  test("one group never stands alone as a column; a narrow board is one card wide", () => {
-    expect(boardColumns(1440, 1).side).toBe(false);
-    expect(boardColumns(360, 3)).toEqual({ side: false, card: 312 });
+  test("2560 and 1920: fewer tracks, the same rule; with fewer tracks than groups, later groups go under the lighter column", () => {
+    expect(tracks(boardLayout(2560 - 320 - 880, evening))).toEqual([2, 1, 1]);
+    const narrow = boardLayout(1920 - 320 - 800, desk);
+    expect(groups(narrow)).toEqual([[0, 2, 3], [1]]);
+    expect(narrow.cardWidth).toBe(368);
+  });
+
+  test("tracks nothing needs widen the cards; empty groups take no column", () => {
+    // Two Works, one group: two cards a row across the whole pane, never two small cards in a corner.
+    const lone = boardLayout(3440 - 320 - 880, [0, 2, 0, 0, 0]);
+    expect(tracks(lone)).toEqual([2]);
+    expect(filled(lone, 3440 - 320 - 880)).toBe(true);
+    const width = 3440 - 320 - 880;
+    const two = boardLayout(width, [0, 1, 0, 1, 0]);
+    expect(tracks(two)).toEqual([1, 1]);
+    expect(filled(two, width)).toBe(true);
+    expect(groups(boardLayout(2000, [0, 0, 0, 0, 0]))).toEqual([[]]);
+    expect(groups(boardLayout(300, desk))).toEqual([[0, 1, 2, 3]]);
   });
 });
 

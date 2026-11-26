@@ -282,7 +282,7 @@ export function Shell() {
           paneBottom.set(bounds.origin.y + bounds.size.height);
         }}>
           <View class="flex-1 flex-row">
-            <View class="h-full" style={besideShown() ? { width: besideBrainWidth } : { flex: 1 }}><Stack /></View>
+            <View class="h-full" style={besideShown() ? { width: besideBrainWidth() } : { flex: 1 }}><Stack /></View>
             {/* Kept while the split is up, so what it shows keeps its state under a page that covers both (Settings). */}
             <If when={beside()}><View testID="beside-pane" onLayout={({ bounds }) => besidePaneWidth.set(bounds.size.width)} class="h-full flex-1 flex-row overflow-hidden border-l border-border" style={{ display: besideShown() ? "flex" : "none" }}><BesideStack /></View></If>
           </View>

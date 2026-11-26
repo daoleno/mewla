@@ -2,7 +2,7 @@ import { computed, Scroll, signal, Text, View } from "nsh";
 import { Button } from "nsh/base";
 import { BRAIN_WORK_GROUP_LABELS, BRAIN_WORK_GROUP_ORDER, type BrainWorkGroup, type BrainWorkSlip } from "../../core/work/surface";
 import { workRow } from "../../core/tray/model";
-import { boardColumns, workRequest } from "../../core/work/board";
+import { boardLayout, workRequest } from "../../core/work/board";
 import { tray } from "../tray/state";
 import { NavPage } from "../shell/NavPage";
 import { openWorkDetail } from "../shell/nav";
@@ -24,29 +24,34 @@ const groups = computed(() => {
 
 /**
  * The Work board (client/DESIGN.md "The wide layout", Beside): what the beside pane shows while nothing is open beside
- * Brain. Brain's Work by what it asks of you, one card each; a card opens its Work detail in the pane. Its groups
- * stand side by side when each has 300 or more, else one under another with the cards in a grid.
+ * Brain. Brain's Work by what it asks of you, one card each; a card opens its Work detail in the pane. Its groups stand
+ * side by side over the whole pane, the longest taking the spare card tracks as a grid (core/work/board.ts), so the
+ * pane is filled at any width and any number of Works.
  */
 export function WorkBoard() {
   const width = signal(0);
   const sessions = computed(() => new Map(workers().map((w) => [w.id, w] as const)));
-  const layout = computed(() => boardColumns(width(), groups().length));
+  const layout = computed(() => boardLayout(width(), groups().map((g) => g.slips.length)));
   return (
     <NavPage title="Work" testID="work-board" column="full" frame={false}>
       <View class="flex-1 bg-background" onLayout={({ bounds }) => width.set(bounds.size.width)}>
         <If when={groups().length > 0} else={<EmptyState icon="brain" title="No Work" testID="work-board-empty" />}>
           <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-6 pt-2 pb-10">
-            <View class={layout().side ? "flex-row items-start gap-4" : "gap-2"}>
-              <Each of={groups()} key={(g) => g.group}>{(g) => (
-                <View testID={`work-board-${g().group}`} class={layout().side ? "min-w-0 flex-1 gap-3" : "gap-3"}>
-                  <GroupLabel group={g().group} count={g().slips.length} />
-                  <View class={layout().side ? "gap-3" : "flex-row flex-wrap gap-3"}>
-                    <Each of={g().slips} key={(slip) => slip.workId}>{(slip) => (
-                      <View style={layout().side ? undefined : { width: layout().card }}>
-                        <BoardCard slip={slip} sessions={sessions} />
+            <View class="flex-row items-start gap-4">
+              <Each of={layout().columns} key={(column) => `${column.groups.join(",")}:${column.width}`}>{(column) => (
+                <View testID="work-board-column" class="gap-2" style={{ width: column().width }}>
+                  <Each of={column().groups} key={(index) => groups()[index]!.group}>{(index) => (
+                    <View testID={`work-board-${groups()[index()]!.group}`} class="gap-3 pb-3">
+                      <GroupLabel group={groups()[index()]!.group} count={groups()[index()]!.slips.length} />
+                      <View class="flex-row flex-wrap gap-4">
+                        <Each of={groups()[index()]!.slips} key={(slip) => slip.workId}>{(slip) => (
+                          <View style={{ width: layout().cardWidth }}>
+                            <BoardCard slip={slip} sessions={sessions} />
+                          </View>
+                        )}</Each>
                       </View>
-                    )}</Each>
-                  </View>
+                    </View>
+                  )}</Each>
                 </View>
               )}</Each>
             </View>
@@ -74,7 +79,7 @@ function BoardCard(props: { slip: () => BrainWorkSlip; sessions: () => ReadonlyM
   const asks = () => (needs() ? props.slip().question ?? asked(props.slip())?.title ?? "" : "");
   return (
     <Button testID="work-board-card" accessibilityLabel={[row().title, row().line, row().end].filter(Boolean).join(", ")} onPress={() => openWorkDetail(props.slip().workId)}
-      class="min-h-[112px] gap-2 rounded-(--radius-group) bg-sheet-surface px-4 py-3.5 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+      class="gap-2 rounded-(--radius-group) bg-sheet-surface px-4 py-3.5 hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
       <View class="flex-row items-center gap-3">
         <RowTile tile={() => row().tile} mark={() => row().mark} />
         <Text class={`min-w-0 flex-1 text-body line-clamp-1 ${row().done ? "" : "font-semibold"}`}>{row().title}</Text>
@@ -84,7 +89,7 @@ function BoardCard(props: { slip: () => BrainWorkSlip; sessions: () => ReadonlyM
         </View>
       </View>
       <If when={asks()}><Text testID="work-board-asks" class="text-body font-semibold line-clamp-3">{asks()}</Text></If>
-      <If when={row().line && row().line !== asks()}><Text testID="work-board-line" class="text-sub text-muted-foreground line-clamp-3">{row().line}</Text></If>
+      <If when={row().line && row().line !== asks() && row().line !== row().end}><Text testID="work-board-line" class="text-sub text-muted-foreground line-clamp-3">{row().line}</Text></If>
     </Button>
   );
 }

@@ -1,3 +1,5 @@
+import { ROOMY_READING_WIDTH } from "./beside";
+
 /**
  * The app's places: the URL of each place, the browser tab's title, the wide layout's gate and
  * its left pane's width. Pure, so the shell and the page host agree without a browser
@@ -299,6 +301,8 @@ export function nativeHeaderTitleWidth(options: { stackWidth: number; os: string
 }
 
 /** The header row's width for a column; null for the whole pane. `mac`: Mewla for Mac's window. */
-export function pageColumnWidth(column: PageColumn, mac = false): number | null {
+export function pageColumnWidth(column: PageColumn, mac = false, roomy = false): number | null {
+  // A roomy browser window (core/web/beside.ts ROOMY_MIN_WIDTH) reads its thread a step larger, in a wider column.
+  if (column === "reading" && roomy && !mac) return ROOMY_READING_WIDTH;
   return column === "full" ? null : (mac ? MAC_COLUMN_WIDTH : PAGE_COLUMN_WIDTH)[column];
 }
