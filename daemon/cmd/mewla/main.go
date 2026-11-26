@@ -1113,6 +1113,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		Follow:  grantManager.Follow,
 		Restart: grantManager.RestartNow,
 	})
+	if runtime.GOOS == "darwin" {
+		// Add extension: Mewla adds it on this screen itself, where it may.
+		agentUse.SetExtensionAdder(func(ctx context.Context, dir string, connected func() bool) error {
+			return screenService.LoadUnpackedInChrome(ctx, dir, connected)
+		}, func() bool { return agentUse.Enabled() && accessibilityGranted(computerStatus(ctx, screenService)) })
+	}
 	if hold, release, ok := screenService.AgentDisplay(); ok {
 		// The browser's agent windows open on the agent display too, off the
 		// person's screen; a Worker's is listed in Screen while it is open.

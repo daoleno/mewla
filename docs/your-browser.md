@@ -29,6 +29,18 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
    is in the Chrome Web Store, **Fix** opens its page there and you click
    **Add to Chrome** instead.
 
+   On a Mac where Mewla has **Accessibility**, **Add extension** in Mewla's
+   Settings does all of this itself. It uses the screen the way an agent
+   does, so you see it and can stop it. It opens a window of its own on
+   Chrome's extensions page, turns on Developer mode, chooses Load unpacked,
+   picks the folder and closes that window once the extension connects.
+   Your tabs stay as they are. Chrome only shows its pages to another app
+   when it thinks a screen reader is on, so Mewla turns that on while it
+   works and off again after (unless VoiceOver is running).
+
+macOS keeps Mewla out of Chrome's own folder. On a Mac, Mewla therefore knows
+the extension is there because it connected, not by reading Chrome's files.
+
 That is all: no key to copy. Mewla registers its helper with Chrome itself (on
 Windows under your own user in the registry, which needs no administrator
 rights), and the extension connects to it whenever Chrome runs. If Chrome isn't running when

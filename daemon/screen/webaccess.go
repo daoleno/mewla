@@ -2,6 +2,7 @@ package screen
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -38,6 +39,24 @@ const webAccessNote = "Turned on this app's web accessibility so its pages can b
 type webAccess struct {
 	mu   sync.Mutex
 	done map[int]bool
+	// asked is when each app was last asked again (reassert).
+	asked map[int]time.Time
+	// noted are the apps already logged as showing no page.
+	noted map[int]bool
+}
+
+// noteNoPages logs, once for an app, that a read of it held no page.
+func (w *webAccess) noteNoPages(pid, elements int, truncated bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.noted == nil || len(w.noted) > 512 {
+		w.noted = map[int]bool{}
+	}
+	if w.noted[pid] {
+		return
+	}
+	w.noted[pid] = true
+	log.Printf("screen: pid %d is a browser, and a read of it (%d elements, cut short %v) holds no page", pid, elements, truncated)
 }
 
 // ensure makes sure the app with pid has built its web accessibility tree,
@@ -57,14 +76,17 @@ func (w *webAccess) ensure(ctx context.Context, pid int, ops webAccessOps, clock
 	// An app may not list the attribute until it is set (Electron answers a
 	// read only once asked), so an unsupported read still gets a try: the
 	// write has to be read back as on to count.
-	if on, _ := ops.state(pid); on {
+	if on, supported := ops.state(pid); on {
+		log.Printf("screen: web accessibility of pid %d already reads on (answered %v)", pid, supported)
 		return ""
 	}
 	before := ops.size(ctx, pid)
-	if ops.enable(pid) != nil {
+	if err := ops.enable(pid); err != nil {
+		log.Printf("screen: web accessibility of pid %d: %v", pid, err)
 		return ""
 	}
 	if on, supported := ops.state(pid); !on || !supported {
+		log.Printf("screen: web accessibility of pid %d: written, reads on=%v answered=%v", pid, on, supported)
 		return "" // not confirmed: don't claim it
 	}
 	// The tree fills over a second or so: wait until it has grown and
@@ -84,4 +106,40 @@ func (w *webAccess) ensure(ctx context.Context, pid int, ops webAccessOps, clock
 		last = n
 	}
 	return webAccessNote
+}
+
+// webReassertEvery bounds how often an app that shows no page is asked again.
+const webReassertEvery = 10 * time.Second
+
+// reassert asks the app with pid to build its pages' tree again although its
+// switch may read on: Chrome can stop building it for a client that is not
+// a screen reader while the switch it answers stays on (the owner's Mac,
+// 11-26: a Chrome up for a day showed its toolbars and none of its pages).
+// At most every webReassertEvery for one app; true when asked, after the tree
+// has had a moment to fill.
+func (w *webAccess) reassert(ctx context.Context, pid int, ops webAccessOps, clock func() time.Time, sleep func(time.Duration)) bool {
+	w.mu.Lock()
+	if w.asked == nil || len(w.asked) > 512 {
+		w.asked = map[int]time.Time{}
+	}
+	if last, ok := w.asked[pid]; ok && clock().Sub(last) < webReassertEvery {
+		w.mu.Unlock()
+		return false
+	}
+	w.asked[pid] = clock()
+	w.mu.Unlock()
+	before := ops.size(ctx, pid)
+	if err := ops.enable(pid); err != nil {
+		log.Printf("screen: asking pid %d for its pages' accessibility again: %v", pid, err)
+		return false
+	}
+	deadline := clock().Add(webAccessSettle)
+	for clock().Before(deadline) && ctx.Err() == nil {
+		sleep(webAccessTick)
+		if ops.size(ctx, pid) > before {
+			sleep(webAccessTick)
+			break
+		}
+	}
+	return true
 }

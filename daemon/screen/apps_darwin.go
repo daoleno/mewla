@@ -251,10 +251,39 @@ func readApp(ctx context.Context, pid int, limit int) (ElementTree, error) {
 		e.Actions = axActionNames(element)
 		return true
 	}
-	for i, n := int64(0), axLib.arrayCount(windows); i < n; i++ {
-		walkElements(ctx, &tree, axLib.arrayAt(windows, i), limit, deadline, keep)
+	walk := func() {
+		for i, n := int64(0), axLib.arrayCount(windows); i < n; i++ {
+			walkElements(ctx, &tree, axLib.arrayAt(windows, i), limit, deadline, keep)
+		}
+	}
+	walk()
+	// A browser's windows without a single page: it stopped building them.
+	if appBundle(pid).chromium && axLib.arrayCount(windows) > 0 && !hasWebArea(tree) {
+		webAX.noteNoPages(pid, len(tree.Elements), tree.Truncated)
+	}
+	if appBundle(pid).chromium && axLib.arrayCount(windows) > 0 && !tree.Truncated && !hasWebArea(tree) &&
+		webAX.reassert(ctx, pid, macWebOps, time.Now, time.Sleep) {
+		for _, e := range tree.Elements {
+			if e.ref != 0 {
+				axLib.release(e.ref)
+			}
+		}
+		tree.Elements = nil
+		deadline = time.Now().Add(axBudget)
+		walk()
+		log.Printf("screen: asked %s (pid %d) for its pages' accessibility again; pages now read: %v", tree.App, pid, hasWebArea(tree))
 	}
 	return tree, nil
+}
+
+// hasWebArea says whether a read holds a web page.
+func hasWebArea(tree ElementTree) bool {
+	for _, e := range tree.Elements {
+		if e.Role == "AXWebArea" {
+			return true
+		}
+	}
+	return false
 }
 
 // PrintApp fingerprints an app: two requests, a few of its attributes each,

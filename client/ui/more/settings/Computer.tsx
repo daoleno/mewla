@@ -149,9 +149,11 @@ export function Computer(props: { id: string; nav: PageNav; onPair: () => void }
       });
     }
     void act(problem.key, async () => {
-      agentUse.set(await changeAgentUse(s, { fix: does.fix }));
+      const next = await changeAgentUse(s, { fix: does.fix });
+      agentUse.set(next);
       const where = s.name || "the computer";
-      if (does.fix === "install_extension") note(problem.key, `Load the Mewla folder in Chrome on ${where}: Developer mode, then Load unpacked.`);
+      // A Mac with Accessibility adds it itself: the row says so.
+      if (does.fix === "install_extension" && next.browser.state === "no_extension") note(problem.key, `Load the Mewla folder in Chrome on ${where}: Developer mode, then Load unpacked.`);
       if (does.fix === "open_settings") note(problem.key, `Turn on Mewla in the settings that opened on ${where}.`);
     });
   }

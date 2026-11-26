@@ -91,3 +91,20 @@ func TestWebAccessGivesUpWaiting(t *testing.T) {
 		t.Fatalf("waited %v", clock().Sub(start))
 	}
 }
+
+func TestWebAccessIsAskedAgainAtMostEveryFewSeconds(t *testing.T) {
+	// Chrome answers on while it builds no page (the owner's Mac, 11-26).
+	f := &fakeWeb{on: true, supported: true, sizes: []int{10, 10, 60, 60}}
+	var w webAccess
+	clock, sleep := webClock()
+	if !w.reassert(context.Background(), 9, f.ops(), clock, sleep) || f.enables != 1 {
+		t.Fatalf("asked %d", f.enables)
+	}
+	if w.reassert(context.Background(), 9, f.ops(), clock, sleep) || f.enables != 1 {
+		t.Fatal("asked again at once")
+	}
+	sleep(webReassertEvery)
+	if !w.reassert(context.Background(), 9, f.ops(), clock, sleep) || f.enables != 2 {
+		t.Fatal("not asked again after the gap")
+	}
+}

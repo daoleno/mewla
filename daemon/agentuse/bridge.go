@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"os"
@@ -408,6 +409,13 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 	b.mu.Unlock()
 	if old != nil {
 		old.conn.Close() // a newer Chrome profile or window took over
+	}
+	if !agent {
+		// The person's Chrome has the extension: kept for when its folder
+		// can't be read and Chrome is closed (mewlaExtensionConnectedLocked).
+		if err := os.WriteFile(filepath.Join(b.dir, connectedMarker), []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o600); err != nil {
+			log.Printf("agent use: note the connected extension: %v", err)
+		}
 	}
 	b.dropUnlistedLater(gone, grace)
 	defer func() {

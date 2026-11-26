@@ -137,6 +137,19 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if a.agentUse == nil {
 			return control.ErrorResponse("agent_use_unavailable", "Agent use is not running")
 		}
+		if fix, ok := strings.CutPrefix(req.Name, "fix"); ok {
+			fix = strings.TrimPrefix(fix, ":")
+			if fix == "" {
+				fix = a.agentUse.Refresh().Browser.Fix
+			}
+			if fix != "" {
+				status, err := a.agentUse.Fix(fix)
+				if err != nil {
+					return control.ErrorResponse("agent_use_fix", err.Error())
+				}
+				return control.Response{OK: true, AgentUse: &status}
+			}
+		}
 		status := a.agentUse.Refresh()
 		return control.Response{OK: true, AgentUse: &status}
 	case "computers":

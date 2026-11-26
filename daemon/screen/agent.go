@@ -583,7 +583,9 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		s.posts.noteWake(woke, woke.Add(wakeDeclares))
 	}
 	label := worker
-	if s.workerName != nil {
+	if name, ok := internalAgents[worker]; ok {
+		label = name
+	} else if s.workerName != nil {
 		if name := s.workerName(worker); name != "" {
 			label = name
 		}
@@ -675,7 +677,8 @@ func (s *Service) watchAgent(agent *agentSession) {
 				agent.cancel(err)
 				break
 			}
-			if alive != nil && time.Since(lastAlive) >= every {
+			// Mewla's own agents are no Worker's: alive while they act.
+			if _, internal := internalAgents[agent.worker]; alive != nil && !internal && time.Since(lastAlive) >= every {
 				lastAlive = time.Now()
 				if alive(agent.worker) {
 					missing = 0
