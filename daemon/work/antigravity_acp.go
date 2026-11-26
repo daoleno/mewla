@@ -365,8 +365,10 @@ func projectAntigravityUpdates(id, cwd, path string, updates []antigravityACPUpd
 				if event.ExitCode != nil && *event.ExitCode != 0 {
 					event.Status = "failed"
 				}
+				event.endTool(at)
 			case "failed":
 				event.Status = "failed"
+				event.endTool(at)
 			default:
 				event.Status = "running"
 			}

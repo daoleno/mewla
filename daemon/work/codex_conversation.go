@@ -332,6 +332,14 @@ type CodexConversationEvent struct {
 	// own transcript the provider keeps beside the conversation: the steps the
 	// subagent took, so the apps never infer them from the call's text.
 	Subagent *CodexConversationSubagent `json:"subagent,omitempty"`
+	// Tool is what a tool call did, in the same words for every agent
+	// (conversation_tool.go). The wire projection sets it; readers leave it nil.
+	Tool *ConversationTool `json:"tool,omitempty"`
+	// StartedAt and EndedAt are when a tool call began and when its result
+	// came, as the provider recorded them; Tool.DurationMS is read from them.
+	// Daemon-internal.
+	StartedAt string `json:"-"`
+	EndedAt   string `json:"-"`
 	// AdmissionSHA256 is the exact provider-native user input digest when the
 	// source preserves those bytes separately from its display projection.
 	AdmissionSHA256 string `json:"-"`
@@ -1222,7 +1230,7 @@ func (b *codexConversationBuilder) upsertCommandEnd(lineNumber int, timestamp, c
 		b.events[index].Status = status
 		b.events[index].Body = body
 		if timestamp != "" {
-			b.events[index].Timestamp = timestamp
+			b.events[index].settleTool(timestamp)
 		}
 		return
 	}
@@ -1262,7 +1270,7 @@ func (b *codexConversationBuilder) updateCommandOutput(lineNumber int, timestamp
 			}
 			body = codexCommandOutputBody(body)
 			if timestamp != "" {
-				b.events[index].Timestamp = timestamp
+				b.events[index].settleTool(timestamp)
 			}
 		} else if body != "" {
 			status := codexToolOutputStatus(body)
@@ -1273,7 +1281,7 @@ func (b *codexConversationBuilder) updateCommandOutput(lineNumber int, timestamp
 				b.events[index].Title = "Command finished"
 			}
 			if timestamp != "" {
-				b.events[index].Timestamp = timestamp
+				b.events[index].settleTool(timestamp)
 			}
 		}
 		b.events[index].Body = truncateConversationBody(body)
@@ -1301,7 +1309,7 @@ func (b *codexConversationBuilder) upsertWebSearchBegin(lineNumber int, timestam
 		if b.events[index].Kind == "web_search" {
 			b.events[index].Status = "running"
 			if timestamp != "" {
-				b.events[index].Timestamp = timestamp
+				b.events[index].settleTool(timestamp)
 			}
 		}
 		return
@@ -1331,7 +1339,7 @@ func (b *codexConversationBuilder) upsertWebSearchEnd(lineNumber int, timestamp,
 				b.events[index].Input = truncateConversationBody(input)
 				b.events[index].Status = status
 				if timestamp != "" {
-					b.events[index].Timestamp = timestamp
+					b.events[index].settleTool(timestamp)
 				}
 				return
 			}
@@ -1521,7 +1529,7 @@ func (b *codexConversationBuilder) addToolStart(lineNumber int, timestamp, callI
 			}
 			b.events[index].Status = event.Status
 			if timestamp != "" {
-				b.events[index].Timestamp = timestamp
+				b.events[index].settleTool(timestamp)
 			}
 			return
 		}
@@ -1553,13 +1561,13 @@ func (b *codexConversationBuilder) updateCallOutput(lineNumber int, timestamp, c
 			b.events[index].Output = codexToolPayloadText(output)
 			b.events[index].Status = codexToolOutputStatus(output)
 			if timestamp != "" {
-				b.events[index].Timestamp = timestamp
+				b.events[index].settleTool(timestamp)
 			}
 		case "patch":
 			// Codex renders apply_patch as a file-change cell. The paired
 			// custom_tool_call_output is only protocol acknowledgement.
 			if timestamp != "" {
-				b.events[index].Timestamp = timestamp
+				b.events[index].settleTool(timestamp)
 			}
 		}
 		return

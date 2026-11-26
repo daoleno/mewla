@@ -28,6 +28,7 @@ func SanitizeConversationProjection(conversation CodexConversation) CodexConvers
 		for index := range event.Plan {
 			event.Plan[index].Step = CleanCodexDisplayText(event.Plan[index].Step)
 		}
+		AnnotateConversationTool(&event)
 		if event.Kind == "user_message" || event.Kind == "assistant_message" {
 			if event.Body == "" && len(event.Attachments) == 0 {
 				continue

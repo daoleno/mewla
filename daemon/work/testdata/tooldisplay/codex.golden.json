@@ -1,0 +1,199 @@
+[
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "read",
+      "target": "policies/watch.md",
+      "more": 2,
+      "status": "done",
+      "duration_ms": 1022
+    }
+  },
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "command",
+      "target": "/home/me/workspace/mewla/daemon/tmp/mewla-dev watch problem label w_80f80f8f24f3 not --by brain --note '中文 03:02 中文GitHub Actions 45058394401 中文 02:52 中文' | jq '{ok, error}'",
+      "status": "done",
+      "duration_ms": 69
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60005
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60006
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60005
+    }
+  },
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "command",
+      "target": "/home/me/workspace/mewla/daemon/tmp/mewla-dev brain work get -id 718c7e02-8140-491f-a8c4-91e132426503 --json | jq '{work:(.brain_work|{status}),last:[.brain_work_events[]|{kind,summary,created_at}]|.[-2:]}'",
+      "status": "done",
+      "duration_ms": 149
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60005
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60006
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  },
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "list",
+      "target": "worklog/skytrip-riverton-art",
+      "more": 1,
+      "status": "done",
+      "duration_ms": 135
+    }
+  },
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "command",
+      "target": "python - \u003c\u003c'PY'",
+      "status": "done",
+      "duration_ms": 246
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60006
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60016
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  },
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "list",
+      "target": "worklog/skytrip-riverton-art",
+      "more": 1,
+      "status": "done",
+      "duration_ms": 89
+    }
+  },
+  {
+    "call": "exec_command",
+    "tool": {
+      "kind": "command",
+      "target": "git diff -- docs/RIVERTON.md credits.html | tail -65",
+      "more": 2,
+      "status": "done",
+      "duration_ms": 335
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60006
+    }
+  },
+  {
+    "call": "multi:exec_command,view_image",
+    "tool": {
+      "kind": "command",
+      "target": "python - \u003c\u003c'PY'",
+      "more": 1,
+      "status": "done",
+      "duration_ms": 211
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  },
+  {
+    "call": "sleep",
+    "tool": {
+      "kind": "wait",
+      "status": "done",
+      "duration_ms": 60007
+    }
+  }
+]

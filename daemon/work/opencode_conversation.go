@@ -876,6 +876,8 @@ func (b *openCodeConversationBuilder) projectContent(messageID string, index int
 			Output:    output,
 			Status:    status,
 			Partial:   status == "running",
+			StartedAt: openCodeTimestamp(content.Time.Created),
+			EndedAt:   openCodeTimestamp(content.Time.Completed),
 		})
 	}
 }

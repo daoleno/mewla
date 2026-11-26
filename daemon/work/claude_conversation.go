@@ -1263,7 +1263,7 @@ func (b *claudeConversationBuilder) updateToolResult(lineNumber int, recordID st
 				b.events[eventIndex].ExitCode = &code
 			}
 			if timestamp != "" {
-				b.events[eventIndex].Timestamp = timestamp
+				b.events[eventIndex].settleTool(timestamp)
 			}
 			return
 		}

@@ -257,7 +257,7 @@ func TestPiLiveConversationProjectsAllShapes(t *testing.T) {
 	}
 	wantKinds := []string{
 		"user_message", "reasoning", "assistant_message",
-		"tool_call", "tool_call", "tool_call", "command_execution", "assistant_message",
+		"tool_call", "tool_call", "tool_call", "command", "assistant_message",
 	}
 	if strings.Join(kinds, ",") != strings.Join(wantKinds, ",") {
 		t.Fatalf("event kinds = %v, want %v", kinds, wantKinds)
@@ -270,7 +270,7 @@ func TestPiLiveConversationProjectsAllShapes(t *testing.T) {
 	}
 	var execution *CodexConversationEvent
 	for i := range conversation.Events {
-		if conversation.Events[i].Kind == "command_execution" {
+		if conversation.Events[i].Kind == "command" {
 			execution = &conversation.Events[i]
 		}
 	}
