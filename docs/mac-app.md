@@ -66,7 +66,10 @@ When a newer release exists, **Settings → General** shows **Update to X** besi
 the version, and so does the cat's menu. One click downloads it (checked against
 the update key built into the app), replaces the app, restarts the daemon onto
 the new version and opens Mewla again. Sessions keep running, and the paired
-devices and the login item stay as they were.
+devices and the login item stay as they were. If the daemon is still running
+under the replaced app, macOS checks its permissions against that old copy, so
+they read as **Restart Mewla** until it restarts. Mewla notices this and
+restarts its daemon from the installed app at the next quiet moment, once.
 
 ## Permissions
 
@@ -81,7 +84,10 @@ process. **Allow** opens the permission's list in System Settings with a small
 panel beside it holding Mewla's icon: drag it into the list, or turn Mewla on if
 it is already there. The same panel brings Mewla back after you removed it with
 −. A Mewla in the list that grants nothing (left by a differently signed Mewla)
-is cleared first, so the Mewla you drag in is the one that counts. Once you give
+is cleared first, so the Mewla you drag in is the one that counts. For
+Accessibility, macOS reports such a row as switched off even when the list
+shows it on, so a switched-off Accessibility row is also cleared and asked for
+again. Once you give
 the permission, the panel closes, Mewla comes back to the front
 and applies it by itself, restarting its daemon where macOS needs that (Sessions
 keep running).

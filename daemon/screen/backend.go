@@ -111,6 +111,24 @@ const (
 	PermissionRestart = "restart"
 )
 
+// hostReplaced: the process macOS charges Mewla's permissions to (Mewla for
+// Mac's host) runs an app an update replaced, so no grant reads right until
+// Mewla starts again (cmd/mewla app_host.go).
+var hostReplaced atomic.Bool
+
+// SetHostReplaced says the app's host runs a replaced app: every grant not
+// read as given reads "restart" until Mewla starts again.
+func SetHostReplaced(replaced bool) { hostReplaced.Store(replaced) }
+
+// underReplacedHost is a grant's state under a replaced host: anything but
+// given needs Mewla to start again before it can be read.
+func underReplacedHost(state string, replaced bool) string {
+	if replaced && state != PermissionGranted {
+		return PermissionRestart
+	}
+	return state
+}
+
 // permissionState is where one grant stands: own is this process's answer,
 // live a fresh process's (macOS keeps answering a process from the state it
 // started with), listed whether macOS has a row for Mewla at all (true when it

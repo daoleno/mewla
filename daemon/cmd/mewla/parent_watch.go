@@ -55,6 +55,7 @@ func stopWithHost(ctx context.Context, stop context.CancelCauseFunc) {
 	if err != nil || host <= 1 {
 		return
 	}
+	noteAppHost(host)
 	go watchParent(ctx, host, os.Getppid, time.Second, func() {
 		log.Printf("mewla: stopping: the app's host (pid %d) that runs it is gone", host)
 		stop(nil)
