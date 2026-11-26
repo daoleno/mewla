@@ -91,4 +91,17 @@ describe("a turn's calls as a Ledger", () => {
     const items = createToolRunFolder()(buildTimeline(events)) as ActivityTimelineItem[];
     expect(items.flatMap(toolPictures)).toEqual(["/tmp/fixture-preview.png", "/tmp/screen.png"]);
   });
+
+  test("thoughts before a lone call read as one thought", () => {
+    const thought = (id: string, seq: number, body: string): CodexConversationEvent => ({ id, seq, kind: "commentary", body, status: "done" });
+    const events: CodexConversationEvent[] = [
+      thought("r1", 1, "The pane keeps its old marker."),
+      thought("r2", 2, "A migration and a test will do."),
+      thought("r3", 3, "Unset exits with code 0."),
+      event("e4", { kind: "read", target: "/w/daemon/watcher/watcher.go", status: "done", result: "lines 1–40" }),
+    ];
+    const items = createToolRunFolder()(buildTimeline(events)) as ActivityTimelineItem[];
+    expect(items.map((item) => item.activityKind ?? item.title)).toEqual(["reasoning", "Read daemon/watcher/watcher.go"]);
+    expect(items[0].body).toContain("Unset exits with code 0.");
+  });
 });

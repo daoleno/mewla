@@ -217,7 +217,10 @@ export function createToolRunFolder(): ToolRunFolder {
     let changed = false;
     const flush = () => {
       if (run.filter((step) => step.activityKind !== "reasoning").length < 2) {
-        out.push(...run);
+        // Too short to fold: its calls stand alone, and the thoughts before them read as one.
+        const merged = withThoughtsMerged(run);
+        if (merged.length !== run.length) changed = true;
+        out.push(...merged);
       } else {
         const id = `${TOOL_RUN_CACHE_PREFIX}${run[0].id}`;
         const previous = built.get(id);
@@ -278,6 +281,21 @@ export function createToolRunFolder(): ToolRunFolder {
 function mergedThoughts(held: ActivityTimelineItem[]): ActivityTimelineItem[] {
   if (held.length < 2) return held;
   return [{ ...held[0], body: held.map((thought) => (thought.body ?? "").trim()).filter(Boolean).join("\n\n") }];
+}
+
+function withThoughtsMerged(steps: ActivityTimelineItem[]): ActivityTimelineItem[] {
+  const out: ActivityTimelineItem[] = [];
+  let thoughts: ActivityTimelineItem[] = [];
+  for (const step of steps) {
+    if (isRunReasoning(step)) {
+      thoughts.push(step);
+      continue;
+    }
+    out.push(...mergedThoughts(thoughts), step);
+    thoughts = [];
+  }
+  out.push(...mergedThoughts(thoughts));
+  return out;
 }
 
 function isRunReasoning(item: TimelineItem): boolean {
