@@ -281,6 +281,20 @@ Claude Code, two Responses endpoints for Codex) cannot be paired, and
 `fallback set` says so: each would refuse the thinking the other signed in the
 conversation.
 
+**What a Provider used.** A Provider's page shows its last 30 days (cost,
+tokens, requests and how many failed, each with today's), its recent requests
+and its recent errors. Each request shows the agent, the model that answered,
+its input, what was read from the prompt cache or written to it, its output,
+and its cost when models.dev prices the model; a total that leaves out
+unpriced requests ends in "+". The daemon reads these from the reply each
+agent gets, in the gateway and in Sessions alike, including Codex's WebSocket
+turns, translated replies and requests a fallback answered (that request is
+the fallback's, and the failure is the connection's). It keeps the last 100
+requests, the last 20 errors and 30 days of totals per Provider in
+`provider-usage.json` in its state directory, and drops them when the
+Provider is deleted. `mewla providers usage --connection <id>` prints the
+same as JSON.
+
 **Other tools that switch your CLIs.** Mewla shares these files with you and
 with tools such as Magpie that point Codex or Claude Code at a gateway of their
 own. It changes a value only while the value is still the one it wrote: a

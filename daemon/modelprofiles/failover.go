@@ -3,6 +3,7 @@ package modelprofiles
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -199,6 +200,11 @@ func (f *failover) fromFailure(ctx context.Context, w http.ResponseWriter, via f
 	}
 	wait := f.rests.fail(r.from.ProfileID, base, most)
 	moved := f.send(ctx, w, via, r)
+	if rec, ok := w.(*usageRecorder); ok && moved {
+		// The agent hears the fallback; the failure is still the
+		// connection's own.
+		rec.log.fail(r.from.ProfileID, UsageError{At: time.Now(), Agent: rec.agent, Model: r.model, Status: status, Message: failureMessage(status, body, err)})
+	}
 	if moved {
 		log.Printf("model providers: connection %q failed (%s); it rests %s and its requests go to its fallback", r.from.Name, failureWords(status, err), wait.Round(time.Second))
 	}
@@ -224,10 +230,16 @@ func (f *failover) send(ctx context.Context, w http.ResponseWriter, via forwardV
 		return false
 	}
 	body := r.body
-	if model := failoverModel(r.clientAPI, r.model, target); model != "" && model != r.model {
+	model := failoverModel(r.clientAPI, r.model, target)
+	if model != "" && model != r.model {
 		if rewritten, err := rewriteRequestModel(body, model); err == nil {
 			body = rewritten
 		}
+	}
+	rec, recording := w.(*usageRecorder)
+	if recording {
+		rec.servedBy(target.ProfileID)
+		rec.asked = firstNonEmpty(model, r.model)
 	}
 	applyAuth := func(h http.Header) error {
 		return applyGatewayAuth(h, target.GatewayUpstream, r.inbound, via.lookup, via.creds)
@@ -265,6 +277,9 @@ func (f *failover) send(ctx context.Context, w http.ResponseWriter, via forwardV
 	}
 	copyInboundHeaders(upReq.Header, r.inbound)
 	upReq.Header.Del("Content-Encoding")
+	if recording {
+		upReq.Header.Del("Accept-Encoding")
+	}
 	upReq.Header.Set("Content-Type", "application/json")
 	upReq.ContentLength = int64(len(body))
 	if err := applyAuth(upReq.Header); err != nil {
@@ -305,6 +320,21 @@ func failoverModel(clientAPI, asked string, target failoverTarget) string {
 		}
 	}
 	return firstNonEmpty(target.Model, target.Listed[0])
+}
+
+// failureMessage is what a failed reply said, else its status.
+func failureMessage(status int, body []byte, err error) string {
+	if len(body) > 0 {
+		var reply struct {
+			Error json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal(body, &reply) == nil {
+			if words := errorWords(reply.Error); words != "" {
+				return words
+			}
+		}
+	}
+	return failureWords(status, err)
 }
 
 func failureWords(status int, err error) string {

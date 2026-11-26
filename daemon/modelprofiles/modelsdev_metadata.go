@@ -154,16 +154,27 @@ func presentationFromCatalog(catalog *modelfacts.Catalog) (map[string]map[string
 		items := make(map[string]modelPresentationMetadata, len(models))
 		for id, model := range models {
 			items[id] = normalizeModelPresentationMetadata(modelPresentationMetadata{
-				DisplayName:           model.Name,
-				ReleaseDate:           model.ReleaseDate,
-				ContextWindow:         model.Context,
-				Modalities:            model.Modalities,
-				TemperatureSupported:  model.Temperature,
-				InputPricePerMillion:  model.Cost.Input,
-				OutputPricePerMillion: model.Cost.Output,
+				DisplayName:               model.Name,
+				ReleaseDate:               model.ReleaseDate,
+				ContextWindow:             model.Context,
+				Modalities:                model.Modalities,
+				TemperatureSupported:      model.Temperature,
+				InputPricePerMillion:      model.Cost.Input,
+				OutputPricePerMillion:     model.Cost.Output,
+				CacheReadPricePerMillion:  model.Cost.CacheRead,
+				CacheWritePricePerMillion: firstRateOf(model.Cost.CacheWrite, model.Cost.CacheWrite5m),
 			})
 		}
 		out[provider] = items
 	}
 	return out, nil
+}
+
+func firstRateOf(rates ...*float64) *float64 {
+	for _, rate := range rates {
+		if rate != nil {
+			return rate
+		}
+	}
+	return nil
 }

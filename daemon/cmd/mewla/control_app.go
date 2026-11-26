@@ -395,6 +395,15 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
 		}
 		return control.Response{OK: true, LocalProviders: a.profiles.DetectLocalProviders(context.Background())}
+	case "provider_usage":
+		if a == nil || a.profiles == nil {
+			return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
+		}
+		usage, err := a.profiles.ProviderUsage(req.ConnectionID)
+		if err != nil {
+			return control.ErrorResponse(modelprofiles.CodeProfileInvalid, err.Error())
+		}
+		return control.Response{OK: true, ProviderUsage: &usage}
 	case "provider_set_image_model":
 		return a.handleProviderSetImageModel(req)
 	case "provider_discover":

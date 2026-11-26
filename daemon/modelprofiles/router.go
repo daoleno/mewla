@@ -53,6 +53,8 @@ type Router struct {
 	thinking *issuedThinkingLedger
 	// failover moves a request from a failing connection to its fallback.
 	failover *failover
+	// usage keeps what each connection's model requests used.
+	usage *usageLog
 	// active counts HTTP model requests from arrival to their last byte.
 	active atomic.Int64
 }
@@ -135,6 +137,11 @@ func WithRouterModelSwitch(apply func(routeID, modelID, effort string, effortPre
 // fallback (see failover).
 func WithRouterFailover(f *failover) RouterOption {
 	return func(r *Router) { r.failover = f }
+}
+
+// WithRouterUsage keeps each model request's tokens and failures.
+func WithRouterUsage(l *usageLog) RouterOption {
+	return func(r *Router) { r.usage = l }
 }
 
 func WithRouterNativeSettings(lookup func(routeID string) (codexctl.NativeSettings, bool)) RouterOption {
@@ -255,6 +262,13 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.serveLocalModels(w, binding)
 		return
 	}
+	modelRequest := parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointResponses
+	var usage *usageRecorder
+	if r.usage != nil && modelRequest {
+		usage = newUsageRecorder(w, r.usage, usageAgent(parsed.Endpoint == EndpointAnthropicMessages), binding.ProfileID)
+		w = usage
+		defer usage.finish()
+	}
 
 	inboundAuth := captureInboundAuth(req.Header)
 
@@ -337,6 +351,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
+		if usage != nil {
+			usage.asked = requestModel
+		}
 		requestEffort, requestEffortPresent := requestEffortFromBody(body)
 		explicitModelSwitch, signalErr := requestHasModelSwitchSignal(body)
 		if signalErr != nil {
@@ -481,7 +498,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// A model request may go to the connection's fallback: straight away
 	// while the connection rests, or when it fails before the agent heard
 	// anything.
-	moveable := r.failover != nil && (parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointResponses)
+	moveable := r.failover != nil && modelRequest
 	via := forwardVia{client: r.client, creds: r.creds, lookup: r.credentialLookup()}
 	moved := func(body []byte) failoverRequest {
 		return failoverRequest{
@@ -549,13 +566,14 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if decodedEncoding {
 		upReq.Header.Del("Content-Encoding")
 	}
-	// Switched Anthropic routes learn the signatures the new upstream issues.
-	// Dropping the client's Accept-Encoding lets the transport negotiate and
-	// decode compression itself, so the recorder sees plain SSE/JSON.
+	// Switched Anthropic routes learn the signatures the new upstream issues,
+	// and every model reply is read for its usage. Dropping the client's
+	// Accept-Encoding lets the transport negotiate and decode compression
+	// itself, so the recorders see plain SSE/JSON.
 	learnThinking := parsed.Endpoint == EndpointAnthropicMessages &&
 		normalizeID(binding.RouteProtocol) == RouteProtocolAnthropicMessages &&
 		normalizeID(binding.HistoryPortability) == HistoryPortabilityStripOpaque
-	if learnThinking {
+	if learnThinking || usage != nil {
 		upReq.Header.Del("Accept-Encoding")
 	}
 	if err := applyUpstreamAuth(upReq.Header, binding, inboundAuth, r.credentialLookup(), r.creds); err != nil {
@@ -705,10 +723,14 @@ func (r *Router) serveRouteWebSocket(w http.ResponseWriter, req *http.Request, p
 		if authErr := applyUpstreamAuth(headers, binding, captureInboundAuth(req.Header), r.credentialLookup(), r.creds); authErr != nil {
 			return fail(ErrCredentialNotReady)
 		}
-		return wsProxyTarget{
+		target := wsProxyTarget{
 			key: fmt.Sprintf("%s:%d", binding.ProfileID, binding.Generation),
 			url: wsURL, headers: headers, done: release,
-		}, nil
+		}
+		if turn && r.usage != nil {
+			target.usage = newUsageTurn(r.usage, ClientCodex, binding.ProfileID)
+		}
+		return target, nil
 	}
 	proxyWebSocketToUpstream(req.Context(), w, req, resolve, r.ws)
 }

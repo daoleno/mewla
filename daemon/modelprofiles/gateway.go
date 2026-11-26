@@ -95,6 +95,7 @@ type Gateway struct {
 	// failover moves a model request from a failing connection to its
 	// fallback (shared with the Session router).
 	failover       *failover
+	usage          *usageLog
 	claudeStandIn  func(profileID, model string) (string, bool)
 	listenFallback bool
 	// requests counts HTTP model requests being answered now (a websocket
@@ -133,6 +134,11 @@ func WithGatewayRequestResolver(resolve GatewayRequestResolver) GatewayOption {
 // fallback (see failover).
 func WithGatewayFailover(f *failover) GatewayOption {
 	return func(g *Gateway) { g.failover = f }
+}
+
+// WithGatewayUsage keeps each model request's tokens and failures.
+func WithGatewayUsage(l *usageLog) GatewayOption {
+	return func(g *Gateway) { g.usage = l }
 }
 
 func WithGatewayClaudeStandIn(standIn func(profileID, model string) (string, bool)) GatewayOption {
@@ -434,7 +440,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			writeRouteError(w, http.StatusUpgradeRequired, ErrRouteWebSocket)
 			return
 		}
-		resolve := func(bool) (wsProxyTarget, error) {
+		resolve := func(turn bool) (wsProxyTarget, error) {
 			selected, selectedOK := g.Upstream()
 			if !selectedOK {
 				return wsProxyTarget{}, ErrUpstreamInvalid
@@ -451,10 +457,14 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 			if authErr := applyGatewayAuth(headers, selected, req.Header, g.lookup, g.creds); authErr != nil {
 				return wsProxyTarget{}, ErrCredentialNotReady
 			}
-			return wsProxyTarget{
+			proxied := wsProxyTarget{
 				key: strings.Join([]string{selected.ProfileID, selected.BaseURL, selected.AuthMode, selected.CredentialEnv, selected.CredentialRef}, "\x00"),
 				url: wsURL, headers: headers,
-			}, nil
+			}
+			if turn && g.usage != nil {
+				proxied.usage = newUsageTurn(g.usage, ClientCodex, selected.ProfileID)
+			}
+			return proxied, nil
 		}
 		proxyWebSocketToUpstream(req.Context(), w, req, resolve, registry)
 		return
@@ -530,12 +540,14 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		writeRouteError(w, http.StatusServiceUnavailable, ErrUpstreamInvalid)
 		return
 	}
+	sentModel := agentModel
 	if protocol == GatewayProtocolAnthropic && g.claudeStandIn != nil && len(bodyBytes) > 0 {
 		if model, err := gatewayModelID(bodyBytes); err == nil {
 			if normalized, ok := normalizeClaudeContextModel(model); ok {
 				model = normalized
 			}
 			if standIn, ok := g.claudeStandIn(upstream.ProfileID, model); ok {
+				sentModel = standIn
 				debuglog.Printf("gateway: %s stands in for %s, which %q does not offer", standIn, model, upstream.Name)
 				if bodyBytes, err = rewriteRequestModel(bodyBytes, standIn); err != nil {
 					writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
@@ -552,6 +564,13 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 		}
 	}
 	clientAPI := map[string]string{GatewayProtocolAnthropic: translate.APIAnthropic, GatewayProtocolResponses: translate.APIResponses}[protocol]
+	var usage *usageRecorder
+	if g.usage != nil && clientAPI != "" && !strings.HasSuffix(req.URL.Path, "/count_tokens") {
+		usage = newUsageRecorder(w, g.usage, usageAgent(clientAPI == translate.APIAnthropic), upstream.ProfileID)
+		usage.asked = sentModel
+		w = usage
+		defer usage.finish()
+	}
 	// A model request may go to the connection's fallback: straight away
 	// while the connection rests, or when it fails before the agent heard
 	// anything.
@@ -682,6 +701,11 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, req *http.Request, registry *
 	copyInboundHeaders(upReq.Header, req.Header)
 	if decodedEncoding {
 		upReq.Header.Del("Content-Encoding")
+	}
+	if usage != nil {
+		// The reply is read for its usage: the transport takes and undoes
+		// the compression itself.
+		upReq.Header.Del("Accept-Encoding")
 	}
 	if err := applyGatewayAuth(upReq.Header, upstream, req.Header, g.lookup, g.creds); err != nil {
 		writeRouteError(w, http.StatusBadGateway, forProvider(ErrCredentialNotReady, upstream.Name, ""))

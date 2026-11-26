@@ -70,6 +70,9 @@ func (s *Server) handleModelProfileMessage(conn *websocket.Conn, raw clientMessa
 	case "detect_local_providers":
 		go s.handleDetectLocalProviders(conn, raw)
 		return true
+	case "provider_usage":
+		s.handleProviderUsage(conn, raw)
+		return true
 	// A Session's model is asked of its agent (Claude starts `claude -p` to
 	// list them; Codex asks its app-server), which can take seconds: off this
 	// connection's read loop, or the conversation asked for beside it waits as
@@ -250,6 +253,27 @@ func (s *Server) handleDetectLocalProviders(conn *websocket.Conn, raw clientMess
 		found = []modelprofiles.LocalProvider{}
 	}
 	s.sendJSON(conn, map[string]any{"type": "local_providers", "request_id": raw.RequestID, "found": found})
+}
+
+// handleProviderUsage answers a connection's recent model requests, its
+// last failures and its daily totals.
+func (s *Server) handleProviderUsage(conn *websocket.Conn, raw clientMessage) {
+	owner := s.modelProfiles()
+	if owner == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
+		return
+	}
+	connectionID := strings.TrimSpace(raw.ConnectionID)
+	if connectionID == "" {
+		s.sendErrorWithRequestID(conn, raw.RequestID, modelprofiles.CodeProfileInvalid, "connection_id is required")
+		return
+	}
+	usage, err := owner.ProviderUsage(connectionID)
+	if err != nil {
+		s.sendModelProfileError(conn, raw.RequestID, err)
+		return
+	}
+	s.sendJSON(conn, map[string]any{"type": "provider_usage", "request_id": raw.RequestID, "connection_id": connectionID, "usage": usage})
 }
 
 // handleSetProviderFallback names (or, with an empty fallback_connection_id,

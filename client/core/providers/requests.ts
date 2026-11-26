@@ -3,6 +3,7 @@ import { invalidProviderReply, offlineProviderError, ProviderError, PROVIDER_ERR
 import { parseLocalProviders, parseProviderConnectionTestResult, parseProviderModelsResult, parseProvidersSnapshot } from "./parse";
 import { parseOptionalMutationPersistence, requireAppliedPersistence } from "./persistence";
 import { ambiguousProviderMutation } from "./errors";
+import { parseProviderUsage, type ProviderUsage } from "./usage";
 import type { LocalProvider, ProviderConnectionInput, ProviderConnectionTestResult, ProviderModelsResult, ProvidersMutationResult, ProvidersSnapshot } from "./types";
 
 /**
@@ -86,6 +87,16 @@ export async function detectLocalProviders(daemon: Daemon): Promise<LocalProvide
     return parseLocalProviders(await daemon.request("detect_local_providers", {}, { reply: "local_providers", timeoutMs: 8_000 }));
   } catch {
     return [];
+  }
+}
+
+/** What a connection's model requests used and its last failures; a daemon that keeps none (older) answers nothing. */
+export async function providerUsage(daemon: Daemon, connectionId: string): Promise<ProviderUsage | null> {
+  if (daemon.state !== "connected") return null;
+  try {
+    return parseProviderUsage(await daemon.request("provider_usage", { connection_id: connectionId }, { reply: "provider_usage", timeoutMs: 8_000 }));
+  } catch {
+    return null;
   }
 }
 

@@ -819,6 +819,7 @@ func (o *Owner) DeleteProviderConnection(id string, revision int64) (ProviderCat
 			_, delErr = o.store.Delete(id, revision)
 		}
 		if delErr == nil || errors.Is(delErr, ErrPersistDirSync) {
+			o.usage.forget(id)
 			// A connection that named the deleted one has no fallback now.
 			for _, other := range o.store.Catalog().Profiles {
 				if normalizeID(other.Fallback) == id {

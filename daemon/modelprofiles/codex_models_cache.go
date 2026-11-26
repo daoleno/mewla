@@ -13,15 +13,17 @@ import (
 const maxCodexModelsCacheBytes = 32 << 20
 
 type modelPresentationMetadata struct {
-	DisplayName              string                       `json:"display_name,omitempty"`
-	DefaultReasoningLevel    string                       `json:"default_reasoning_level,omitempty"`
-	SupportedReasoningLevels []CodexReasoningEffortPreset `json:"supported_reasoning_levels,omitempty"`
-	ContextWindow            int64                        `json:"context_window,omitempty"`
-	Modalities               []string                     `json:"modalities,omitempty"`
-	TemperatureSupported     *bool                        `json:"temperature_supported,omitempty"`
-	InputPricePerMillion     *float64                     `json:"input_price_per_million,omitempty"`
-	OutputPricePerMillion    *float64                     `json:"output_price_per_million,omitempty"`
-	ReleaseDate              string                       `json:"release_date,omitempty"`
+	DisplayName               string                       `json:"display_name,omitempty"`
+	DefaultReasoningLevel     string                       `json:"default_reasoning_level,omitempty"`
+	SupportedReasoningLevels  []CodexReasoningEffortPreset `json:"supported_reasoning_levels,omitempty"`
+	ContextWindow             int64                        `json:"context_window,omitempty"`
+	Modalities                []string                     `json:"modalities,omitempty"`
+	TemperatureSupported      *bool                        `json:"temperature_supported,omitempty"`
+	InputPricePerMillion      *float64                     `json:"input_price_per_million,omitempty"`
+	OutputPricePerMillion     *float64                     `json:"output_price_per_million,omitempty"`
+	CacheReadPricePerMillion  *float64                     `json:"cache_read_price_per_million,omitempty"`
+	CacheWritePricePerMillion *float64                     `json:"cache_write_price_per_million,omitempty"`
+	ReleaseDate               string                       `json:"release_date,omitempty"`
 }
 
 func metadataFromWire(entry CodexModelCatalogWireEntry) modelPresentationMetadata {
@@ -81,6 +83,12 @@ func normalizeModelPresentationMetadata(metadata modelPresentationMetadata) mode
 	}
 	if metadata.OutputPricePerMillion != nil && *metadata.OutputPricePerMillion < 0 {
 		metadata.OutputPricePerMillion = nil
+	}
+	if metadata.CacheReadPricePerMillion != nil && *metadata.CacheReadPricePerMillion < 0 {
+		metadata.CacheReadPricePerMillion = nil
+	}
+	if metadata.CacheWritePricePerMillion != nil && *metadata.CacheWritePricePerMillion < 0 {
+		metadata.CacheWritePricePerMillion = nil
 	}
 	return metadata
 }
