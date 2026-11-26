@@ -299,6 +299,17 @@ describe("Mewla for Mac", () => {
     expect(app.value("id:composer")).toBe("kept across the close");
   }, 30_000);
 
+  test("the close button works again after the Dock's reopen: every close hides the window", async () => {
+    const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    for (let round = 1; round <= 3; round += 1) {
+      await app.window("main").pressClose();
+      await app.waitUntil(() => app.window("main").state()?.visible === false, { timeout: 5_000 });
+      await app.reopen();
+      await app.waitUntil(() => app.window("main").state()?.visible === true, { timeout: 5_000 });
+    }
+  }, 40_000);
+
   test("⌘W on the main window is a close too: the quick chat's shortcut is offered from the cat", async () => {
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}) });
     await app.waitFor("id:composer", { timeout: 15_000 });
