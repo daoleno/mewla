@@ -141,3 +141,29 @@ func TestOnlyMewlasWindowCloses(t *testing.T) {
 		t.Fatal("closed a window that shows another page")
 	}
 }
+
+// Owner's Mac, 11-26: once the address bar has the keyboard, its suggestions
+// are a window of their own in front of Mewla's, with no address bar.
+func TestTheAddressBarsSuggestionsAreNotTheWindowInFront(t *testing.T) {
+	tree := ElementTree{
+		Elements: []Element{
+			{Role: "AXWindow", Depth: 0},
+			{Role: "AXGroup", Depth: 1},
+			{Role: "AXWindow", Title: "New Tab - Google Chrome", Depth: 0},
+			{Role: "AXTextField", Value: "chrome://extensions/", Focused: true, Depth: 8},
+			{Role: "AXButton", Subrole: "AXCloseButton", Depth: 1},
+			{Role: "AXWindow", Depth: 0},
+			{Role: "AXTextField", Value: "news.ycombinator.com", Depth: 8},
+		},
+		IDs: []int{60, 61, 50, 51, 52, 10, 11},
+	}
+	if start, end := frontWindow(tree); start != 2 || end != 5 {
+		t.Fatalf("front window [%d, %d)", start, end)
+	}
+	if window, address, err := newWindowAddress(tree, map[int]bool{10: true}); err != nil || window != 50 || address != 51 {
+		t.Fatalf("[%d] [%d] %v", window, address, err)
+	}
+	if id, err := closeButtonOfMewlas(tree, map[int]bool{10: true}); err != nil || id != 52 {
+		t.Fatalf("[%d] %v", id, err)
+	}
+}

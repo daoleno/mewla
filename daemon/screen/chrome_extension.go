@@ -389,18 +389,29 @@ func closeButtonOfMewlas(t ElementTree, before map[int]bool) (int, error) {
 	return 0, errors.New("the window in front has no close button")
 }
 
-// frontWindow is where the window in front lies in a read: the first window
-// and what follows it, deeper; the whole read when it names no window.
+// frontWindow is where the browser window in front lies in a read: the first
+// window with an address bar, and what follows it, deeper (the address bar's
+// suggestions are a window of their own, in front of it); the whole read when
+// it names no window.
 func frontWindow(t ElementTree) (start, end int) {
 	start, end = 0, len(t.Elements)
+	first := true
 	for i, e := range t.Elements {
 		if e.Role != "AXWindow" {
 			continue
 		}
-		start = i
-		for end = i + 1; end < len(t.Elements) && t.Elements[end].Depth > e.Depth; end++ {
+		stop := i + 1
+		for stop < len(t.Elements) && t.Elements[stop].Depth > e.Depth {
+			stop++
 		}
-		break
+		if first {
+			start, end, first = i, stop, false
+		}
+		for j := i + 1; j < stop; j++ {
+			if t.Elements[j].Role == "AXTextField" {
+				return i, stop
+			}
+		}
 	}
 	return start, end
 }
