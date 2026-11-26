@@ -30,6 +30,10 @@ export type ProviderConnection = {
   models_fetched_at?: string;
   models_stale?: boolean;
   models_warning?: string;
+  /** The connection that takes this one's requests while it fails. */
+  fallback_connection_id?: string;
+  /** The API its requests go out in: anthropic_messages, openai_chat or openai_responses. */
+  upstream_api?: string;
 };
 
 export type ProviderPreset = {

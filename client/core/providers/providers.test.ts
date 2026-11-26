@@ -7,10 +7,13 @@ import {
 } from "./parse";
 import {
   advancedConnectionInput,
+  connectionIsTranslated,
   createdConnectionFromMutation,
+  fallbackChoices,
   enabledModelIds,
   modelSupportToggleTurnsOff,
   toggleModelSupport,
+  upstreamApiLabel,
 } from "./presentation";
 import { ProviderRequestOwner } from "./reconcile";
 import type { ProvidersSnapshot } from "./types";
@@ -366,6 +369,54 @@ describe("Provider Settings and Plus presentation policy", () => {
     expect(() =>
       createdConnectionFromMutation(before, ambiguous, "deepseek"),
     ).toThrow(/uniquely identify/i);
+  });
+});
+
+describe("Provider fallback", () => {
+  const claude = (id: string, upstream_api?: string) => ({
+    id,
+    name: id,
+    preset_id: "custom",
+    clients: ["claude"],
+    credential_ready: true,
+    advanced: true,
+    upstream_api,
+  });
+
+  test("the fallback and API come from the daemon's projection", () => {
+    const parsed = parseProvidersSnapshot({
+      type: "providers",
+      revision: 3,
+      connections: [
+        { ...claude("a", "anthropic_messages"), fallback_connection_id: "b" },
+        claude("b", "openai_chat"),
+      ],
+      defaults: {},
+      presets: [],
+      models: {},
+    });
+    expect(parsed?.connections[0].fallback_connection_id).toBe("b");
+    expect(parsed?.connections[1].upstream_api).toBe("openai_chat");
+    expect(parsed?.connections[1].fallback_connection_id).toBeUndefined();
+  });
+
+  test("a translated connection is named by its API", () => {
+    expect(upstreamApiLabel(claude("b", "openai_chat"))).toBe("Chat Completions");
+    expect(connectionIsTranslated(claude("b", "openai_chat"))).toBe(true);
+    expect(connectionIsTranslated(claude("a", "anthropic_messages"))).toBe(false);
+    expect(connectionIsTranslated(claude("old"))).toBe(false);
+  });
+
+  test("two connections of the agent's own API are never offered as a pair", () => {
+    const own = claude("a", "anthropic_messages");
+    const s = providerSnapshot({
+      connections: [own, claude("a2", "anthropic_messages"), claude("chat", "openai_chat"), claude("old")],
+    });
+    expect(fallbackChoices(s, own).map((c) => c.id)).toEqual(["chat"]);
+    // A translated connection may move to any other of its agent's, its own API included.
+    expect(fallbackChoices(s, claude("chat", "openai_chat")).map((c) => c.id)).toEqual(["a", "a2", "old"]);
+    // Other agents' connections never show.
+    expect(fallbackChoices(providerSnapshot(), providerSnapshot().connections[0])).toEqual([]);
   });
 });
 
