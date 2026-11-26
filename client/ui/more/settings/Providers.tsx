@@ -1,4 +1,4 @@
-import { effect, signal, Text, untracked, View, type JSX } from "nsh";
+import { effect, Scroll, signal, Text, untracked, View, type JSX } from "nsh";
 import { Menu, MenuItem } from "nsh/base";
 import { Icon } from "../../kit/Icon";
 import { listDetail, wide } from "../../shell/layout";
@@ -24,7 +24,7 @@ import {
 import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapshot } from "../../../core/providers/types";
 import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
-import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
+import { confirmDestructive, DisplayTitle, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
 import { LEAD_SLOT, RowTile, StateLine, tile, type Lead } from "../../kit/RowTile";
 import { dense } from "../../kit/density";
 import { AgentIcon } from "../../icons/AgentIcon";
@@ -80,6 +80,10 @@ function keyed<K>(key: () => K, render: (key: K) => JSX.Element): JSX.Element {
   return ((value: K) => untracked(() => render(value)))(key());
 }
 
+/** The split's list (the agents over the Providers) and the most its Provider's page grows to. */
+const SPLIT_LIST = 420;
+const SPLIT_DETAIL = 720;
+
 /** The Provider shown beside the lists on a wide pane; "" for the first one an agent uses. */
 const shown = signal("");
 
@@ -99,7 +103,7 @@ function shownId(): string {
 /**
  * Model Providers, design A (Magpie's Agents / Providers split): each agent once, with what it uses in a chip that
  * picks in place; every Provider once. On a pane wide enough for a list beside its detail (`listDetail()`), the
- * agents sit beside the shown Provider's page and the Providers run under both; narrower, a Provider opens its page.
+ * agents over the Providers are the list and the shown Provider's page is beside it; narrower, a Provider opens its page.
  */
 export function Providers(props: { nav: PageNav }) {
   let forServer = "";
@@ -132,24 +136,28 @@ export function Providers(props: { nav: PageNav }) {
     if (id !== untracked(shownKey)) shownKey.set(id);
   });
 
+  // On a wide pane the agents and the Providers are the list, and the shown Provider's page scrolls on its own beside it.
+  const split = () => listDetail() && Boolean(shownKey());
+  const aside = (
+    <View testID="providers-shown" class="flex-1 flex-col border-l border-border bg-background" style={{ display: split() ? "flex" : "none" }}>
+      {keyed(() => (split() ? shownKey() : ""), (cid) => <If when={cid}><Scroll keyboardShouldPersistTaps="handled" testID="providers-shown-scroll" class="flex-1" contentClass="px-6 pt-2" contentStyle={{ paddingBottom: 40 }}>
+          <View class="w-full" style={{ maxWidth: SPLIT_DETAIL }}>
+            <DisplayTitle testID="provider-shown-title" title={snapshot()?.connections.find((c) => c.id === cid)?.name ?? ""} />
+            <ProviderPanel connectionId={cid} nav={props.nav} />
+          </View>
+        </Scroll></If>)}
+    </View>
+  );
+
   return (
-    <Page display full={listDetail()} title="Model Providers" testID="providers" refreshing={pulled() && providers().loading && Boolean(snapshot())} onRefresh={() => { pulled.set(true); refreshProviders(); if (!untracked(providers).loading) pulled.set(false); }}>
+    <Page display full={listDetail()} list={split() ? SPLIT_LIST : undefined} aside={aside} title="Model Providers" testID="providers" refreshing={pulled() && providers().loading && Boolean(snapshot())} onRefresh={() => { pulled.set(true); refreshProviders(); if (!untracked(providers).loading) pulled.set(false); }}>
       <>
         <If when={!daemon()} else={<If when={!connected() && !snapshot()} else={<If when={!snapshot() && providers().error} else={<If when={!snapshot()} else={<View>
             <If when={locked()}><Notice testID="providers-locked" title="Refresh required" detail="Changes are paused until this list is refreshed." action="Refresh" onAction={refreshProviders} /></If>
             <If when={warning()}><Notice testID="providers-warning" title="Saved with a warning" detail={warning()} /></If>
             <If when={providers().error}><Notice tone="failed" title={presentProviderError(providers().error).title === "Providers" ? "Refresh required" : presentProviderError(providers().error).title} detail={failureWords(providers().error)} action="Refresh" onAction={refreshProviders} /></If>
-            <If when={listDetail()} else={<View><Agents nav={props.nav} /><ProviderList nav={props.nav} /></View>}>
-              <View testID="providers-split">
-                <View class="flex-row gap-6">
-                  <View class="min-w-0 flex-1"><Agents nav={props.nav} /></View>
-                  <View testID="providers-shown" class="min-w-0 flex-1">
-                    {keyed(shownKey, (cid) => <If when={cid}><ProviderPanel connectionId={cid} nav={props.nav} label /></If>)}
-                  </View>
-                </View>
-                <ProviderList nav={props.nav} />
-              </View>
-            </If>
+            <Agents nav={props.nav} />
+            <ProviderList nav={props.nav} />
           </View>}><EmptyState busy title="Loading Providers" /></If>}><If when={providers().error!.kind === "unavailable"} else={<EmptyState
               testID="providers-failed"
               icon="alert"
@@ -318,9 +326,9 @@ export function ProviderDetail(props: { connectionId: string; nav: PageNav }) {
 
 /**
  * One Provider: where it points, its key, a test, and which of its models agents may use. Showing it asks the Provider
- * for its model list again, so a model it added since shows. `label`: under a section label with its name (the split).
+ * for its model list again, so a model it added since shows.
  */
-function ProviderPanel(props: { connectionId: string; nav: PageNav; label?: boolean; onDeleted?: () => void }) {
+function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: () => void }) {
   const search = signal("");
   const failure = signal<{ title: string; detail: string } | null>(null);
   const tested = signal<{ tone: "ok" | "error" | "off"; label: string } | null>(null);
@@ -395,7 +403,7 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; label?: bool
     <If when={connection()} else={<EmptyState icon="key" title="Provider removed" />}>
       <View testID="provider-panel">
         <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
-        <Section title={props.label ? connection()!.name : undefined}>
+        <Section>
           <Row testID="provider-endpoint" title="Endpoint" value={whereOf(snapshot(), connection()!)} />
           <Row
             testID="provider-key-row"

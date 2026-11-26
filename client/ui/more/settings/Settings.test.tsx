@@ -138,20 +138,28 @@ describe("Model Providers", () => {
     expect(app.shows("id:provider-dot-claude-off")).toBe(true);
   });
 
-  test("on a wide pane the agents sit beside the shown Provider's page, and a Provider row shows it there instead of opening a page", async () => {
+  test("on a wide pane the agents and the Providers are the list, the shown Provider's page scrolls beside it, and a row shows its Provider there", async () => {
+    // A long model list (17, as on the owner's Mac) once pushed the Providers below it, out of the window.
+    const models = Array.from({ length: 17 }, (_, i) => ({ id: `m-${i}`, display_name: `Model ${i}`, available: true, source: "upstream" }));
     const c = computer({ name: "settings-providers" }, (type) => {
-      if (type === "list_providers") return snapshot({ defaults: { codex: { connection_id: "c1" } }, connections: [...snapshot().connections, { id: "c3", name: "Home", clients: ["claude"], credential_ready: true, advanced: true, base_url: "https://home.example.com/v1" }] });
+      if (type === "list_providers") return snapshot({ defaults: { codex: { connection_id: "c1" } }, models: { c1: models }, connections: [...snapshot().connections, { id: "c3", name: "Home", clients: ["claude"], credential_ready: true, advanced: true, base_url: "https://home.example.com/v1" }] });
       if (type === "discover_provider_models") return { reply: "provider_models", connection_id: "c1", models: [] };
       return null;
-    }, { width: 1920, height: 1400 });
+    }, { width: 1280, height: 800 });
     const app = await open(HARNESS, c.options);
-    await app.waitFor("id:providers-split");
     await app.waitFor("id:provider-panel");
+    await app.waitFor("id:model-m-16");
     await app.waitFor("id:provider-c1-shown");
+    const list = app.layout("id:provider-c3")!;
+    const detail = app.layout("id:providers-shown")!;
+    expect(list.x + list.width).toBeLessThanOrEqual(detail.x);
+    expect(app.layout("id:provider-pick-codex")!.x).toBeLessThan(detail.x);
+    expect(list.y + list.height).toBeLessThanOrEqual(800);
     await app.press("id:provider-c3");
     await app.waitFor("id:provider-c3-shown");
+    await app.waitUntil(() => app.texts().includes("home.example.com"));
     expect(app.shows("id:provider-detail")).toBe(false);
-    expect(app.texts()).toContain("home.example.com");
+    expect(app.texts()).toContain("Home");
   });
 
   test("a connection without a key opens its editor instead of being chosen", async () => {
