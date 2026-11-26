@@ -228,6 +228,9 @@ type Profile struct {
 	// machine gateway. Codex always names gpt-image-2; empty keeps that request
 	// byte-for-byte.
 	ImageModel string `toml:"image_model,omitempty" json:"image_model,omitempty"`
+	// Fallback is the connection, of the same agent, a model request goes to
+	// when this one fails before the agent heard anything (see failover).
+	Fallback string `toml:"fallback,omitempty" json:"fallback,omitempty"`
 	// ReasoningEffort is an ephemeral compile-only carrier for Session effort
 	// activation (same pattern as ModelPlaceholder). It is never durable and
 	// never a connection setting: the Session route owns the override and

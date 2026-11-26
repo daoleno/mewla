@@ -46,43 +46,45 @@ type Request struct {
 	IPhoneAction *phone.AgentAction `json:"iphone_action,omitempty"`
 	ProcessID    int                `json:"process_id,omitempty"`
 	// Path is what mewla gc why asks about (type "gc_why", when ProcessID is 0).
-	Path               string                                 `json:"path,omitempty"`
-	ProcessStart       string                                 `json:"process_start,omitempty"`
-	Type               string                                 `json:"type"`
-	Name               string                                 `json:"name,omitempty"`
-	Executor           string                                 `json:"executor,omitempty"`
-	ExecutorID         string                                 `json:"executor_id,omitempty"`
-	Command            string                                 `json:"command,omitempty"`
-	Cwd                string                                 `json:"cwd,omitempty"`
-	Prompt             string                                 `json:"prompt,omitempty"`
-	PromptFile         string                                 `json:"prompt_file,omitempty"`
-	Profile            string                                 `json:"profile,omitempty"`
-	ProfileID          string                                 `json:"profile_id,omitempty"`
-	ConnectionID       string                                 `json:"connection_id,omitempty"`
-	ModelID            string                                 `json:"model_id,omitempty"`
-	ReasoningEffort    string                                 `json:"reasoning_effort,omitempty"`
-	ModelIDs           []string                               `json:"model_ids,omitempty"`
-	ProviderConnection *modelprofiles.ProviderConnectionInput `json:"provider_connection,omitempty"`
-	Runtime            *modelprofiles.ThreadRuntimeChoice     `json:"runtime,omitempty"`
-	Generation         int64                                  `json:"generation,omitempty"` // internal CAS only; ignored on Provider activate
-	Operation          string                                 `json:"operation,omitempty"`
-	WorkerID           string                                 `json:"worker_id,omitempty"`
-	Client             string                                 `json:"client,omitempty"`
-	Credential         string                                 `json:"credential,omitempty"`
-	Status             string                                 `json:"status,omitempty"`
-	Phase              string                                 `json:"phase,omitempty"`
-	Attention          string                                 `json:"attention,omitempty"`
-	Summary            string                                 `json:"summary,omitempty"`
-	TaskClass          string                                 `json:"task_class,omitempty"`
-	EventKind          string                                 `json:"event_kind,omitempty"`
-	DetailsJSON        string                                 `json:"details_json,omitempty"`
-	LeaseSeconds       int                                    `json:"lease_seconds,omitempty"`
-	ProgressEventID    string                                 `json:"progress_event_id,omitempty"`
-	TurnID             string                                 `json:"turn_id,omitempty"`
-	EventID            string                                 `json:"event_id,omitempty"`
-	HandlingID         string                                 `json:"handling_id,omitempty"`
-	ProviderTurnID     string                                 `json:"provider_turn_id,omitempty"`
-	Text               string                                 `json:"text,omitempty"`
+	Path         string `json:"path,omitempty"`
+	ProcessStart string `json:"process_start,omitempty"`
+	Type         string `json:"type"`
+	Name         string `json:"name,omitempty"`
+	Executor     string `json:"executor,omitempty"`
+	ExecutorID   string `json:"executor_id,omitempty"`
+	Command      string `json:"command,omitempty"`
+	Cwd          string `json:"cwd,omitempty"`
+	Prompt       string `json:"prompt,omitempty"`
+	PromptFile   string `json:"prompt_file,omitempty"`
+	Profile      string `json:"profile,omitempty"`
+	ProfileID    string `json:"profile_id,omitempty"`
+	ConnectionID string `json:"connection_id,omitempty"`
+	// FallbackConnectionID is the fallback provider_set_fallback sets ("" clears).
+	FallbackConnectionID string                                 `json:"fallback_connection_id,omitempty"`
+	ModelID              string                                 `json:"model_id,omitempty"`
+	ReasoningEffort      string                                 `json:"reasoning_effort,omitempty"`
+	ModelIDs             []string                               `json:"model_ids,omitempty"`
+	ProviderConnection   *modelprofiles.ProviderConnectionInput `json:"provider_connection,omitempty"`
+	Runtime              *modelprofiles.ThreadRuntimeChoice     `json:"runtime,omitempty"`
+	Generation           int64                                  `json:"generation,omitempty"` // internal CAS only; ignored on Provider activate
+	Operation            string                                 `json:"operation,omitempty"`
+	WorkerID             string                                 `json:"worker_id,omitempty"`
+	Client               string                                 `json:"client,omitempty"`
+	Credential           string                                 `json:"credential,omitempty"`
+	Status               string                                 `json:"status,omitempty"`
+	Phase                string                                 `json:"phase,omitempty"`
+	Attention            string                                 `json:"attention,omitempty"`
+	Summary              string                                 `json:"summary,omitempty"`
+	TaskClass            string                                 `json:"task_class,omitempty"`
+	EventKind            string                                 `json:"event_kind,omitempty"`
+	DetailsJSON          string                                 `json:"details_json,omitempty"`
+	LeaseSeconds         int                                    `json:"lease_seconds,omitempty"`
+	ProgressEventID      string                                 `json:"progress_event_id,omitempty"`
+	TurnID               string                                 `json:"turn_id,omitempty"`
+	EventID              string                                 `json:"event_id,omitempty"`
+	HandlingID           string                                 `json:"handling_id,omitempty"`
+	ProviderTurnID       string                                 `json:"provider_turn_id,omitempty"`
+	Text                 string                                 `json:"text,omitempty"`
 	// EchoID and Apply are mewla brain claim-echo's: the stored echo row the
 	// admission (ID) claims, and whether to write it (otherwise a dry run).
 	EchoID string `json:"echo_id,omitempty"`

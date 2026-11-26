@@ -384,6 +384,12 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleProviderSwitch(req)
 	case "provider_set_models":
 		return a.handleProviderSetModels(req)
+	case "provider_set_fallback":
+		if a == nil || a.profiles == nil {
+			return control.ErrorResponse(modelprofiles.CodeProfilesUnavailable, "Providers are not available.")
+		}
+		proj, err := a.profiles.SetProviderFallback(req.ConnectionID, req.FallbackConnectionID)
+		return a.providersMutationResponse(proj, err)
 	case "provider_set_image_model":
 		return a.handleProviderSetImageModel(req)
 	case "provider_discover":

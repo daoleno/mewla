@@ -252,6 +252,22 @@ refused`. Problems that asking again cannot fix (no key, no Provider chosen)
 are answered so that neither agent spends minutes retrying them. A Provider on
 another of your computers over Tailscale is reached like one on your LAN.
 
+**A fallback for a Provider.** A connection can name another connection of
+the same agent to take its requests while it fails:
+`mewla providers fallback set <fallback-id> --connection <id>` (and `clear`;
+`mewla providers fallback` lists them). When the connection cannot be reached,
+stays busy after the retries above, is rate-limited, is out of credit or quota,
+or refuses its key, the request goes to the fallback before the agent sees an
+error, and the connection rests: 30 seconds at first, longer each time it
+fails again (up to 10 minutes; a rate limit rests until the time the Provider
+names, a used-up balance 15 minutes). Its requests go to the fallback while it
+rests and come back to it after. A Claude model the fallback does not serve is
+answered by one it does, and Codex's model goes as the fallback's own. Two
+connections that both speak the agent's own API (two Anthropic endpoints for
+Claude Code, two Responses endpoints for Codex) cannot be paired, and
+`fallback set` says so: each would refuse the thinking the other signed in the
+conversation.
+
 **Other tools that switch your CLIs.** Mewla shares these files with you and
 with tools such as Magpie that point Codex or Claude Code at a gateway of their
 own. It changes a value only while the value is still the one it wrote: a
