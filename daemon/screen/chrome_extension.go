@@ -95,7 +95,12 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 		defer screenReaderOff()
 	}
 	// A window of Mewla's own: the person's tabs stay as they are. It is the
-	// one that was not there before.
+	// one that was not there before, and Chrome's keys go to it only when
+	// Chrome is in front as it opens (a window opened behind does not take
+	// them, and keys go to the window that does).
+	if err := act("Chrome in front", AgentAction{Action: "bring_forward", App: chromeApp}); err != nil {
+		return err
+	}
 	if err := appKey("a new window", "cmd+n"); err != nil {
 		return err
 	}
@@ -106,14 +111,14 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 		return fmt.Errorf("step %d: %w", step, err)
 	}
 	// It closes when Mewla is done, whatever happened, by its own close
-	// button, while it is the one in front.
+	// button, while it is the one in front on the extensions page.
 	defer func() {
 		// Pages off first: a read of all of Chrome's then holds every window.
 		screenReaderOff()
 		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
 			return
 		}
-		button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOfMewlas(t, len(before)) })
+		button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOfMewlas(t, before) })
 		if err != nil {
 			log.Printf("screen: Mewla's Chrome window stays open: %v", err)
 			return
@@ -144,10 +149,6 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 			return err
 		}); err != nil {
 			return fmt.Errorf("step %d: %w", step, err)
-		}
-		// The keyboard is Chrome's only while it is in front.
-		if err := act("Chrome in front", AgentAction{Action: "bring_forward", App: chromeApp}); err != nil {
-			return err
 		}
 		if err := appKey("the address bar", "cmd+l"); err != nil {
 			return err
@@ -366,23 +367,20 @@ func newWindowAddress(t ElementTree, before map[int]bool) (window, address int, 
 }
 
 // closeButtonOfMewlas is the close button of Mewla's window: the one in
-// front, on the extensions page, while Chrome has one window more than the
-// windows it had before. A window's id does not last (Chrome gives it a new
-// element when its page changes), so it is known by these.
-func closeButtonOfMewlas(t ElementTree, windowsBefore int) (int, error) {
-	windows := 0
-	for _, e := range t.Elements {
-		if e.Role == "AXWindow" {
-			windows++
-		}
+// front, on the extensions page (typed or opened), not one of the windows
+// before. A window's id does not always last a page change, so what it shows
+// is what tells.
+func closeButtonOfMewlas(t ElementTree, before map[int]bool) (int, error) {
+	start, end := frontWindow(t)
+	if start >= end || t.Elements[start].Role != "AXWindow" {
+		return 0, errors.New("Chrome shows no window")
 	}
-	if windows != windowsBefore+1 {
-		return 0, fmt.Errorf("Chrome has %d windows, not the %d it had and Mewla's", windows, windowsBefore)
+	if before[t.id(start)] {
+		return 0, errors.New("the window in front was there before Mewla's")
 	}
 	if a := frontAddress(t); !strings.HasPrefix(a, "chrome://extensions") {
 		return 0, fmt.Errorf("the window in front shows %q", a)
 	}
-	start, end := frontWindow(t)
 	for i := start; i < end; i++ {
 		if t.Elements[i].Subrole == "AXCloseButton" {
 			return t.id(i), nil
