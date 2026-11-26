@@ -386,5 +386,10 @@ func bootTaskUninstall(runner bootRunner, out io.Writer) error {
 		return errors.New("schtasks /delete: " + strings.TrimSpace(string(output)))
 	}
 	fmt.Fprintf(out, "Removed scheduled task %q; Mewla no longer starts at login.\n", task.Name)
+	if stateDir := bootTaskStateDir(task.XML); stateDir != "" {
+		if held, err := bootStateLockHeld(stateDir); err == nil && !held {
+			bootReleaseAgentConfigs(stateDir, out)
+		}
+	}
 	return nil
 }

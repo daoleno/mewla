@@ -753,6 +753,9 @@ func bootLaunchdUninstall(runner bootRunner, out io.Writer) error {
 		return fmt.Errorf("remove boot metadata: %w", err)
 	}
 	fmt.Fprintf(out, "Removed %s; daemon state and pairing are untouched\n", path)
+	if !otherOwnerHeld {
+		bootReleaseAgentConfigs(metadata.StateDir, out)
+	}
 	if bundle := macapp.Path(metadata.Home); metadata.Binary == macapp.Executable(bundle) {
 		if err := macapp.Remove(bundle); err != nil {
 			fmt.Fprintf(out, "Note: %s was not removed: %v\n", bundle, err)

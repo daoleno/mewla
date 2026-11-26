@@ -1458,6 +1458,8 @@ func bootUninstall(runner bootRunner, out io.Writer) error {
 	fmt.Fprintf(out, "Removed %s; daemon state and pairing are untouched\n", path)
 	if outsideOwner {
 		fmt.Fprintf(out, "Note: state directory %s is owned by a process outside mewla.service; it was not stopped or modified\n", metadata.StateDir)
+	} else {
+		bootReleaseAgentConfigs(metadata.StateDir, out)
 	}
 	return nil
 }

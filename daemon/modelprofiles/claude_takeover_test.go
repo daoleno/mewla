@@ -382,3 +382,77 @@ func TestGatewayTakeoverFollowsSelection(t *testing.T) {
 		t.Fatalf("Official login did not give the Claude settings back: %#v", env)
 	}
 }
+
+// A daemon that stops or restarts keeps Codex and Claude Code on the gateway: it comes back on the same address, and
+// giving the settings back on every restart would flip them to and fro. Only Official login and an uninstall give back.
+func TestDaemonStopKeepsTheProjection(t *testing.T) {
+	root := t.TempDir()
+	codexConfig := filepath.Join(root, "codex", "config.toml")
+	settings := filepath.Join(root, "claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(codexConfig), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(codexConfig, []byte("model = \"user-model\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := OwnerConfig{
+		ProfilesPath:       filepath.Join(root, "profiles.toml"),
+		RoutesPath:         filepath.Join(root, "routes.json"),
+		ListenerPath:       filepath.Join(root, "listener.json"),
+		GatewayAddr:        "127.0.0.1:0",
+		GatewayStateDir:    filepath.Join(root, "gateway"),
+		CodexConfigPath:    codexConfig,
+		ClaudeSettingsPath: settings,
+		Credentials:        NewMemoryCredentialStore(),
+		Verifier:           BuiltinEnvelopeVerifier{},
+	}
+	owner, err := StartOwner(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj, err := owner.UpsertProviderConnection(ProviderConnectionInput{
+		ID: "codex-conn", Name: "codex", Client: ClientCodex, PresetID: ProviderPresetCustom,
+		BaseURL: "https://codex.example/v1", ModelID: "gpt-5", Advanced: true,
+	}, "codex-key", 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proj, err = owner.UpsertProviderConnection(ProviderConnectionInput{
+		ID: "claude-conn", Name: "claude", Client: ClientClaude, PresetID: ProviderPresetCustom,
+		BaseURL: "https://claude.example", Advanced: true,
+	}, "claude-key", proj.Revision, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proj, err = owner.SetProviderConnection("codex", "codex-conn", proj.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = owner.SetProviderConnection("claude", "claude-conn", proj.Revision); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(codexConfig)
+	claudeBefore := readSettingsEnv(t, settings)[EnvAnthropicBaseURL]
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(codexConfig)
+	if string(after) != string(before) || !strings.Contains(string(after), GatewayProviderName) {
+		t.Fatalf("a stop changed the Codex config:\n%s", after)
+	}
+	if got := readSettingsEnv(t, settings)[EnvAnthropicBaseURL]; got != claudeBefore || got == "" {
+		t.Fatalf("a stop changed Claude Code's settings: %q", got)
+	}
+
+	again, err := StartOwner(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = again.Close() })
+	restarted, _ := os.ReadFile(codexConfig)
+	if !strings.Contains(string(restarted), `model_provider = "`+GatewayProviderName+`"`) {
+		t.Fatalf("a restart gave the Codex config back:\n%s", restarted)
+	}
+	if readSettingsEnv(t, settings)[EnvAnthropicBaseURL] == "" {
+		t.Fatal("a restart gave Claude Code's settings back")
+	}
+}
