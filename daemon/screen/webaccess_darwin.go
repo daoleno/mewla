@@ -80,14 +80,15 @@ var macWebOps = webAccessOps{
 const enhancedUIName = "AXEnhancedUserInterface"
 
 // setEnhancedUI sets AXEnhancedUserInterface on the app with pid: what
-// VoiceOver sets, on which Chrome builds its pages' tree whatever else it
-// answers. Chrome then runs as for a screen reader, so it is set only while
-// Mewla needs a page and put back after.
-func setEnhancedUI(pid int, on bool) error {
+// VoiceOver sets, on which Chrome builds its pages' tree (it no longer answers
+// AXManualAccessibility). Chrome then runs as for a screen reader, so it is set
+// only while Mewla needs a page and put back after. was is what it read before.
+// Chrome answers a set it made with "not implemented": the value read back is
+// the answer.
+func setEnhancedUI(pid int, on bool) (was bool, err error) {
 	if !loadApps() {
-		return ErrNoApps
+		return false, ErrNoApps
 	}
-	var err error
 	withPool(func() {
 		app := appsLib.createApplication(int32(pid))
 		if app == 0 {
@@ -99,13 +100,17 @@ func setEnhancedUI(pid int, on bool) error {
 		if axLib.attrs[enhancedUIName] == 0 {
 			axLib.attrs[enhancedUIName] = axLib.createString(0, enhancedUIName, cfStringEncodingUTF8)
 		}
+		was = axBool(app, enhancedUIName, false)
+		if was == on {
+			return
+		}
 		value := objc.ID(objc.GetClass("NSNumber")).Send(objc.RegisterName("numberWithBool:"), on)
-		if code := appsLib.setAttribute(app, axLib.attrs[enhancedUIName], uintptr(value)); code != 0 {
+		if code := appsLib.setAttribute(app, axLib.attrs[enhancedUIName], uintptr(value)); code != 0 && axBool(app, enhancedUIName, !on) != on {
 			err = fmt.Errorf("refused (accessibility error %d)", code)
 		}
 	})
-	return err
+	return was, err
 }
 
 // SetEnhancedUI is setEnhancedUI for the extension flow.
-func (b *macBackend) SetEnhancedUI(pid int, on bool) error { return setEnhancedUI(pid, on) }
+func (b *macBackend) SetEnhancedUI(pid int, on bool) (bool, error) { return setEnhancedUI(pid, on) }

@@ -102,16 +102,20 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 		if !ok || perr != nil || pid == 0 {
 			return err
 		}
-		if serr := enhanced.SetEnhancedUI(pid, true); serr != nil {
+		was, serr := enhanced.SetEnhancedUI(pid, true)
+		if serr != nil {
 			log.Printf("screen: Chrome's pages as for a screen reader: %v", serr)
 			return err
 		}
-		log.Printf("screen: Chrome (pid %d) showed no page; asked for its pages as a screen reader does", pid)
-		defer func() {
-			if serr := enhanced.SetEnhancedUI(pid, false); serr != nil {
-				log.Printf("screen: Chrome back from screen reader mode: %v", serr)
-			}
-		}()
+		if !was {
+			log.Printf("screen: Chrome (pid %d) showed no page; asked for its pages as a screen reader does", pid)
+			// Back as it was (VoiceOver's, if it had set it, stays).
+			defer func() {
+				if _, serr := enhanced.SetEnhancedUI(pid, false); serr != nil {
+					log.Printf("screen: Chrome back from screen reader mode: %v", serr)
+				}
+			}()
+		}
 		if err := waitFor("the extensions page", devMode, "", 10); err != nil {
 			return err
 		}
@@ -218,9 +222,10 @@ func focusedFieldInLastSheet(t ElementTree) (int, error) {
 	return 0, errors.New("the sheet's field does not have the keyboard")
 }
 
-// enhancedUISetter sets an app's AXEnhancedUserInterface (macOS).
+// enhancedUISetter sets an app's AXEnhancedUserInterface (macOS) and says
+// what it was.
 type enhancedUISetter interface {
-	SetEnhancedUI(pid int, on bool) error
+	SetEnhancedUI(pid int, on bool) (was bool, err error)
 }
 
 // internalPick chooses an element of an internal agent's latest read.
