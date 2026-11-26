@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// UnsignedThinkingSignature is the signature Mewla gives a thinking block
+// made from a Chat model's reasoning, which has none of its own.
+const UnsignedThinkingSignature = "mewla.unsigned-thinking.v1"
+
 // NativeHistory removes from a request what only translation put into the
 // agent's history, before the request goes to an upstream that speaks the
 // agent's own API (api). An agent keeps what a translated Provider answered
@@ -22,10 +26,6 @@ import (
 //
 // A body with none of these, or one that cannot be read, is returned as it
 // is.
-// UnsignedThinkingSignature is the signature Mewla gives a thinking block
-// made from a Chat model's reasoning, which has none of its own.
-const UnsignedThinkingSignature = "mewla.unsigned-thinking.v1"
-
 func NativeHistory(api string, body []byte) []byte {
 	switch api {
 	case APIResponses:

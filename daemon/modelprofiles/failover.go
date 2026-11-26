@@ -169,8 +169,9 @@ type failoverRequest struct {
 	inbound   http.Header
 }
 
-// resting reports whether a connection rests and has a fallback to take its
-// requests meanwhile.
+// resting reports whether a connection rests. The caller still asks send,
+// which answers false when there is no fallback to take the request; then
+// the request goes to the resting connection after all.
 func (f *failover) resting(profileID string) bool {
 	return f != nil && f.rests.resting(profileID)
 }
@@ -231,6 +232,8 @@ func (f *failover) send(ctx context.Context, w http.ResponseWriter, via forwardV
 				if status == 0 {
 					err = ErrUpstreamInvalid
 				}
+				// Only the status reaches here, so a fallback that is rate
+				// limited or out of quota gets the default rest for it.
 				f.rests.settle(target.ProfileID, status, nil, nil, err)
 			},
 		}.serve(ctx, w)

@@ -198,7 +198,17 @@ func TestTwoEndpointsOfTheAgentsOwnAPIAreNotPaired(t *testing.T) {
 	owner := detectingOwner(t)
 	fb := addConnection(t, owner, ClientClaude, "Other Anthropic", osrv.URL, "claude-opus-5-5")
 	main := addConnection(t, owner, ClientClaude, "Main Relay", psrv.URL, "claude-opus-5-5")
-	if _, err := owner.SetProviderFallback(main.ID, fb.ID); err != nil {
+	if _, err := owner.SetProviderFallback(main.ID, fb.ID); err == nil {
+		t.Fatalf("the pair was accepted")
+	}
+	// A pair saved while one of them still looked translated (its API was
+	// found again later) is not moved either.
+	saved, err := owner.store.Get(main.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.Fallback = fb.ID
+	if _, err := owner.store.Update(saved, owner.store.Revision()); err != nil {
 		t.Fatal(err)
 	}
 	plan, _ := owner.PrepareLaunchModel(ExecutorClaude, "", "claude-opus-5-5", "claude")
@@ -273,6 +283,20 @@ func TestSetProviderFallbackRules(t *testing.T) {
 	}
 	if _, err := owner.SetProviderFallback(a.ID, c.ID); err == nil {
 		t.Fatalf("a Codex connection was made a Claude connection's fallback")
+	}
+	// Two Anthropic endpoints for Claude Code: send would never move a
+	// request between them, so the pair is refused when it is set.
+	if _, err := owner.SetProviderFallback(a.ID, b.ID); err == nil || !strings.Contains(err.Error(), "own API") {
+		t.Fatalf("two connections of the agent's own API were paired: %v", err)
+	}
+	// B turns out to speak Chat: now it may take A's requests.
+	chat, err := owner.store.Get(b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat.UpstreamAPI = ProtocolOpenAIChat
+	if _, err := owner.store.Update(chat, owner.store.Revision()); err != nil {
+		t.Fatal(err)
 	}
 	proj, err := owner.SetProviderFallback(a.ID, b.ID)
 	if err != nil {

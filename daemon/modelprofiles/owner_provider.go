@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelprofiles/translate"
 )
 
 // ProjectProviders returns the Provider-first Settings projection.
@@ -990,6 +992,9 @@ func (o *Owner) SetProviderFallback(connectionID, fallbackID string) (ProviderCa
 				clientFromExecutor(fallback.Client) != clientFromExecutor(profile.Client) {
 				return fmt.Errorf("%w: the fallback must be a Provider connection of the same agent", ErrInvalid)
 			}
+			if speaksAgentAPI(profile) && speaksAgentAPI(fallback) {
+				return fmt.Errorf("%w: %s and %s both speak the agent's own API; a conversation cannot move between them", ErrInvalid, profile.Name, fallback.Name)
+			}
 		}
 		profile.Fallback = fallbackID
 		_, err = o.store.Update(profile, o.store.Revision())
@@ -1004,6 +1009,18 @@ func (o *Owner) SetProviderFallback(connectionID, fallbackID string) (ProviderCa
 		return ProviderCatalogProjection{}, errors.Join(applyErr, perr)
 	}
 	return proj, applyErr
+}
+
+// speaksAgentAPI reports whether requests to a connection go out in its
+// agent's own API, untranslated. failover.send never moves a request between
+// two such connections, so they are not offered as a pair.
+func speaksAgentAPI(conn Profile) bool {
+	compiled, err := CompileConnectionTarget(conn, clientFromExecutor(conn.Client), "", "")
+	if err != nil {
+		return false
+	}
+	agentAPI := map[string]string{ExecutorClaude: translate.APIAnthropic, ExecutorCodex: translate.APIResponses}[executorFromClient(conn.Client)]
+	return agentAPI != "" && apiOfProtocol(compiled.Protocol) == agentAPI
 }
 
 // failoverFor is the fallback of a connection, when it names one that is

@@ -264,8 +264,9 @@ names, a used-up balance 15 minutes). Its requests go to the fallback while it
 rests and come back to it after. A Claude model the fallback does not serve is
 answered by one it does, and Codex's model goes as the fallback's own. Two
 connections that both speak the agent's own API (two Anthropic endpoints for
-Claude Code, two Responses endpoints for Codex) are not paired: each would
-refuse the thinking the other signed in the conversation.
+Claude Code, two Responses endpoints for Codex) cannot be paired, and
+`fallback set` says so: each would refuse the thinking the other signed in the
+conversation.
 
 **Other tools that switch your CLIs.** Mewla shares these files with you and
 with tools such as Magpie that point Codex or Claude Code at a gateway of their
