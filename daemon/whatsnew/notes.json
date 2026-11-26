@@ -6,7 +6,9 @@
       "highlights": [],
       "fixes": [
         "Mewla for Mac shows the permissions you granted.",
-        "On the Mac, Add extension adds Mewla to Chrome for you."
+        "On the Mac, Add extension adds Mewla to Chrome for you.",
+        "Codex no longer answers 404 for a model your Provider added after Mewla last listed its models.",
+        "Turning off Magpie or another tool that points Codex or Claude Code at its own gateway no longer leaves them pointing at Mewla's."
       ]
     },
     {

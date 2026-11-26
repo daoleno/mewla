@@ -212,7 +212,21 @@ marked block in Codex's `config.toml`, backed up first) and Claude Code
 that gateway. So a CLI you start in a plain terminal or an IDE uses the
 selected connection too. The gateway swaps in the real key and forwards the
 request unchanged. Running Claude Sessions use a new connection from their next
-request. A second daemon run for a test beside your own
+request.
+
+**Other tools that switch your CLIs.** Mewla shares these files with you and
+with tools such as Magpie that point Codex or Claude Code at a gateway of their
+own. It changes a value only while the value is still the one it wrote: a
+`model_provider` or `ANTHROPIC_BASE_URL` someone set since is left alone, and
+a daemon restart never takes a CLI back from another tool (choosing a Provider
+in Mewla does). Choosing Official login gives back what you had before. If
+another tool later writes Mewla's gateway back while Mewla is not using it
+(it restores what it saw while it was on), Mewla notices within seconds and
+gives the CLI your own provider again, so Codex never names a gateway that is
+gone. Codex lists and resumes a chat only on the provider it was started on,
+so Mewla moves your Codex chats along with the provider each way. A model the
+Provider added since Mewla last listed its models is looked up once before
+the gateway refuses it. A second daemon run for a test beside your own
 (`MEWLA_NO_CONFIG_TAKEOVER=1`) leaves both files alone; with a `CODEX_HOME` of
 its own it points that copy's Codex config at its gateway instead.
 
