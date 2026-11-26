@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/modelprofiles/translate"
 )
 
 // gatewayOwnerFile groups the Owner integration of the machine-level gateway
@@ -68,7 +70,7 @@ func (o *Owner) startGateway(cfg OwnerConfig) error {
 	if listenAddr != "" {
 		addr = listenAddr
 	}
-	gateway := NewGateway(addr, cfg.Credentials, WithGatewayRequestResolver(o.resolveGatewayRequestLive))
+	gateway := NewGateway(addr, cfg.Credentials, WithGatewayRequestResolver(o.resolveGatewayRequestLive), WithGatewayClaudeStandIn(o.gatewayClaudeStandIn))
 	if stateDir != "" {
 		if err := os.MkdirAll(stateDir, 0o700); err != nil {
 			return fmt.Errorf("%w: create gateway state dir: %v", ErrInvalid, err)
@@ -228,6 +230,26 @@ func (o *Owner) resolveGatewayRequestLive(protocol, modelID string) (GatewayUpst
 	return o.resolveGatewayRequest(protocol, modelID)
 }
 
+// gatewayClaudeStandIn is the model a plain-terminal Claude Code's request
+// goes out as when the chosen Claude connection's list (as the Provider
+// answered it) lacks the Claude id asked for. See claudeStandIn.
+func (o *Owner) gatewayClaudeStandIn(profileID, model string) (string, bool) {
+	if o == nil || o.store == nil || !o.connectionListedByProvider(profileID) {
+		return "", false
+	}
+	profile, err := o.store.Get(profileID)
+	if err != nil {
+		return "", false
+	}
+	entries, _ := o.modelsForConnection(profile, false)
+	for _, e := range entries {
+		if e.Available && e.ID == model {
+			return "", false
+		}
+	}
+	return claudeStandIn(model, standInCandidates(entries), profile.Model)
+}
+
 // connectionListedByProvider reports whether the Provider itself has answered
 // a model list for the connection. Until it has, the list shown is a stand-in
 // (Codex's own models, the bundled list) that says nothing of what it serves.
@@ -277,7 +299,7 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 			continue
 		}
 		target, err := CompileConnectionTarget(profile, wantClient, wantModel, "")
-		if err != nil || routeProtocolFor(target.Protocol) != protocol {
+		if route, ok := RouteProtocolForExecutor(ExecutorCodex, target.Protocol); err != nil || !ok || route != protocol {
 			continue
 		}
 		if o.gatewayModelDisabled(profile.ID, wantModel) {
@@ -341,7 +363,7 @@ func (o *Owner) selectedClaudeGatewayUpstream() (GatewayUpstream, error) {
 	if err != nil {
 		return GatewayUpstream{}, err
 	}
-	if routeProtocolFor(target.Protocol) != GatewayProtocolAnthropic {
+	if route, ok := RouteProtocolForExecutor(ExecutorClaude, target.Protocol); !ok || route != GatewayProtocolAnthropic {
 		return GatewayUpstream{}, forProvider(fmt.Errorf("%w: Claude connection %s does not speak Anthropic Messages", ErrRouteProtocolMismatch, selected), profile.Name, "")
 	}
 	return GatewayUpstreamFromProfile(target), nil
@@ -367,7 +389,7 @@ func (o *Owner) selectedCodexGatewayUpstream() (GatewayUpstream, error) {
 	if err != nil {
 		return GatewayUpstream{}, err
 	}
-	if routeProtocolFor(target.Protocol) != GatewayProtocolResponses {
+	if apiOfProtocol(target.Protocol) != translate.APIResponses {
 		return GatewayUpstream{}, forProvider(fmt.Errorf("%w: Codex connection %s does not speak Responses", ErrRouteProtocolMismatch, selected), profile.Name, "")
 	}
 	return GatewayUpstreamFromProfile(target), nil

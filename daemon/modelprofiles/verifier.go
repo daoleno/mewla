@@ -28,7 +28,7 @@ func (BuiltinEnvelopeVerifier) VerifyProfileContract(profile Profile) (VerifiedP
 	if !SupportsExecutor(profile.ExecutorID) {
 		return VerifiedProfileContract{}, fmt.Errorf("%w: %s", ErrUnsupportedExecutor, profile.ExecutorID)
 	}
-	route, needs := RouteProtocolFor(profile.Protocol)
+	route, needs := RouteProtocolForExecutor(profile.ExecutorID, profile.Protocol)
 	if needs && route == "" {
 		return VerifiedProfileContract{}, fmt.Errorf("%w: protocol %q", ErrUnsupportedProtocol, profile.Protocol)
 	}

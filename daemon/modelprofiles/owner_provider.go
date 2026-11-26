@@ -526,6 +526,23 @@ func (o *Owner) UpsertProviderConnection(in ProviderConnectionInput, apiKey stri
 		return ProviderCatalogProjection{}, err
 	}
 	apiKey = strings.TrimSpace(apiKey)
+	// A custom endpoint may speak another API than its agent: find out now,
+	// with the key, so the route can translate. Done before the lock (it
+	// asks the network); an endpoint that does not answer keeps what it had.
+	detectedAPI, detected := "", false
+	if normalizeID(profile.ProviderID) == ProviderPresetCustom && o.upstreamAPIDetect != nil {
+		secret := apiKey
+		if secret == "" && !create && o.creds != nil {
+			if prev, gerr := o.store.Get(profile.ID); gerr == nil {
+				if val, ok, _ := o.creds.Get(activeCredentialRef(prev)); ok {
+					secret = strings.TrimSpace(val)
+				}
+			}
+		}
+		if secret != "" {
+			detectedAPI, detected = o.upstreamAPIDetect(executorFromClient(profile.Client), profile.BaseURL, secret)
+		}
+	}
 
 	o.mu.Lock()
 	applyErr := func() error {
@@ -543,6 +560,12 @@ func (o *Owner) UpsertProviderConnection(in ProviderConnectionInput, apiKey stri
 			profile.CredentialRef = previous.CredentialRef
 			// image_model is set outside the connection editor.
 			profile.ImageModel = previous.ImageModel
+			if strings.TrimRight(previous.BaseURL, "/") == strings.TrimRight(profile.BaseURL, "/") {
+				profile.UpstreamAPI = previous.UpstreamAPI
+			}
+		}
+		if detected {
+			profile.UpstreamAPI = detectedAPI
 		}
 
 		stagedRef := ""

@@ -133,7 +133,7 @@ func ValidateProfile(profile Profile) error {
 		if authMode != AuthModeNone || normalizeSpace(profile.CredentialEnv) != "" {
 			return fmt.Errorf("%w: openai_native profiles must use auth_mode=none without credential_env", ErrInvalid)
 		}
-	case ProtocolOpenAIResponses, ProtocolAnthropicMessages:
+	case ProtocolOpenAIResponses, ProtocolAnthropicMessages, ProtocolOpenAIChat:
 		if err := ValidateUpstreamBaseURL(profile.BaseURL); err != nil {
 			return err
 		}
@@ -415,6 +415,7 @@ func normalizeProfile(profile Profile) Profile {
 	profile.ClientModelProvenance = normalizeID(profile.ClientModelProvenance)
 	profile.Model = normalizeSpace(profile.Model)
 	profile.ImageModel = normalizeSpace(profile.ImageModel)
+	profile.UpstreamAPI = normalizeID(profile.UpstreamAPI)
 	profile.BaseURL = normalizeSpace(profile.BaseURL)
 	profile.AuthMode = normalizeID(profile.AuthMode)
 	if profile.AuthMode == "" {

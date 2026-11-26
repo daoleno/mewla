@@ -38,7 +38,7 @@ func Compile(baseCommand string, profile Profile, opts CompileOptions) (Resolved
 		return ResolvedLaunch{}, err
 	}
 
-	routeProtocol, needsRoute := RouteProtocolFor(profile.Protocol)
+	routeProtocol, needsRoute := RouteProtocolForExecutor(profile.ExecutorID, profile.Protocol)
 	loopbackRouteURL := normalizeSpace(opts.LoopbackRouteURL)
 	if needsRoute {
 		if err := ValidateLoopbackRouteURL(loopbackRouteURL); err != nil {
@@ -115,7 +115,9 @@ func compileCodex(baseCommand, explicitModel string, profile Profile, loopbackRo
 			return baseCommand, nil, "", nil
 		}
 		return appendArgv(baseCommand, "--model", explicitModel), nil, "", nil
-	case ProtocolOpenAIResponses:
+	case ProtocolOpenAIResponses, ProtocolAnthropicMessages, ProtocolOpenAIChat:
+		// Codex speaks Responses to its route whatever the Provider
+		// speaks; the route translates.
 		tuiCommand := baseCommand
 		if explicitModel != "" {
 			tuiCommand = appendArgv(tuiCommand, "--model", explicitModel)
@@ -192,7 +194,7 @@ func compileCodexAppServerLive(baseCommand, explicitModel, tuiCommand, socket, l
 }
 
 func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRouteURL string) (command string, env map[string]string, err error) {
-	if profile.Protocol != ProtocolAnthropicMessages {
+	if profile.Protocol != ProtocolAnthropicMessages && profile.Protocol != ProtocolOpenAIChat {
 		return "", nil, fmt.Errorf("%w: protocol %q", ErrUnsupportedProtocol, profile.Protocol)
 	}
 	if err := ValidateLoopbackRouteURL(loopbackRouteURL); err != nil {

@@ -213,9 +213,26 @@ marked block in Codex's `config.toml`, backed up first) and Claude Code
 (`ANTHROPIC_BASE_URL` and a placeholder token in `~/.claude/settings.json`) at
 that gateway. So a CLI you start in a plain terminal or an IDE uses the
 selected connection too. The gateway swaps in the real key and forwards the
-request unchanged. Running Claude Sessions use a new connection from their next
+request. Running Claude Sessions use a new connection from their next
 request. When Codex asks for a model, the selected Codex connection answers it
 whenever it may serve it, even before its model list has been fetched.
+
+**Any agent on any Provider.** A Custom Gateway may speak another API than
+its agent: OpenAI Chat Completions (most local servers and model vendors),
+Anthropic Messages, or OpenAI Responses. Mewla finds out which when you save
+the connection, by sending each endpoint an empty request (no model is asked
+anything), and then carries each request across. So Claude Code runs on a
+Chat Completions endpoint, and Codex on a Chat Completions or an Anthropic
+one. Streaming, tool calls (parallel ones too), images, reasoning effort and
+token usage come through. Toward Anthropic, Codex keeps Claude's thinking
+from one turn to the next, and the prompt is marked for caching, so a long
+Session reads most of each prompt from cache. When Claude Code asks for its
+own Haiku or Opus (for titles, summaries, Explore subagents) and the Provider
+does not serve it, a model the Provider does serve answers instead. For any
+model that is not Claude, the billing line Claude Code puts at the start of
+its prompt is dropped: it changes every turn and would keep the Provider from
+reusing its cache. Codex on a translated endpoint uses HTTP, not
+WebSocket.
 
 **When a Provider fails.** A Provider that is busy (a 5xx or 529 status, or a
 dropped connection) is asked twice more, after 1 and 2 seconds. A rate limit is

@@ -606,3 +606,85 @@ func withRawQuery(upstreamURL, rawQuery string) (string, error) {
 	u.Fragment = ""
 	return u.String(), nil
 }
+
+// claudeBillingPrefix opens the first system block Claude Code sends:
+// "x-anthropic-billing-header: cc_version=…; cc_entrypoint=…; cch=…;". It is
+// for Claude models (Anthropic's API, or a relay or cloud serving Claude),
+// and its cch changes every turn. Another vendor's model reads it as the
+// first words of the prompt, so no turn reads the cached prefix of the one
+// before.
+const claudeBillingPrefix = "x-anthropic-billing-header:"
+
+// withoutBillingLine is text with a leading billing line cut off, and
+// whether it had one.
+func withoutBillingLine(text string) (string, bool) {
+	trimmed := strings.TrimLeft(text, " \t\r\n")
+	if !strings.HasPrefix(trimmed, claudeBillingPrefix) {
+		return text, false
+	}
+	if nl := strings.IndexByte(trimmed, '\n'); nl >= 0 {
+		return strings.TrimLeft(trimmed[nl+1:], "\r\n"), true
+	}
+	return "", true
+}
+
+// dropClaudeBillingLine removes Claude Code's billing line from an
+// Anthropic Messages request for a model that is not Claude: a system block
+// that is only the line goes, and a block that starts with it keeps the rest.
+// A request for a Claude model, one without the line, or one that cannot be
+// read is returned as it is.
+func dropClaudeBillingLine(body []byte) []byte {
+	if !bytes.Contains(body, []byte(claudeBillingPrefix)) {
+		return body
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(body, &obj) != nil {
+		return body
+	}
+	var model string
+	if json.Unmarshal(obj["model"], &model) != nil || strings.Contains(strings.ToLower(model), "claude") {
+		return body
+	}
+	var blocks []map[string]json.RawMessage
+	if json.Unmarshal(obj["system"], &blocks) != nil {
+		return body
+	}
+	kept := make([]map[string]json.RawMessage, 0, len(blocks))
+	changed := false
+	for _, b := range blocks {
+		var typ, text string
+		_ = json.Unmarshal(b["type"], &typ)
+		if typ != "text" || json.Unmarshal(b["text"], &text) != nil {
+			kept = append(kept, b)
+			continue
+		}
+		rest, had := withoutBillingLine(text)
+		if !had {
+			kept = append(kept, b)
+			continue
+		}
+		changed = true
+		if strings.TrimSpace(rest) == "" {
+			continue
+		}
+		raw, err := json.Marshal(rest)
+		if err != nil {
+			return body
+		}
+		b["text"] = raw
+		kept = append(kept, b)
+	}
+	if !changed {
+		return body
+	}
+	system, err := json.Marshal(kept)
+	if err != nil {
+		return body
+	}
+	obj["system"] = system
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return body
+	}
+	return out
+}
