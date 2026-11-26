@@ -246,11 +246,16 @@ type extensionsToolbar struct {
 }
 
 // readExtensionsToolbar finds the toolbar in the window in front (the first
-// one read), whose address is the extensions page.
+// one read) once it shows the extensions page: its address is that page's,
+// and no longer has the keyboard (an address being typed still shows the page
+// before it, the person's new tab page).
 func readExtensionsToolbar(t ElementTree) (extensionsToolbar, error) {
-	page := -1
-	for i, e := range t.Elements {
-		if e.Role == "AXWebArea" {
+	start, end := frontWindow(t)
+	address, page := -1, -1
+	for i := start; i < end; i++ {
+		if e := t.Elements[i]; e.Role == "AXTextField" && address < 0 {
+			address = i
+		} else if e.Role == "AXWebArea" {
 			page = i
 			break
 		}
@@ -258,11 +263,14 @@ func readExtensionsToolbar(t ElementTree) (extensionsToolbar, error) {
 	if page < 0 {
 		return extensionsToolbar{}, errors.New("Chrome shows no page")
 	}
-	if address := frontAddress(t); !strings.HasPrefix(address, "chrome://extensions") {
-		return extensionsToolbar{}, fmt.Errorf("the window in front shows %q, not the extensions page", address)
+	if address < 0 || !strings.HasPrefix(t.Elements[address].Value, "chrome://extensions") {
+		return extensionsToolbar{}, fmt.Errorf("the window in front shows %q, not the extensions page", frontAddress(t))
+	}
+	if t.Elements[address].Focused {
+		return extensionsToolbar{}, errors.New("the extensions page is still being opened")
 	}
 	search, devMode := -1, -1
-	for i := page + 1; i < len(t.Elements) && t.Elements[i].Depth > t.Elements[page].Depth; i++ {
+	for i := page + 1; i < end && t.Elements[i].Depth > t.Elements[page].Depth; i++ {
 		e := t.Elements[i]
 		switch {
 		case search < 0:
@@ -283,10 +291,27 @@ func readExtensionsToolbar(t ElementTree) (extensionsToolbar, error) {
 	return extensionsToolbar{}, errors.New("the extensions page has no Developer mode switch yet")
 }
 
-// frontAddress is the address of the tab in front: the first window read is
-// the one in front, its address bar the first text field in it.
+// frontWindow is where the window in front lies in a read: the first window
+// and what follows it, deeper; the whole read when it names no window.
+func frontWindow(t ElementTree) (start, end int) {
+	start, end = 0, len(t.Elements)
+	for i, e := range t.Elements {
+		if e.Role != "AXWindow" {
+			continue
+		}
+		start = i
+		for end = i + 1; end < len(t.Elements) && t.Elements[end].Depth > e.Depth; end++ {
+		}
+		break
+	}
+	return start, end
+}
+
+// frontAddress is the address of the tab in front: its window's address bar
+// is the first text field in it.
 func frontAddress(t ElementTree) string {
-	for _, e := range t.Elements {
+	start, end := frontWindow(t)
+	for _, e := range t.Elements[start:end] {
 		if e.Role == "AXTextField" {
 			return e.Value
 		}

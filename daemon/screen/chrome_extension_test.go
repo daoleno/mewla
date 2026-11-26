@@ -54,7 +54,22 @@ func TestTheExtensionsToolbarIsFoundByItsOrderInAnyLanguage(t *testing.T) {
 	if _, err := readExtensionsToolbar(tree); err == nil {
 		t.Fatal("a window that shows no page has a toolbar")
 	}
-	if a := frontAddress(page("chrome://extensions/", "1")); a != "chrome://extensions/" {
+	// Typed, not yet opened: the person's new tab page still shows, with
+	// switches and buttons of its own.
+	typed := page("chrome://extensions/", "1")
+	typed.Elements[1].Focused = true
+	if _, err := readExtensionsToolbar(typed); err == nil {
+		t.Fatal("the page before the extensions page was read as it")
+	}
+	// The window in front shows no page: another window's is not its.
+	behind := page("https://mail.example.com/", "1")
+	behind.Elements = append(behind.Elements[12:], behind.Elements[:12]...)
+	behind.Elements[1].Value = "chrome://extensions/"
+	behind.Elements[3].Value = "chrome://extensions/"
+	if _, err := readExtensionsToolbar(behind); err == nil {
+		t.Fatal("a window behind lent the one in front its page")
+	}
+	if a := frontAddress(behind); a != "chrome://extensions/" {
 		t.Fatalf("front address %q", a)
 	}
 }
