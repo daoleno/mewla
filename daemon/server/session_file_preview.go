@@ -27,7 +27,9 @@ import (
 const (
 	maxSessionFileReferenceBytes = namedpath.MaxReferenceBytes
 	maxSessionFileTextBytes      = 512 << 10
-	maxSessionFileBinaryBytes    = 50 << 20
+	// The preview bound of a picture or PDF (metadata's too_large). It bounds what the app
+	// renders, never what it may download: the raw read streams a file of any size.
+	maxSessionFileBinaryBytes = 50 << 20
 	// Media streams from disk in Range requests and is never read whole, so its
 	// bound caps a recording's size rather than a preview's memory.
 	maxSessionFileMediaBytes     = 2 << 30
@@ -39,7 +41,7 @@ const (
 var (
 	errSessionFileChanged       = errors.New("session file changed")
 	errStaleSessionFileIdentity = errors.New("stale Session identity")
-	errSessionFileTooLarge      = errors.New("Session file exceeds the preview size limit")
+	errSessionFileTooLarge      = errors.New("Session file exceeds the size limit")
 )
 
 type sessionFileMetadata struct {
@@ -506,27 +508,6 @@ func previewLimitForKind(kind string) int64 {
 	}
 }
 
-func validateSessionFileBinarySize(resolved *resolvedSessionFile) error {
-	if resolved == nil || resolved.info == nil {
-		return fmt.Errorf("Session file is unavailable")
-	}
-	limit := previewLimitForKind(resolved.kind)
-	if limit == 0 {
-		// Text and unsupported files stream only as downloads, under the
-		// binary preview bound.
-		limit = maxSessionFileBinaryBytes
-	}
-	if resolved.info.Size() > limit {
-		return fmt.Errorf(
-			"%w: %d bytes; limit is %d bytes",
-			errSessionFileTooLarge,
-			resolved.info.Size(),
-			limit,
-		)
-	}
-	return nil
-}
-
 func readSessionFileText(resolved *resolvedSessionFile, expectedGeneration string) (sessionFileTextPreview, error) {
 	if resolved == nil || resolved.file == nil {
 		return sessionFileTextPreview{}, fmt.Errorf("Session file is unavailable")
@@ -628,10 +609,6 @@ func (s *Server) handleSessionFileCapability(
 		)
 		return
 	}
-	if err := validateSessionFileBinarySize(resolved); err != nil {
-		writeSessionFileHTTPError(w, err)
-		return
-	}
 
 	expiresAtMS := s.sessionFileCapabilityNow().
 		Add(sessionFileCapabilityTTL).
@@ -713,15 +690,16 @@ func (s *Server) handleSessionFileBinary(w http.ResponseWriter, r *http.Request)
 		writeSessionFileHTTPError(w, fmt.Errorf("%w; refresh the preview", errSessionFileChanged))
 		return
 	}
-	if err := validateSessionFileBinarySize(resolved); err != nil {
-		writeSessionFileHTTPError(w, err)
-		return
-	}
 
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", resolved.contentType)
-	w.Header().Set("Content-Disposition", contentDispositionInline(resolved.info.Name()))
+	disposition := "inline"
+	if r.URL.Query().Get("disposition") == "attachment" {
+		// A browser (or the system's) saves the file to disk as it streams, whatever its size.
+		disposition = "attachment"
+	}
+	w.Header().Set("Content-Disposition", contentDisposition(disposition, resolved.info.Name()))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(
 		w,
@@ -888,12 +866,12 @@ func boundedSessionFileBinaryReader(resolved *resolvedSessionFile) io.ReadSeeker
 	return io.NewSectionReader(resolved.file, 0, resolved.info.Size())
 }
 
-func contentDispositionInline(name string) string {
-	value := mime.FormatMediaType("inline", map[string]string{
+func contentDisposition(kind, name string) string {
+	value := mime.FormatMediaType(kind, map[string]string{
 		"filename": filepath.Base(name),
 	})
 	if value == "" {
-		return "inline"
+		return kind
 	}
 	return value
 }

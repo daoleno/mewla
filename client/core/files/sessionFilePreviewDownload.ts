@@ -4,11 +4,8 @@ import type { SessionFileMetadata } from "./sessionFilePreview";
 // sessionFileDownloadNameCandidates, streams into it and deletes only the file
 // it created when the download fails. What stays here decides what to ask for.
 
-/** Matches daemon `maxSessionFileBinaryBytes` (50 MiB). */
-export const SESSION_FILE_BINARY_LIMIT_BYTES = 50 * 1024 * 1024;
-
-export type SessionFileDownloadResult = "saved" | "cancelled";
-export type SessionFileDownloadFeedback = "idle" | "busy" | "saved" | "failed";
+export type SessionFileDownloadResult = "saved" | "started" | "cancelled";
+export type SessionFileDownloadFeedback = "idle" | "busy" | "saved" | "started" | "failed";
 
 export function sessionFileDownloadErrorMessage(error: unknown): string {
   const message =
@@ -46,7 +43,7 @@ export function createSessionFileDownloadLifecycleOwner(input: {
       try {
         const result = await task();
         if (!disposed && epoch === taskEpoch) {
-          input.onFeedbackChange(result === "saved" ? "saved" : "idle");
+          input.onFeedbackChange(result === "cancelled" ? "idle" : result);
         }
         return result;
       } catch (error) {
@@ -149,14 +146,33 @@ export function sessionFileDownloadMimeType(
   return base || "application/octet-stream";
 }
 
+/**
+ * Any file a reply names can be downloaded, whatever its size: `tooLarge` and the preview limit
+ * are about what the app renders, never about what it may save. The bytes stream to disk.
+ */
 export function sessionFileCanDownload(
   metadata: SessionFileMetadata | null | undefined,
 ): boolean {
   if (!metadata) return false;
-  if (metadata.tooLarge) return false;
   if (!metadata.path.trim() || !metadata.generation.trim()) return false;
-  if (!Number.isFinite(metadata.size) || metadata.size < 0) return false;
-  return metadata.size <= SESSION_FILE_BINARY_LIMIT_BYTES;
+  return Number.isFinite(metadata.size) && metadata.size >= 0;
+}
+
+/** Copy reads a file whole into the clipboard through the stream, so it keeps the old 50 MiB bound (a download does not). */
+export const SESSION_FILE_COPY_LIMIT_BYTES = 50 * 1024 * 1024;
+
+export function sessionFileCanCopyWhole(
+  metadata: SessionFileMetadata | null | undefined,
+): boolean {
+  return sessionFileCanDownload(metadata) && metadata!.size <= SESSION_FILE_COPY_LIMIT_BYTES;
+}
+
+/**
+ * The signed read as a download: the daemon answers it `attachment`, so a browser saves it as it
+ * streams (progress, Cancel and the folder are the browser's) instead of showing it.
+ */
+export function sessionFileAttachmentUrl(url: string): string {
+  return `${url}${url.includes("?") ? "&" : "?"}disposition=attachment`;
 }
 
 /** User/picker/abort cancellation only — never HTTP failure text. */
@@ -201,7 +217,11 @@ export function sessionFileDownloadNameCandidates(
   return names;
 }
 
-/** The host side of a download (`files.pickDirectory`, `files.download`). */
+/**
+ * The host side of a download (`files.pickDirectory`, `files.download`). A host that streams
+ * to the chosen folder answers with the bytes written; one that hands the download to the
+ * system's browser (the web, a desktop) answers `handedOff`, and the browser saves it.
+ */
 export interface SessionFileDownloadHost {
   /** The folder the person chose, as a token only the host can read; null when they closed the picker. */
   pickDirectory(): Promise<{ token: string } | null>;
@@ -215,7 +235,7 @@ export interface SessionFileDownloadHost {
     expectedSize: number | null;
     maxBytes: number;
     headers: Record<string, string>;
-  }): Promise<{ bytesWritten: number; name: string }>;
+  }): Promise<{ bytesWritten: number; name: string; handedOff?: boolean }>;
 }
 
 let downloadSequence = 0;
@@ -237,15 +257,16 @@ export async function downloadSessionFile(input: {
   downloadSequence += 1;
   const downloadId = `download-${Date.now().toString(36)}-${downloadSequence.toString(36)}`;
   input.onStart?.(downloadId);
-  await input.host.download({
+  const saved = await input.host.download({
     downloadId,
     url: source.uri,
     directory: folder.token,
     names: sessionFileDownloadNameCandidates(sessionFileDownloadFileName(input.metadata)),
     mimeType: sessionFileDownloadMimeType(input.metadata.contentType),
     expectedSize: input.metadata.size,
-    maxBytes: SESSION_FILE_BINARY_LIMIT_BYTES,
+    // No limit but the file itself: the host stops a stream that runs past the size it was inspected at.
+    maxBytes: Math.max(1, input.metadata.size),
     headers: source.headers,
   });
-  return "saved";
+  return saved?.handedOff ? "started" : "saved";
 }

@@ -8,7 +8,8 @@ import {
 import {
   createSessionFileDownloadLifecycleOwner,
   isSessionFileDownloadCancelError,
-  SESSION_FILE_BINARY_LIMIT_BYTES,
+  sessionFileAttachmentUrl,
+  sessionFileCanCopyWhole,
   sessionFileCanDownload,
   sessionFileDownloadFileName,
   sessionFileDownloadMimeType,
@@ -337,16 +338,26 @@ describe("Session file preview download", () => {
     expect(sessionFileDownloadMimeType("")).toBe("application/octet-stream");
   });
 
-  test("download eligibility stays inside the existing binary size bound", () => {
+  test("download eligibility has no size bound: the preview limit is the preview's", () => {
     expect(sessionFileCanDownload(metadata)).toBe(true);
-    expect(
-      sessionFileCanDownload({
-        ...metadata,
-        size: SESSION_FILE_BINARY_LIMIT_BYTES + 1,
-        tooLarge: false,
-      }),
-    ).toBe(false);
+    for (const size of [50 * 1024 * 1024 + 1, 2 * 1024 ** 3 + 1, 8 * 1024 ** 3]) {
+      expect(sessionFileCanDownload({ ...metadata, size, tooLarge: true, previewLimitBytes: 50 * 1024 * 1024 })).toBe(true);
+    }
+    expect(sessionFileCanDownload({ ...metadata, size: 0 })).toBe(true);
+    expect(sessionFileCanDownload({ ...metadata, size: Number.NaN })).toBe(false);
+    expect(sessionFileCanDownload({ ...metadata, generation: " " })).toBe(false);
     expect(sessionFileCanDownload(null)).toBe(false);
+  });
+
+  test("Copy keeps its own 50 MiB bound: it reads the whole file into the clipboard", () => {
+    expect(sessionFileCanCopyWhole({ ...metadata, size: 50 * 1024 * 1024 })).toBe(true);
+    expect(sessionFileCanCopyWhole({ ...metadata, size: 50 * 1024 * 1024 + 1 })).toBe(false);
+    expect(sessionFileCanCopyWhole(null)).toBe(false);
+  });
+
+  test("the attachment URL adds one query parameter to a signed read", () => {
+    expect(sessionFileAttachmentUrl("http://desk.test/session-file?a=1")).toBe("http://desk.test/session-file?a=1&disposition=attachment");
+    expect(sessionFileAttachmentUrl("http://desk.test/session-file")).toBe("http://desk.test/session-file?disposition=attachment");
   });
 
   test("a taken name tries name (1), name (2) … in that order, extension kept", () => {

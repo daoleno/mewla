@@ -13,8 +13,8 @@
 // - web.*: the address bar, the tab title and the browser's Back and Forward
 //   (client/ui/shell/webLocation.ts; core/web/history.ts decides what each step does).
 // - files.*: M4's Files contract (client/ui/more/files/host.ts) the browser's way: an
-//   `<input type=file>` picker, an XHR upload with progress and abort, and a download into memory
-//   handed to the browser's own download (`<a download>`), and a picked picture's thumbnail. Files
+//   `<input type=file>` picker, an XHR upload with progress and abort, and a download the browser itself
+//   streams to disk (`<a download>` at the signed read as an attachment), and a picked picture's thumbnail. Files
 //   dragged onto a conversation are kept as picked ones (`files.dragOver`, `files.dropped`: listenForDrops).
 // - links.pluginReturn: how a Plugins sign-in ended, as the computer's callback sent this tab back
 //   (`/plugins?connected=<account>` or `?plugin_error=<step>`, with `service=`): read once and taken
@@ -122,7 +122,6 @@ function listenForSteps(player) {
 const picked = new Map();
 let pickSequence = 0;
 const uploads = new Map();
-const downloads = new Map();
 
 function remember(file) {
   pickSequence += 1;
@@ -233,66 +232,29 @@ function pickDirectory() {
   return { token: "browser-downloads", name: "Downloads" };
 }
 
-function deliver(blob, name) {
-  const url = URL.createObjectURL(blob);
+/**
+ * `files.download {downloadId, url, names, ...}` → `{bytesWritten, name, handedOff: true}`: the browser's own
+ * download of the signed read, which the daemon answers as an attachment. The browser streams it to disk
+ * (nothing is held in the page, whatever the size) and shows its progress and Cancel. The size and name checks
+ * of the native hosts are the daemon's: it serves exactly the inspected generation.
+ */
+function download(args) {
+  const name = (Array.isArray(args.names) && args.names[0]) || "download";
+  const url = String(args.url || "");
+  if (!url) throw new Error("Download URL is invalid.");
   const anchor = document.createElement("a");
-  anchor.href = url;
+  anchor.href = url + (url.includes("?") ? "&" : "?") + "disposition=attachment";
   anchor.download = name;
   anchor.rel = "noopener";
   anchor.style.display = "none";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  // The browser reads the blob after the click: revoke late enough that the download never breaks.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { bytesWritten: typeof args.expectedSize === "number" ? args.expectedSize : 0, name, handedOff: true };
 }
 
-/**
- * `files.download {downloadId, url, names, mimeType, expectedSize, maxBytes, headers}` →
- * `{bytesWritten, name}`: the signed GET streamed into memory under `maxBytes`, checked against
- * `expectedSize`, then handed to the browser's download as the first of `names`.
- */
-async function download(args) {
-  const downloadId = String(args.downloadId || "");
-  const controller = new AbortController();
-  downloads.set(downloadId, controller);
-  const maxBytes = Number(args.maxBytes) || Infinity;
-  try {
-    const response = await fetch(args.url, { method: "GET", headers: args.headers || {}, cache: "no-store", signal: controller.signal });
-    if (!response.ok) {
-      response.body?.cancel().catch(() => {});
-      throw new Error(`Session file download failed (HTTP ${response.status}).`);
-    }
-    if (!response.body) throw new Error("Session file download returned an empty body.");
-    const reader = response.body.getReader();
-    const chunks = [];
-    let bytesWritten = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytesWritten += value.byteLength;
-      if (bytesWritten > maxBytes) {
-        reader.cancel().catch(() => {});
-        throw new Error(`Session file download exceeded the ${maxBytes} byte preview limit.`);
-      }
-      chunks.push(value);
-    }
-    if (typeof args.expectedSize === "number" && bytesWritten !== args.expectedSize) {
-      throw new Error(`Session file download was truncated (expected ${args.expectedSize} bytes, received ${bytesWritten}).`);
-    }
-    const name = (Array.isArray(args.names) && args.names[0]) || "download";
-    deliver(new Blob(chunks, { type: args.mimeType || "application/octet-stream" }), name);
-    return { bytesWritten, name };
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error("Session file download was cancelled.");
-    throw error;
-  } finally {
-    downloads.delete(downloadId);
-  }
-}
-
-function cancelDownload(args) {
-  downloads.get(String(args.downloadId || ""))?.abort();
+/** The browser's download has its own Cancel; the page holds nothing to stop. */
+function cancelDownload() {
   return null;
 }
 
