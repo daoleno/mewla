@@ -3,7 +3,7 @@
 import { mount, Scroll, Text, View } from "nsh";
 import { Scene } from "../scenes";
 
-const NAMES = ["tool-ledger", "wide-beside", "long-chat"];
+const NAMES = ["any-provider", "tool-ledger", "wide-beside"];
 
 mount(() => (
   <Scroll keyboardShouldPersistTaps="handled" class="flex-1 bg-sheet" contentClass="gap-4 px-5 py-6">

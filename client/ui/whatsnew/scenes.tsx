@@ -1165,6 +1165,43 @@ function ToolLedger() {
   );
 }
 
+/** Claude Code and Codex on a Provider of another API; the Provider fails and its Fallback answers. */
+function AnyProvider() {
+  const toMain = loop(between(0.08, 0.5));
+  const mainOk = loop(between(0.08, 0.5));
+  const mainDown = loop([{ offset: 0, opacity: 0 }, { offset: 0.5, opacity: 0 }, { offset: 0.56, opacity: 1 }, { offset: 0.94, opacity: 1 }, { offset: 1, opacity: 0 }]);
+  const toBackup = loop(between(0.56, 0.94));
+  const Chip = (props: { name: string }) => (
+    <View class="flex-row items-center gap-1.5 rounded-[10px] bg-background px-2 py-1.5">
+      <Icon name="terminal" size={12} tone="soft" />
+      <Text class="text-[11px] font-semibold text-foreground">{props.name}</Text>
+    </View>
+  );
+  const Provider = (props: { name: string; ok?: Record<string, unknown>; down?: Record<string, unknown> }) => (
+    <View class="relative flex-row items-center gap-1.5 rounded-[10px] border border-border px-2 py-1.5">
+      <Text class="flex-1 text-[11px] text-foreground">{props.name}</Text>
+      {props.ok ? <View class="size-[7px] rounded-full bg-add" style={props.ok} /> : <Dot tone="ok" />}
+      {props.down ? <View class="absolute right-2 size-[7px] rounded-full bg-del" style={props.down} /> : null}
+    </View>
+  );
+  return (
+    <Card class="h-[150px] w-[264px] flex-row items-center justify-between px-3">
+      <View class="w-[100px] gap-3">
+        <Chip name="Claude Code" />
+        <Chip name="Codex" />
+      </View>
+      <View class="relative h-[90px] w-[28px]">
+        <View class="absolute left-0 right-0 top-[18px] h-[2px] rounded-full bg-foreground opacity-60" style={toMain} />
+        <View class="absolute left-0 right-0 top-[70px] h-[2px] rounded-full bg-foreground opacity-60" style={toBackup} />
+      </View>
+      <View class="w-[96px] gap-8">
+        <Provider name="Provider" ok={mainOk} down={mainDown} />
+        <Provider name="Fallback" />
+      </View>
+    </Card>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -1193,6 +1230,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "page-zoom": PageZoom,
   "long-chat": LongChat,
   "tool-ledger": ToolLedger,
+  "any-provider": AnyProvider,
   "wide-beside": WideBeside,
 };
 

@@ -2,7 +2,7 @@
   "releases": [
     {
       "version": "0.4.33",
-      "date": "2026-11-26",
+      "date": "2026-11-27",
       "highlights": [
         {
           "id": "0.4.33-wide-beside",
@@ -23,7 +23,7 @@
         {
           "id": "0.4.33-tool-ledger",
           "title": "Every step says what it did",
-          "line": "Commands, reads and edits from every agent show their target, result and time.",
+          "line": "Each command, read and edit shows its target and result, and its time when known.",
           "media": {
             "scene": "tool-ledger"
           },
@@ -31,12 +31,24 @@
             "kind": "open",
             "target": "sessions"
           }
+        },
+        {
+          "id": "0.4.33-any-provider",
+          "title": "Claude Code and Codex, any Provider",
+          "line": "A Provider of another API just works, and a Fallback answers when one is down.",
+          "media": {
+            "scene": "any-provider"
+          },
+          "try": {
+            "kind": "open",
+            "target": "settings"
+          }
         }
       ],
       "fixes": [
+        "On the Mac, updating Mewla in the app restarts it without hanging.",
         "Codex keeps working after Magpie is turned off, and with models a Provider adds later.",
-        "Uninstalling Mewla gives Codex and Claude Code back their own settings.",
-        "On an ultrawide the Work board fills the screen, and from 2560 wide the chat reads larger."
+        "Uninstalling Mewla gives Codex and Claude Code back their own settings."
       ]
     },
     {
