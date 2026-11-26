@@ -232,9 +232,16 @@ func (r *responsesEncoder) handle(e Event) {
 		r.thinking.WriteString(e.Text)
 		r.send("response.reasoning_summary_text.delta", map[string]any{"item_id": r.openItem["id"], "output_index": len(r.output), "summary_index": 0, "delta": e.Text})
 	case EvSignature:
-		if r.open == "reasoning" {
-			r.sig.WriteString(e.Text)
+		if e.Text == "" {
+			return
 		}
+		// Claude 5 models sign a thinking block whose text they leave
+		// out: the signature alone is what the next turn must send back.
+		if r.open != "reasoning" {
+			r.flushTools()
+			r.openReasoning()
+		}
+		r.sig.WriteString(e.Text)
 	case EvRedacted:
 		r.flushTools()
 		r.openReasoning()

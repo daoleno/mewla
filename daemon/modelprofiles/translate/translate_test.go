@@ -332,3 +332,37 @@ func TestEndpointServed(t *testing.T) {
 		}
 	}
 }
+
+// 11-27 live: claude-sonnet-5 answers a thinking block with no text, only a
+// signature. Unless that signature reaches Codex, the next turn of a tool
+// loop cannot send the thinking back, and thinking is off from then on.
+func TestCodexKeepsASignatureWithoutThinkingText(t *testing.T) {
+	x, _ := Prepare(APIResponses, APIAnthropic, []byte(`{"model":"claude-sonnet-5","stream":true,"reasoning":{"effort":"high"},"input":"hi"}`), "")
+	upstream := sseBody(
+		`data: {"type":"message_start","message":{"usage":{"input_tokens":5}}}`,
+		`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`,
+		`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"ONLY-SIG"}}`,
+		`data: {"type":"content_block_stop","index":0}`,
+		`data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"exec_command"}}`,
+		`data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{}"}}`,
+		`data: {"type":"content_block_stop","index":1}`,
+		`data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":3}}`,
+		`data: {"type":"message_stop"}`)
+	w := httptest.NewRecorder()
+	if _, err := x.Reply(w, upstreamResp(200, "text/event-stream", upstream)); err != nil {
+		t.Fatal(err)
+	}
+	var items []map[string]any
+	for _, e := range clientEvents(t, w.Body.String()) {
+		if e["type"] == "response.output_item.done" {
+			items = append(items, e["item"].(map[string]any))
+		}
+	}
+	if len(items) != 2 || items[0]["type"] != "reasoning" {
+		t.Fatalf("items = %v: want the signed reasoning item before the call", items)
+	}
+	sig, part, ok := unsealAnthropicThinking(items[0]["encrypted_content"].(string))
+	if !ok || sig != "ONLY-SIG" || part.Text != "" {
+		t.Fatalf("sealed = %q %+v %v", sig, part, ok)
+	}
+}
