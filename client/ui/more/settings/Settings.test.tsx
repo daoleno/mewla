@@ -121,7 +121,7 @@ describe("Model Providers", () => {
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:provider-c1");
     await app.press("id:provider-c1");
-    await app.waitFor("id:provider-panel");
+    await app.waitFor("id:provider-detail");
     await app.waitFor("id:model-gpt-6.2");
     expect(app.shows("id:provider-key-row")).toBe(true);
     expect(app.shows("id:provider-test-row")).toBe(true);

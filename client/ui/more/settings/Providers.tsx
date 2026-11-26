@@ -25,7 +25,8 @@ import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapsh
 import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
-import { LEAD_SLOT, StateLine, tile, type Lead } from "../../kit/RowTile";
+import { LEAD_SLOT, RowTile, StateLine, tile, type Lead } from "../../kit/RowTile";
+import { dense } from "../../kit/density";
 import { AgentIcon } from "../../icons/AgentIcon";
 import { officialLoginLead, providerLead, type ProviderLead } from "../../../core/providers/lead";
 import { Segmented } from "../../kit/Segmented";
@@ -210,7 +211,7 @@ function AgentRow(props: { client: ProviderClient; nav: PageNav }) {
   }
 
   const chip = (
-    <View testID={`provider-pick-${client}`} role="button" accessibilityLabel={`${label} uses ${chosenName(client)}, ${agentState(client).words}. Change`} class={`${wide() ? "max-w-[240px]" : "max-w-[156px]"} shrink-0 flex-row items-center gap-2 rounded-xl bg-muted px-3 py-2`}>
+    <View testID={`provider-pick-${client}`} role="button" accessibilityLabel={`${label} uses ${chosenName(client)}, ${agentState(client).words}. Change`} class="min-w-0 max-w-[280px] shrink flex-row items-center gap-2 rounded-xl bg-muted px-3 py-2">
       <View testID={`provider-dot-${client}-${agentState(client).tone}`} class={`size-2 rounded-full ${DOT[agentState(client).tone]}`} />
       <Text class="shrink text-body line-clamp-1">{chosenName(client)}</Text>
       <If when={changing().startsWith("select:")} else={<Icon name="chevron-down" size={14} tone="faint" />}><Spinner size={14} /></If>
@@ -219,12 +220,16 @@ function AgentRow(props: { client: ProviderClient; nav: PageNav }) {
 
   return (
     <View>
+      {/* The agent's name keeps its width; the chip has the rest of the row, and its Provider's name is cut only there. */}
       <Row
         testID={`provider-agent-${client}`}
-        lead={{ kind: "logo", node: <AgentIcon kind={client} size={28} slot={LEAD_SLOT} /> }}
-        title={label}
+        leading={<View class="shrink-0 flex-row items-center gap-3.5">
+          <RowTile lead={{ kind: "logo", node: <AgentIcon kind={client} size={28} slot={LEAD_SLOT} /> }} />
+          <Text class={dense({ phone: "text-body", window: "text-[14px] leading-[19px]" })}>{label}</Text>
+        </View>}
+        title=""
         trailing={
-          <Menu trigger={chip} popupClass={wide() ? `${MENU_POPUP} w-[288px]` : MENU_POPUP} backdropClass="bg-scrim">
+          <Menu trigger={chip} align="end" popupClass={wide() ? `${MENU_POPUP} w-[288px]` : MENU_POPUP} backdropClass="bg-scrim">
             <MenuItem testID={`provider-pick-${client}-official`} disabled={Boolean(changing())} onSelect={() => void select(null)} class={MENU_ITEM}>
               <Text class="flex-1 text-body">Official login</Text>
               <If when={selectedId() === ""}><Icon name="check" size={18} tone="ink" /></If>
@@ -267,24 +272,27 @@ function ProviderList(props: { nav: PageNav }) {
         </Section></If>
       <Section title="Providers" footer={list().length === 0 && q() ? "No Providers match this search." : undefined}>
         {list().map((c) => (
-          <Row
-            testID={`provider-${c.id}`}
-            lead={lead(providerLead(c))}
-            title={c.name}
-            subtitle={`${whereOf(snapshot(), c)} · ${modelCount(c)}`}
-            subtitleOneLine
-            selected={listDetail() && shownId() === c.id}
-            accessibilityLabel={`${c.name}, ${whereOf(snapshot(), c)}, for ${CLIENTS.find((k) => k.key === clientOf(c))!.label}${c.credential_ready ? "" : ", API key required"}`}
-            chevron
-            onPress={() => open(c)}
-            trailing={
-              <View class="flex-row items-center gap-2">
-                <If when={listDetail() && shownId() === c.id}><View testID={`provider-${c.id}-shown`} class="size-1.5 rounded-full bg-foreground" /></If>
-                <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
-                <AgentIcon kind={clientOf(c)} size={16} slot={24} />
-              </View>
-            }
-          />
+          <View class="relative">
+            {/* The Provider shown beside the agents is filled, as a chosen item of a list beside its detail. */}
+            <If when={listDetail() && shownId() === c.id}><View testID={`provider-${c.id}-shown`} class="absolute inset-0 bg-accent" /></If>
+            <Row
+              testID={`provider-${c.id}`}
+              lead={lead(providerLead(c))}
+              title={c.name}
+              subtitle={`${whereOf(snapshot(), c)} · ${modelCount(c)}`}
+              subtitleOneLine
+              selected={listDetail() && shownId() === c.id}
+              accessibilityLabel={`${c.name}, ${whereOf(snapshot(), c)}, for ${CLIENTS.find((k) => k.key === clientOf(c))!.label}${c.credential_ready ? "" : ", API key required"}`}
+              chevron
+              onPress={() => open(c)}
+              trailing={
+                <View class="flex-row items-center gap-2">
+                  <If when={!c.credential_ready}><StateLine testID={`provider-${c.id}-key`} tone="warn" label="Key required" /></If>
+                  <AgentIcon kind={clientOf(c)} size={16} slot={24} />
+                </View>
+              }
+            />
+          </View>
         ))}
         <Row testID="provider-add" lead={tile("add")} title="Add Provider" disabled={Boolean(changing())} onPress={() => props.nav.push({ name: "settings-provider-editor", client: "codex", choose: true })} />
       </Section>
