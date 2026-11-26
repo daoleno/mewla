@@ -33,15 +33,18 @@ print("\n".join(c["id"] for c in d["connections"] if c["id"] not in before))' "$
 }
 trap cleanup EXIT
 
+# A row below the fold is not on the screen: the release replay's emulator is 320x640, the lane's 1080x2400.
+reach() { for _ in 1 2 3 4 5; do "$PHONE" tap "$1" 3 && return 0; "$PHONE" scroll; done; "$PHONE" tap "$1" 3; }
+see() { for _ in 1 2 3 4 5; do "$PHONE" shows "$1" 3 && return 0; "$PHONE" scroll; done; "$PHONE" shows "$1" 3; }
 "$PHONE" tap 'home-cat'
-"$PHONE" tap '^Settings$'
-"$PHONE" tap '^Model Providers$'
-"$PHONE" tap '^Add Provider$'
+reach '^Settings$'
+reach '^Model Providers$'
+reach '^Add Provider$'
 "$PHONE" shows 'On this computer'   # shows greps the raw XML: no anchors
 "$PHONE" tap "^$server\$"
-"$PHONE" shows 'provider-url'
+see 'provider-url'
 ! "$PHONE" shows 'provider-key' 1
-"$PHONE" tap '^Add Provider$'
+reach '^Add Provider$'
 "$PHONE" shows 'provider-detail' 30
 dir="$(mktemp -d "${TMPDIR:-/tmp}/provider-local.XXXXXX")"
 "$PHONE" shot "$dir/local.png" > /dev/null
