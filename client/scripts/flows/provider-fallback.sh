@@ -59,11 +59,13 @@ ctl '{"type":"provider_list"}' | python3 -I -c 'import json,sys
 c = {x["name"]: x for x in json.load(sys.stdin)["providers"]["connections"]}
 print("chat speaks", c[sys.argv[1]].get("upstream_api"))' "$chat"
 
+# A row below the fold is not on the screen: the release replay's emulator is 320x640, the lane's 1080x2400.
+reach() { for _ in 1 2 3 4 5; do "$PHONE" tap "$1" 3 && return 0; "$PHONE" scroll; done; "$PHONE" tap "$1" 3; }
 "$PHONE" tap 'home-cat'
-"$PHONE" tap '^Settings$'
-"$PHONE" tap '^Model Providers$'
-"$PHONE" tap "$main"
-"$PHONE" shows 'Anthropic Messages'  # shows greps the raw XML: no anchors
+reach '^Settings$'
+reach '^Model Providers$'
+reach "$main"
+"$PHONE" shows 'Anthropic M'  # shows greps the raw XML: no anchors; on a 320 dp screen the row reads "Anthropic Mes…"
 "$PHONE" tap 'Fallback None'
 "$PHONE" tap "$chat"
 "$PHONE" shows "Fallback $chat"
