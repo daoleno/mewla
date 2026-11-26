@@ -363,8 +363,8 @@ func TestGatewayWebSocketUpstreamHandshakeRejectionBecomesCapabilityFallback(t *
 func TestGatewayWebSocketNoUpstreamHonestServiceUnavailable(t *testing.T) {
 	g := gatewayTest(t)
 	_, status := wsClientDial(t, "http://"+g.ActualAddr(), "/v1/responses", nil)
-	if status != http.StatusServiceUnavailable {
-		t.Fatalf("no-upstream ws status = %d, want 503", status)
+	if status != http.StatusBadRequest {
+		t.Fatalf("no-upstream ws status = %d, want 400 (no Provider chosen)", status)
 	}
 }
 

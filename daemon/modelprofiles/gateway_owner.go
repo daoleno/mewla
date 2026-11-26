@@ -228,6 +228,20 @@ func (o *Owner) resolveGatewayRequestLive(protocol, modelID string) (GatewayUpst
 	return o.resolveGatewayRequest(protocol, modelID)
 }
 
+// connectionListedByProvider reports whether the Provider itself has answered
+// a model list for the connection. Until it has, the list shown is a stand-in
+// (Codex's own models, the bundled list) that says nothing of what it serves.
+func (o *Owner) connectionListedByProvider(profileID string) bool {
+	o.mu.Lock()
+	cache := o.discovery
+	o.mu.Unlock()
+	if cache == nil {
+		return false
+	}
+	e, ok := cache.get(profileID)
+	return ok && e.Err == "" && len(e.IDs) > 0
+}
+
 func splitGatewayModelID(modelID string) (slug, model string) {
 	modelID = strings.TrimSpace(modelID)
 	parts := strings.SplitN(modelID, "/", 2)
@@ -253,6 +267,7 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 	}
 	wantClient := ClientCodex
 	wantSlug, wantModel := splitGatewayModelID(modelID)
+	selectedCodex := normalizeID(o.store.DefaultProfileID(executorFromClient(wantClient)))
 	var matches []Profile
 	for _, profile := range o.store.Catalog().Profiles {
 		if clientFromExecutor(profile.Client) != wantClient || !o.connectionReady(profile) {
@@ -276,7 +291,13 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 				break
 			}
 		}
-		if available || (len(entries) == 0 && target.Model == wantModel) {
+		// A connection whose models were never listed (just added, or its
+		// list could not be fetched) is a candidate when it is the one chosen
+		// for Codex: the Provider decides, instead of another connection that
+		// happens to have an older list (11-27: a request went to a
+		// connection that was not chosen because only its list had the model).
+		unlisted := normalizeID(profile.ID) == selectedCodex && !o.connectionListedByProvider(profile.ID)
+		if available || unlisted || (len(entries) == 0 && target.Model == wantModel) {
 			matches = append(matches, target)
 		}
 	}
@@ -307,21 +328,21 @@ func (o *Owner) resolveGatewayRequest(protocol, modelID string) (GatewayUpstream
 func (o *Owner) selectedClaudeGatewayUpstream() (GatewayUpstream, error) {
 	selected := normalizeID(o.store.ClientDefault(ClientClaude))
 	if selected == "" {
-		return GatewayUpstream{}, fmt.Errorf("%w: no Claude connection selected", ErrNotFound)
+		return GatewayUpstream{}, fmt.Errorf("%w: no Claude connection selected", ErrNoProviderSelected)
 	}
 	profile, err := o.store.Get(selected)
 	if err != nil {
 		return GatewayUpstream{}, err
 	}
 	if !o.connectionReady(profile) {
-		return GatewayUpstream{}, fmt.Errorf("%w: %s", ErrCredentialNotReady, selected)
+		return GatewayUpstream{}, forProvider(fmt.Errorf("%w: %s", ErrCredentialNotReady, selected), profile.Name, "")
 	}
 	target, err := CompileConnectionTarget(profile, ClientClaude, "", "")
 	if err != nil {
 		return GatewayUpstream{}, err
 	}
 	if routeProtocolFor(target.Protocol) != GatewayProtocolAnthropic {
-		return GatewayUpstream{}, fmt.Errorf("%w: Claude connection %s does not speak Anthropic Messages", ErrUpstreamInvalid, selected)
+		return GatewayUpstream{}, forProvider(fmt.Errorf("%w: Claude connection %s does not speak Anthropic Messages", ErrRouteProtocolMismatch, selected), profile.Name, "")
 	}
 	return GatewayUpstreamFromProfile(target), nil
 }
@@ -333,21 +354,21 @@ func (o *Owner) selectedClaudeGatewayUpstream() (GatewayUpstream, error) {
 func (o *Owner) selectedCodexGatewayUpstream() (GatewayUpstream, error) {
 	selected := normalizeID(o.store.DefaultProfileID(ExecutorCodex))
 	if selected == "" {
-		return GatewayUpstream{}, fmt.Errorf("%w: no Codex connection selected", ErrNotFound)
+		return GatewayUpstream{}, fmt.Errorf("%w: no Codex connection selected", ErrNoProviderSelected)
 	}
 	profile, err := o.store.Get(selected)
 	if err != nil {
 		return GatewayUpstream{}, err
 	}
 	if !o.connectionReady(profile) {
-		return GatewayUpstream{}, fmt.Errorf("%w: %s", ErrCredentialNotReady, selected)
+		return GatewayUpstream{}, forProvider(fmt.Errorf("%w: %s", ErrCredentialNotReady, selected), profile.Name, "")
 	}
 	target, err := CompileConnectionTarget(profile, ClientCodex, "", "")
 	if err != nil {
 		return GatewayUpstream{}, err
 	}
 	if routeProtocolFor(target.Protocol) != GatewayProtocolResponses {
-		return GatewayUpstream{}, fmt.Errorf("%w: Codex connection %s does not speak Responses", ErrUpstreamInvalid, selected)
+		return GatewayUpstream{}, forProvider(fmt.Errorf("%w: Codex connection %s does not speak Responses", ErrRouteProtocolMismatch, selected), profile.Name, "")
 	}
 	return GatewayUpstreamFromProfile(target), nil
 }

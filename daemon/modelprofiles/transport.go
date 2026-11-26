@@ -156,7 +156,11 @@ func isMetadataIP(ip netip.Addr) bool {
 		if v4[0] == 169 && v4[1] == 254 {
 			return true
 		}
-		if v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
+		// Alibaba Cloud's metadata service. The rest of 100.64.0.0/10 is
+		// carrier-grade NAT space that Tailscale uses for its addresses: a
+		// model server on another of the person's machines over Tailscale is
+		// reached like one on the LAN.
+		if v4 == [4]byte{100, 100, 100, 200} {
 			return true
 		}
 	}

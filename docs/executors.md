@@ -214,7 +214,23 @@ marked block in Codex's `config.toml`, backed up first) and Claude Code
 that gateway. So a CLI you start in a plain terminal or an IDE uses the
 selected connection too. The gateway swaps in the real key and forwards the
 request unchanged. Running Claude Sessions use a new connection from their next
-request.
+request. When Codex asks for a model, the selected Codex connection answers it
+whenever it may serve it, even before its model list has been fetched.
+
+**When a Provider fails.** A Provider that is busy (a 5xx or 529 status, or a
+dropped connection) is asked twice more, after 1 and 2 seconds. A rate limit is
+asked three more times, after 1, 2 and 4 seconds. Either way, Mewla waits what
+the Provider's `Retry-After` says instead, if that is 8 seconds or less. This
+holds for Sessions Mewla starts and for CLIs in a plain terminal. Nothing is
+sent again once the reply has started, and never for image generation or web
+search, which are billed per call. A longer wait, a used-up quota or balance,
+and every other error go straight to the agent. When Mewla itself cannot
+forward a request, the agent shows why and where to fix it, for example `Mewla
+has no API key for Provider "xcode". Add it in Mewla: Settings › Model
+Providers.` or `Mewla could not reach Provider "Home GPU": the connection was
+refused`. Problems that asking again cannot fix (no key, no Provider chosen)
+are answered so that neither agent spends minutes retrying them. A Provider on
+another of your computers over Tailscale is reached like one on your LAN.
 
 **Other tools that switch your CLIs.** Mewla shares these files with you and
 with tools such as Magpie that point Codex or Claude Code at a gateway of their

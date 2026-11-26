@@ -136,8 +136,11 @@ func TestGatewayHonestFailureWithoutUpstream(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("no-upstream status = %d, want 503", resp.StatusCode)
+	// Nothing to retry: the agent shows the reason at once instead of
+	// retrying a 503 for minutes.
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusBadRequest || !strings.Contains(string(body), "no_provider_selected") || !strings.Contains(string(body), "Model Providers") {
+		t.Fatalf("no-upstream status = %d body = %s, want 400 no_provider_selected", resp.StatusCode, body)
 	}
 }
 

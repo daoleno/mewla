@@ -94,7 +94,7 @@ func TestGatewayCodexToolsResolveSelectedCodexConnection(t *testing.T) {
 	creds := NewMemoryCredentialStore()
 	owner.creds = creds
 	owner.router.creds = creds
-	if _, err := owner.resolveGatewayRequest(GatewayProtocolCodexTools, ""); !errors.Is(err, ErrNotFound) {
+	if _, err := owner.resolveGatewayRequest(GatewayProtocolCodexTools, ""); !errors.Is(err, ErrNoProviderSelected) {
 		t.Fatalf("no selection error = %v", err)
 	}
 	proj, err := owner.UpsertProviderConnection(ProviderConnectionInput{
