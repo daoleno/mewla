@@ -13,8 +13,9 @@ import (
 
 var updateToolGolden = flag.Bool("update-tool-golden", false, "rewrite testdata/tooldisplay/*.golden.json from the recorded transcripts")
 
-// The recorded transcripts are real turns of each agent (owner 11-27), trimmed and scrubbed (home paths, private
-// addresses and tokens), read by the agent's own reader and the wire projection, as the apps receive them.
+// The recorded transcripts are real turns of each agent (owner 11-27), trimmed and scrubbed: home paths, addresses,
+// tokens and project names replaced; prose, output and file contents are filler of the same line count, so only the
+// calls' shape is real. Each is read by the agent's own reader and the wire projection, as the apps receive them.
 func TestRecordedToolCallsReadTheSameWayForEveryAgent(t *testing.T) {
 	dir := filepath.Join("testdata", "tooldisplay")
 	cases := []struct {
