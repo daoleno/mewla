@@ -104,27 +104,41 @@ func (s *Service) LoadUnpackedInChrome(ctx context.Context, dir string, loaded f
 	if err := appKey("a new window", "cmd+n"); err != nil {
 		return err
 	}
-	if err := s.untilRead(ctx, "Mewla's window", 5*time.Second, func(t ElementTree) error {
-		_, _, err := newWindowAddress(t, before)
-		return err
-	}); err != nil {
-		return fmt.Errorf("step %d: %w", step, err)
-	}
-	// It closes when Mewla is done, whatever happened, by its own close
-	// button, while it is the one in front on the extensions page.
+	// It closes when Mewla is done, whatever happened: Mewla's own window,
+	// closed by its number even while another agent holds Chrome or after the
+	// add's time ran out (the owner's Mac, 11-27: one left open each time
+	// a Worker held Chrome).
+	var mine uint32
 	defer func() {
 		// Pages off first: a read of all of Chrome's then holds every window.
 		screenReaderOff()
-		if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
-			return
-		}
-		button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOfMewlas(t, before) })
-		if err != nil {
+		closing, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := s.closeMewlasWindow(closing, pid, mine, before); err != nil {
 			log.Printf("screen: Mewla's Chrome window stays open: %v", err)
-			return
 		}
-		_, _ = s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "element", Element: button, ElementAction: "press"})
 	}()
+	found := s.untilRead(ctx, "Mewla's window", 5*time.Second, func(t ElementTree) error {
+		_, _, err := newWindowAddress(t, before)
+		return err
+	})
+	if closer, ok := s.backend.(ownWindowCloser); ok {
+		_, _ = s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) {
+			start, _ := frontWindow(t)
+			if start >= len(t.Elements) || t.Elements[start].Role != "AXWindow" || before[t.id(start)] {
+				return 0, nil
+			}
+			number, err := closer.WindowNumber(t.Elements[start])
+			if err != nil {
+				log.Printf("screen: Mewla's Chrome window has no number to close it by: %v", err)
+			}
+			mine = number
+			return 0, nil
+		})
+	}
+	if found != nil {
+		return fmt.Errorf("step %d: %w", step, found)
+	}
 	// Its new tab page loads and may take the keyboard (the person's may be
 	// any page): once it shows, the address bar takes it back, and the
 	// extensions page's address goes in only while it has it.
@@ -287,6 +301,34 @@ func focusedFieldInLastSheet(t ElementTree) (int, error) {
 		}
 	}
 	return 0, errors.New("the sheet's field does not have the keyboard")
+}
+
+// ownWindowCloser closes a window of another app by its system number,
+// outside any agent: Mewla's own window in Chrome (macOS).
+type ownWindowCloser interface {
+	WindowNumber(e Element) (uint32, error)
+	CloseWindow(ctx context.Context, pid int, number uint32) error
+}
+
+// closeMewlasWindow closes the Chrome window Mewla opened: by its number when
+// known, which no agent's hold on Chrome refuses; otherwise as the internal
+// agent, while it is the one in front on the extensions page.
+func (s *Service) closeMewlasWindow(ctx context.Context, pid int, number uint32, before map[int]bool) error {
+	if closer, ok := s.backend.(ownWindowCloser); ok && number != 0 {
+		if err := closer.CloseWindow(ctx, pid, number); err != nil {
+			return fmt.Errorf("window %d: %w", number, err)
+		}
+		return nil
+	}
+	if _, err := s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "wait_for", App: chromeApp, Match: &ElementMatch{Role: "AXWindow"}, Duration: 1}); err != nil {
+		return err
+	}
+	button, err := s.internalPick(ChromeExtensionAgent, func(t ElementTree) (int, error) { return closeButtonOfMewlas(t, before) })
+	if err != nil {
+		return err
+	}
+	_, err = s.Act(ctx, ChromeExtensionAgent, AgentAction{Action: "element", Element: button, ElementAction: "press"})
+	return err
 }
 
 // enhancedUISetter sets an app's AXEnhancedUserInterface (macOS).
