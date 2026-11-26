@@ -49,7 +49,9 @@ describe("Settings keeps what is being typed through the computer's news", () =>
     const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? providers : null));
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:provider-add");
-    await pressUntil(app, "id:provider-add", "id:provider-name");
+    // Add Provider starts with what is being added.
+    await pressUntil(app, "id:provider-add", "id:preset-custom");
+    await pressUntil(app, "id:preset-custom", "id:provider-name");
     await app.type("id:provider-name", "Home");
     await app.paste("id:provider-url", { text: "https://c9.example.com/v1" });
     await app.paste("id:provider-key", { text: "sk-home-1234" });
@@ -84,7 +86,9 @@ describe("a tap held across the computer's news still takes (Settings)", () => {
     });
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:provider-add");
-    await pressUntil(app, "id:provider-add", "id:provider-name");
+    // Add Provider starts with what is being added.
+    await pressUntil(app, "id:provider-add", "id:preset-custom");
+    await pressUntil(app, "id:preset-custom", "id:provider-name");
     await app.type("id:provider-name", "Home");
     await app.type("id:provider-url", "https://c9.example.com/v1");
     await app.type("id:provider-key", "sk-home");
