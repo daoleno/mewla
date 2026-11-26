@@ -86,7 +86,8 @@ log "paired"
 log "2. the flows"
 adb unroot > /dev/null 2>&1 || true # a share started by a root adb is refused
 failed=0
-PHONE_EXTERNAL=1 PHONE_PKG="$PKG" MEWLA_LANE_HOME="$OUT/lane" "$here/phone.sh" flow all 2>&1 | tee -a "$OUT/flows.log" || failed=1
+# provider-fallback reads the daemon's Providers over its control socket: this daemon's, not a lane's.
+PHONE_EXTERNAL=1 PHONE_PKG="$PKG" MEWLA_LANE_HOME="$OUT/lane" MEWLA_CONTROL_SOCK="$state/mewla/run/control.sock" "$here/phone.sh" flow all 2>&1 | tee -a "$OUT/flows.log" || failed=1
 for f in "$OUT"/lane/flow-*.log; do [[ -f "$f" ]] && cp "$f" "$OUT/"; done
 [[ "$failed" == 0 ]] || fail "a flow failed (flow-*.log)"
 log "PASS"

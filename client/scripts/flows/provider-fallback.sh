@@ -5,7 +5,8 @@
 # daemon, and the chip shows it. Both connections are removed at the end.
 set -euo pipefail
 lane="${MEWLA_LANE_HOME:-$HOME/.mewla/lane}"
-sock="$lane/state/run/control.sock"
+# The release replay has no lane: its daemon's socket comes in MEWLA_CONTROL_SOCK (release-flows.sh).
+sock="${MEWLA_CONTROL_SOCK:-$lane/state/run/control.sock}"
 tag=$RANDOM
 dir="$(mktemp -d "${TMPDIR:-/tmp}/provider-fallback.XXXXXX")"
 # The fake: 404 for Anthropic Messages, 400 for an empty Chat Completions request, an empty model list.
