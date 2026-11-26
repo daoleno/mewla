@@ -1361,6 +1361,7 @@ func (b *grokConversationBuilder) updateToolOutput(lineNumber int, timestamp, ca
 	if index, exists := b.eventByCall[callID]; exists && index >= 0 && index < len(b.events) {
 		b.events[index].Output = output
 		b.events[index].Status = codexToolOutputStatus(output)
+		b.events[index].endTool(timestamp)
 		if b.events[index].Timestamp == "" && timestamp != "" {
 			b.events[index].Timestamp = timestamp
 		}
@@ -1390,6 +1391,7 @@ func (b *grokConversationBuilder) updateToolOutputSnapshot(timestamp, callID, ou
 	}
 	if index, exists := b.eventByCall[callID]; exists && index >= 0 && index < len(b.events) {
 		b.events[index].Output = output
+		b.events[index].endTool(timestamp)
 		if b.events[index].Timestamp == "" && timestamp != "" {
 			b.events[index].Timestamp = timestamp
 		}

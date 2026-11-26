@@ -286,10 +286,10 @@ describe("summarising a run", () => {
       row("e", "run_command"),
       row("f", "run_command"),
     ]);
-    expect(title).toBe("Edited 1 file, ran 3 commands");
+    expect(title).toBe("Edited 1 file, ran 3 commands, read 2 files");
   });
 
-  test("names the two most consequential kinds (tests count as commands)", () => {
+  test("names the three most consequential kinds (tests count as commands)", () => {
     expect(
       summarizeToolRun([
         row("a", "update_files"),
@@ -299,7 +299,7 @@ describe("summarising a run", () => {
         row("e", "search_code"),
         row("f", "use_tool"),
       ]),
-    ).toBe("Edited 1 file, ran 2 commands");
+    ).toBe("Edited 1 file, ran 2 commands, read 1 file");
   });
 
   test("an explore row counts every lookup it holds", () => {
@@ -313,7 +313,7 @@ describe("summarising a run", () => {
         }),
         row("b", "search_code"),
       ]),
-    ).toBe("Searched code 3 times");
+    ).toBe("Searched 3 times");
   });
 });
 

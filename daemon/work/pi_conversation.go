@@ -689,6 +689,7 @@ func (b *piConversationBuilder) projectMessage(
 			(*events)[index].Output = body
 			(*events)[index].Status = status
 			(*events)[index].Partial = false
+			(*events)[index].endTool(timestamp)
 		} else {
 			*events = append(*events, event)
 		}
@@ -702,7 +703,7 @@ func (b *piConversationBuilder) projectMessage(
 			ID:        firstNonEmpty(entry.ID, fmt.Sprintf("%s:bash:%d", b.sourceID, seq)),
 			Seq:       seq,
 			Timestamp: timestamp,
-			Kind:      "command_execution",
+			Kind:      "command",
 			Command:   strings.TrimSpace(envelope.Message.Command),
 			Output:    envelope.Message.Output,
 			ExitCode:  envelope.Message.ExitCode,

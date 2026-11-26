@@ -1136,6 +1136,35 @@ function WideBeside() {
   );
 }
 
+/** The tool Ledger: a run of calls is one line with its time; pressed, its steps, each with its result, one failed. */
+function ToolLedger() {
+  const steps = loop(appear(0.3, 4));
+  const rows = [{ width: 92, end: 26 }, { width: 70, end: 34, failed: true }, { width: 104, end: 22 }];
+  return (
+    <Card class="h-[150px] w-[250px] gap-2 px-3 py-2.5">
+      <Line width={150} strong />
+      <View class="relative flex-row items-center gap-2">
+        <View class="size-[8px] rounded-[2px] bg-track" />
+        <Line width={120} />
+        <View class="flex-1" />
+        <Line width={24} />
+        <Press at={0.18} style={{ right: 8, top: -4 }} />
+      </View>
+      <View class="ml-1 gap-2 border-l border-border pl-3" style={steps}>
+        {rows.map((row) => (
+          <View class="flex-row items-center gap-2">
+            <View class={`size-[7px] rounded-full ${row.failed ? "bg-del" : "bg-track"}`} />
+            <Line width={row.width} />
+            <View class="flex-1" />
+            <View class={`h-[5px] rounded-full ${row.failed ? "bg-del" : "bg-track"}`} style={{ width: row.end }} />
+          </View>
+        ))}
+      </View>
+      <Line width={130} strong />
+    </Card>
+  );
+}
+
 type SceneProps = { version: string; target?: string };
 
 const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
@@ -1163,6 +1192,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "image-drop": ImageDrop,
   "page-zoom": PageZoom,
   "long-chat": LongChat,
+  "tool-ledger": ToolLedger,
   "wide-beside": WideBeside,
 };
 

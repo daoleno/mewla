@@ -3199,6 +3199,18 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 			writeFingerprintString(w, value)
 		}
 	}
+	writeFingerprintTool(w, event.Tool)
+}
+
+// writeFingerprintTool: a call's time and result can change while its raw
+// fields do not (the time comes from fields the wire leaves out).
+func writeFingerprintTool(w io.Writer, tool *work.ConversationTool) {
+	if tool == nil {
+		writeFingerprintString(w, "")
+		return
+	}
+	encoded, _ := json.Marshal(tool)
+	writeFingerprintString(w, string(encoded))
 }
 
 func writeFingerprintSubagent(w io.Writer, subagent *work.CodexConversationSubagent) {

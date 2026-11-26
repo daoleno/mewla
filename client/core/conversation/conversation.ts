@@ -150,6 +150,44 @@ export interface CodexConversationEvent {
   computer?: ComputerConversationMessage;
   /** The work a delegating call's subagent did, set on the call that started it. */
   subagent?: ConversationSubagent;
+  /** What a tool call did, in the same words for every agent (daemon/work/conversation_tool.go). Older daemons omit it. */
+  tool?: ConversationTool;
+}
+
+/** The kinds of thing a tool call does, whichever agent made it. */
+export type ConversationToolKind =
+  | "command"
+  | "read"
+  | "list"
+  | "search"
+  | "edit"
+  | "fetch"
+  | "web_search"
+  | "agent"
+  | "wait"
+  | "plan"
+  | "image"
+  | "browser"
+  | "other";
+
+/** One tool call as the daemon reads it: kind, what it worked on, how it ended, what came back, how long it took. */
+export interface ConversationTool {
+  kind: ConversationToolKind;
+  /** The tool's own name, readable, for kinds the app cannot word alone (other, browser). */
+  name?: string;
+  server?: string;
+  target?: string;
+  /** Further calls the same call made in parallel. */
+  more?: number;
+  /** Where a search looked. */
+  scope?: string;
+  /** The agent's own words for the call (Claude's Bash description). */
+  intent?: string;
+  status: "running" | "done" | "failed" | "refused" | "interrupted";
+  result?: string;
+  added?: number;
+  removed?: number;
+  duration_ms?: number;
 }
 
 /** A subagent's own transcript: the calls it made, not its words. */
@@ -418,6 +456,7 @@ function normalizeCodexConversationEvent(
     task_duration_ms: finiteCount(event.task_duration_ms),
     computer: normalizeComputerMessage(event.computer),
     subagent: normalizeSubagent(event.subagent),
+    tool: normalizeTool(event.tool),
   };
   if (
     (normalized.kind === "user_message" ||
@@ -428,6 +467,38 @@ function normalizeCodexConversationEvent(
     return null;
   }
   return normalized;
+}
+
+const TOOL_KINDS = new Set<ConversationToolKind>(["command", "read", "list", "search", "edit", "fetch", "web_search", "agent", "wait", "plan", "image", "browser", "other"]);
+const TOOL_STATUSES = new Set<ConversationTool["status"]>(["running", "done", "failed", "refused", "interrupted"]);
+
+function normalizeTool(value: unknown): ConversationTool | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  if (!TOOL_KINDS.has(raw.kind as ConversationToolKind)) return undefined;
+  const text = (key: string) => (typeof raw[key] === "string" && (raw[key] as string).trim() ? (raw[key] as string) : undefined);
+  return {
+    kind: raw.kind as ConversationToolKind,
+    name: text("name"),
+    server: text("server"),
+    target: text("target"),
+    more: finiteCount(raw.more) || undefined,
+    scope: text("scope"),
+    intent: text("intent"),
+    status: TOOL_STATUSES.has(raw.status as ConversationTool["status"]) ? (raw.status as ConversationTool["status"]) : "done",
+    result: text("result"),
+    added: finiteCount(raw.added),
+    removed: finiteCount(raw.removed),
+    duration_ms: finiteCount(raw.duration_ms),
+  };
+}
+
+export function conversationToolsEqual(left: ConversationTool | undefined, right: ConversationTool | undefined) {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.name === right.name && left.server === right.server && left.target === right.target &&
+    left.more === right.more && left.scope === right.scope && left.intent === right.intent && left.status === right.status &&
+    left.result === right.result && left.added === right.added && left.removed === right.removed && left.duration_ms === right.duration_ms;
 }
 
 function normalizeSubagent(value: unknown): ConversationSubagent | undefined {

@@ -1,6 +1,7 @@
 import {
   conversationChoicesEqual,
   conversationSubagentsEqual,
+  conversationToolsEqual,
   type CodexConversation,
 } from "./conversation";
 import {
@@ -857,7 +858,8 @@ function codexEventsEqual(
       fileChangesEqual(left.file_changes, right.file_changes) &&
       planStepsEqual(left.plan, right.plan) &&
       conversationChoicesEqual(left.choice, right.choice) &&
-      conversationSubagentsEqual(left.subagent, right.subagent))
+      conversationSubagentsEqual(left.subagent, right.subagent) &&
+      conversationToolsEqual(left.tool, right.tool))
   );
 }
 

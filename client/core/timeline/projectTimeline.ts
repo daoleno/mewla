@@ -2,6 +2,7 @@ import { sameResultActions } from "../work/resultActions";
 import {
   conversationChoicesEqual,
   conversationSubagentsEqual,
+  conversationToolsEqual,
   type CodexConversationEvent,
 } from "../conversation/conversation";
 import { compareConversationEvents } from "../conversation/reconciliation";
@@ -563,7 +564,8 @@ function isBoundedStreamingFieldDelta(
     sameFileChanges(previous.file_changes, next.file_changes) &&
     samePlan(previous.plan, next.plan) &&
     conversationChoicesEqual(previous.choice, next.choice) &&
-    conversationSubagentsEqual(previous.subagent, next.subagent)
+    conversationSubagentsEqual(previous.subagent, next.subagent) &&
+    conversationToolsEqual(previous.tool, next.tool)
   );
 }
 

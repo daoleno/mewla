@@ -9,6 +9,13 @@
       "media": {"scene": "wide-beside"},
       "try": {"kind": "open", "target": "brain"},
       "platforms": ["web", "macos"]
+    },
+    {
+      "id": "0.4.33-tool-ledger",
+      "title": "Every step says what it did",
+      "line": "Commands, reads and edits from every agent show their target, result and time.",
+      "media": {"scene": "tool-ledger"},
+      "try": {"kind": "open", "target": "sessions"}
     }
   ],
   "fixes": [

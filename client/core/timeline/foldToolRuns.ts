@@ -29,7 +29,7 @@ const SUMMARY_PRIORITY: readonly RunBucket[] = [
   "image",
   "other",
 ];
-const MAX_NAMED_BUCKETS = 2;
+const MAX_NAMED_BUCKETS = 3;
 
 function bucketOf(kind: SemanticActionKind): RunBucket {
   switch (kind) {
@@ -65,7 +65,8 @@ export function isFoldableToolRow(
   if (item.activityKind) return false;
   if (item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX)) return false;
   if (item.statusKey?.startsWith("choice:")) return false;
-  if (shouldAutoExpandActivity(item)) return false;
+  // A Ledger step that failed opens itself, and stays in its run: the run shows it without being opened.
+  if (shouldAutoExpandActivity(item) && !(item.ledger && item.tone === "failed")) return false;
   const mark = splitActivityStatusDetail(item.detail, item.tone).mark;
   return mark === null || mark === "ready" || mark === "failed";
 }
@@ -74,6 +75,8 @@ export function isFoldableToolRow(
 function runCounts(steps: readonly ActivityTimelineItem[]): Map<RunBucket, Set<string>> {
   const counts = new Map<RunBucket, Set<string>>();
   for (const step of steps) {
+    // The agent's reasoning between calls rides in the run; it is no call.
+    if (step.activityKind === "reasoning") continue;
     const bucket = bucketOf(step.semanticKind ?? "use_tool");
     const keys = counts.get(bucket) ?? new Set<string>();
     counts.set(bucket, keys);
@@ -146,7 +149,7 @@ function phraseFor(bucket: RunBucket, count: number): string {
     case "read":
       return `Read ${count} ${many ? "files" : "file"}`;
     case "search":
-      return many ? `Searched code ${count} times` : "Searched code";
+      return many ? `Searched ${count} times` : "Searched once";
     case "image":
       return `Viewed ${count} ${many ? "images" : "image"}`;
     default:
@@ -160,6 +163,9 @@ export function foldedToolRun(
   const title = summarizeToolRun(steps);
   const last = steps[steps.length - 1];
   const failed = steps.filter((step) => step.tone === "failed").length;
+  const timed = steps.filter((step) => step.ledger?.durationMs !== undefined);
+  const durationMs = timed.length ? timed.reduce((sum, step) => sum + (step.ledger?.durationMs ?? 0), 0) : undefined;
+  const ledger = steps.some((step) => step.ledger);
   return {
     type: "activity",
     // The first step's id: the list keeps that row mounted (and the reading
@@ -168,8 +174,10 @@ export function foldedToolRun(
     timestamp: last.timestamp ?? steps[0].timestamp,
     statusKey: "done",
     title,
-    // Beside the summary, quiet: what failed, else the files it touched (soft-final SPEC §11 tool row).
-    detail: failed ? `${failed} failed` : runFileNames(steps),
+    // Beside the summary, quiet: what failed, else the files it touched (soft-final SPEC §11 tool row). A Ledger run
+    // says its time and failures on its own (owner 11-27): the steps name the files.
+    detail: ledger ? undefined : failed ? `${failed} failed` : runFileNames(steps),
+    ledger: ledger ? { durationMs, failed: failed || undefined } : undefined,
     tone: "neutral",
     icon: RUN_ICONS[SUMMARY_PRIORITY.find((bucket) => runCounts(steps).has(bucket)) ?? "other"],
     defaultExpanded: false,
@@ -208,8 +216,11 @@ export function createToolRunFolder(): ToolRunFolder {
     let run: ActivityTimelineItem[] = [];
     let changed = false;
     const flush = () => {
-      if (run.length < 2) {
-        out.push(...run);
+      if (run.filter((step) => step.activityKind !== "reasoning").length < 2) {
+        // Too short to fold: its calls stand alone, and the thoughts before them read as one.
+        const merged = withThoughtsMerged(run);
+        if (merged.length !== run.length) changed = true;
+        out.push(...merged);
       } else {
         const id = `${TOOL_RUN_CACHE_PREFIX}${run[0].id}`;
         const previous = built.get(id);
@@ -223,12 +234,23 @@ export function createToolRunFolder(): ToolRunFolder {
       }
       run = [];
     };
+    // The agent's finished reasoning before or between calls rides in their run (Pi, Grok and agy think before every
+    // call): held until the next call takes it in, else put back where it was.
+    let held: ActivityTimelineItem[] = [];
     for (const item of items) {
       if (isFoldableToolRow(item)) {
-        run.push(item);
+        run.push(...held, item);
+        held = [];
+        continue;
+      }
+      if (isRunReasoning(item)) {
+        held.push(item as ActivityTimelineItem);
         continue;
       }
       flush();
+      if (held.length > 1) changed = true;
+      out.push(...mergedThoughts(held));
+      held = [];
       if (
         item.type === "activity" &&
         item.semanticKind === "delegate_agent" &&
@@ -247,10 +269,37 @@ export function createToolRunFolder(): ToolRunFolder {
       out.push(item);
     }
     flush();
+    if (held.length > 1) changed = true;
+    out.push(...mergedThoughts(held));
     built = next;
     subagents = nextSubagents;
     return changed ? out : items;
   };
+}
+
+/** Thoughts in a row with no call to ride in are one quiet line (Grok writes a dozen between two replies). */
+function mergedThoughts(held: ActivityTimelineItem[]): ActivityTimelineItem[] {
+  if (held.length < 2) return held;
+  return [{ ...held[0], body: held.map((thought) => (thought.body ?? "").trim()).filter(Boolean).join("\n\n") }];
+}
+
+function withThoughtsMerged(steps: ActivityTimelineItem[]): ActivityTimelineItem[] {
+  const out: ActivityTimelineItem[] = [];
+  let thoughts: ActivityTimelineItem[] = [];
+  for (const step of steps) {
+    if (isRunReasoning(step)) {
+      thoughts.push(step);
+      continue;
+    }
+    out.push(...mergedThoughts(thoughts), step);
+    thoughts = [];
+  }
+  out.push(...mergedThoughts(thoughts));
+  return out;
+}
+
+function isRunReasoning(item: TimelineItem): boolean {
+  return item.type === "activity" && item.activityKind === "reasoning" && !item.streaming && item.tone !== "running";
 }
 
 type SubagentEntry = {

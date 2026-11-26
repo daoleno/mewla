@@ -1,3 +1,4 @@
+import { hasToolStep, toolStepActivity } from "./toolStep";
 import { answeredKeys } from "./answered";
 import type {
   CodexConversation,
@@ -260,6 +261,16 @@ export function buildTimelineFromSortedEvents(
         if (activity) {
           items.push(activity);
         }
+      }
+      continue;
+    }
+
+    // A call the daemon has read (event.tool) is a Ledger step: one shape for every agent.
+    if (hasToolStep(event)) {
+      flushExploration();
+      const activity = activityOf(event);
+      if (activity) {
+        items.push(event.subagent ? withSubagentWork(activity, event.subagent) : activity);
       }
       continue;
     }
@@ -696,6 +707,12 @@ export function attachBrainWorkEventActions(
 function activityFromEvent(
   event: CodexConversationEvent,
 ): TimelineItem | null {
+  if (hasToolStep(event)) {
+    const step = toolStepActivity(event);
+    // A picture the call made or looked at shows under its row, as before the Ledger.
+    const previewPath = step && (toolPresentation(event).localImagePath || imagePathFromTool(event));
+    return step && previewPath ? { ...step, previewPath } : step;
+  }
   switch (event.kind) {
     case "command": {
       const presentation = commandPresentation(event.command || "");
