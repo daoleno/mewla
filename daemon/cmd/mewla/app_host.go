@@ -39,23 +39,30 @@ const (
 
 // replacedAppHost says whether host, the executable of the app's host, is not
 // the app this daemon (helper, its executable) is a part of, and names the one
-// it should be. A daemon outside an app's Contents/Helpers, a host outside an
+// it should be. gone: macOS has no path for the host's executable any more,
+// which is so once the app it was started from is deleted (an update moves the
+// old app aside and deletes it; proc_pidpath then answers nothing, the owner's
+// Mac 11-26). A daemon outside an app's Contents/Helpers, a host outside an
 // app's Contents/MacOS, an unknown host, and an installed app whose own
-// executable is missing (an update half done) are never replaced: nothing is
+// executables are missing (an update half done) are never replaced: nothing is
 // done until it reads right.
-func replacedAppHost(host, helper string, exists func(string) bool) (replaced bool, want string) {
-	if host == "" || helper == "" {
+func replacedAppHost(host string, gone bool, helper string, exists func(string) bool) (replaced bool, want string) {
+	if helper == "" || (host == "" && !gone) {
 		return false, ""
 	}
 	helpers := filepath.Dir(helper)
 	if !strings.EqualFold(filepath.Base(helpers), "Helpers") || !strings.EqualFold(filepath.Base(filepath.Dir(helpers)), "Contents") {
 		return false, ""
 	}
+	macOS := filepath.Join(filepath.Dir(helpers), "MacOS")
+	if gone {
+		return exists(macOS), macOS
+	}
 	hostDir := filepath.Dir(host)
 	if !strings.EqualFold(filepath.Base(hostDir), "MacOS") || !strings.EqualFold(filepath.Base(filepath.Dir(hostDir)), "Contents") {
 		return false, ""
 	}
-	want = filepath.Join(filepath.Dir(helpers), "MacOS", filepath.Base(host))
+	want = filepath.Join(macOS, filepath.Base(host))
 	if strings.EqualFold(filepath.Clean(host), want) {
 		return false, want
 	}
@@ -104,9 +111,10 @@ func watchAppHost(ctx context.Context, stateDir string, quiet func() string, res
 	}
 	marker := filepath.Join(stateDir, "run", appHostMarker)
 	exists := func(path string) bool { _, err := os.Stat(path); return err == nil }
+	log.Printf("mewla: under the app's host (pid %d); checking it runs the installed app", host)
 	go func() {
 		wait := appHostFirstCheck
-		var logged, waited string
+		logged, waited := false, ""
 		for {
 			select {
 			case <-ctx.Done():
@@ -118,14 +126,21 @@ func watchAppHost(ctx context.Context, stateDir string, quiet func() string, res
 			if err != nil {
 				return // this system cannot tell
 			}
-			replaced, want := replacedAppHost(path, helper, exists)
+			if os.Getppid() != host {
+				return // the host is gone: stopWithHost stops the daemon
+			}
+			replaced, want := replacedAppHost(path, path == "", helper, exists)
 			if !replaced {
 				continue
 			}
 			screen.SetHostReplaced(true)
-			if logged == "" {
-				logged = path
-				log.Printf("mewla: the app's host (pid %d) runs %s, not the installed %s: its permissions are not this Mewla's until it starts again", host, path, want)
+			if !logged {
+				logged = true
+				runs := path
+				if runs == "" {
+					runs = "an app that was deleted"
+				}
+				log.Printf("mewla: the app's host (pid %d) runs %s, not the installed %s: its permissions are not this Mewla's until it starts again", host, runs, want)
 			}
 			if !mayRestartAppHost(marker, host, time.Now()) {
 				continue // asked once already: the person's Restart Mewla does it

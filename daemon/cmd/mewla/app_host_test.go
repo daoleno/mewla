@@ -29,13 +29,24 @@ func TestAHostFromAReplacedAppIsFoundAndNothingElseIs(t *testing.T) {
 		{"an unknown host", "", helper, there, false},
 	}
 	for _, c := range cases {
-		replaced, _ := replacedAppHost(c.host, c.helper, c.exists)
+		replaced, _ := replacedAppHost(c.host, false, c.helper, c.exists)
 		if replaced != c.replaced {
 			t.Errorf("%s: replaced = %v, want %v", c.name, replaced, c.replaced)
 		}
 	}
-	if _, want := replacedAppHost("/Applications/.x-Mewla.app/Contents/MacOS/Mewla", helper, there); want != installed {
+	if _, want := replacedAppHost("/Applications/.x-Mewla.app/Contents/MacOS/Mewla", false, helper, there); want != installed {
 		t.Fatalf("want = %q", want)
+	}
+	// The owner's Mac, 11-26, proof run: once the moved-aside app is deleted, proc_pidpath answers nothing for its host.
+	installedDir := func(path string) bool { return path == "/Applications/Mewla.app/Contents/MacOS" }
+	if replaced, _ := replacedAppHost("", true, helper, installedDir); !replaced {
+		t.Fatal("a host whose app was deleted is replaced")
+	}
+	if replaced, _ := replacedAppHost("", true, helper, func(string) bool { return false }); replaced {
+		t.Fatal("with the installed app missing nothing is done")
+	}
+	if replaced, _ := replacedAppHost("", true, "/usr/local/bin/mewla", installedDir); replaced {
+		t.Fatal("a daemon outside an app has no app host")
 	}
 }
 

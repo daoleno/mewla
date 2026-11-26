@@ -14,7 +14,9 @@ var pidPath struct {
 }
 
 // processPath is the executable a process runs, where it is now (proc_pidpath
-// follows the file: an app moved aside reads at its new place).
+// follows the file: an app moved aside reads at its new place); "" once that
+// file is deleted (proc_pidpath answers nothing for it). The error is only for
+// a system that cannot tell.
 func processPath(pid int) (string, error) {
 	pidPath.once.Do(func() {
 		lib, err := purego.Dlopen("/usr/lib/libSystem.B.dylib", purego.RTLD_NOW|purego.RTLD_GLOBAL)
@@ -32,7 +34,7 @@ func processPath(pid int) (string, error) {
 	buf := make([]byte, 4096) // PROC_PIDPATHINFO_MAXSIZE
 	n := pidPath.fn(int32(pid), unsafe.Pointer(&buf[0]), uint32(len(buf)))
 	if n <= 0 || int(n) > len(buf) {
-		return "", errors.New("proc_pidpath failed")
+		return "", nil
 	}
 	return string(buf[:n]), nil
 }
