@@ -109,3 +109,31 @@ func TestAddExtensionAddsItOnTheScreenWhereMewlaMay(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Removed from Chrome after it connected: the next agent's Chrome finds it
+// missing, and the old connection stops standing for it.
+func TestAnExtensionThatNoLongerConnectsIsNoLongerCounted(t *testing.T) {
+	state, err := os.MkdirTemp("", "ext")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(state)
+	b := NewBridge(filepath.Join(state, "agent-use"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serveBridge(t, ctx, b)
+	marker := filepath.Join(state, "agent-use", connectedMarker)
+	if err := os.WriteFile(marker, []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer func(wait time.Duration) { openForToolsWait = wait }(openForToolsWait)
+	openForToolsWait = 300 * time.Millisecond
+	started := false
+	err = OpenForTools(state, []string{"chrome-extension://x/connect.html?mcpRelayUrl=ws%3A%2F%2F127.0.0.1%3A1%2Fextension%2Fx"}, func(string) error { started = true; return nil })
+	if err == nil || !strings.Contains(err.Error(), "did not connect") || !started {
+		t.Fatalf("err %v started %v", err, started)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("the marker stayed: %v", err)
+	}
+}

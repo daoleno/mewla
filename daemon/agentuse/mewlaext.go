@@ -238,6 +238,9 @@ func parseToolsArgs(args []string) (toolsRequest, error) {
 	return req, nil
 }
 
+// openForToolsWait is how long OpenForTools waits for the extension.
+var openForToolsWait = 25 * time.Second
+
 // OpenForTools answers the browser tools' request to open Chrome: the Mewla
 // extension connects to their relay in a window of its own. When Chrome isn't
 // running it is started without a window, only to run the extension.
@@ -248,7 +251,7 @@ func OpenForTools(stateDir string, args []string, startChrome func(profile strin
 	}
 	dir := filepath.Join(stateDir, "agent-use")
 	started := false
-	deadline := time.Now().Add(25 * time.Second)
+	deadline := time.Now().Add(openForToolsWait)
 	for {
 		err := ConnectViaBridgeFor(dir, req.RelayURL, req.Client, strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID")))
 		if err == nil {
@@ -266,6 +269,9 @@ func OpenForTools(stateDir string, args []string, startChrome func(profile strin
 			}
 		}
 		if time.Now().After(deadline) {
+			// It connected once, but not now with Chrome running: it was
+			// removed, so the old connection no longer stands for it.
+			_ = os.Remove(filepath.Join(dir, connectedMarker))
 			return errors.New("Chrome started but the Mewla extension did not connect: is it added to this profile, and is Chrome allowed to run it?")
 		}
 		time.Sleep(500 * time.Millisecond)
