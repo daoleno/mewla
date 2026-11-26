@@ -35,6 +35,7 @@ import {
   createSessionFileDownloadLifecycleOwner,
   downloadSessionFile,
   isSessionFileDownloadCancelError,
+  sessionFileCanCopyWhole,
   sessionFileCanDownload,
   sessionFileDownloadErrorMessage,
   type SessionFileDownloadFeedback,
@@ -211,7 +212,7 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   const title = () => sessionFileTitle(metadata(), props.reference);
   const canDownload = () => sessionFileCanDownload(metadata());
   // A cut text copies the whole file through the stream, so only while it can be read whole.
-  const canCopy = () => (!!text() && (!text()!.truncated || canDownload())) || (!!page() && canDownload());
+  const canCopy = () => (!!text() && (!text()!.truncated || sessionFileCanCopyWhole(metadata()))) || (!!page() && sessionFileCanCopyWhole(metadata()));
   const status = () => sessionFileDownloadStatus(download(), downloadError());
   const shownPage = () => (loading() || problem() ? null : page());
 

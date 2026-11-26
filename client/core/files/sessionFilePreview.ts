@@ -313,7 +313,8 @@ function sessionFileCapabilityError(status: number): string {
     case 409:
       return "The Session or file changed before the preview could be authorized. Refresh and try again.";
     case 413:
-      return "This file exceeds the daemon's Session preview limit.";
+      // Only a computer on a Mewla from before downloads had no size limit answers this.
+      return "This computer runs an older Mewla that limits file size. Update it, then try again.";
     default:
       return `Could not authorize the Session file preview (HTTP ${status}). Refresh and try again.`;
   }
@@ -403,7 +404,7 @@ export function sessionFileTooLargeMessage(
   const limit = metadata.previewLimitBytes
     ? formatSessionFileSize(metadata.previewLimitBytes)
     : "the V1 size limit";
-  return `This ${formatSessionFileSize(metadata.size)} file exceeds Mewla's ${limit} preview limit. It was not downloaded.`;
+  return `This ${formatSessionFileSize(metadata.size)} file is over Mewla's ${limit} preview limit.`;
 }
 
 function normalizeSessionFileKind(value: unknown): SessionFileKind {

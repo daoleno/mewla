@@ -1,5 +1,5 @@
-import { host, nativeComponent, Picker, platform } from "nsh";
-import type { SessionFileDownloadHost } from "../../../core/files/sessionFilePreviewDownload";
+import { host, nativeComponent, openUrl, Picker, platform } from "nsh";
+import { sessionFileAttachmentUrl, type SessionFileDownloadHost } from "../../../core/files/sessionFilePreviewDownload";
 import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../../../core/files/uploads";
 import { appFileImageUrl, appFileUploadHost, isAppFileUri, keepAppFiles } from "./appFiles";
 import { pickedPhotoName } from "../../../core/files/attachSources";
@@ -26,8 +26,9 @@ import { pickedPhotoName } from "../../../core/files/attachSources";
  * - `files.pickDirectory` → `{token, name?}` or null when closed: the folder downloads go to.
  * - `files.download {downloadId, url, directory, names, mimeType, expectedSize, maxBytes, headers}`
  *   → `{bytesWritten, name}`: GETs `url` into the first of `names` the folder does not
- *   have, refuses more than `maxBytes` and any size but `expectedSize`, and deletes the file
- *   it made when it fails.
+ *   have, a chunk at a time (a file of any size, none held whole), refuses more than `maxBytes`
+ *   (the size the file was inspected at) and any size but `expectedSize`, and deletes the file
+ *   it made when it fails. The browser's answers `{…, handedOff: true}`: its own download took it.
  * - `files.cancelDownload {downloadId}` (a post): rejects with "Session file download was cancelled.".
  * - `files.thumbnail {uri, maxPixels}` → `{dataUrl}` or null: a picked picture, scaled (below).
  * - `mewla.pdf` (below): a PDF's pages.
@@ -38,7 +39,7 @@ import { pickedPhotoName } from "../../../core/files/attachSources";
  * The calls that wait on a person or a transfer have no timeout.
  *
  * In a browser the page host (client/ui/web/host.js) answers them: a file input, XHR, a
- * download into memory handed to the browser. The web player delivers no posts to the page,
+ * download the browser itself saves (a link to the signed read as an attachment). The web player delivers no posts to the page,
  * so the two cancels are calls there.
  */
 
@@ -135,10 +136,26 @@ export const uploadHost: UploadHost = {
   },
 };
 
-export const downloadHost: SessionFileDownloadHost = {
+/** The phones stream a download into the folder the person chose (Android's, iOS's host: no whole file is held). */
+const nativeDownloads: SessionFileDownloadHost = {
   pickDirectory: () => host.call<{ token: string } | null>("files.pickDirectory", null, WAIT).then((folder) => (folder?.token ? folder : null)),
-  download: (request) => host.call<{ bytesWritten: number; name: string }>("files.download", request, WAIT),
+  download: (request) => host.call<{ bytesWritten: number; name: string; handedOff?: boolean }>("files.download", request, WAIT),
 };
+
+/**
+ * A desktop's host (Mac, Linux, Windows) answers no `files.*` and the app may only read files: the signed read, as
+ * an attachment, goes to the system's browser, which saves it to its Downloads folder as it streams, whatever its size.
+ */
+const browserDownloads: SessionFileDownloadHost = {
+  pickDirectory: async () => ({ token: "browser-downloads" }),
+  download: async (request) => {
+    const result = await openUrl(sessionFileAttachmentUrl(request.url));
+    if (!result.opened) throw new Error("The browser blocked the download. Allow pop-ups for Mewla and try again.");
+    return { bytesWritten: request.expectedSize ?? 0, name: request.names[0] ?? "download", handedOff: true };
+  },
+};
+
+export const downloadHost: SessionFileDownloadHost = platform.os === "android" || platform.os === "ios" || platform.os === "web" ? nativeDownloads : browserDownloads;
 
 const thumbnails = new Map<string, Promise<string | null>>();
 

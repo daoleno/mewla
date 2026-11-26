@@ -39,7 +39,7 @@ export function sessionFileProblemTitle(input: { stale: boolean; tooLarge: boole
   // Deleted or moved since the Session wrote it (a worktree or scratch folder collected): said as such.
   if (input.gone) return "File is gone";
   if (input.stale) return "File changed";
-  return input.tooLarge ? "File too large" : "Could not open file";
+  return input.tooLarge ? "Too large to preview" : "Could not open file";
 }
 
 export function sessionFileTruncationNote(text: SessionFileTextPreview | null): string | null {
@@ -48,6 +48,7 @@ export function sessionFileTruncationNote(text: SessionFileTextPreview | null): 
 
 export function sessionFileDownloadStatus(feedback: SessionFileDownloadFeedback, error: string): string | null {
   if (feedback === "saved") return "Saved";
+  if (feedback === "started") return "Downloading in your browser";
   return feedback === "failed" ? `Download failed: ${error || "Unknown error"}` : null;
 }
 

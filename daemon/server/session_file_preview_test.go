@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -311,12 +312,7 @@ func TestSessionFileMediaStreamsRangesBeyondTheImageBound(t *testing.T) {
 			request.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
 			response := httptest.NewRecorder()
 			server.handleSessionFileBinary(response, request)
-			if tt.tooLarge {
-				if response.Code != http.StatusRequestEntityTooLarge {
-					t.Fatalf("status=%d body=%s, want 413", response.Code, response.Body.String())
-				}
-				return
-			}
+			// Past the preview bound the read still streams: the app just does not preview it.
 			if response.Code != http.StatusPartialContent {
 				t.Fatalf("status=%d body=%s, want 206", response.Code, response.Body.String())
 			}
@@ -830,7 +826,9 @@ func TestSessionFileReadCapabilitySupportsGETHEADRangeAndRetry(t *testing.T) {
 	}
 }
 
-func TestSessionFileBinaryPreviewSizeBoundary(t *testing.T) {
+// The preview bound belongs to the preview: metadata says too_large, the raw read of
+// the same file still streams (Range and all), so a download has no size limit of its own.
+func TestSessionFileBinaryReadHasNoSizeBoundButPreviewKeepsIt(t *testing.T) {
 	workspace := t.TempDir()
 	manager, privateKey, deviceID := sessionFileAuthFixture(t)
 	started := time.Date(2026, 7, 20, 4, 0, 0, 0, time.UTC)
@@ -852,7 +850,8 @@ func TestSessionFileBinaryPreviewSizeBoundary(t *testing.T) {
 	}{
 		{name: "just-below.pdf", size: maxSessionFileBinaryBytes - 1, status: http.StatusPartialContent},
 		{name: "at.pdf", size: maxSessionFileBinaryBytes, status: http.StatusPartialContent},
-		{name: "above.pdf", size: maxSessionFileBinaryBytes + 1, tooLarge: true, status: http.StatusRequestEntityTooLarge},
+		{name: "above.pdf", size: maxSessionFileBinaryBytes + 1, tooLarge: true, status: http.StatusPartialContent},
+		{name: "model.bin", size: 3 << 30, status: http.StatusPartialContent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -861,9 +860,11 @@ func TestSessionFileBinaryPreviewSizeBoundary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := file.WriteString("%PDF-1.7\n"); err != nil {
-				_ = file.Close()
-				t.Fatal(err)
+			if strings.HasSuffix(tt.name, ".pdf") {
+				if _, err := file.WriteString("%PDF-1.7\n"); err != nil {
+					_ = file.Close()
+					t.Fatal(err)
+				}
 			}
 			if err := file.Truncate(tt.size); err != nil {
 				_ = file.Close()
@@ -883,7 +884,7 @@ func TestSessionFileBinaryPreviewSizeBoundary(t *testing.T) {
 			if metadata.TooLarge != tt.tooLarge {
 				t.Fatalf("too_large=%v, want %v", metadata.TooLarge, tt.tooLarge)
 			}
-			if metadata.PreviewLimit != maxSessionFileBinaryBytes {
+			if strings.HasSuffix(tt.name, ".pdf") && metadata.PreviewLimit != maxSessionFileBinaryBytes {
 				t.Fatalf("preview_limit_bytes=%d, want %d", metadata.PreviewLimit, maxSessionFileBinaryBytes)
 			}
 
@@ -902,8 +903,19 @@ func TestSessionFileBinaryPreviewSizeBoundary(t *testing.T) {
 			if response.Code != tt.status {
 				t.Fatalf("status=%d body=%s, want %d", response.Code, response.Body.String(), tt.status)
 			}
-			if !tt.tooLarge && response.Body.Len() != 1 {
+			if response.Body.Len() != 1 {
 				t.Fatalf("bounded range response bytes=%d, want 1", response.Body.Len())
+			}
+			if got := response.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "inline;") {
+				t.Fatalf("content disposition=%q, want inline", got)
+			}
+
+			request.URL.RawQuery = request.URL.RawQuery + "&disposition=attachment"
+			request.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+			attached := httptest.NewRecorder()
+			server.handleSessionFileBinary(attached, request)
+			if got := attached.Header().Get("Content-Disposition"); !strings.HasPrefix(got, "attachment;") || !strings.Contains(got, tt.name) {
+				t.Fatalf("download disposition=%q, want attachment naming %s", got, tt.name)
 			}
 		})
 	}
@@ -1119,5 +1131,86 @@ func TestSessionFolderNamedByItsHomeOrAbsolutePathOpensItsIndexPage(t *testing.T
 		if filepath.Base(resolved.canonicalPath) != "index.html" || resolved.kind != "text" {
 			t.Fatalf("%s resolved = %s (%s)", path, resolved.canonicalPath, resolved.kind)
 		}
+	}
+}
+
+// The read capability is what the app asks for before every preview and download: it
+// must not refuse a file for its size (an 86 MB APK was refused here) and the stream it
+// signs must serve a Range read.
+func TestSessionFileReadCapabilityIsIssuedForAFileOfAnySize(t *testing.T) {
+	workspace := t.TempDir()
+	path := filepath.Join(workspace, "model.bin")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(3 << 30); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := openSessionFile(workspace, "model.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	generation := resolved.generation
+	_ = resolved.file.Close()
+
+	manager, privateKey, deviceID := sessionFileAuthFixture(t)
+	started := time.Date(2026, 11, 26, 4, 0, 0, 0, time.UTC)
+	worker := &classifier.Worker{ID: "main:@big", Cwd: workspace, ProcessID: 913, StartedAt: started}
+	server := New(manager, nil, nil, nil, nil, nil, nil)
+	server.sessionFileWorkerLoader = func(id string) *classifier.Worker {
+		if id != worker.ID {
+			return nil
+		}
+		copy := *worker
+		return &copy
+	}
+	body, err := json.Marshal(map[string]any{
+		"worker_id": worker.ID, "process_id": worker.ProcessID, "started_at": started.UnixMilli(),
+		"path": "model.bin", "generation": generation,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := httptest.NewRequest(http.MethodPost, "/session-file-capability", bytes.NewReader(body))
+	issue.Header.Set("Authorization", sessionFileAuthorizationHeader(t, privateKey, manager.DaemonID(), deviceID))
+	issue.Header.Set("Content-Type", "application/json")
+	issued := httptest.NewRecorder()
+	server.Handler().ServeHTTP(issued, issue)
+	if issued.Code != http.StatusOK {
+		t.Fatalf("capability for a 3 GiB file status=%d body=%q", issued.Code, issued.Body.String())
+	}
+	var capability struct {
+		DeviceID     string `json:"device_id"`
+		ExpiresAtMS  int64  `json:"expires_at_ms"`
+		GETSignature string `json:"get_signature"`
+	}
+	if err := json.Unmarshal(issued.Body.Bytes(), &capability); err != nil {
+		t.Fatal(err)
+	}
+
+	query := url.Values{}
+	query.Set("worker_id", worker.ID)
+	query.Set("process_id", strconv.Itoa(worker.ProcessID))
+	query.Set("started_at", strconv.FormatInt(started.UnixMilli(), 10))
+	query.Set("path", "model.bin")
+	query.Set("generation", generation)
+	query.Set("file_cap_device", capability.DeviceID)
+	query.Set("file_cap_expires", strconv.FormatInt(capability.ExpiresAtMS, 10))
+	query.Set("file_cap_get", capability.GETSignature)
+	query.Set("disposition", "attachment")
+	read := httptest.NewRequest(http.MethodGet, "/session-file?"+query.Encode(), nil)
+	read.Header.Set("Range", "bytes=3221225468-")
+	got := httptest.NewRecorder()
+	server.Handler().ServeHTTP(got, read)
+	if got.Code != http.StatusPartialContent || got.Body.Len() != 4 {
+		t.Fatalf("signed read status=%d bytes=%d body=%q", got.Code, got.Body.Len(), got.Body.String())
+	}
+	if !strings.HasPrefix(got.Header().Get("Content-Disposition"), "attachment;") {
+		t.Fatalf("disposition=%q", got.Header().Get("Content-Disposition"))
 	}
 }

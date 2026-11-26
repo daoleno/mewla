@@ -246,9 +246,14 @@ folder that run worked in, also after Mewla restarts. A file that is no
 longer there, such as one in a scratch folder or worktree that was cleaned up,
 shows **File is gone**.
 Playback streams from the computer, so a long recording starts at once and
-seeking does not download the whole file. Every file has **Download**; text
-files (Markdown, code, txt, JSON) also have **Copy**, which copies the whole
-file.
+seeking does not download the whole file. Every file has **Download**, whatever
+its size: an installer, a recording or a model of several GB streams to disk, a
+chunk at a time, so it never sits in memory. On Android and iOS you choose the
+folder; in a browser and in Mewla for Mac the browser saves it to its Downloads
+folder and shows its own progress and Cancel. A file over the preview limit
+(50 MB for a picture or PDF, 2 GB for a video or audio) says it is too large to
+preview, and Download is still there. Text files (Markdown, code, txt, JSON)
+also have **Copy**, which copies the whole file (up to 50 MB).
 
 An HTML file opens as a browser shows it, across the whole screen: its scripts
 run, charts draw and respond (zoom, hover, tabs), libraries load from a CDN,

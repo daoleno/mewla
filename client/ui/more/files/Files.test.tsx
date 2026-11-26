@@ -163,14 +163,57 @@ describe("File preview", () => {
     expect(app.texts()).toContain("out/report.pdf · PDF · 4.0 KB");
   });
 
-  test("a file over the limit says so, reads nothing, and offers no download", async () => {
-    const c = preview(meta({ name: "dump.bin", relative_path: "dump.bin", kind: "unsupported", size: 3 * 1024 * 1024 * 1024, too_large: true }));
+  test("a file over the preview limit says so, reads nothing, and still downloads in full", async () => {
+    const size = 3 * 1024 * 1024 * 1024;
+    const c = preview(meta({ name: "dump.bin", relative_path: "dump.bin", kind: "unsupported", size, too_large: true }), {
+      handlers: {
+        "files.pickDirectory": () => ({ token: "folder-1", name: "Downloads" }),
+        "files.download": (request: { names: string[]; expectedSize: number }) => ({ bytesWritten: request.expectedSize, name: request.names[0] }),
+      },
+      network: { [`POST ${BASE}/session-file-capability`]: capability() },
+    });
     const app = await open(HARNESS, c.options);
     await app.waitFor("id:file-problem");
-    expect(app.texts()).toContain("File too large");
-    expect(app.texts()).toContain("This 3.0 GB file exceeds Mewla's 50 MB preview limit. It was not downloaded.");
+    expect(app.texts()).toContain("Too large to preview");
+    expect(app.texts()).toContain("This 3.0 GB file is over Mewla's 50 MB preview limit.");
     expect(c.asked.map((a) => a.type)).toEqual(["session_file_metadata"]);
-    expect(app.enabled("id:file-download")).toBe(false);
+    expect(app.enabled("id:file-download")).toBe(true);
+    await app.press("id:file-download");
+    await app.waitFor("text:Saved");
+    const call = app.host.calls().find((m) => m.name === "files.download")!;
+    expect(call.data).toMatchObject({ expectedSize: size, maxBytes: size, directory: "folder-1" });
+  });
+
+  test("in a browser Download hands the signed read, as an attachment, to the browser's own download", async () => {
+    const c = preview(meta({ name: "dump.bin", relative_path: "dump.bin", kind: "unsupported", size: 3 * 1024 * 1024 * 1024, too_large: true }), {
+      handlers: {
+        "files.pickDirectory": () => ({ token: "browser-downloads", name: "Downloads" }),
+        "files.download": (request: { names: string[]; expectedSize: number }) => ({ bytesWritten: request.expectedSize, name: request.names[0], handedOff: true }),
+      },
+      network: { [`POST ${BASE}/session-file-capability`]: capability() },
+    });
+    const app = await open(HARNESS, { ...c.options, platform: "web" });
+    await app.waitFor("id:file-problem");
+    await app.press("id:file-download");
+    await app.waitFor("text:Downloading in your browser");
+    expect(app.texts()).not.toContain("Saved");
+  });
+
+  test("on a desktop Download opens the signed read as an attachment in the system browser", async () => {
+    const LOOP = "http://127.0.0.1:9877";
+    const c = preview(meta({ name: "dump.bin", relative_path: "dump.bin", kind: "unsupported", size: 3 * 1024 * 1024 * 1024, too_large: true }), {
+      network: { [`POST ${LOOP}/session-file-capability`]: capability() },
+    });
+    (c.options.host.params as Record<string, unknown>).server = { url: "ws://127.0.0.1:9877/ws" };
+    const app = await open(HARNESS, { ...c.options, platform: "macos", width: 1280, height: 800 });
+    await app.waitFor("id:file-problem");
+    await app.press("id:file-download");
+    await app.waitFor("text:Downloading in your browser");
+    const [opened] = app.openedUrls();
+    expect(opened!.startsWith(`${LOOP}/session-file?`)).toBe(true);
+    expect(opened).toContain("generation=g1");
+    expect(opened!.endsWith("&disposition=attachment")).toBe(true);
+    expect(app.host.calls().some((m) => m.name === "files.download")).toBe(false);
   });
 
   test("a file that changed under the preview says so and can be read again", async () => {
@@ -213,7 +256,7 @@ describe("File preview", () => {
     expect(request.url.startsWith(`${BASE}/session-file?`)).toBe(true);
     expect(request.url).toContain("generation=g1");
     expect(request.url).toContain(`file_cap_get=${"a".repeat(128)}`);
-    expect(request).toMatchObject({ directory: "folder-1", mimeType: "text/plain", expectedSize: 600 * 1024, maxBytes: 50 * 1024 * 1024, headers: { "Cache-Control": "no-store" } });
+    expect(request).toMatchObject({ directory: "folder-1", mimeType: "text/plain", expectedSize: 600 * 1024, maxBytes: 600 * 1024, headers: { "Cache-Control": "no-store" } });
     expect(request.names.slice(0, 2)).toEqual(["notes.txt", "notes (1).txt"]);
   });
 
@@ -386,7 +429,7 @@ describe("Brain workspace", () => {
       },
     });
     await app.waitFor("id:workspace-file-error");
-    expect(app.texts()).toContain("This 3.0 GB file exceeds Mewla's 2.0 GB preview limit. It was not downloaded.");
+    expect(app.texts()).toContain("This 3.0 GB file is over Mewla's 2.0 GB preview limit.");
     expect(app.requests().some((r) => r.url.includes("session-file-capability"))).toBe(false);
   });
 
