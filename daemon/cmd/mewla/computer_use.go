@@ -43,6 +43,16 @@ func (a *controlApp) handleComputerControl(req control.Request) control.Response
 	return control.Response{OK: true, ComputerResult: &result}
 }
 
+// accessibilityGranted: the screen's Accessibility counts in this process.
+func accessibilityGranted(status agentuse.ComputerStatus) bool {
+	for _, grant := range status.Permissions {
+		if grant.ID == "accessibility" {
+			return grant.State == "granted"
+		}
+	}
+	return false
+}
+
 // computerStatus turns the screen's state into the app's one line, with each
 // grant the screen needs and where it stands.
 func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerStatus {

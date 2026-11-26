@@ -38,6 +38,8 @@ const webAccessNote = "Turned on this app's web accessibility so its pages can b
 type webAccess struct {
 	mu   sync.Mutex
 	done map[int]bool
+	// asked is when each app was last asked again (reassert).
+	asked map[int]time.Time
 }
 
 // ensure makes sure the app with pid has built its web accessibility tree,
@@ -84,4 +86,39 @@ func (w *webAccess) ensure(ctx context.Context, pid int, ops webAccessOps, clock
 		last = n
 	}
 	return webAccessNote
+}
+
+// webReassertEvery bounds how often an app that shows no page is asked again.
+const webReassertEvery = 10 * time.Second
+
+// reassert asks the app with pid to build its pages' tree again although its
+// switch may read on: Chrome can stop building it for a client that is not
+// a screen reader while the switch it answers stays on (the owner's Mac,
+// 11-26: a Chrome up for a day showed its toolbars and none of its pages).
+// At most every webReassertEvery for one app; true when asked, after the tree
+// has had a moment to fill.
+func (w *webAccess) reassert(ctx context.Context, pid int, ops webAccessOps, clock func() time.Time, sleep func(time.Duration)) bool {
+	w.mu.Lock()
+	if w.asked == nil || len(w.asked) > 512 {
+		w.asked = map[int]time.Time{}
+	}
+	if last, ok := w.asked[pid]; ok && clock().Sub(last) < webReassertEvery {
+		w.mu.Unlock()
+		return false
+	}
+	w.asked[pid] = clock()
+	w.mu.Unlock()
+	before := ops.size(ctx, pid)
+	if ops.enable(pid) != nil {
+		return false
+	}
+	deadline := clock().Add(webAccessSettle)
+	for clock().Before(deadline) && ctx.Err() == nil {
+		sleep(webAccessTick)
+		if ops.size(ctx, pid) > before {
+			sleep(webAccessTick)
+			break
+		}
+	}
+	return true
 }

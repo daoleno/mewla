@@ -27,6 +27,10 @@ type ElementMatch struct {
 	Title string `json:"title,omitempty"`
 	Value string `json:"value,omitempty"`
 	Empty bool   `json:"empty,omitempty"`
+	// DOMID is a web page element's id attribute, which no translation of
+	// the page changes; Focused asks for the element that has the keyboard.
+	DOMID   string `json:"dom_id,omitempty"`
+	Focused bool   `json:"focused,omitempty"`
 }
 
 func (m ElementMatch) String() string {
@@ -43,13 +47,24 @@ func (m ElementMatch) String() string {
 	if m.Empty {
 		parts = append(parts, "(empty)")
 	}
+	if m.DOMID != "" {
+		parts = append(parts, "#"+m.DOMID)
+	}
+	if m.Focused {
+		parts = append(parts, "(focused)")
+	}
 	return strings.Join(parts, " ")
+}
+
+// names says whether m names anything at all.
+func (m ElementMatch) names() bool {
+	return m.Role != "" || m.Title != "" || m.Value != "" || m.Empty || m.DOMID != "" || m.Focused
 }
 
 // matchIDs are the ids of the elements m names, those whose title is the
 // whole one first, and when there are none, those whose title only holds it.
 func (t *ElementTree) matchIDs(m ElementMatch) ([]int, error) {
-	if m.Role == "" && m.Title == "" && m.Value == "" && !m.Empty {
+	if !m.names() {
 		return nil, errors.New("a match needs a role, title or value")
 	}
 	if m.Empty && m.Value != "" {
@@ -59,6 +74,9 @@ func (t *ElementTree) matchIDs(m ElementMatch) ([]int, error) {
 	var whole, part []int
 	for i, e := range t.Elements {
 		if role != "" && strings.TrimPrefix(strings.ToLower(e.Role), "ax") != role {
+			continue
+		}
+		if (m.DOMID != "" && e.DOMID != m.DOMID) || (m.Focused && !e.Focused) {
 			continue
 		}
 		value := e.Value
@@ -88,7 +106,7 @@ func (t *ElementTree) matchIDs(m ElementMatch) ([]int, error) {
 // match finds the element m names in the tree and returns its id. With
 // one, several equally good matches are an error rather than a guess.
 func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
-	if m.Role == "" && m.Title == "" && m.Value == "" {
+	if !m.names() {
 		return 0, errors.New("a match needs a role, title or value")
 	}
 	found, err := t.matchIDs(m)

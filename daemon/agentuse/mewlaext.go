@@ -64,6 +64,36 @@ func installedMewlaExtension(userDataDir string) (profile string, ids []string, 
 	return profile, ids, profile != ""
 }
 
+// connectedMarker, in the agent use folder, says the person's Chrome had the
+// Mewla extension connected once: where Chrome's own folder cannot be read,
+// it stands for the extension while Chrome is closed.
+const connectedMarker = "mewla-extension-connected"
+
+// mewlaExtensionConnectedLocked says whether the Mewla extension is in the
+// person's Chrome by what it did rather than by Chrome's files: it is
+// connected now, or, where Chrome's folder can't be read, it connected
+// before. A connected extension is never asked to be added.
+func (s *Service) mewlaExtensionConnectedLocked(userDataDir string) bool {
+	if s.bridge != nil && s.bridge.HasHost() {
+		return true
+	}
+	if chromeFolderReadable(userDataDir) {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(s.dir, connectedMarker))
+	return err == nil
+}
+
+// chromeFolderReadable says whether this process may read Chrome's folder.
+// macOS keeps an app out of another app's data unless the person allows it
+// (Privacy & Security › Files & Folders, or Full Disk Access): the folder
+// is there and listing it is refused. A folder that is not there reads as
+// readable: there is nothing in it to find.
+func chromeFolderReadable(userDataDir string) bool {
+	_, err := os.ReadDir(userDataDir)
+	return !errors.Is(err, fs.ErrPermission)
+}
+
 // NativeHostName is the name the extension asks Chrome for.
 const NativeHostName = "com.mewla.browser"
 

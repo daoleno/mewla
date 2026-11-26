@@ -124,11 +124,16 @@ type Service struct {
 	lookCodex   func(home string) bool
 	recheck     time.Duration
 
-	mu           sync.Mutex
-	settings     settings
-	cached       Status
-	cachedAt     time.Time
-	installing   bool
+	mu         sync.Mutex
+	settings   settings
+	cached     Status
+	cachedAt   time.Time
+	installing bool
+	// adder adds the extension on this screen where adderReady allows;
+	// adding is while it does.
+	adder        ExtensionAdder
+	adderReady   func() bool
+	adding       bool
 	installErr   error
 	installErrAt time.Time
 	computer     *ComputerHooks
@@ -316,11 +321,20 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		// asks the person to copy its key, is still used where that was done.
 		var mewlaProfile string
 		mewlaProfile, mewlaIDs, mewla = installedMewlaExtension(chrome.UserDataDir)
+		if !mewla && s.mewlaExtensionConnectedLocked(chrome.UserDataDir) {
+			// Chrome's folder could not say (macOS keeps it from Mewla), but
+			// the extension is connected, or has been: it is there, in the
+			// profile Chrome uses (unknown here, so none is named).
+			mewlaProfile, mewlaIDs, mewla = "", mewlaExtensionIDs(), true
+		}
 		profile, ok = mewlaProfile, mewla
 		if !mewla {
 			profile, ok = extensionProfile(chrome.UserDataDir)
 		}
 		if !ok {
+			if s.adding {
+				return BrowserStatus{State: BrowserPreparing, Summary: "Mewla is adding its extension to Chrome…"}, launch{}
+			}
 			return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Mewla extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
 		}
 	}
@@ -498,6 +512,52 @@ func (s *Service) saveLocked(next settings) error {
 	return nil
 }
 
+// ExtensionAdder adds the extension in dir to the person's Chrome the way a
+// person does, on this screen (screen.Service.LoadUnpackedInChrome), and
+// returns once connected says it is connected, or why it could not.
+type ExtensionAdder func(ctx context.Context, dir string, connected func() bool) error
+
+// SetExtensionAdder lets Add extension do the adding where ready says Mewla
+// may use this screen now (Accessibility given); elsewhere it opens Chrome
+// and says how.
+func (s *Service) SetExtensionAdder(add ExtensionAdder, ready func() bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.adder, s.adderReady = add, ready
+}
+
+// startAdding starts adding the extension in the background, or says why
+// not; one at a time.
+func (s *Service) startAdding(dir string) bool {
+	s.mu.Lock()
+	add, ready := s.adder, s.adderReady
+	s.mu.Unlock()
+	if add == nil || (ready != nil && !ready()) {
+		return false
+	}
+	s.mu.Lock()
+	if s.adding {
+		s.mu.Unlock()
+		return true
+	}
+	s.adding = true
+	s.mu.Unlock()
+	go func() {
+		bridge := s.Bridge()
+		err := add(context.Background(), dir, bridge.HasHost)
+		if err != nil {
+			log.Printf("agent use: couldn't add the Mewla extension to Chrome: %v", err)
+		} else {
+			log.Printf("agent use: added the Mewla extension to Chrome; it is connected")
+		}
+		s.mu.Lock()
+		s.adding = false
+		s.cachedAt = time.Time{}
+		s.mu.Unlock()
+	}()
+	return true
+}
+
 // Fix performs one of the status's fixes on this computer: it opens the
 // extension's store page or its status page (where it shows its key) in the
 // user's Chrome, or retries the download.
@@ -523,6 +583,10 @@ func (s *Service) Fix(fix string) (Status, error) {
 				if err := s.InstallNativeHost(chrome.UserDataDir, exe, mewlaExtensionIDs()); err != nil {
 					log.Printf("agent use: couldn't register Mewla's native host with Chrome: %v", err)
 				}
+			}
+			// Where Mewla may use this screen, it adds the extension itself.
+			if fix == FixInstallExtension && s.startAdding(dir) {
+				return s.Refresh(), nil
 			}
 			unpublished = fmt.Errorf("Add the Mewla extension from a folder: in Chrome's extensions page (opened), turn on Developer mode, choose Load unpacked and pick %s", dir)
 		}
@@ -598,7 +662,12 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 			return nil, nil, err
 		}
 	}
-	argv = []string{l.node, l.cli, "--extension", "--executable-path", executable, "--profile-dir-name", l.profile,
+	argv = []string{l.node, l.cli, "--extension", "--executable-path", executable}
+	// No profile when Chrome's own folder can't be read: Chrome opens the one it used last.
+	if l.profile != "" {
+		argv = append(argv, "--profile-dir-name", l.profile)
+	}
+	argv = append(argv,
 		// An action answers with what changed, not the whole page: a busy
 		// app's page is hundreds of thousands of tokens, which the agent
 		// asks for, when it needs it, with browser_find or browser_snapshot.
@@ -625,7 +694,7 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		// downloads) stay in Mewla's state, not in the Worker's project,
 		// within a budget that drops the oldest first.
 		"--output-dir", s.browserFilesDir(), "--output-max-size", strconv.Itoa(browserFilesBudget), "--file-paths", "absolute",
-	}
+	)
 	// Agents' MCP hosts pass only a few variables on; Chrome also needs the
 	// desktop session, found by the daemon side.
 	replaced := map[string]bool{envName("PATH"): true, envName(OpenShimEnv): true}
