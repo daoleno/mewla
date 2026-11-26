@@ -192,8 +192,10 @@ So:
 ## Model Providers
 
 **Settings › Model Providers** (tap the cat, then **Settings**) decides where
-Codex and Claude Code send model requests. Pick the client, then its
-connection:
+Codex and Claude Code send model requests. **Agents** lists each of them with
+what it uses now; tap one to choose its connection. **Providers** lists every
+connection once; tap one for its page: its endpoint, its key, a connection
+test, its models and Delete.
 
 | Connection | Requests go to |
 | --- | --- |
@@ -283,8 +285,8 @@ catalog when it can. Choosing a connection sets no default model: each CLI
 keeps its own (for Claude Code, whatever you chose with `/model`). A model
 picked for one Session applies to that Session only.
 
-**Model access.** A Provider's **Model access** page turns each model on or
-off for every agent using that Provider. A model that is off
+**Models.** A Provider's page turns each of its models on or off for every
+agent using that Provider, and opening it asks the Provider for its list again. A model that is off
 is refused by the gateway, so a Session asking for it fails until it is turned
 back on. Turning a model off asks for confirmation first.
 

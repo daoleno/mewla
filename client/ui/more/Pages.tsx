@@ -16,7 +16,7 @@ import { Computer } from "./settings/Computer";
 import { IPhone } from "./settings/IPhone";
 import { License, Licenses } from "./settings/Licenses";
 import { OutsideAgents } from "./settings/OutsideAgents";
-import { ProviderEditor, ProviderModels, Providers } from "./settings/Providers";
+import { AgentProviders, ProviderDetail, ProviderEditor, Providers } from "./settings/Providers";
 import { restoreAppearance, Settings } from "./settings/Settings";
 import { Stats, StatsDay, StatsModel } from "./stats/Stats";
 
@@ -36,8 +36,9 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "settings": return <Settings nav={props.nav} />;
     case "settings-computer": return <Computer id={route.id} nav={props.nav} onPair={props.onPair} />;
     case "settings-providers": return <Providers nav={props.nav} />;
-    case "settings-provider-editor": return <ProviderEditor client={route.client} connectionId={route.connectionId} retry={route.retry} nav={props.nav} />;
-    case "settings-provider-models": return <ProviderModels connectionId={route.connectionId} />;
+    case "settings-provider-editor": return <ProviderEditor client={route.client} connectionId={route.connectionId} retry={route.retry} choose={route.choose} nav={props.nav} />;
+    case "settings-provider-agent": return <AgentProviders client={route.client} nav={props.nav} />;
+    case "settings-provider": return <ProviderDetail connectionId={route.connectionId} nav={props.nav} />;
     case "settings-agents": return <OutsideAgents />;
     case "settings-friends": return <FriendsSettings nav={props.nav} />;
     case "friends":
