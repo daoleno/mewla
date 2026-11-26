@@ -4,7 +4,6 @@
   "highlights": [],
   "fixes": [
     "Mewla for Mac shows the permissions you granted.",
-    "On the Mac, Add extension adds Mewla to Chrome for you.",
-    "Codex keeps working after Magpie is turned off, and with models a Provider adds later."
+    "On the Mac, Add extension adds Mewla to Chrome for you."
   ]
 }
