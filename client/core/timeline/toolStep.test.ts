@@ -6,6 +6,7 @@ import { commandTitle, toolStepActivity, toolStepTitle } from "./toolStep";
 import { createToolRunFolder } from "./foldToolRuns";
 import { buildTimeline } from "./model";
 import type { ActivityTimelineItem } from "./activityTypes";
+import { toolPictures } from "./threadPictures";
 
 // The daemon's reading of recorded real turns of every agent (daemon/work/testdata/tooldisplay, owner 11-27).
 const GOLDEN = join(import.meta.dir, "../../../daemon/work/testdata/tooldisplay");
@@ -76,5 +77,16 @@ describe("a turn's calls as a Ledger", () => {
     expect(run.title).toBe("Ran 1 command, read 1 file, searched once");
     expect(run.ledger).toMatchObject({ durationMs: 2_100, failed: 1 });
     expect(run.steps?.map((step) => step.activityKind ?? step.title)).toEqual(["Read daemon/work/a.go", "reasoning", "Test ./work", "Search “needs” in cmd"]);
+  });
+
+  test("a picture a call looked at still shows under its run", () => {
+    const events: CodexConversationEvent[] = [
+      event("e1", { kind: "command", target: "ls docs", status: "done", duration_ms: 30 }, { command: "ls docs" }),
+      event("e2", { kind: "image", target: "/tmp/fixture-preview.png", status: "done", duration_ms: 12 },
+        { tool_name: "exec", input: 'text(await tools.view_image({path:"/tmp/fixture-preview.png"}))' }),
+      event("e3", { kind: "read", target: "/tmp/screen.png", status: "done" }, { tool_name: "Read", input: '{"file_path":"/tmp/screen.png"}' }),
+    ];
+    const items = createToolRunFolder()(buildTimeline(events)) as ActivityTimelineItem[];
+    expect(items.flatMap(toolPictures)).toEqual(["/tmp/fixture-preview.png", "/tmp/screen.png"]);
   });
 });

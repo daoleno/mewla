@@ -708,7 +708,10 @@ function activityFromEvent(
   event: CodexConversationEvent,
 ): TimelineItem | null {
   if (hasToolStep(event)) {
-    return toolStepActivity(event);
+    const step = toolStepActivity(event);
+    // A picture the call made or looked at shows under its row, as before the Ledger.
+    const previewPath = step && (toolPresentation(event).localImagePath || imagePathFromTool(event));
+    return step && previewPath ? { ...step, previewPath } : step;
   }
   switch (event.kind) {
     case "command": {
