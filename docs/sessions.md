@@ -67,9 +67,17 @@ Session's folder is a Git repository, a **Git** button sits beside the switch;
 it opens [Git review](#git-review).
 
 - **Chat**: the structured conversation, with your messages, the agent's
-  replies, tool calls, plans and pictures. A run of finished tool calls folds
-  into one row that says what it did ("Read 3 files"); tap it for the calls. A
-  call that failed is folded like any other and the row says so; a call that is
+  replies, tool calls, plans and pictures. Every agent's calls read the same
+  way: each step says what it did to what (the agent's own words when it gave
+  some, such as Claude's "Test screencapture over SSH", else "Check run 4576…",
+  "Read daemon/work/a.go", "Search “needs” in cmd"), with its result (+/−
+  lines, results found, the lines read, the exit code) and how long it took
+  on the right. A run of finished calls between two messages folds into one
+  line ("Ran 4 commands, read 1 file") with its total time; tap it for the
+  steps. A call that failed shows under its run without a tap, open on its
+  command and the end of its output, and the run says how many failed. Waits
+  (a sleep, polling a background command) are not shown, and the agent's
+  reasoning between calls is a quiet line inside the run. A call that is
   running or waiting on you stays on its own row, and so does a subagent, which
   reads as the task it was given. On Claude, tap a subagent to see the calls it
   made, folded the same way, with how many there were, how long it took and
