@@ -19,6 +19,8 @@ export interface AgentUseStatus {
     fix?: AgentUseFix;
     profile?: string;
     key_pasted?: boolean;
+    /** Why the last Add extension did not finish, in the computer's words; until the next try. */
+    error?: string;
   };
   /** The screen, keyboard and pointer; reported by computers with Screen. */
   computer?: {

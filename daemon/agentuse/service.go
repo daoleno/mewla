@@ -86,6 +86,9 @@ type BrowserStatus struct {
 	Profile string `json:"profile,omitempty"`
 	// KeyPasted is set when the extension's key was pasted instead of read.
 	KeyPasted bool `json:"key_pasted,omitempty"`
+	// Error is why the last Add extension did not finish, in Mewla's words;
+	// it stays until the next try or until the extension is there.
+	Error string `json:"error,omitempty"`
 }
 
 type Status struct {
@@ -134,6 +137,7 @@ type Service struct {
 	adder        ExtensionAdder
 	adderReady   func() bool
 	adding       bool
+	addErr       string
 	installErr   error
 	installErrAt time.Time
 	computer     *ComputerHooks
@@ -334,6 +338,9 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		if !ok {
 			if s.adding {
 				return BrowserStatus{State: BrowserPreparing, Summary: "Mewla is adding its extension to Chrome…"}, launch{}
+			}
+			if s.addErr != "" {
+				return BrowserStatus{State: BrowserNoExtension, Summary: "Couldn't add the Mewla extension to Chrome: " + s.addErr, Fix: FixInstallExtension, Error: s.addErr}, launch{}
 			}
 			return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Mewla extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
 		}
@@ -540,18 +547,21 @@ func (s *Service) startAdding(dir string) bool {
 		s.mu.Unlock()
 		return true
 	}
-	s.adding = true
+	s.adding, s.addErr = true, ""
+	s.cachedAt = time.Time{}
 	s.mu.Unlock()
 	go func() {
 		bridge := s.Bridge()
 		err := add(context.Background(), dir, bridge.HasHost)
+		reason := ""
 		if err != nil {
+			reason = err.Error()
 			log.Printf("agent use: couldn't add the Mewla extension to Chrome: %v", err)
 		} else {
 			log.Printf("agent use: added the Mewla extension to Chrome; it is connected")
 		}
 		s.mu.Lock()
-		s.adding = false
+		s.adding, s.addErr = false, reason
 		s.cachedAt = time.Time{}
 		s.mu.Unlock()
 	}()

@@ -1,8 +1,8 @@
-import { cleanup, effect, keymap, lifecycle, Scroll, signal, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, keymap, lifecycle, Scroll, signal, Text, untracked, View } from "nsh";
 import { Button } from "nsh/base";
 import { Window } from "nsh/desktop";
 import { getAgentUse, changeAgentUse, getWatch, setWatch, type AgentUseStatus, type WatchSwitch } from "../../core/settings/computer";
-import { chromeAccess, type ChromeAccess } from "../../core/settings/computerModel";
+import { chromeAccess, chromeBusy, type ChromeAccess } from "../../core/settings/computerModel";
 import { grantOf, grantRow, type GrantRow } from "../../core/settings/macGrants";
 import { allowGrant } from "./permissionGuide";
 import { BrainHostPanel } from "../brain/BrainHostSheet";
@@ -204,10 +204,15 @@ function Grant(props: { title: string; row: GrantRow | null; onAllow: () => void
   );
 }
 
-/** Chrome: the extension on, the one button that fixes it, or the plain state (see chromeAccess). */
+/** Chrome: the extension on, the one button that fixes it, or the plain state (see chromeAccess); a failed try's
+ * reason under it. */
 function ChromeRow(props: { access: ChromeAccess | null; fix: () => void }) {
+  const reason = () => {
+    const access = props.access;
+    return access?.kind === "action" ? access.reason : undefined;
+  };
   return (
-    <Row testID="mac-access-chrome" title="Chrome"
+    <Row testID="mac-access-chrome" title="Chrome" subtitle={reason()} subtitleTone="error"
       trailing={<If when={props.access}>{(access) =>
         <If when={access().kind === "action"} else={<StateLine testID="mac-access-chrome-state" tone={access().kind === "on" ? "ok" : "off"} label={access().label} />}>
           <RowButton testID="mac-access-chrome-fix" label={access().label} accessibilityLabel={`${access().label} for Chrome`} onPress={props.fix} />
@@ -242,11 +247,16 @@ function Access() {
     void getAgentUse(server).then((status) => agentUse.set(status)).catch(() => agentUse.set(null));
   };
   // macOS gives no event for a grant: read again every 3 s while the page is open, and as Mewla comes back to the front
-  // (from System Settings), so a row follows what macOS holds now, never a kept answer.
+  // (from System Settings), so a row follows what macOS holds now, never a kept answer. While Mewla adds its extension
+  // it drives Chrome in front of this window: read every second whatever is in front, so the row shows the moment it
+  // is done, or why it did not finish (the owner's Mac, 11-26: "Getting ready…" for a minute after either).
+  const busy = computed(() => chromeBusy(agentUse()));
   effect(() => {
-    if (connection() !== "connected" || !isThisMac(current()) || lifecycle() !== "active") return;
+    if (connection() !== "connected" || !isThisMac(current())) return;
+    const following = busy();
+    if (lifecycle() !== "active" && !following) return;
     untracked(read);
-    const timer = setInterval(read, 3_000);
+    const timer = setInterval(read, following ? 1_000 : 3_000);
     cleanup(() => clearInterval(timer));
   });
   const row = (id: string) => grantRow(grantOf(agentUse()?.computer?.permissions, id)?.state);

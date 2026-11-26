@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentUseStatus } from "./computer";
-import { chromeAccess, computerProblems, computerProblemsMayChange, computerStatusWord, computerUpdateProblem } from "./computerModel";
+import { chromeAccess, chromeBusy, computerProblems, computerProblemsMayChange, computerStatusWord, computerUpdateProblem } from "./computerModel";
 
 const macMissingExtension: AgentUseStatus = {
   enabled: true,
@@ -157,6 +157,15 @@ describe("chromeAccess", () => {
     expect(chromeAccess(browser("no_extension", "install_extension"))).toEqual({ kind: "action", label: "Add extension", fix: "install_extension" });
     expect(chromeAccess(browser("no_key", "open_extension"))).toEqual({ kind: "action", label: "Open it", fix: "open_extension" });
     expect(chromeAccess(browser("failed", "retry"))).toEqual({ kind: "action", label: "Try again", fix: "retry" });
+  });
+
+  // Owner's Mac, 11-26: Add extension failed and the row said "Getting ready…" for a minute, the reason only in a log.
+  test("a failed Add extension shows its reason with the button to try again", () => {
+    const failed: AgentUseStatus = { enabled: true, browser: { state: "no_extension", summary: "x", fix: "install_extension", error: "step 4 (a new window): Another agent is working in that app" } };
+    expect(chromeAccess(failed)).toEqual({ kind: "action", label: "Try again", fix: "install_extension", reason: "step 4 (a new window): Another agent is working in that app" });
+    expect(computerProblems(failed)).toEqual([{ key: "browser", text: "Couldn't add the extension: step 4 (a new window): Another agent is working in that app", action: { label: "Try again", does: { kind: "fix", fix: "install_extension", target: "browser" } } }]);
+    expect(chromeBusy(browser("preparing"))).toBe(true);
+    expect(chromeBusy(failed)).toBe(false);
   });
 
   test("a state nothing can fix from here says what it is", () => {
