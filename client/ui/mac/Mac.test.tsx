@@ -213,6 +213,21 @@ describe("Mewla for Mac", () => {
     expect(app.shows("id:mac-access-chrome >> text:Try again")).toBe(true);
   }, 30_000);
 
+  test("Settings › Privacy & access: opened while another app is in front, the rows still read", async () => {
+    const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const app = await open(APP, {
+      platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}),
+      network: { "GET http://127.0.0.1:1/agent-use": () => json({ enabled: true, browser: { state: "ready", summary: "x" } }) },
+    });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    // From the menu bar's cat, Settings… on Privacy & access while another app stays in front.
+    await app.setLifecycle("inactive");
+    await app.keyboard.press("mod+,");
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 5_000 });
+    await app.press("id:mac-settings >> id:mac-settings-access");
+    await app.waitFor("id:mac-access-chrome >> text:Extension on", { timeout: 10_000 });
+  }, 30_000);
+
   test("Settings › Privacy & access: Chrome with the extension on says so", async () => {
     const app = await chromeSettings({ state: "ready" });
     await app.waitFor("id:mac-access-chrome >> text:Extension on", { timeout: 10_000 });

@@ -251,6 +251,10 @@ function Access() {
   // it drives Chrome in front of this window: read every second whatever is in front, so the row shows the moment it
   // is done, or why it did not finish (the owner's Mac, 11-26: "Getting ready…" for a minute after either).
   const busy = computed(() => chromeBusy(agentUse()));
+  // Opened while another app is in front (the owner's Mac, 11-27: blank rows until Mewla came forward): one read now.
+  effect(() => {
+    if (connection() === "connected" && isThisMac(current())) untracked(read);
+  });
   effect(() => {
     if (connection() !== "connected" || !isThisMac(current())) return;
     const following = busy();
