@@ -1,0 +1,9 @@
+{
+  "version": "0.4.32",
+  "date": "2026-11-26",
+  "highlights": [],
+  "fixes": [
+    "Mewla for Mac shows the permissions you granted.",
+    "Add extension adds Mewla to Chrome for you."
+  ]
+}
