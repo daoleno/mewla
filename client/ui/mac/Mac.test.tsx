@@ -139,11 +139,17 @@ describe("Mewla for Mac", () => {
   // What Privacy & access says of Chrome (core/settings/computerModel chromeAccess): never a blank row.
   const chromeSettings = async (browser: Record<string, unknown>, post?: (request: { body?: string | null }) => { status: number; headers: Record<string, string>; body: string }) => {
     const base = macHost({ settings: "access" });
-    const status = { enabled: true, browser: { summary: "x", ...browser } };
+    let status = { enabled: true, browser: { summary: "x", ...browser } };
     const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    // Like a computer, it goes on answering with what its last change said.
+    const change = post && ((request: { body?: string | null }) => {
+      const answer = post(request);
+      status = JSON.parse(answer.body);
+      return answer;
+    });
     const app = await open(APP, {
       platform: "macos", width: 1280, height: 800, storage: paired, host: base,
-      network: { "GET http://127.0.0.1:1/agent-use": json(status), ...(post ? { "POST http://127.0.0.1:1/agent-use": post } : {}) },
+      network: { "GET http://127.0.0.1:1/agent-use": () => json(status), ...(change ? { "POST http://127.0.0.1:1/agent-use": change } : {}) },
     });
     await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
     await app.waitFor("id:mac-settings >> id:mac-access-chrome");
@@ -167,6 +173,59 @@ describe("Mewla for Mac", () => {
     await app.press("id:mac-access-chrome >> id:mac-access-chrome-fix");
     await app.waitUntil(() => asked.includes("install_extension"), { timeout: 5_000 });
     await app.waitFor("id:mac-access-chrome >> text:Getting ready…", { timeout: 10_000 });
+  }, 30_000);
+
+  // Owner-found 11-26: after Add extension the row said "Getting ready…" for about a minute, whether it worked or not.
+  // Mewla drives Chrome in front of its window meanwhile, and the page read only while it was in front. It follows the
+  // computer every second while adding, in front or not, and a failure's reason shows with the button at once.
+  const addingWithChromeInFront = async (ending: Record<string, unknown>) => {
+    let browser: Record<string, unknown> = { state: "no_extension", fix: "install_extension" };
+    const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const status = () => ({ enabled: true, browser: { summary: "x", ...browser } });
+    const app = await open(APP, {
+      platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({ settings: "access" }),
+      network: {
+        "GET http://127.0.0.1:1/agent-use": () => json(status()),
+        "POST http://127.0.0.1:1/agent-use": () => {
+          browser = { state: "preparing" };
+          return json(status());
+        },
+      },
+    });
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 15_000 });
+    await app.waitFor("id:mac-settings >> id:mac-access-chrome-fix", { timeout: 10_000 });
+    await app.press("id:mac-access-chrome >> id:mac-access-chrome-fix");
+    await app.waitFor("id:mac-access-chrome >> text:Getting ready…", { timeout: 5_000 });
+    await app.setLifecycle("inactive");
+    browser = ending;
+    return app;
+  };
+
+  test("Settings › Privacy & access: Add extension done while Chrome is in front shows at once", async () => {
+    const app = await addingWithChromeInFront({ state: "ready" });
+    await app.waitFor("id:mac-access-chrome >> text:Extension on", { timeout: 3_000 });
+  }, 30_000);
+
+  test("Settings › Privacy & access: Add extension that failed says why at once, with Try again", async () => {
+    const reason = "step 4 (a new window): Another agent is working in that app";
+    const app = await addingWithChromeInFront({ state: "no_extension", fix: "install_extension", error: reason });
+    await app.waitFor(`id:mac-access-chrome >> text:${reason}`, { timeout: 3_000 });
+    expect(app.shows("id:mac-access-chrome >> text:Try again")).toBe(true);
+  }, 30_000);
+
+  test("Settings › Privacy & access: opened while another app is in front, the rows still read", async () => {
+    const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const app = await open(APP, {
+      platform: "macos", width: 1280, height: 800, storage: paired, host: macHost({}),
+      network: { "GET http://127.0.0.1:1/agent-use": () => json({ enabled: true, browser: { state: "ready", summary: "x" } }) },
+    });
+    await app.waitFor("id:composer", { timeout: 15_000 });
+    // From the menu bar's cat, Settings… on Privacy & access while another app stays in front.
+    await app.setLifecycle("inactive");
+    await app.keyboard.press("mod+,");
+    await app.waitUntil(() => app.window("mewla-settings").state()?.visible === true, { timeout: 5_000 });
+    await app.press("id:mac-settings >> id:mac-settings-access");
+    await app.waitFor("id:mac-access-chrome >> text:Extension on", { timeout: 10_000 });
   }, 30_000);
 
   test("Settings › Privacy & access: Chrome with the extension on says so", async () => {

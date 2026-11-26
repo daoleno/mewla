@@ -56,6 +56,15 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
   const browser = status.browser;
   switch (browser.state) {
     case "no_extension":
+      if (browser.error) {
+        // Add extension ran and did not finish: its reason, and the same button again.
+        problems.push({
+          key: "browser",
+          text: `Couldn't add the extension: ${browser.error}`,
+          action: { label: "Try again", does: { kind: "fix", fix: browser.fix ?? "install_extension", target: "browser" } },
+        });
+        break;
+      }
       // Not a problem: nobody has started browser setup. One plain row is the
       // way in; the person who taps it is then walked through the rest.
       problems.push({
@@ -117,7 +126,8 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
  */
 export type ChromeAccess =
   | { kind: "on"; label: string }
-  | { kind: "action"; label: string; fix: AgentUseFix }
+  /** reason: why the last try did not finish, shown with the button at once. */
+  | { kind: "action"; label: string; fix: AgentUseFix; reason?: string }
   | { kind: "state"; label: string };
 
 export function chromeAccess(status: AgentUseStatus | null): ChromeAccess | null {
@@ -126,6 +136,7 @@ export function chromeAccess(status: AgentUseStatus | null): ChromeAccess | null
   const browser = status.browser;
   if (browser.state === "ready") return { kind: "on", label: "Extension on" };
   const fix = browser.fix;
+  if (fix === "install_extension" && browser.error) return { kind: "action", label: "Try again", fix, reason: browser.error };
   if (fix === "install_extension") return { kind: "action", label: "Add extension", fix };
   if (fix === "open_extension") return { kind: "action", label: "Open it", fix };
   if (fix === "retry") return { kind: "action", label: "Try again", fix };
@@ -146,6 +157,11 @@ export function chromeAccess(status: AgentUseStatus | null): ChromeAccess | null
       // no_extension / no_key without a fix: the computer's own line says what is missing.
       return { kind: "state", label: "Not set up" };
   }
+}
+
+/** Mewla is adding its extension to Chrome (or getting the browser tools ready): the row is followed closely. */
+export function chromeBusy(status: AgentUseStatus | null): boolean {
+  return status?.browser.state === "preparing";
 }
 
 /** Whether anything shown can change while the page is open. */
