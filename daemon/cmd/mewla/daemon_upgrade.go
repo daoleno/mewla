@@ -166,6 +166,21 @@ func inPlaceRestartFailurePath(stateDir string) string {
 	return filepath.Join(stateDir, "run", "restart-failed.txt")
 }
 
+// errAppHostRestart ends a daemon under Mewla for Mac's host with a failure,
+// so the host ends with it and launchd's KeepAlive starts both again.
+var errAppHostRestart = errors.New("restarting Mewla: launchd starts it again from the installed app")
+
+// restartsThroughAppHost: a daemon under the app's host (host, from
+// MEWLA_STOP_WITH_HOST, still its parent) restarts by ending instead of
+// running its executable again in place. launchd then starts the job from the
+// installed app: a new host, from the app an update just put in place (an
+// exec would leave the old app's host, whose permissions are not the new
+// app's: app_host.go), and the session host and its Sessions run on. It also
+// never meets the exec that could stall on macOS (platform/exec_darwin.go).
+func restartsThroughAppHost(host, ppid int) bool {
+	return host > 1 && ppid == host
+}
+
 // runInPlaceRestart runs after the daemon has shut down for an accepted
 // daemon_upgrade. It returns only when the restart did not happen: stopped
 // by a signal (nil), or the executable could not be started.
@@ -175,6 +190,10 @@ func runInPlaceRestart(r *daemonReexec) error {
 		log.Printf("mewla: stopping on %v instead of restarting", received)
 		return nil
 	default:
+	}
+	if host := int(appHostPID.Load()); restartsThroughAppHost(host, os.Getppid()) {
+		log.Printf("mewla: restarting onto %s: ending so launchd starts the installed app's host (pid %d now) and its daemon", r.version, host)
+		return errAppHostRestart
 	}
 	log.Printf("mewla: restarting onto %s", r.version)
 	err := execInPlace(r.startup, r.stops)
