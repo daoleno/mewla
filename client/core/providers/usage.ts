@@ -69,6 +69,7 @@ export function localDay(ms: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** `requests` counts every request, `errors` the ones among them that failed. */
 export type ProviderUsageTotals = { requests: number; errors: number; tokens: number; cost: number; costKnown: boolean };
 
 /** The days from `since` (a local "YYYY-MM-DD") on, added up. */
@@ -76,7 +77,8 @@ export function usageTotals(usage: ProviderUsage, since: string): ProviderUsageT
   const t = { requests: 0, errors: 0, tokens: 0, cost: 0, costKnown: true };
   for (const [day, d] of Object.entries(usage.days)) {
     if (day < since) continue;
-    t.requests += d.requests;
+    // The daemon counts a day's answered requests and its failed ones apart; Requests is both.
+    t.requests += d.requests + d.errors;
     t.errors += d.errors;
     t.tokens += d.input + d.cacheRead + d.cacheWrite + d.output;
     t.cost += d.cost;

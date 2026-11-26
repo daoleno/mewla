@@ -37,6 +37,9 @@ describe("Provider usage", () => {
     expect(usageCostLabel(usageTotals(usage, today))).toBe("$1.50+");
     usage.days[today] = day(2, 0, 2);
     expect(usageCostLabel(usageTotals(usage, today))).toBe("—");
+    // Failed requests are requests too.
+    usage.days[today] = { ...day(2, 1.5), errors: 1 };
+    expect(usageTotals(usage, today)).toMatchObject({ requests: 3, errors: 1 });
     expect(usageSince(NOW, 1)).toBe(today);
   });
 

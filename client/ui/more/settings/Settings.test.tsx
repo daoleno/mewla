@@ -198,6 +198,9 @@ describe("Model Providers", () => {
     expect(texts).toContain("$2.51+");
     expect(texts).toContain("50.5K");
     expect(texts).toContain("1 failed");
+    // Seven answered and one failed: eight requests.
+    expect(texts).toContain("8");
+    expect(texts).toContain("· 8 today");
     expect(texts).toContain("$0.0123");
     expect(texts).toContain("1.2K in · 48K cached · 350 out");
     expect(texts).toContain("900 in · 40 out");

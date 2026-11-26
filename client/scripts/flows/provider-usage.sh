@@ -64,6 +64,9 @@ ctl "{\"type\":\"provider_upsert\",\"operation\":\"create\",\"revision\":$(revis
 id=$(ctl '{"type":"provider_list"}' | id_of "$name")
 ctl "{\"type\":\"provider_set_connection\",\"client\":\"claude\",\"connection_id\":\"$id\",\"revision\":$(revision)}" > /dev/null
 gateway=$(ctl '{"type":"provider_list"}' | field providers.gateway.address)
+running=$(ctl '{"type":"provider_list"}' | field providers.gateway.running)
+# A gateway that could not listen (its saved port taken by another daemon) cannot carry the requests.
+[[ "$running" == "True" && -n "$gateway" ]] || { echo "the daemon's gateway is not running (address '${gateway}'); see its log" >&2; exit 1; }
 ask() {
   curl -s -o /dev/null -w '%{http_code}\n' -X POST "http://$gateway/v1/messages" -H 'content-type: application/json' \
     -H 'anthropic-version: 2023-06-01' -H 'x-api-key: placeholder' \

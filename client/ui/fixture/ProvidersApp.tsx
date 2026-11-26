@@ -50,7 +50,7 @@ const usage = {
     { at: ago(8), agent: "codex", model: "gpt-6-sol", status: 429, message: "Rate limit reached for requests. Try again in 20s." },
     { at: ago(95), agent: "codex", model: "gpt-6-sol", status: 0, message: "connection refused" },
   ],
-  days: { [today]: { requests: 38, errors: 2, input_tokens: 96_400, cache_read_tokens: 1_420_000, output_tokens: 18_300, cost_usd: 1.84, unpriced: 1 } },
+  days: { [today]: { requests: 36, errors: 2, input_tokens: 96_400, cache_read_tokens: 1_420_000, output_tokens: 18_300, cost_usd: 1.84, unpriced: 1 } },
 };
 
 const daemon = new FakeDaemon({
