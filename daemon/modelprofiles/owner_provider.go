@@ -193,7 +193,7 @@ func (o *Owner) projectConnectionModels(profile Profile, discovered discoveryEnt
 				appendModelIDs(&ids, sources, []string{id}, ModelSourceBundled)
 			}
 		}
-		providerKey := strings.ToLower(normalizeSpace(profile.ProviderID))
+		providerKey := catalogKeyOf(profile)
 		if providerKey == "" {
 			providerKey = strings.ToLower(executorID)
 		}
@@ -237,7 +237,7 @@ func (o *Owner) projectConnectionModels(profile Profile, discovered discoveryEnt
 					mergeModelPresentationMetadata(metadata[id], localMetadata[id])))
 		}
 	}
-	providerKey := strings.ToLower(normalizeSpace(profile.ProviderID))
+	providerKey := catalogKeyOf(profile)
 	if providerKey == "" {
 		providerKey = strings.ToLower(executorID)
 	}
@@ -472,6 +472,9 @@ func (o *Owner) writeCodexModelCatalogLocked(profile Profile) error {
 func providerConnectionFromProfile(profile Profile, ready bool) ProviderConnection {
 	presetID := inferPresetID(profile)
 	advanced := normalizeID(presetID) == ProviderPresetCustom || accountLooksAdvanced(profile, presetID)
+	if spec, ok := lookupPreset(presetID); ok && spec.Local {
+		advanced = true // its address is the person's to change
+	}
 	clients := []string{}
 	if isAccountConnection(profile) {
 		clients = []string{clientFromExecutor(profile.Client)}
@@ -538,7 +541,7 @@ func (o *Owner) UpsertProviderConnection(in ProviderConnectionInput, apiKey stri
 	// with the key, so the route can translate. Done before the lock (it
 	// asks the network); an endpoint that does not answer keeps what it had.
 	detectedAPI, detected := "", false
-	if normalizeID(profile.ProviderID) == ProviderPresetCustom && o.upstreamAPIDetect != nil {
+	if detectsUpstreamAPI(profile) && o.upstreamAPIDetect != nil {
 		secret := apiKey
 		if secret == "" && !create && o.creds != nil {
 			if prev, gerr := o.store.Get(profile.ID); gerr == nil {
@@ -547,7 +550,7 @@ func (o *Owner) UpsertProviderConnection(in ProviderConnectionInput, apiKey stri
 				}
 			}
 		}
-		if secret != "" {
+		if secret != "" || keyless(profile) {
 			detectedAPI, detected = o.upstreamAPIDetect(executorFromClient(profile.Client), profile.BaseURL, secret)
 		}
 	}

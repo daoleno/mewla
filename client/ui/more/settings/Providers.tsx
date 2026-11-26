@@ -3,14 +3,16 @@ import { Menu, MenuItem } from "nsh/base";
 import { Icon } from "../../kit/Icon";
 import { listDetail, wide } from "../../shell/layout";
 import { presentProviderError } from "../../../core/providers/errors";
-import { providerEditorCanSave, providerEditorInitialBaseUrl, providerEditorInitialName, providerEditorRequiresBaseUrl, type ProvidersEditorState } from "../../../core/providers/editorModel";
+import { providerEditorCanSave, providerEditorInitialBaseUrl, providerEditorInitialName, providerEditorRequiresBaseUrl, providerEditorTakesKey, type ProvidersEditorState } from "../../../core/providers/editorModel";
 import {
   advancedConnectionInput,
   connectionsForClient,
   createdConnectionFromMutation,
   enabledModelIds,
   fallbackChoices,
+  localAddressLabel,
   modelSupportToggleTurnsOff,
+  presetsForClient,
   providerBaseUrlHostname,
   providerNameIssue,
   toggleModelSupport,
@@ -18,13 +20,14 @@ import {
 } from "../../../core/providers/presentation";
 import {
   deleteProviderConnection,
+  detectLocalProviders,
   setProviderConnection,
   setProviderFallback,
   setProviderModels,
   testProviderConnection,
   upsertProviderConnection,
 } from "../../../core/providers/requests";
-import type { ProviderClient, ProviderConnection, ProviderModel, ProvidersSnapshot } from "../../../core/providers/types";
+import type { LocalProvider, ProviderClient, ProviderConnection, ProviderModel, ProviderPreset, ProvidersSnapshot } from "../../../core/providers/types";
 import { AGENT_ASSETS } from "../../icons/agents/assets";
 import { connected, daemon } from "../daemon";
 import { confirmDestructive, DisplayTitle, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow } from "../../kit/kit";
@@ -60,6 +63,11 @@ function note(id: string, text: string): void {
 /** Where a connection points: its endpoint's host, its preset, or the agent's own endpoint. */
 function whereOf(s: ProvidersSnapshot | null, c: ProviderConnection): string {
   return c.base_url ? providerBaseUrlHostname(c.base_url) : s?.presets.find((p) => p.id === c.preset_id)?.label ?? "Official endpoint";
+}
+
+/** Whether a connection is a model server on the computer (it takes no key). */
+function isLocal(c: ProviderConnection): boolean {
+  return Boolean(snapshot()?.presets.find((p) => p.id === c.preset_id)?.local);
 }
 
 /** The client a connection serves (each connection serves one). */
@@ -422,15 +430,15 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: 
       <View testID="provider-panel">
         <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
         <Section>
-          <Row testID="provider-endpoint" title="Endpoint" value={whereOf(snapshot(), connection()!)} />
+          <If when={!isLocal(connection()!)}><Row testID="provider-endpoint" title="Endpoint" value={whereOf(snapshot(), connection()!)} /></If>
           <If when={upstreamApiLabel(connection()!)}><Row testID="provider-api" title="API" value={upstreamApiLabel(connection()!)} /></If>
-          <Row
+          <If when={!isLocal(connection()!)} else={<Row testID="provider-edit-row" title="Address" value={localAddressLabel(connection()!.base_url ?? "")} chevron onPress={() => props.nav.push({ name: "settings-provider-editor", client: clientOf(connection()!), connectionId: connection()!.id })} />}><Row
             testID="provider-key-row"
             title="API key"
             value={connection()!.credential_ready ? connection()!.credential_hint || "Saved" : "Required"}
             chevron
             onPress={() => props.nav.push({ name: "settings-provider-editor", client: clientOf(connection()!), connectionId: connection()!.id })}
-          />
+          /></If>
           <Row
             testID="provider-test-row"
             title="Test connection"
@@ -498,11 +506,19 @@ function ProviderPanel(props: { connectionId: string; nav: PageNav; onDeleted?: 
   );
 }
 
-/** Add or edit one Provider: its name, its endpoint (custom ones) and its key, saved together. */
+/**
+ * Add or edit one Provider. A new one starts with what it is: a model server found running on the computer, a vendor
+ * (its address and API are known: only the key is asked), a local server (no key) or a Custom Gateway. The form then
+ * asks for its name, its address (custom and local ones) and its key, saved together.
+ */
 export function ProviderEditor(props: { client: ProviderClient; connectionId?: string; retry?: boolean; choose?: boolean; nav: PageNav }) {
   const forClient = signal<ProviderClient>(props.client);
+  const picked = signal<{ preset?: ProviderPreset; baseUrl?: string } | null>(null);
+  const local = signal<LocalProvider[]>([]);
   const existing = () => (props.connectionId ? snapshot()?.connections.find((c) => c.id === props.connectionId) ?? null : null);
-  const editor = (): ProvidersEditorState => (existing() ? { kind: "edit", connection: existing()!, retry: props.retry } : { kind: "create", client: forClient() });
+  const choosing = () => !props.connectionId && !picked();
+  const editor = (): ProvidersEditorState =>
+    existing() ? { kind: "edit", connection: existing()!, retry: props.retry } : { kind: "create", client: forClient(), preset: picked()?.preset, baseUrl: picked()?.baseUrl };
   const name = signal(providerEditorInitialName(editor()));
   const baseUrl = signal(providerEditorInitialBaseUrl(editor()));
   const apiKey = signal("");
@@ -515,6 +531,8 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
     testLine.set("");
   };
   const requiresBaseUrl = () => providerEditorRequiresBaseUrl(editor());
+  const takesKey = () => providerEditorTakesKey(editor(), snapshot()?.presets ?? []);
+  const custom = () => !existing() && (!picked()?.preset || picked()!.preset!.id === "custom");
   const nameIssue = () => providerNameIssue({ name: name(), snapshot: snapshot(), exceptConnectionId: existing()?.id });
   const canSave = () =>
     providerEditorCanSave({
@@ -526,7 +544,31 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
       createMode: !existing(),
       editMode: Boolean(existing()),
       requiresBaseUrl: requiresBaseUrl(),
+      keyless: !takesKey(),
     });
+
+  // The servers running on the computer, asked once when Add Provider opens.
+  if (!props.connectionId) {
+    const current = daemon();
+    if (current) void detectLocalProviders(current).then((found) => local.set(found));
+  }
+
+  function pick(preset: ProviderPreset | undefined, address?: string): void {
+    picked.set({ preset, baseUrl: address });
+    const next = editor();
+    name.set(providerEditorInitialName(next));
+    baseUrl.set(providerEditorInitialBaseUrl(next));
+    apiKey.set("");
+    failure.set(null);
+    testLine.set("");
+  }
+
+  /** A server found running, offered for this agent: its preset, and whether this agent already has it. */
+  const found = () =>
+    local()
+      .map((server) => ({ server, preset: snapshot()?.presets.find((p) => p.id === server.preset_id && p.clients.includes(forClient())) }))
+      .filter((x): x is { server: LocalProvider; preset: ProviderPreset } => Boolean(x.preset));
+  const added = (server: LocalProvider) => server.connection_ids.some((id) => snapshot()?.connections.find((c) => c.id === id && clientOf(c) === forClient()));
 
   /** A new connection with its key in place goes straight to choosing its models. */
   async function discoverNew(saved: ProviderConnection): Promise<boolean> {
@@ -545,13 +587,14 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
     const before = snapshot();
     if (!current || !before || !canSave()) return;
     failure.set(null);
-    const key = apiKey();
+    const key = takesKey() ? apiKey() : "";
     apiKey.set("");
     const editing = existing();
+    const presetId = editing ? editing.preset_id : picked()?.preset?.id;
     try {
       const connection = editing
         ? advancedConnectionInput({ existingId: editing.id, name: name(), client: forClient(), baseUrl: baseUrl(), presetId: editing.preset_id, advanced: Boolean(editing.base_url) })
-        : advancedConnectionInput({ name: name(), client: forClient(), baseUrl: baseUrl() });
+        : advancedConnectionInput({ name: name(), client: forClient(), baseUrl: requiresBaseUrl() ? baseUrl() : "", presetId, advanced: requiresBaseUrl() });
       const result = await change("save", () =>
         upsertProviderConnection(current, { connection, revision: before.revision, operation: editing ? "update" : "create", credential: key }),
       );
@@ -598,23 +641,53 @@ export function ProviderEditor(props: { client: ProviderClient; connectionId?: s
   }
 
   return (
-    <Page display title={existing() ? "Edit Provider" : "Add Provider"} testID="provider-editor">
+    <Page display title={existing() ? "Edit Provider" : picked()?.preset && picked()!.preset!.id !== "custom" ? `Add ${picked()!.preset!.label}` : "Add Provider"} testID="provider-editor">
       <If when={props.retry}><Notice testID="provider-retry" tone="failed" title="The API key was not saved. Check it and try again." /></If>
-      <If when={props.choose && !existing()}><View class="mt-3">
-          <Segmented testID="provider-for" accessibilityLabel="For" options={CLIENTS} value={forClient()} onChange={(key) => forClient.set(key as ProviderClient)} />
-        </View></If>
-      <Section footer={nameIssue() ?? undefined}>
-        <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => edit(name, v)} />
-        <If when={requiresBaseUrl()}><Field testID="provider-url" label="Base URL" mono keyboardType="url" value={baseUrl()} placeholder="https://api.example.com/v1" onChange={(v) => edit(baseUrl, v)} /></If>
-        <Field testID="provider-key" label="API Key" masked value={apiKey()} placeholder="Paste API key" onChange={(v) => edit(apiKey, v)} />
-      </Section>
-      <If when={existing()?.credential_hint} else={<If when={existing()?.credential_ready}><View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground">Leave empty to keep the current key.</Text></View></If>}><View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text></View></If>
-      <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
-      <If when={testLine()}><View class="mt-3 px-4"><Text testID="provider-test-line" class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{testLine()}</Text></View></If>
-      <View class="mt-4 flex-row gap-3">
-        <PillButton testID="provider-save" filled title={changing() === "save" ? "Saving…" : existing() ? "Save changes" : "Add Provider"} busy={changing() === "save"} disabled={!canSave()} onPress={() => void save()} />
-        <PillButton testID="provider-test" title="Test connection" disabled={!(baseUrl().trim() || existing()) || (!existing() && !apiKey().trim())} onPress={() => void test()} />
-      </View>
+      <If when={choosing()} else={<>
+        <Section footer={nameIssue() ?? undefined}>
+          <Field testID="provider-name" label="Provider name" value={name()} placeholder="e.g. Work gateway" onChange={(v) => edit(name, v)} />
+          <If when={requiresBaseUrl()}><Field testID="provider-url" label={custom() ? "Base URL" : "Address"} mono keyboardType="url" value={baseUrl()} placeholder={custom() ? "https://api.example.com/v1" : "http://localhost:8000"} onChange={(v) => edit(baseUrl, v)} /></If>
+          <If when={takesKey()}><Field testID="provider-key" label="API Key" masked value={apiKey()} placeholder="Paste API key" onChange={(v) => edit(apiKey, v)} /></If>
+        </Section>
+        <If when={takesKey()}><If when={existing()?.credential_hint} else={<If when={existing()?.credential_ready}><View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground">Leave empty to keep the current key.</Text></View></If>}><View class="mt-1.5 px-4"><Text testID="provider-key-hint" class="text-xs text-muted-foreground line-clamp-1">{`Stored key · ${existing()!.credential_hint} — leave empty to keep it`}</Text></View></If></If>
+        <If when={failure()}><Notice testID="provider-failure" tone="failed" title={failure()!.title} detail={failure()!.detail} /></If>
+        <If when={testLine()}><View class="mt-3 px-4"><Text testID="provider-test-line" class="text-sm text-muted-foreground" android={{ accessibilityLiveRegion: "polite" }}>{testLine()}</Text></View></If>
+        <View class="mt-4 flex-row gap-3">
+          <PillButton testID="provider-save" filled title={changing() === "save" ? "Saving…" : existing() ? "Save changes" : "Add Provider"} busy={changing() === "save"} disabled={!canSave()} onPress={() => void save()} />
+          <If when={existing() ? takesKey() : custom()}><PillButton testID="provider-test" title="Test connection" disabled={!(baseUrl().trim() || existing()) || (!existing() && !apiKey().trim())} onPress={() => void test()} /></If>
+        </View>
+      </>}>
+        <If when={props.choose}><View class="mt-3">
+            <Segmented testID="provider-for" accessibilityLabel="For" options={CLIENTS} value={forClient()} onChange={(key) => forClient.set(key as ProviderClient)} />
+          </View></If>
+        <If when={found().length > 0}><Section title="On this computer">
+          {found().map(({ server, preset }) => (
+            <Row
+              testID={`local-${server.preset_id}-${localAddressLabel(server.base_url)}`}
+              lead={tile("desktop")}
+              title={server.label}
+              subtitle={`${localAddressLabel(server.base_url)} · ${server.models} ${server.models === 1 ? "model" : "models"}`}
+              subtitleOneLine
+              trailing={<If when={added(server)}><StateLine tone="ok" label="Added" /></If>}
+              chevron
+              onPress={() => pick(preset, server.base_url)}
+            />
+          ))}
+        </Section></If>
+        <Section title="Providers">
+          {presetsForClient(snapshot(), forClient()).map((preset) => (
+            <Row
+              testID={`preset-${preset.id}`}
+              lead={lead(providerLead({ preset_id: preset.id }))}
+              title={preset.label}
+              subtitle={preset.base_url ? localAddressLabel(preset.base_url) : undefined}
+              chevron
+              onPress={() => pick(preset)}
+            />
+          ))}
+          <Row testID="preset-custom" lead={tile("key")} title="Custom Gateway" chevron onPress={() => pick(undefined)} />
+        </Section>
+      </If>
     </Page>
   );
 }

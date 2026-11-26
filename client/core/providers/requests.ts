@@ -1,9 +1,9 @@
 import type { Daemon } from "../more/daemon";
 import { invalidProviderReply, offlineProviderError, ProviderError, PROVIDER_ERROR_CODES, providerErrorFromPayload } from "./errors";
-import { parseProviderConnectionTestResult, parseProviderModelsResult, parseProvidersSnapshot } from "./parse";
+import { parseLocalProviders, parseProviderConnectionTestResult, parseProviderModelsResult, parseProvidersSnapshot } from "./parse";
 import { parseOptionalMutationPersistence, requireAppliedPersistence } from "./persistence";
 import { ambiguousProviderMutation } from "./errors";
-import type { ProviderConnectionInput, ProviderConnectionTestResult, ProviderModelsResult, ProvidersMutationResult, ProvidersSnapshot } from "./types";
+import type { LocalProvider, ProviderConnectionInput, ProviderConnectionTestResult, ProviderModelsResult, ProvidersMutationResult, ProvidersSnapshot } from "./types";
 
 /**
  * The Providers requests of the current computer, each settling with a ProviderError
@@ -77,6 +77,16 @@ export function setProviderModels(daemon: Daemon, connectionId: string, modelIds
 /** Names the connection that takes `connectionId`'s requests while it fails; "" clears it. */
 export function setProviderFallback(daemon: Daemon, connectionId: string, fallbackId: string): Promise<ProvidersMutationResult> {
   return catalog(daemon, "set_provider_fallback", { connection_id: connectionId, fallback_connection_id: fallbackId }, false);
+}
+
+/** The model servers running on the computer; none from a daemon that cannot look (older, or offline). */
+export async function detectLocalProviders(daemon: Daemon): Promise<LocalProvider[]> {
+  if (daemon.state !== "connected") return [];
+  try {
+    return parseLocalProviders(await daemon.request("detect_local_providers", {}, { reply: "local_providers", timeoutMs: 8_000 }));
+  } catch {
+    return [];
+  }
 }
 
 export async function discoverProviderModels(daemon: Daemon, connectionId: string): Promise<ProviderModelsResult> {

@@ -471,6 +471,9 @@ func fetchUpstreamModels(ctx context.Context, client *http.Client, profile Profi
 		return nil, nil, err
 	}
 	candidates := modelDiscoveryURLs(base, profile.Protocol)
+	if listed := presetModelsURL(profile); listed != "" {
+		candidates = append([]string{listed}, candidates...)
+	}
 	var lastErr, deniedErr error
 	for _, endpoint := range candidates {
 		ids, metadata, err := getModelsOnce(ctx, client, endpoint, profile, store, lookup)
@@ -558,6 +561,10 @@ func applyDiscoveryAuth(req *http.Request, profile Profile, store CredentialStor
 		}
 		req.Header.Set("x-api-key", strings.TrimSpace(val))
 		req.Header.Set("anthropic-version", "2023-06-01")
+		if listed := presetModelsURL(profile); listed != "" && req.URL.String() == listed {
+			// The vendor's OpenAI-side list takes the key as a bearer.
+			req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(val))
+		}
 		return nil
 	default:
 		return fmt.Errorf("%w: auth mode %q", ErrInvalid, profile.AuthMode)

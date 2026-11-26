@@ -177,6 +177,78 @@ describe("Model Providers", () => {
     expect(app.shows("id:provider-fallback")).toBe(false);
   });
 
+  const PRESETS = [
+    { id: "openrouter", label: "OpenRouter", clients: ["codex", "claude"] },
+    { id: "kimi", label: "Kimi", clients: ["codex", "claude"] },
+    { id: "anthropic", label: "Anthropic", clients: ["claude"] },
+    { id: "ollama", label: "Ollama", clients: ["codex", "claude"], local: true, base_url: "http://localhost:11434" },
+    { id: "local", label: "Local server", clients: ["codex", "claude"], local: true },
+    { id: "custom", label: "Custom Gateway", clients: ["codex", "claude"], advanced: true },
+  ];
+
+  test("a vendor preset asks only for the key: its address and API are the daemon's", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => {
+      if (type === "list_providers") return snapshot({ presets: PRESETS });
+      if (type === "detect_local_providers") return { reply: "local_providers", found: [] };
+      if (type === "upsert_provider_connection") return { ...snapshot({ presets: PRESETS }), persistence_outcome: "applied", persistence_durable: true };
+      return null;
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-add");
+    await app.press("id:provider-add");
+    await app.waitFor("id:preset-kimi");
+    // Codex is the default here: Anthropic serves Claude Code only.
+    expect(app.shows("id:preset-anthropic")).toBe(false);
+    expect(app.shows("id:preset-ollama")).toBe(true);
+    await app.press("id:preset-kimi");
+    await app.waitFor("id:provider-key");
+    expect(app.shows("id:provider-url")).toBe(false);
+    expect(app.texts()).toContain("Add Kimi");
+    await app.type("id:provider-key", "sk-fixture-not-real");
+    await pressWhenEnabled(app, "id:provider-save");
+    await app.waitUntil(() => c.asked.some((a) => a.type === "upsert_provider_connection"));
+    const sent = c.asked.find((a) => a.type === "upsert_provider_connection")!.body;
+    expect(sent.provider_connection).toEqual({ name: "Kimi", preset_id: "kimi", client: "codex", advanced: false });
+    expect(sent.credential).toBe("sk-fixture-not-real");
+  });
+
+  test("a model server found running is offered first, and is added without a key", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => {
+      if (type === "list_providers") return snapshot({ presets: PRESETS });
+      if (type === "detect_local_providers") return { reply: "local_providers", found: [{ preset_id: "ollama", label: "Ollama", base_url: "http://localhost:11434", models: 2 }] };
+      if (type === "upsert_provider_connection") return { ...snapshot({ presets: PRESETS }), persistence_outcome: "applied", persistence_durable: true };
+      return null;
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-add");
+    await app.press("id:provider-add");
+    await app.waitFor("text:On this computer");
+    expect(app.texts()).toContain("localhost:11434 · 2 models");
+    await app.press("id:local-ollama-localhost:11434");
+    await app.waitFor("id:provider-url");
+    expect(app.shows("id:provider-key")).toBe(false);
+    await pressWhenEnabled(app, "id:provider-save");
+    await app.waitUntil(() => c.asked.some((a) => a.type === "upsert_provider_connection"));
+    const sent = c.asked.find((a) => a.type === "upsert_provider_connection")!.body;
+    expect(sent.provider_connection).toEqual({ name: "Ollama", preset_id: "ollama", client: "codex", base_url: "http://localhost:11434", advanced: true });
+    expect(sent.credential).toBeUndefined();
+  });
+
+  test("a local server's page shows its address, not a key", async () => {
+    const c = computer({ name: "settings-providers" }, (type) => {
+      if (type === "list_providers") return snapshot({ presets: PRESETS, connections: [{ id: "c9", name: "Ollama", preset_id: "ollama", clients: ["claude"], credential_ready: true, advanced: true, base_url: "http://localhost:11434", upstream_api: "openai_chat" }], models: {} });
+      if (type === "discover_provider_models") return { reply: "provider_models", connection_id: "c9", models: [] };
+      return null;
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:provider-c9");
+    await app.press("id:provider-c9");
+    await app.waitFor("id:provider-detail");
+    expect(app.shows("id:provider-key-row")).toBe(false);
+    expect(app.texts()).toContain("localhost:11434");
+    expect(app.texts()).toContain("Chat Completions");
+  });
+
   test("each agent's chip has a dot for its state: none on its own login, green when ready", async () => {
     const c = computer({ name: "settings-providers" }, (type) => (type === "list_providers" ? snapshot({ defaults: { codex: { connection_id: "c1" }, claude: { connection_id: "" } } }) : null));
     const app = await open(HARNESS, c.options);
@@ -234,6 +306,7 @@ describe("Model Providers", () => {
     const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { page: { name: "settings-providers" } } } });
     await app.waitFor("text:Work gateway");
     await app.press("id:provider-add");
+    await app.press("id:preset-custom");
     await app.waitFor("id:provider-name");
     await app.type("id:provider-name", "Work gateway");
     expect(app.texts().join(" ")).toContain("Names must be unique.");
@@ -262,6 +335,7 @@ describe("Provider editor", () => {
     const app = await open(HARNESS, { ...c.options, host: { ...c.options.host, params: { page: { name: "settings-providers" } } } });
     await app.waitFor("text:Work gateway");
     await app.press("id:provider-add");
+    await app.press("id:preset-custom");
     await app.waitFor("id:provider-name");
     await app.type("id:provider-name", "Fake verify");
     await app.type("id:provider-url", "ftp://127.0.0.1:9/v1");

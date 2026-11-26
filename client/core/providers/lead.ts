@@ -8,13 +8,17 @@ import type { ProviderClient, ProviderConnection } from "./types";
  * neutral tile. The daemon's presets are openai, openrouter, anthropic, deepseek and custom; a custom connection
  * (Bedrock, Vertex AI, Azure…) is known by its endpoint's host, which is never shown for it here.
  */
-export type ProviderLead = { kind: "mark"; mark: BrandMark } | { kind: "agent"; agent: "claude" | "dsh" } | { kind: "tile"; glyph: "key" | "person-circle" };
+export type ProviderLead = { kind: "mark"; mark: BrandMark } | { kind: "agent"; agent: "claude" | "dsh" } | { kind: "tile"; glyph: "key" | "person-circle" | "desktop" };
 
 const PRESETS: Record<string, ProviderLead> = {
   openai: { kind: "mark", mark: "openai" },
   openrouter: { kind: "mark", mark: "openrouter" },
   anthropic: { kind: "agent", agent: "claude" },
   deepseek: { kind: "agent", agent: "dsh" },
+  // Model servers on the computer.
+  ollama: { kind: "tile", glyph: "desktop" },
+  lmstudio: { kind: "tile", glyph: "desktop" },
+  local: { kind: "tile", glyph: "desktop" },
 };
 
 /** Endpoint hosts by the domain they end with, most specific first. */

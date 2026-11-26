@@ -153,7 +153,9 @@ describe("Model Providers", () => {
     });
     const app = await open(HARNESS, s.options);
     await app.waitFor("id:provider-add");
-    await pressUntil(app, "id:provider-add", "id:provider-name");
+    await pressUntil(app, "id:provider-add", "id:preset-custom");
+    await app.press("id:preset-custom");
+    await app.waitFor("id:provider-name");
     await app.type("id:provider-name", "Home");
     await app.type("id:provider-url", "https://c9.example.com/v1");
     await app.type("id:provider-key", "sk-home");
@@ -199,6 +201,7 @@ describe("Model Providers", () => {
     const app = await open(HARNESS, s.options);
     await app.waitFor("id:provider-add");
     await app.press("id:provider-add");
+    await app.press("id:preset-custom");
     await app.waitFor("text:Provider name is required.");
     expect(app.enabled("id:provider-save")).toBe(false);
   });
