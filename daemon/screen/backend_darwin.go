@@ -330,10 +330,13 @@ func (b *macBackend) Capability(ctx context.Context) Capability {
 		counts := own[id] || id == permScreenRecording
 		listed, known := live[id+listedSuffix]
 		p := Permission{ID: id, Name: name, Granted: live[id], CanOpen: true, Guidance: guidance,
-			State: permissionState(counts, live[id], listed || !known, b.stale[id])}
+			State: underReplacedHost(permissionState(counts, live[id], listed || !known, b.stale[id]), hostReplaced.Load())}
 		if p.State == PermissionRestart {
 			p.Granted, p.RestartRequired = false, true
 			p.Guidance = "Allowed. Mewla restarts to apply it."
+			if hostReplaced.Load() {
+				p.Guidance = "Mewla was updated. It restarts to read this."
+			}
 		}
 		return p
 	}

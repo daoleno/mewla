@@ -874,6 +874,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	updater.host = hosts
 	go hosts.Run(ctx)
+	// Under an app's host left from before an update: onto the installed app's.
+	watchAppHost(ctx, authManager.StorageDir(), updater.quiet, func() { restartDaemon(errDaemonRestart) })
 	srv.SetDaemonUpdater(updater)
 	controlHandler.addr = cfg.addr
 	controlHandler.restarter = newInPlaceRestarter(authManager.StorageDir(), updater.Updating,

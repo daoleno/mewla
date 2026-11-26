@@ -174,14 +174,21 @@ pub fn listed(permission: Permission) -> Listed {
     if granted { Listed::Granted } else { Listed::Missing }
 }
 
-/// Whether Allow clears this app's rows first: only when TCC itself says Mewla.app has no row that counts (a row of
-/// another signature of Mewla reads so for Screen Recording, while the list shows it on), and the daemon does not count
-/// the grant already. This app's own answer decides, not the daemon's "off": an older Mewla's daemon row (its path,
-/// switched off) makes the daemon read off while Mewla.app's row is the stale one. Mewla.app's row switched off reads
-/// off here and is left alone, as is everything without an exact answer. (For Accessibility TCC answers off for a row
-/// of another signature too, so such a row is left alone: macos-permissions.yml probe, `bundle-stale-req`.)
-fn clears(exact: Option<Listed>, daemon: Option<&str>) -> bool {
-    exact == Some(Listed::Missing) && !matches!(daemon, Some("granted" | "restart"))
+/// Whether Allow clears this app's rows first: only when TCC itself says Mewla.app has no row that counts, and the
+/// daemon does not count the grant already. This app's own answer decides, not the daemon's "off": an older Mewla's
+/// daemon row (its path, switched off) makes the daemon read off while Mewla.app's row is the stale one. A row of
+/// another signature of Mewla (an earlier build signed otherwise) reads missing for Screen Recording, while the list
+/// shows it on; for Accessibility it reads off, the same as Mewla.app's own row switched off (macos-permissions.yml
+/// probe, `bundle-stale-req`), so an Accessibility row that reads off is cleared too: switched off it gave nothing,
+/// and of another signature it never counts however often it is switched on (the owner's Mac, 11-26: a row of
+/// Mewla Local Signing, on in the list). A Screen Recording row switched off is left for the person to turn on, as is
+/// everything without an exact answer.
+fn clears(permission: Permission, exact: Option<Listed>, daemon: Option<&str>) -> bool {
+    let stale = match permission {
+        Permission::ScreenRecording => exact == Some(Listed::Missing),
+        Permission::Accessibility => matches!(exact, Some(Listed::Missing | Listed::Off)),
+    };
+    stale && !matches!(daemon, Some("granted" | "restart"))
 }
 
 /// Before asking: when Mewla has no row that counts, removes this app's own rows for the permission (`tccutil reset
@@ -190,7 +197,7 @@ fn clears(exact: Option<Listed>, daemon: Option<&str>) -> bool {
 /// a path (an older Mewla's bare daemon, listed as "mewla") are not this bundle id's and stay as they are: nothing
 /// points at them. Any thread; returns whether it cleared.
 pub fn clear_stale(permission: Permission, daemon: Option<&str>) -> bool {
-    if !clears(exact(permission), daemon) {
+    if !clears(permission, exact(permission), daemon) {
         return false;
     }
     let Some(id) = NSBundle::mainBundle().bundleIdentifier().map(|id| id.to_string()) else { return false };
@@ -570,18 +577,26 @@ mod tests {
 
     #[test]
     fn only_a_row_that_does_not_count_is_cleared() {
-        assert!(clears(Some(Listed::Missing), Some("missing")));
-        assert!(clears(Some(Listed::Missing), None));
-        // The daemon reads off from an older Mewla's path row while Mewla.app's own row does not count: cleared.
-        assert!(clears(Some(Listed::Missing), Some("off")));
-        // Mewla.app's row switched off: left for the person to turn on.
-        assert!(!clears(Some(Listed::Off), Some("off")));
-        assert!(!clears(Some(Listed::Off), Some("missing")));
-        // Counted already, or given and waiting for the restart: never.
-        assert!(!clears(Some(Listed::Granted), None));
-        assert!(!clears(Some(Listed::Missing), Some("granted")));
-        assert!(!clears(Some(Listed::Missing), Some("restart")));
-        // No exact answer (no TCC preflight): nothing is cleared.
-        assert!(!clears(None, Some("missing")));
+        use Permission::{Accessibility, ScreenRecording};
+        for permission in [ScreenRecording, Accessibility] {
+            assert!(clears(permission, Some(Listed::Missing), Some("missing")));
+            assert!(clears(permission, Some(Listed::Missing), None));
+            // The daemon reads off from an older Mewla's path row while Mewla.app's own row does not count: cleared.
+            assert!(clears(permission, Some(Listed::Missing), Some("off")));
+            // Counted already, or given and waiting for the restart: never.
+            assert!(!clears(permission, Some(Listed::Granted), None));
+            assert!(!clears(permission, Some(Listed::Missing), Some("granted")));
+            assert!(!clears(permission, Some(Listed::Missing), Some("restart")));
+            assert!(!clears(permission, Some(Listed::Off), Some("restart")));
+            // No exact answer (no TCC preflight): nothing is cleared.
+            assert!(!clears(permission, None, Some("missing")));
+        }
+        // Mewla.app's Screen Recording row switched off: left for the person to turn on.
+        assert!(!clears(ScreenRecording, Some(Listed::Off), Some("off")));
+        assert!(!clears(ScreenRecording, Some(Listed::Off), Some("missing")));
+        // Accessibility reads off for a row of another signature too (the owner's Mac, 11-26): cleared.
+        assert!(clears(Accessibility, Some(Listed::Off), Some("off")));
+        assert!(clears(Accessibility, Some(Listed::Off), None));
     }
+
 }

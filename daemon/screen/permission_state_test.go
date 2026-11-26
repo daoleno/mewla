@@ -23,3 +23,17 @@ func TestPermissionStateReadsGrantedOffMissingAndRestart(t *testing.T) {
 		}
 	}
 }
+
+func TestUnderAReplacedHostOnlyAGivenGrantStands(t *testing.T) {
+	for _, state := range []string{PermissionOff, PermissionMissing, PermissionRestart} {
+		if got := underReplacedHost(state, true); got != PermissionRestart {
+			t.Errorf("%s under a replaced host = %s", state, got)
+		}
+		if got := underReplacedHost(state, false); got != state {
+			t.Errorf("%s under the installed host = %s", state, got)
+		}
+	}
+	if got := underReplacedHost(PermissionGranted, true); got != PermissionGranted {
+		t.Errorf("granted under a replaced host = %s", got)
+	}
+}
