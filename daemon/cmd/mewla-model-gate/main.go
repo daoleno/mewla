@@ -751,8 +751,9 @@ func (g *gate) moment(s *session, name string, want choice, during string) {
 		if len(g.approvals(s)) > 0 || claudeAsks(g.screenText(s)) {
 			cl.moment = "waiting for answer"
 		}
-		if hasRecord(s.agent) && g.evidence(s).turns > before.turns {
-			// Not a pick while working: the turn was already over.
+		if holdsMidTurn(s.agent) && g.evidence(s).turns > before.turns {
+			// Not a pick while working: the turn was already over (read by
+			// the agents whose record counts a turn at its end).
 			cl.note = "the turn ended before the pick"
 			g.add(cl)
 			return
