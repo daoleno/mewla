@@ -85,6 +85,11 @@ log "paired"
 
 log "2. the flows"
 adb unroot > /dev/null 2>&1 || true # a share started by a root adb is refused
+# The lane's phone navigates by gesture. On a 3-button bar an NSH Menu sheet on Android runs its last row under the bar (the
+# sheet is not inset by it), and a flow that taps that row's centre taps Back (provider-fallback, 0.4.33 candidate). The replay
+# pins the lane's mode so a flow does not depend on the image's default.
+adb shell cmd overlay enable com.android.internal.systemui.navbar.gestural > /dev/null 2>&1 || true
+sleep 2
 failed=0
 # provider-fallback reads the daemon's Providers over its control socket: this daemon's, not a lane's.
 PHONE_EXTERNAL=1 PHONE_PKG="$PKG" MEWLA_LANE_HOME="$OUT/lane" MEWLA_CONTROL_SOCK="$state/mewla/run/control.sock" "$here/phone.sh" flow all 2>&1 | tee -a "$OUT/flows.log" || failed=1
