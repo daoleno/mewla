@@ -223,8 +223,10 @@ in Mewla does). Choosing Official login gives back what you had before. If
 another tool later writes Mewla's gateway back while Mewla is not using it
 (it restores what it saw while it was on), Mewla notices within seconds and
 gives the CLI your own provider again, so Codex never names a gateway that is
-gone. Codex lists and resumes a chat only on the provider it was started on,
-so Mewla moves your Codex chats along with the provider each way. A model the
+gone. Codex resumes a chat only on the provider its record names ("This chat
+uses model provider ... which is no longer configured"), so Mewla moves that
+record along with the provider each way. Codex's chat list can still group a
+chat under the provider it started on. A model the
 Provider added since Mewla last listed its models is looked up once before
 the gateway refuses it. A second daemon run for a test beside your own
 (`MEWLA_NO_CONFIG_TAKEOVER=1`) leaves both files alone; with a `CODEX_HOME` of
