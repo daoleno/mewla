@@ -1177,11 +1177,10 @@ function AnyProvider() {
       <Text class="text-[11px] font-semibold text-foreground">{props.name}</Text>
     </View>
   );
-  const Provider = (props: { name: string; ok?: Record<string, unknown>; down?: Record<string, unknown> }) => (
+  const Row = (props: { name: string; children?: JSX.Element }) => (
     <View class="relative flex-row items-center gap-1.5 rounded-[10px] border border-border px-2 py-1.5">
       <Text class="flex-1 text-[11px] text-foreground">{props.name}</Text>
-      {props.ok ? <View class="size-[7px] rounded-full bg-add" style={props.ok} /> : <Dot tone="ok" />}
-      {props.down ? <View class="absolute right-2 size-[7px] rounded-full bg-del" style={props.down} /> : null}
+      {props.children}
     </View>
   );
   return (
@@ -1195,8 +1194,13 @@ function AnyProvider() {
         <View class="absolute left-0 right-0 top-[70px] h-[2px] rounded-full bg-foreground opacity-60" style={toBackup} />
       </View>
       <View class="w-[96px] gap-8">
-        <Provider name="Provider" ok={mainOk} down={mainDown} />
-        <Provider name="Fallback" />
+        <Row name="Provider">
+          <View class="size-[7px] rounded-full bg-add" style={mainOk} />
+          <View class="absolute right-2 size-[7px] rounded-full bg-del" style={mainDown} />
+        </Row>
+        <Row name="Fallback">
+          <Dot tone="ok" />
+        </Row>
       </View>
     </Card>
   );
