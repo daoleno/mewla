@@ -79,16 +79,18 @@ assert len(u["requests"]) == 1 and u["requests"][0]["cache_read_tokens"] == 4800
 assert len(u["errors"]) == 1 and u["errors"][0]["status"] == 400, u
 print("daemon kept", len(u["requests"]), "request,", len(u["errors"]), "error")'
 
+# A row below the fold is not on the screen: the release replay's emulator is 320x640, the lane's 1080x2400.
+reach() { for _ in 1 2 3 4 5; do "$PHONE" tap "$1" 3 && return 0; "$PHONE" scroll; done; "$PHONE" tap "$1" 3; }
+see() { for _ in 1 2 3 4 5; do "$PHONE" shows "$1" 3 && return 0; "$PHONE" scroll; done; "$PHONE" shows "$1" 3; }
 "$PHONE" tap 'home-cat'
-"$PHONE" tap '^Settings$'
-"$PHONE" tap '^Model Providers$'
-"$PHONE" tap "^$name, "  # the Provider's row, not the agent chip that names it too
-"$PHONE" shows 'Usage · 30 days' 15  # shows greps the raw XML: no anchors
+reach '^Settings$'
+reach '^Model Providers$'
+reach "^$name, "  # the Provider's row, not the agent chip that names it too
+"$PHONE" shows 'provider-detail' 15
+see 'Usage · 30 days'  # shows greps the raw XML: no anchors
 "$PHONE" shot "$dir/usage-top.png" > /dev/null
 # The page's recent requests and errors are under its tiles.
-read -r w h < <(adb shell wm size | awk -F'[ x]' '/Physical/ {print $3, $4}')
-adb shell input swipe $((w / 2)) $((h * 3 / 4)) $((w / 2)) $((h / 4)) 400
-"$PHONE" shows '1.2K in · 48K cached · 350 out'
-"$PHONE" shows 'Lane fake refused this request'
+see '1.2K in · 48K cached · 350 out'
+see 'Lane fake refused this request'
 "$PHONE" shot "$dir/usage.png" > /dev/null
 echo "shots $dir/usage-top.png $dir/usage.png"
