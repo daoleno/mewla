@@ -160,8 +160,157 @@ function shownDetail(item: ActivityTimelineItem): string | undefined {
   return rest && rest !== item.title ? rest : undefined;
 }
 
+/** How long a step took, in the Ledger's right column: "46 ms", "1.8s", "15s", "4m 12s", "1h 3m". */
+export function formatStepDuration(ms: number | undefined): string {
+  if (ms === undefined) return "";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+  return `${Math.floor(ms / 3_600_000)}h ${Math.round((ms % 3_600_000) / 60_000)}m`;
+}
+
+const TABULAR: { fontVariant: ["tabular-nums"] } = { fontVariant: ["tabular-nums"] };
+
+/** Whether a Ledger row is open: a failed step starts open (owner 11-27), and a tap turns either the other way. */
+const ledgerOpen = (expansion: Expansion, item: ActivityTimelineItem) => expansion.isOpen(stepKey(item)) !== Boolean(item.defaultExpanded && item.tone === "failed");
+/** A step's own key in the open set: a folded run carries its first step's id. */
+const stepKey = (item: ActivityTimelineItem) => `step:${item.id}`;
+
+/** The Ledger's right column: what came back (failure in del, +/− in add and del) and how long it took. */
+function LedgerEnd(props: { item: () => ActivityTimelineItem }) {
+  const type = threadType();
+  const facts = () => props.item().ledger ?? {};
+  const failed = () => props.item().tone === "failed";
+  const result = () => facts().result ?? (failed() ? "failed" : "");
+  const time = () => (props.item().tone === "running" ? "" : formatStepDuration(facts().durationMs));
+  return (
+    <Text class={`shrink-0 ${type.line} text-muted-foreground`} style={TABULAR}>
+      <If when={facts().added !== undefined || facts().removed !== undefined}>
+        <Text class="text-add">{`+${facts().added ?? 0}`}</Text><Text>{" "}</Text><Text class="text-del">{`−${facts().removed ?? 0}`}</Text><Text>{time() ? " · " : ""}</Text>
+      </If>
+      <If when={result()}><Text class={failed() ? "font-semibold text-del" : ""}>{result()}</Text><Text>{time() ? " · " : ""}</Text></If>
+      {time()}
+    </Text>
+  );
+}
+
+/**
+ * One Ledger step (owner 11-27, variant A): its icon, the agent's words or what it did to what, the target in soft
+ * mono, and on the right the result and the time. Open, it shows the command and the output (a failed step's end).
+ */
+function LedgerStep(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void; inRun?: boolean }) {
+  const item = props.item;
+  const type = threadType();
+  const open = () => ledgerOpen(props.expansion, item());
+  const failed = () => item().tone === "failed";
+  const running = () => item().tone === "running";
+  const files = () => activityFileRows(item());
+  const expandable = () => Boolean(item().commandText || item().body || files().length);
+  const target = () => item().ledger?.target;
+  const more = () => item().ledger?.more;
+  return (
+    <View testID="ledger-step">
+      <Button testID={failed() ? "ledger-step-failed" : "ledger-step-row"} accessibilityLabel={item().accessibilityLabel ?? item().title}
+        onPress={() => expandable() && props.expansion.toggle(stepKey(item()))} class={`${props.inRun ? "min-h-[36px]" : "min-h-[44px]"} flex-row items-center gap-2`}>
+        <Icon name={iconOf(item().icon, "construct")} color={failed() ? "del" : running() ? "foreground" : "faint"} size={16} />
+        <Text class={`min-w-0 flex-1 ${type.line} line-clamp-1 text-foreground`}>
+          {item().title}
+          <If when={target()}><Text class={`font-mono ${type.mono} text-muted-foreground`}>{`  ${target()}`}</Text></If>
+          <If when={more()}><Text class="text-muted-foreground">{`  +${more()}`}</Text></If>
+        </Text>
+        <If when={running()} else={<LedgerEnd item={item} />}><Spinner size={14} /></If>
+      </Button>
+      <If when={open()}>
+        <View class="gap-1.5 pb-2 pl-6">
+          <If when={item().commandText || item().body}>
+            <View testID="ledger-output" selectable class="gap-1 rounded-xl bg-card px-3 py-2">
+              <If when={item().commandText}><Text class={`font-mono ${type.mono} text-foreground ${SELECTION}`}>{`$ ${item().commandText ?? ""}`}</Text></If>
+              <If when={item().body}><Text class={`font-mono ${type.mono} text-muted-foreground ${SELECTION}`}>{item().body ?? ""}</Text></If>
+            </View>
+          </If>
+          {files().map((file) => <FileRow file={file} onFile={props.onFile} />)}
+        </View>
+      </If>
+    </View>
+  );
+}
+
+/** The agent's reasoning inside a run: its first line, soft; open, all of it. */
+function LedgerThought(props: { item: () => ActivityTimelineItem; expansion: Expansion }) {
+  const type = threadType();
+  const open = () => props.expansion.isOpen(stepKey(props.item()));
+  const firstLine = () => (props.item().body ?? "").trim().split("\n")[0];
+  return (
+    <Button testID="ledger-thought" onPress={() => props.expansion.toggle(stepKey(props.item()))} class="min-h-[36px] justify-center">
+      <If when={open()} else={<Text class={`${type.line} italic text-muted-foreground line-clamp-1`}>{firstLine()}</Text>}>
+        <TextView markdown={props.item().body ?? ""} selectable class={`text-sm text-muted-foreground ${SELECTION}`} />
+      </If>
+    </Button>
+  );
+}
+
+/**
+ * A run of calls between two messages (variant A, the Ledger): one quiet line, "Ran 4 commands, read 1 file", with
+ * its time on the right; its failures (the only accent) show under it closed or open. Open, every step is a line
+ * under a hairline rail.
+ */
+function LedgerRun(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void }) {
+  const item = props.item;
+  const type = threadType();
+  const open = () => props.expansion.isOpen(item().id);
+  const failed = () => item().ledger?.failed ?? 0;
+  const shown = () => (open() ? item().steps ?? [] : (item().steps ?? []).filter((step) => step.tone === "failed"));
+  return (
+    <View testID="ledger-run">
+      <Button testID="activity" accessibilityLabel={`${item().title}${failed() ? `, ${failed()} failed` : ""}`} onPress={() => props.expansion.toggle(item().id)}
+        class="min-h-[44px] flex-row items-center gap-2">
+        <Icon name={iconOf(item().icon, "construct")} color="muted-foreground" size={16} />
+        <Text class={`min-w-0 flex-1 ${type.line} line-clamp-1 text-foreground`}>
+          {item().title}
+          <If when={failed()}><Text testID="ledger-run-failed" class="text-del">{` · ${failed()} failed`}</Text></If>
+        </Text>
+        <Text class={`shrink-0 ${type.line} text-muted-foreground`} style={TABULAR}>{formatStepDuration(item().ledger?.durationMs)}</Text>
+        <Icon name={open() ? "chevron-up" : "chevron-down"} size={16} color="faint" />
+      </Button>
+      <If when={shown().length}>
+        <View class="ml-2 border-l border-border pl-3.5">
+          <Each of={shown()} key={(step) => step.id}>{(step) => (
+            <If when={step().activityKind === "reasoning"} else={<LedgerStep item={step} expansion={props.expansion} onFile={props.onFile} inRun />}>
+              <LedgerThought item={step} expansion={props.expansion} />
+            </If>
+          )}</Each>
+        </View>
+      </If>
+    </View>
+  );
+}
+
 /** A tool call, a reasoning or update line, or a folded run of finished calls. */
 export function ActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void; pictures?: { load?: PictureLoader; open: (src: string) => void } }) {
+  const item = props.item;
+  // The agent's finished reasoning reads as its first line, soft, like the thoughts inside a run.
+  const thought = () => item().activityKind === "reasoning" && item().tone !== "running" && !item().streaming;
+  return (
+    <If when={!thought()} else={<View class="px-4 py-0.5"><LedgerThought item={item} expansion={props.expansion} /></View>}>
+    <If when={item().ledger} else={<ClassicActivityRow item={item} expansion={props.expansion} onFile={props.onFile} pictures={props.pictures} />}>
+      <View class="px-4 py-0.5">
+        <If when={item().steps?.length} else={<LedgerStep item={item} expansion={props.expansion} onFile={props.onFile} />}>
+          <LedgerRun item={item} expansion={props.expansion} onFile={props.onFile} />
+        </If>
+        <If when={toolPictures(item()).length}><View testID="tool-pictures" class="flex-row flex-wrap items-start gap-2 pb-1.5 pl-6">
+            {toolPictures(item()).map((src) => (
+              <ChatImage frame="tool" src={src} alt={item().title} load={props.pictures?.load} onOpen={() => props.pictures?.open(src)} />
+            ))}
+          </View></If>
+      </View>
+    </If>
+    </If>
+  );
+}
+
+/** A row an older daemon's events made (no `tool`): the row as it was before the Ledger. */
+function ClassicActivityRow(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void; pictures?: { load?: PictureLoader; open: (src: string) => void } }) {
   const item = props.item;
   const open = () => props.expansion.isOpen(item().id);
   const files = () => activityFileRows(item());

@@ -51,7 +51,24 @@ export interface ActivityTimelineItem {
   semanticKind?: SemanticActionKind;
   /** A folded run: the finished rows it stands for, in order. */
   steps?: ActivityTimelineItem[];
+  /**
+   * A Ledger row's facts (toolStep.ts): a step's mono target, result, line counts and time; a folded run's total time
+   * and how many of its steps failed. Absent on rows an older daemon's events made.
+   */
+  ledger?: LedgerFacts;
 }
+
+export type LedgerFacts = {
+  target?: string;
+  result?: string;
+  added?: number;
+  removed?: number;
+  durationMs?: number;
+  /** Further calls the one call made in parallel. */
+  more?: number;
+  /** A folded run's failed steps. */
+  failed?: number;
+};
 
 export type ActivityChild = {
   id: string;

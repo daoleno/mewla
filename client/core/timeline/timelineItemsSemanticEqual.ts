@@ -259,8 +259,16 @@ function activityItemsEqual(
     toolDeveloperDetailsEqual(left.developerDetails, right.developerDetails) &&
     activityChildrenEqual(left.children, right.children) &&
     left.semanticKind === right.semanticKind &&
+    ledgerFactsEqual(left.ledger, right.ledger) &&
     activityStepsEqual(left.steps, right.steps)
   );
+}
+
+function ledgerFactsEqual(left?: ActivityTimelineItem["ledger"], right?: ActivityTimelineItem["ledger"]): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.target === right.target && left.result === right.result && left.added === right.added &&
+    left.removed === right.removed && left.durationMs === right.durationMs && left.more === right.more && left.failed === right.failed;
 }
 
 function activityStepsEqual(
