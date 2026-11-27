@@ -36,6 +36,8 @@ import (
 
 const letsEncryptDirectory = "https://acme-v02.api.letsencrypt.org/directory"
 
+// main runs the hosted account service: config/deploy.yml, role account, deployed on merge by
+// .github/workflows/account-deploy.yml.
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		log.Fatalf("mewla-account: %v", err)
