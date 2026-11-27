@@ -1,8 +1,9 @@
 //! Files dropped on Mewla or pasted into it from Finder, read for the app: `files.localCopy {path, maxBytes}` and
 //! `files.localCopyDone {path}` (client/ui/more/files/incoming.ts).
 //!
-//! NSH 0.7.1 hands a dropped or pasted local file over as its `file:` URL alone, and its `fs/promises` cannot read
-//! every such file: it opens each folder on the way for reading (O_RDONLY), and macOS keeps some folders unlistable.
+//! NSH 0.7 (0.7.1, 0.7.2) hands a dropped or pasted local file over as its `file:` URL alone, and its `fs/promises`
+//! cannot read every such file: it opens each folder on the way for reading (O_RDONLY), and macOS keeps some folders
+//! unlistable.
 //! The screenshot thumbnail dragged out after ⌘⇧4 is written to
 //! `/var/folders/…/T/TemporaryItems/NSIRD_screencaptureui_*/`, whose `com.apple.macl` lets no app list it; the drag
 //! grants the app that takes it the file alone. The kernel then refuses NSH (`System Policy: Mewla deny(1)

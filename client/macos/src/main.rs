@@ -152,7 +152,7 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
     }
 
     // `files.localCopy {path, maxBytes}` / `files.localCopyDone {path}`: a dropped or pasted file read by its full
-    // path, as NSH 0.7.1's `fs/promises` cannot read every one (the screenshot thumbnail's folder; dropped.rs).
+    // path, as NSH 0.7's `fs/promises` cannot read every one (the screenshot thumbnail's folder; dropped.rs).
     let copies = std::sync::Arc::new(copies);
     {
         let copies = copies.clone();

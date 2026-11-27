@@ -97,7 +97,7 @@ const MAC_FAILED: Record<string, string> = {
 };
 
 /**
- * A dropped or pasted file on Mewla for Mac, read through its host: NSH 0.7.1's `fs/promises` opens every folder on
+ * A dropped or pasted file on Mewla for Mac, read through its host: NSH 0.7's `fs/promises` opens every folder on
  * the way for reading, and macOS lets no app list some of them, though the drag gave Mewla the file (the screenshot
  * thumbnail dragged out after ⌘⇧4 lives in screencaptureui's own folder; owner 11-27). The host opens the file by
  * its path, as a Mac app reads a drop, and hands over a copy in Mewla's own folder, read here and let go. Phones and
