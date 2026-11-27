@@ -423,7 +423,10 @@ reports no fold, so nothing snaps to it.
      page's own close stands down there). A link inside a preview opens
      a file in the pane; anything else (a Session) covers both, as below
      1028. A Session or a Work still covers the thread here: a terminal
-     wants the whole pane. A Mac at 1280 (1000) covers, as a phone does.
+     wants the whole pane. So a Work's file opened from its Work detail (or
+     a Calendar run, or a Session) covers with the page it came from; a
+     Work card's file chip in the thread opens beside. A Mac at 1280 (1000)
+     covers, as a phone does.
    - **The board**, from a right pane of 1480 (a 1920 window with any
      pane width). The right pane is always split: Brain's thread in an 800
      pane (740 on the Mac; 880 on the web from a 2560 window, see Roomy),

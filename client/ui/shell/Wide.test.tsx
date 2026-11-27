@@ -594,6 +594,28 @@ describe("beside: a wide window opens what you pick next to Brain (core/web/besi
     expect(app.shows("id:work-board-card")).toBe(false);
   }, 30_000);
 
+  test("on a laptop a link inside a preview opens the file in the pane, over the first, and Back returns to it", async () => {
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md)." };
+    const metadata = { name: "plan.md", path: "/home/me/worklog/plan.md", relative_path: "worklog/plan.md", kind: "markdown", content_type: "text/markdown", size: 40, modified_at: "2026-11-11T08:00:00Z", generation: "g1" };
+    const replies = {
+      session_file_metadata: { type: "session_file_metadata", metadata },
+      session_file_text: { type: "session_file_text", text: { content: "# Plan\n\nSee [the steps](steps.md).", bytes_read: 40, truncated: false, generation: "g1" } },
+    };
+    const app = await open(APP, { ...big, width: 1440, height: 900, host: webHost({ brain: { chat_thread_id: "t-now", host_worker }, conversations: { "brain-host": [reply] }, replies }) });
+    await app.waitFor("text:the plan", { timeout: 10_000 });
+    await app.press("text:the plan");
+    await app.waitFor("id:beside-pane >> text:the steps", { timeout: 10_000 });
+    expect(app.shows("id:beside-pane >> id:page-back")).toBe(false);
+    await app.press("id:beside-pane >> text:the steps");
+    await app.waitUntil(() => app.shows("id:beside-pane >> id:page-back"));
+    // Still beside the thread, not over both.
+    expect(app.shows("id:home-header")).toBe(true);
+    await app.press("id:beside-pane >> id:page-back");
+    await app.waitUntil(() => !app.shows("id:beside-pane >> id:page-back"));
+    expect(app.shows("id:beside-pane >> id:file-preview")).toBe(true);
+  }, 30_000);
+
   test("on a laptop a preview covers the thread below 1028 of right pane and stands beside it again when widened", async () => {
     const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
     const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md)." };
