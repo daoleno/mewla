@@ -1136,6 +1136,33 @@ function WideBeside() {
   );
 }
 
+/** A laptop: a file in Brain's thread opens in a pane on its right, with a close; the chat stays where it was. */
+function PreviewBeside() {
+  const pane = loop(appear(0.3, 0));
+  const chat = loop([{ offset: 0, opacity: 1 }, { offset: 1, opacity: 1 }]);
+  return (
+    <Card class="h-[150px] w-[264px] flex-row overflow-hidden border border-border">
+      <View class="flex-1 justify-end gap-1.5 border-r border-border p-2" style={chat}>
+        <Line width={90} /><Line width={110} />
+        <View class="relative flex-row items-center gap-1.5 rounded-[8px] bg-background p-1.5">
+          <Icon name="document-text" size={12} tone="soft" />
+          <Line width={56} strong />
+          <Press at={0.2} style={{ right: 6, top: 0 }} />
+        </View>
+        <View class="h-[14px] rounded-full border border-border" />
+      </View>
+      <View class="relative w-[128px] gap-1.5 p-2" style={pane}>
+        <View class="flex-row items-center gap-1.5">
+          <View class="flex-1"><Line width={50} strong /></View>
+          <Icon name="close-circle" size={12} tone="soft" />
+        </View>
+        <View class="h-[52px] rounded-[6px] bg-track" />
+        <Line width={96} /><Line width={78} /><Line width={88} />
+      </View>
+    </Card>
+  );
+}
+
 /** The tool Ledger: a run of calls is one line with its time; pressed, its steps, each with its result, one failed. */
 function ToolLedger() {
   const steps = loop(appear(0.3, 4));
@@ -1300,6 +1327,7 @@ const SCENES: Record<string, (props: SceneProps) => JSX.Element> = {
   "provider-presets": ProviderPresets,
   "provider-usage": ProviderUsage,
   "wide-beside": WideBeside,
+  "preview-beside": PreviewBeside,
 };
 
 /** Whether this app draws the scene (release notes name one; a test holds every bundled name to this). */

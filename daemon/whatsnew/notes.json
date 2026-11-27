@@ -4,7 +4,10 @@
       "version": "0.4.34",
       "date": "2026-11-27",
       "highlights": [],
-      "fixes": []
+      "fixes": [
+        "On the Mac, a screenshot dropped from its thumbnail now attaches.",
+        "Slack: Mewla sends images and files of any type, and asks to reconnect when it may not."
+      ]
     },
     {
       "version": "0.4.33",

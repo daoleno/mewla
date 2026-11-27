@@ -27,9 +27,28 @@
             "kind": "open",
             "target": "settings"
           }
+        },
+        {
+          "id": "0.4.34-preview-beside",
+          "title": "Files open beside the chat",
+          "line": "On a laptop, a file in Brain's thread opens on the right, and you keep typing.",
+          "media": {
+            "scene": "preview-beside"
+          },
+          "try": {
+            "kind": "open",
+            "target": "brain"
+          },
+          "platforms": [
+            "web",
+            "macos"
+          ]
         }
       ],
-      "fixes": []
+      "fixes": [
+        "On the Mac, a screenshot dropped from its thumbnail now attaches.",
+        "Slack: Mewla sends images and files of any type, and asks to reconnect when it may not."
+      ]
     },
     {
       "version": "0.4.33",
