@@ -299,6 +299,7 @@ func run(args []string) error {
 		}
 	}
 	stop()
+	log.Printf("mewla-account stopping: requests in flight have %s", shutdownGrace)
 	shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 	// Both listeners close at once, so the relay's next dial goes to the new
