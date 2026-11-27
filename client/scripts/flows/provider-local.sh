@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Add Provider offers a model server running on the computer (the lane daemon's, so this host's) and adds it with no
 # key; the daemon finds which API it speaks. Needs one: Ollama on 11434 (any version), else an OpenAI-style server
-# on 1234, 8000, 8080 or 1337. The connection is removed at the end.
+# on 1234, 8000, 8080 or 1337; without one (the release replay's runner) a small fake answers on 1337. The connection is
+# removed at the end.
 set -euo pipefail
 lane="${MEWLA_LANE_HOME:-$HOME/.mewla/lane}"
 # The release replay has no lane: its daemon's socket comes in MEWLA_CONTROL_SOCK (release-flows.sh).
@@ -18,10 +19,36 @@ while True:
     except ValueError: pass' "$sock" "$1"
 }
 before=$(ctl '{"type":"provider_list"}' | python3 -I -c 'import json,sys; print(" ".join(c["id"] for c in json.load(sys.stdin)["providers"]["connections"]))')
-server=$(ctl '{"type":"provider_detect_local"}' | python3 -I -c 'import json,sys; f=json.load(sys.stdin).get("local_providers") or []; print(f[0]["label"] if f else "")')
+detect() { ctl '{"type":"provider_detect_local"}' | python3 -I -c 'import json,sys; f=json.load(sys.stdin).get("local_providers") or []; print(f[0]["label"] if f else "")'; }
+server=$(detect)
+fake=""
+if [[ -z "$server" ]]; then
+  # The release replay's runner has no model server: a small OpenAI-style one stands in on Jan's port. It lists a model and,
+  # like a Chat Completions endpoint, refuses an empty request (what the daemon's API detection asks); any other path is 404.
+  fakedir="$(mktemp -d "${TMPDIR:-/tmp}/provider-local-fake.XXXXXX")"
+  cat > "$fakedir/fake.py" <<'PY'
+import http.server, json
+class H(http.server.BaseHTTPRequestHandler):
+    def reply(self, code, body):
+        raw = json.dumps(body).encode()
+        self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(raw))); self.end_headers(); self.wfile.write(raw)
+    def do_GET(self):
+        self.reply(200, {"object": "list", "data": [{"id": "local-model", "object": "model"}]}) if self.path.rstrip("/") == "/v1/models" else self.reply(404, {"error": {"message": "not found"}})
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("content-length") or 0))
+        if self.path.rstrip("/") == "/v1/chat/completions":
+            return self.reply(400, {"error": {"message": "you must provide a model parameter", "type": "invalid_request_error"}})
+        self.reply(404, {"error": {"message": "not found"}})
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", 1337), H).serve_forever()
+PY
+  python3 -I "$fakedir/fake.py" & fake=$!
+  for _ in $(seq 1 20); do server=$(detect); [[ -n "$server" ]] && break; sleep 0.5; done
+fi
 [[ -n "$server" ]] || { echo "no model server runs on this computer"; exit 1; }
 echo "found $server"
 cleanup() {
+  if [[ -n "$fake" ]]; then kill "$fake" 2>/dev/null || true; rm -f "$fakedir/fake.py"; rmdir "$fakedir" 2>/dev/null || true; fi
   ctl '{"type":"provider_list"}' | python3 -I -c 'import json,sys
 before = set(sys.argv[1].split())
 d = json.load(sys.stdin)["providers"]
