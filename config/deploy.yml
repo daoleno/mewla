@@ -222,7 +222,10 @@ accessories:
       no-healthcheck: true
 
 deploy_timeout: 60
-drain_timeout: 10
+# docker stop -t for the account container: longer than mewla-account's 35 s
+# shutdownGrace, so a deploy never cuts a request in flight (an ACME TXT wait
+# takes up to 20 s). The relay and TURN accessories do not use it.
+drain_timeout: 40
 retain_containers: 5
 
 aliases:

@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -298,14 +299,31 @@ func run(args []string) error {
 		}
 	}
 	stop()
-	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownContext, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
-	_ = server.Shutdown(shutdownContext)
-	if publicServer != nil {
-		_ = publicServer.Shutdown(shutdownContext)
+	// Both listeners close at once, so the relay's next dial goes to the new
+	// container, and both wait for their requests together.
+	var stopped sync.WaitGroup
+	for _, s := range []*http.Server{server, publicServer} {
+		if s == nil {
+			continue
+		}
+		stopped.Add(1)
+		go func() {
+			defer stopped.Done()
+			_ = s.Shutdown(shutdownContext)
+		}()
 	}
+	stopped.Wait()
 	return nil
 }
+
+// shutdownGrace is how long requests in flight may finish after SIGTERM. A
+// deploy stops the old container while it may still serve the slowest
+// request: a computer's ACME TXT record waits up to 20 s for the zone's
+// nameservers, after the Cloudflare calls. config/deploy.yml's drain_timeout
+// (docker stop -t) must be longer, or Docker kills the process first.
+const shutdownGrace = 35 * time.Second
 
 // friendsHandler is Mewla Friends, mounted under friendsvc.PathPrefix. It runs
 // only when -friends-db is set. The returned func closes its database.

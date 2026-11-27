@@ -717,12 +717,15 @@ runs now. `~/deploy/state/events.log` has one line per run, and
   one stops. For a few seconds Docker's DNS returns both.
 - The relay dials the alias for each connection (`-sni-route`, Go's dialer,
   no DNS cache) and falls through to the next address when one refuses.
-- On SIGTERM the old process closes its listeners at once and finishes its
-  requests (10 s).
+- On SIGTERM the old process closes both listeners at once and finishes its
+  requests, for up to 35 s (`shutdownGrace` in `cmd/mewla-account`). Docker
+  waits 40 s (`drain_timeout`) before it kills it; a test keeps the second
+  longer than the first.
 - Both processes open the same SQLite files in WAL mode with a busy timeout;
   the grant key is only read.
 
-A request still running after 10 s is cut. ACME TXT waits can take up to 20 s.
+The slowest request, a computer's ACME TXT wait (up to 20 s), therefore
+finishes on the old container.
 
 **Install or change the host side** (by hand; CI cannot change it).
 `scripts/kamal-host/install.sh` copies `deploy` and the service configs
