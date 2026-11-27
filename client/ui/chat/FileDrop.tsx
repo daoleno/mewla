@@ -12,8 +12,9 @@ const DROPS = platform.os === "web" || platform.desktop;
  * composer's attach). Text dragged in is the field's, as before. `testID` names the place (one per page).
  *
  * The Mac hears the drop from NSH (`onFileDrop`): a local file (Finder, the screenshot thumbnail) as its `file:` URL,
- * which `attachIncoming` reads (nsh.json `fs.read`), and a promised one (an image dragged out of Safari or Chrome,
- * Mail's attachments) with its contents in `files`, the shape of a pick (NSH 0.7, longbridge/nsh#2964). In a browser
+ * which `attachIncoming` reads through the Mac's host (`readLocalFiles`: NSH 0.7.1 cannot open the thumbnail's
+ * folder), and a promised one (an image dragged out of Safari or Chrome, Mail's attachments) with its contents in
+ * `files`, the shape of a pick (NSH 0.7, longbridge/nsh#2964). In a browser
  * the page host catches files dragged over the page and says which place they are over by its `testID`
  * (`files.dragOver`, `files.dropped`, with the files kept as picked ones are), and refuses a drop that misses every
  * place, so the browser never opens the file over the app. NSH 0.7's web build delivers drops too (#2867), but

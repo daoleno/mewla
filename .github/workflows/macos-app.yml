@@ -103,6 +103,10 @@ jobs:
           PY
       - name: Mewla Relay's pinned tunnels carry bytes only to the pinned key
         run: "cargo test --release --manifest-path client/macos/Cargo.toml link:: -- --nocapture"
+      # The host's copies of dropped and pasted files (dropped.rs): made, said why not, let go, cleared at launch.
+      # The thumbnail's unlistable folder itself shows only on a Mac with SIP on (this runner reads it): the owner's.
+      - name: Dropped files are copied for the app and let go
+        run: "cargo test --release --manifest-path client/macos/Cargo.toml dropped:: -- --nocapture"
       - name: The bundles carry their daemon and CLI
         run: |
           set -euo pipefail

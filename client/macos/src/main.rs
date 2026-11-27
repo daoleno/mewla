@@ -9,7 +9,8 @@
 //! - `app.dock`: the Dock icon shown while the window is, hidden with only the menu bar cat;
 //! - `app.stop`: Stop Mewla on this Mac… (the LaunchAgent unregistered, then `mewla boot give-back`);
 //! - `link.start` / `link.stop` / `link.stopAll` / `link.events`: Mewla Relay's pinned tunnels (link.rs);
-//! - `app.permissionGuide`: System Settings on a permission's list with the panel to drag Mewla in (permissions.rs).
+//! - `app.permissionGuide`: System Settings on a permission's list with the panel to drag Mewla in (permissions.rs);
+//! - `files.localCopy` / `files.localCopyDone`: a dropped or pasted Finder file, read for the app (dropped.rs).
 //!
 //! The daemon: the app (`com.daoleno.mewla`) registers it as a LaunchAgent with SMAppService, run through this
 //! executable (`Mewla --daemon serve`, host.rs) so that macOS charges its permissions to the app, after taking over
@@ -31,6 +32,8 @@ mod launchjob;
 mod link;
 #[cfg(target_os = "macos")]
 mod daemon;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod dropped;
 #[cfg(target_os = "macos")]
 mod host;
 #[cfg(target_os = "macos")]
@@ -107,7 +110,7 @@ fn main() -> std::process::ExitCode {
         options.data_dir.clone().or_else(|| nsh_engine::logging::log_dir(&options.app_id).and_then(|d| d.parent().map(Into::into))),
         keychain.then(|| options.app_id.clone()),
     );
-    install_host(&options.host, config, secrets, release);
+    install_host(&options.host, config, secrets, release, dropped::Copies::in_caches(&options.app_id));
 
     let code = run_app(AppSource::Bundle(launch.bundle), options);
     daemon::stop(child);
@@ -115,7 +118,7 @@ fn main() -> std::process::ExitCode {
 }
 
 #[cfg(target_os = "macos")]
-fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets: secure::Store, release: bool) {
+fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets: secure::Store, release: bool, copies: Option<dropped::Copies>) {
     use serde_json::{Map, Value, json};
 
     let mut params = Map::new();
@@ -147,6 +150,33 @@ fn install_host(host: &nsh_engine::HostChannel, config: daemon::Config, secrets:
             call.reply(result);
         });
     }
+
+    // `files.localCopy {path, maxBytes}` / `files.localCopyDone {path}`: a dropped or pasted file read by its full
+    // path, as NSH 0.7.1's `fs/promises` cannot read every one (the screenshot thumbnail's folder; dropped.rs).
+    let copies = std::sync::Arc::new(copies);
+    {
+        let copies = copies.clone();
+        host.handle("files.localCopy", move |call| {
+            let path = call.data().get("path").and_then(Value::as_str).map(std::path::PathBuf::from);
+            let max = call.data().get("maxBytes").and_then(Value::as_u64).unwrap_or(u64::MAX);
+            let Some(reply) = call.into_reply() else { return };
+            let copies = copies.clone();
+            // A large file takes a moment even cloned: never on the engine's thread.
+            std::thread::spawn(move || {
+                reply.reply(match (copies.as_ref(), path) {
+                    (Some(copies), Some(path)) => Ok(copies.copy(&path, max)),
+                    (None, _) => Err("no folder for dropped files (HOME is not set)".to_string()),
+                    (_, None) => Err("expected a path".to_string()),
+                });
+            });
+        });
+    }
+    host.handle("files.localCopyDone", move |call| {
+        if let (Some(copies), Some(path)) = (copies.as_ref(), call.data().get("path").and_then(Value::as_str)) {
+            copies.release(std::path::Path::new(path));
+        }
+        call.reply(Ok::<Value, String>(Value::Null));
+    });
 
     // The Expo app's storage the phone hosts hand over once: a Mac never had one.
     host.handle("app.legacyStorage", |call| call.reply(Ok(Value::Null)));

@@ -18,11 +18,27 @@ function secureStore() {
   };
 }
 
+/**
+ * Mewla for Mac's host reading a dropped or pasted file (client/macos/src/dropped.rs): the file itself stands for its
+ * copy here (`fs/promises` reads it in the test), a path with no file is `missing`, a folder `folder`. `refused`
+ * paths are files macOS would not let Mewla read.
+ */
+function macFiles(refused: readonly string[] = []) {
+  return {
+    "files.localCopy": ({ path }: { path: string }) => {
+      if (refused.includes(path)) return { failed: "denied" };
+      if (path.startsWith("/.file/id=")) return { failed: "missing" };
+      return path.endsWith("/") ? { folder: true } : { copy: path, size: 1 };
+    },
+    "files.localCopyDone": () => null,
+  };
+}
+
 /** The computer takes each upload and names where it keeps it. */
 function computer(state: "connected" | "waiting" = "connected", handlers: Record<string, (data: never) => unknown> = {}) {
   let n = 0;
   return {
-    host: { params: { state }, handlers: { ...secureStore(), ...handlers } },
+    host: { params: { state }, handlers: { ...secureStore(), ...macFiles(), ...handlers } },
     network: { [`POST ${BASE}/upload`]: () => ({ status: 200, body: JSON.stringify({ path: `/state/uploads/${(n += 1)}.webp`, name: "working.webp" }) }) },
   };
 }
@@ -49,6 +65,25 @@ describe("dropping files on a conversation (Mewla for Mac)", () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.dropFiles("id:file-drop-chat", [FOLDER]);
     await app.waitFor("text:Folders can't be attached.");
+    expect(app.shows("text:Ready")).toBe(false);
+  });
+
+  // The screenshot thumbnail dragged out after ⌘⇧4 (owner 11-27): read through the host, never `fs/promises` on the
+  // way to it, and the copy let go once read.
+  test("a dropped file is read through Mac's host, which lets its copy go", async () => {
+    const app = await open(COMPOSER, { ...computer(), platform: "macos" });
+    await app.dropFiles("id:composer", [PICTURE]);
+    await app.waitFor("text:Ready");
+    const calls = app.host.calls().map((call) => call.name).filter((name) => name.startsWith("files.localCopy"));
+    expect(calls).toEqual(["files.localCopy", "files.localCopyDone"]);
+  });
+
+  test("a dropped file macOS won't let Mewla read is a chip that says so", async () => {
+    const path = new URL(PICTURE).pathname;
+    const app = await open(COMPOSER, { ...computer("connected", macFiles([path])), platform: "macos" });
+    await app.dropFiles("id:composer", [PICTURE]);
+    await app.waitFor("text:macOS didn't let Mewla read this file.");
+    await app.waitUntil(() => shows(app, "working.webp"));
     expect(app.shows("text:Ready")).toBe(false);
   });
 
@@ -85,7 +120,7 @@ describe("pasting files into the composer (Mewla for Mac)", () => {
     const app = await open(COMPOSER, { ...computer(), platform: "macos" });
     await app.type("id:composer", "look at ");
     await app.paste("id:composer", { text: "gone.png", uris: ["file:///.file/id=6571367.8601"] });
-    await app.waitFor("text:Mewla can't read this file.");
+    await app.waitFor("text:Mewla can't find this file.");
     await app.waitUntil(() => shows(app, "File"));
     await app.waitUntil(() => app.value("id:composer") === "look at ");
   });
