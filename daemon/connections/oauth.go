@@ -360,6 +360,17 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		options = append(options, oauth2.SetAuthURLParam(oauth.Static.ScopeParam, strings.Join(r.Account.Scopes, ",")))
 	}
 	authURL := config.AuthCodeURL(state, options...)
+	// What a sign-in asks for, so a grant that comes back short can be told
+	// apart from a sign-in that never asked (11-27: an app without the newer
+	// Reconnect signed in again without changes). Scope names only.
+	renews := "a new or matching card"
+	if in.AccountID != "" {
+		renews = "card " + in.AccountID
+		if len(renews) > 13 {
+			renews = renews[:13]
+		}
+	}
+	log.Printf("plugins: %s sign-in started for %s, changes asked: %v, scopes: %s", in.Integration, renews, in.AllowWrites, strings.Join(r.Account.Scopes, " "))
 	m.records[r.Account.ID] = r
 	lifetime := 10 * time.Minute
 	if loopback {
