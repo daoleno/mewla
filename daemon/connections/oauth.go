@@ -375,6 +375,17 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
+
+// missingScopes lists the asked scopes a grant left out, in asked order.
+func missingScopes(asked, granted []string) []string {
+	var out []string
+	for _, scope := range asked {
+		if !contains(granted, scope) && !contains(out, scope) {
+			out = append(out, scope)
+		}
+	}
+	return out
+}
 func oauthConfig(r *record, secret string) oauth2.Config {
 	return oauth2.Config{ClientID: r.OAuth.ClientID, ClientSecret: secret, RedirectURL: r.OAuth.RedirectURL, Scopes: r.Account.Scopes, Endpoint: oauth2.Endpoint{AuthURL: r.OAuth.AuthURL, TokenURL: r.OAuth.TokenURL, AuthStyle: r.OAuth.AuthStyle}}
 }
@@ -565,8 +576,13 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		}
 		return fail("token", signInDetail(err))
 	}
+	asked := r.Account.Scopes
+	r.Account.DeclinedScopes = nil
 	if scope, ok := token.Extra("scope").(string); ok {
+		// The grant is what the service says it granted, which can be less
+		// than asked (a workspace's app rules, a person unticking a scope).
 		r.Account.Scopes = strings.Fields(scope)
+		r.Account.DeclinedScopes = missingScopes(asked, r.Account.Scopes)
 	}
 	secret := oauthSecret{Token: token, ClientSecret: flow.ClientSecret}
 	raw, _ := json.Marshal(secret)
@@ -582,6 +598,12 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	}
 	m.nameAndDeduplicate(r)
 	m.event(r, "authorize", nil)
+	if len(r.Account.DeclinedScopes) > 0 {
+		// Scope names only: never the token or the code.
+		declined := strings.Join(r.Account.DeclinedScopes, " ")
+		r.Account.History[0].Message = "not granted: " + declined
+		log.Printf("plugins: %s sign-in granted less than it asked for; not granted: %s", r.Account.Integration, declined)
+	}
 	if err = m.save(); err != nil {
 		return fail("storage", err.Error())
 	}

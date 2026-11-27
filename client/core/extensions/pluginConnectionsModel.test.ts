@@ -15,6 +15,7 @@ import {
   isConnecting,
   networkLabel,
   pluginCatalogRows,
+  reconnectInput,
   reconnectsWithWrites,
   toolPolicyRequest,
   toolSections,
@@ -128,6 +129,12 @@ describe("account status and capability boundaries", () => {
     // Changes off: nothing to fix yet. A full grant: nothing either.
     expect(accountRecovery(account({ integration: "slack", access: { ...access, write: "off" } }), "Slack")).toBeNull();
     expect(accountRecovery(account({ integration: "slack", access: { ...access, write_upgrade: false } }), "Slack")).toBeNull();
+    // Reconnect names the card and asks for changes again, so the sign-in asks for the newer change scope.
+    expect(reconnectInput(old)).toEqual({ integration: "slack", account_id: old.id, allow_writes: true });
+    // Asked and not granted (11-27): the card says Slack declined it, not that the sign-in is old.
+    const declined = accountRecovery({ ...old, declined_scopes: ["files:write"] }, "Slack");
+    expect(declined).toMatchObject({ title: "Slack didn't allow sending files", action: "reconnect" });
+    expect(declined?.detail).not.toContain("predates");
   });
 
   test("a sign-in that predates file and DM reading offers one Reconnect, on the card and the list row", () => {

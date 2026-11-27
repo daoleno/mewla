@@ -291,12 +291,16 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
+  // The last sign-in asked and the service left it out (a workspace's app rules): Reconnect again only after that changes.
+  const declined = (account.declined_scopes?.length ?? 0) > 0;
   if (account.access?.read_consent && account.status === "connected") {
     // Signed in before Mewla read files and private conversations: one Reconnect asks for them.
+    if (declined) return { title: `${serviceName} didn't allow reading files and DMs`, detail: "Asked at the last sign-in, not granted.", action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
     return { title: "Reconnect to read files and DMs", detail: `${serviceName}'s sign-in predates reading files and private conversations.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
   if (account.access?.write_upgrade && account.access.write !== "off" && account.status === "connected") {
     // Signed in before Mewla sent files: the messages it already sends keep working; one Reconnect adds files.
+    if (declined) return { title: `${serviceName} didn't allow sending files`, detail: "Asked at the last sign-in, not granted. Messages still work.", action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
     return { title: "Reconnect to send files", detail: `${serviceName}'s sign-in predates sending files. Messages still work.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
   if (account.status === "error" && account.unavailable) {

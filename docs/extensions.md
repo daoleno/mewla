@@ -246,7 +246,11 @@ named it still work. Until then it reads public channels as before, and
 Brain is told plainly to ask you to reconnect when it asks for a file or a
 thread. An account that already makes changes but was connected before Mewla
 sent files shows **Reconnect to send files**; its messages keep working, and
-only send_files waits for the Reconnect.
+only send_files waits for the Reconnect. If Slack approves the sign-in but leaves
+a permission it was asked for out of the grant (a workspace's app rules can do
+this), the card says **Slack didn't allow sending files** (or reading files and
+DMs) instead, and the account's history names the scope Slack left out.
+Reconnect again once the workspace allows it.
 
 Slack's own hosted MCP server is not used: it accepts only apps listed in the
 Slack Marketplace or internal to one workspace, and has no tool to edit a

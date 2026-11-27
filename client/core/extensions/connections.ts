@@ -50,6 +50,8 @@ export type PluginAccount = {
   trusted_networks?: string[];
   auth_method?: string;
   scopes?: string[];
+  /** What the last sign-in asked for and the service left out of its grant. */
+  declined_scopes?: string[];
   /** Hyperliquid: an account is one network. */
   network?: "mainnet" | "testnet";
   /** Hyperliquid: the account a trading key trades for; absent on the keyless reader. */

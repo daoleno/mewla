@@ -211,3 +211,90 @@ func TestStartFoldsADisconnectedTwinIntoTheLiveAccount(t *testing.T) {
 		t.Fatalf("read by old id: %v", err)
 	}
 }
+
+// slackSignInGranting runs the app's sign-in where Slack grants grant(asked):
+// asked is the user_scope the authorization URL carried, as Slack sees it.
+func slackSignInGranting(t *testing.T, m *Manager, wire *slackSignInWire, in *Input, grant func(asked []string) []string) (string, []string) {
+	t.Helper()
+	start := mustHandle(t, m, Request{Action: "connect_start", Input: in}).Flow
+	authorize, _ := url.Parse(start.AuthorizationURL)
+	asked := strings.Split(authorize.Query().Get("user_scope"), ",")
+	wire.scopes = strings.Join(grant(asked), ",")
+	finish := mustHandle(t, m, Request{Action: "connect_finish", FlowID: start.ID, Callback: NativeCallback + "?" + url.Values{"code": {"c"}, "state": {authorize.Query().Get("state")}}.Encode()}).Flow
+	if finish.Status != "connected" {
+		t.Fatalf("sign-in %+v", finish)
+	}
+	return finish.AccountID, asked
+}
+
+// What the app sends from a card's Reconnect (core reconnectInput): the card
+// names itself and asks for changes again when it allows them.
+func appReconnect(a Account) *Input {
+	writes := a.Access != nil && (a.Access.Write == "allowed" || a.Access.Write == "partial")
+	return &Input{Integration: a.Integration, AccountID: a.ID, AllowWrites: writes}
+}
+
+// 11-27: a card that sends messages and lacks files:write (signed in before
+// send_files) runs the app's Reconnect: it asks Slack for files:write and keeps
+// what Slack granted, so send_files comes and the card stops asking.
+func TestSlackReconnectAddsALaterChangeScope(t *testing.T) {
+	withPublicSlack(t)
+	m, wire := publicSlack(t, t.TempDir())
+	before := append(append([]string(nil), slackReadScopes...), "chat:write")
+	id, _ := slackSignInGranting(t, m, wire, &Input{Integration: "slack", AllowWrites: true}, func([]string) []string { return before })
+	card := m.projection(m.records[id])
+	if !card.Access.WriteUpgrade || card.Access.Write != "allowed" {
+		t.Fatalf("old card access %+v", card.Access)
+	}
+	_, asked := slackSignInGranting(t, m, wire, appReconnect(card), func(asked []string) []string { return asked })
+	if !contains(asked, "files:write") || !contains(asked, "chat:write") {
+		t.Fatalf("Reconnect asked Slack for %v", asked)
+	}
+	r := m.records[id]
+	a := m.projection(r)
+	if ids := slackAccountIDs(m); len(ids) != 1 || !contains(r.Account.Scopes, "files:write") || a.Access.WriteUpgrade || len(a.DeclinedScopes) != 0 {
+		t.Fatalf("after Reconnect: accounts %v, scopes %v, access %+v, declined %v", ids, r.Account.Scopes, a.Access, a.DeclinedScopes)
+	}
+	if allowed := toolAllowed(a); !allowed["send_files"] || !allowed["send_message"] {
+		t.Fatalf("tools after Reconnect %v", allowed)
+	}
+}
+
+// A provider that grants less than the sign-in asked for: the card keeps what
+// was granted, names what was not, and the sign-in says so, instead of a quiet
+// success that offers the same Reconnect again.
+func TestSignInGrantedLessThanAskedNamesTheMissingScopes(t *testing.T) {
+	withPublicSlack(t)
+	m, wire := publicSlack(t, t.TempDir())
+	without := func(asked []string) []string {
+		var out []string
+		for _, s := range asked {
+			if s != "files:write" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	id, _ := slackSignInGranting(t, m, wire, &Input{Integration: "slack", AllowWrites: true}, without)
+	r := m.records[id]
+	a := m.projection(r)
+	if contains(r.Account.Scopes, "files:write") || !a.Access.WriteUpgrade || strings.Join(a.DeclinedScopes, ",") != "files:write" {
+		t.Fatalf("scopes %v, access %+v, declined %v", r.Account.Scopes, a.Access, a.DeclinedScopes)
+	}
+	if h := a.History[0]; h.Tool != "authorize" || !strings.Contains(h.Message, "files:write") {
+		t.Fatalf("history %+v", h)
+	}
+	// The next sign-in that gets everything clears it.
+	slackSignInGranting(t, m, wire, appReconnect(a), func(asked []string) []string { return asked })
+	if a = m.projection(m.records[id]); len(a.DeclinedScopes) != 0 || a.Access.WriteUpgrade {
+		t.Fatalf("a full grant still names %v (access %+v)", a.DeclinedScopes, a.Access)
+	}
+}
+
+func toolAllowed(a Account) map[string]bool {
+	out := map[string]bool{}
+	for _, tool := range a.Tools {
+		out[tool.Name] = tool.Allowed
+	}
+	return out
+}

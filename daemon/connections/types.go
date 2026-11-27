@@ -79,6 +79,11 @@ type Account struct {
 	TrustedNetworks      []string   `json:"trusted_networks,omitempty"`
 	AuthMethod           string     `json:"auth_method,omitempty"`
 	Scopes               []string   `json:"scopes,omitempty"`
+	// DeclinedScopes: what the last sign-in asked for and the service left
+	// out of its grant (Slack 11-27: files:write asked, not granted), so the
+	// card says the service declined it instead of offering the same
+	// Reconnect as if it had never been asked.
+	DeclinedScopes []string `json:"declined_scopes,omitempty"`
 	// Hyperliquid: an account is one network ("mainnet" or "testnet"). Address
 	// is the account a trading key trades for, empty on the keyless reader.
 	// Signer is the API wallet's public address when a trading key is saved.
