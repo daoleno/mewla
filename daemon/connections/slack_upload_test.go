@@ -189,6 +189,10 @@ func TestSlackSendFilesRefusals(t *testing.T) {
 		"empty":        {empty, "empty"},
 		"state folder": {secret, "state folder"},
 		"link into it": {viaLink, "state folder"},
+		"its logs":     {stateFile(t, state, "logs/daemon.log"), "state folder"},
+		"its secrets":  {stateFile(t, state, "secrets/key"), "state folder"},
+		"Brain's own":  {stateFile(t, state, "brain/secrets/token"), "state folder"},
+		"worklog link": {linkIn(t, state, "brain/workspace/worklog/w/leak.png", secret), "state folder"},
 	} {
 		_, err := sendFiles(t, m, a.ID, map[string]any{"channel": "C1", "files": []any{map[string]any{"path": c.path}}})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
@@ -207,6 +211,13 @@ func TestSlackSendFilesRefusals(t *testing.T) {
 	}
 	if _, err := sendFiles(t, m, a.ID, map[string]any{"channel": "C1", "files": []any{map[string]any{"path": link}}}); err != nil {
 		t.Fatalf("symlink to a normal file: %v", err)
+	}
+	// 11-27: Brain's worklog (where reports and proof images live) and a
+	// session's scratch are content, not secrets.
+	for _, rel := range []string{"brain/workspace/worklog/mewla-proof/shot.png", "t/abc123/out.pdf"} {
+		if _, err := sendFiles(t, m, a.ID, map[string]any{"channel": "C1", "files": []any{map[string]any{"path": stateFile(t, state, rel)}}}); err != nil {
+			t.Fatalf("%s: %v", rel, err)
+		}
 	}
 	// Mewla's own downloads may be sent on.
 	downloads := filepath.Join(state, "slack-files", a.ID)
@@ -276,4 +287,30 @@ func TestSlackSignInAsksForFilesWriteOnlyWithChanges(t *testing.T) {
 	if contains(spec.Scopes(false), "files:write") || !contains(spec.Scopes(true), "files:write") || !contains(spec.Scopes(true), "chat:write") {
 		t.Fatalf("scopes %v / %v", spec.Scopes(false), spec.Scopes(true))
 	}
+}
+
+// stateFile writes a small file at rel inside the state folder.
+func stateFile(t *testing.T, state, rel string) string {
+	t.Helper()
+	path := filepath.Join(state, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// linkIn makes a link at rel inside the state folder that leads to target.
+func linkIn(t *testing.T, state, rel, target string) string {
+	t.Helper()
+	path := filepath.Join(state, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

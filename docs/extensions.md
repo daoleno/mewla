@@ -229,9 +229,12 @@ type Slack accepts (images, PDF, documents, audio, video, archives), up to
 1 GB each, optionally into a thread and with a message. Each file is named by
 its absolute path, keeps its own file name and type unless Brain gives
 `filename` or `mimetype`, and streams to Slack's upload address without being
-loaded into memory; the token goes only to Slack's API. Mewla's own state
-folder, which holds sign-ins, is refused (files get_file downloaded may be sent
-on). Sending files asks Slack for `files:write` along with `chat:write`.
+loaded into memory; the token goes only to Slack's API. Inside Mewla's own
+state folder only its content folders may be sent: Brain's workspace and
+worklog, files get_file downloaded, artifacts, uploads, session scratch and
+worktrees. The rest of it (sign-ins, keys, certificates, connection state,
+logs) is refused, including through a link. Sending files asks Slack for
+`files:write` along with `chat:write`.
 
 An account connected before Mewla read files and private conversations shows
 **Reconnect to read files and DMs** with one **Reconnect**: Slack asks you once

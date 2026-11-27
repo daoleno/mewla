@@ -41,10 +41,18 @@ type slackUpload struct {
 	alt      string
 }
 
+// slackContentFolders are the folders inside Mewla's state folder that hold
+// content to share: Brain's workspace and worklog (reports, proof images),
+// files downloaded from Slack, artifacts, uploads, session scratch and
+// worktrees. Everything else there (the credential vault, tokens, keys,
+// certificates, connection state, logs, sockets) never goes to Slack, and a
+// folder added later stays refused until it is named here.
+var slackContentFolders = []string{"brain/workspace", "slack-files", "artifacts", "uploads", "downloads", "apk-share", "t", "tmp", "scratch", "worktrees"}
+
 // slackUploadSource opens the file an agent named. The path must be absolute
-// (the daemon's working folder is not the agent's), a regular file, and not
-// inside the daemon's own state folder, which holds the account tokens; files
-// Mewla downloaded from Slack there may be sent on.
+// (the daemon's working folder is not the agent's), a regular file, and, when
+// it is inside the daemon's own state folder, inside one of its content
+// folders; a link is judged by where it leads.
 func slackUploadSource(path, state, downloads string) (*os.File, os.FileInfo, error) {
 	if !filepath.IsAbs(path) {
 		return nil, nil, callRefused("Pass each file's absolute path on this computer: " + cutRunes(path, 120) + " is not absolute")
@@ -53,8 +61,8 @@ func slackUploadSource(path, state, downloads string) (*os.File, os.FileInfo, er
 	if err != nil {
 		return nil, nil, callRefused("No file at " + cutRunes(path, 120) + " on this computer")
 	}
-	if inside(resolved, resolveOr(state)) && !inside(resolved, resolveOr(filepath.Dir(downloads))) {
-		return nil, nil, callRefused("Mewla's own state folder is not sent to Slack; copy the file elsewhere first if you mean it")
+	if inside(resolved, resolveOr(state)) && !slackContent(resolved, state, downloads) {
+		return nil, nil, callRefused("This part of Mewla's state folder holds sign-ins, keys and logs and is not sent to Slack; Brain's workspace, its worklog, downloads and scratch folders are")
 	}
 	f, err := os.Open(resolved)
 	if err != nil {
@@ -76,6 +84,20 @@ func slackUploadSource(path, state, downloads string) (*os.File, os.FileInfo, er
 		return nil, nil, callRefused(fmt.Sprintf("%s is %d MB; Slack takes files up to %d MB", cutRunes(path, 120), info.Size()>>20, slackUploadLimit>>20))
 	}
 	return f, info, nil
+}
+
+// slackContent reports a resolved path inside one of the state folder's
+// content folders (or this account's own downloads).
+func slackContent(resolved, state, downloads string) bool {
+	if inside(resolved, resolveOr(filepath.Dir(downloads))) {
+		return true
+	}
+	for _, folder := range slackContentFolders {
+		if inside(resolved, resolveOr(filepath.Join(state, filepath.FromSlash(folder)))) {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveOr(path string) string {
