@@ -525,6 +525,23 @@ describe("Slack sign-ins made before Mewla read files and DMs (11-19)", () => {
     await app.waitFor("id:recover-s1");
     expect(app.texts()).toContain("Reconnect to read files and DMs");
   });
+
+  // 11-27: a card that sends messages and predates sending files (write_upgrade, as the computer lists it). Its
+  // Reconnect must ask for changes again, or Slack is never asked for files:write.
+  test("Reconnect to send files asks for changes again", async () => {
+    const sender = { ...older, access: { read: "allowed", write: "allowed", write_upgrade: true, allowed: 8, tools: 8 } };
+    const c = computer({ name: "extensions-service", id: "slack" }, (request) => {
+      if (request.action === "list" || request.action === "get") return { catalog: slackCatalog, accounts: [sender], account: sender };
+      if (request.action === "connect_start") return { flow: { id: "f1", integration: "slack", status: "waiting", authorization_url: "https://slack.com/oauth/v2/authorize?state=s", expires: expires() } };
+      return {};
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:recover-s1");
+    expect(app.texts()).toContain("Reconnect to send files");
+    await app.press("text:Reconnect");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "connect_start"));
+    expect(c.asked.find((r) => r.action === "connect_start")).toEqual({ action: "connect_start", input: { integration: "slack", account_id: "s1", allow_writes: true } });
+  });
 });
 
 describe("a cloud card whose tool could not be installed says why (11-21)", () => {
