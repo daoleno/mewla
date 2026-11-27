@@ -1,0 +1,332 @@
+#!/usr/bin/env bash
+# The only thing a CI deploy key can run on the Kamal host (167.114.116.27).
+# authorized_keys pins it per service:
+#   restrict,command="/home/ubuntu/deploy/bin/deploy mewla-link" ssh-ed25519 ... mewla-deploy
+#
+# SSH_ORIGINAL_COMMAND grammar (anything else is refused, nothing is interpolated):
+#   status                       the service's state file (JSON)
+#   deploy <version> <sha256>    stdin: tar (zstd) of the service's Kamal configs and images.tar
+#   wait <version>               follow the run of <version> until it ends (after a dropped connection)
+#
+# A deploy is received and checked here, then runs detached (setsid) so a dropped or
+# cancelled CI connection never stops Kamal halfway. The run takes the host lock (one Kamal
+# run at a time for every service on this host), boots each Kamal service with
+# `kamal app boot` from the pinned Kamal image, runs the service's post-deploy check and,
+# when that fails, `kamal rollback`s every service it booted to the version that ran before.
+#
+# Exit codes and the state file's "outcome":
+#   0  live            the version runs and its check passed (or it was already live)
+#   10 failed          refused or failed before the running version was stopped; it still runs
+#   20 rolled_back     the check failed; the previous version runs again and passed its check
+#   30 rollback_failed the previous version could not be confirmed: look now
+# Runbook: docs/internal/mewla-relay.md, "Deploys from CI".
+set -euo pipefail
+umask 077
+
+ROOT=/home/ubuntu/deploy
+SERVICE=${1:-}
+[[ "$SERVICE" =~ ^[a-z][a-z0-9-]{0,30}$ ]] && [ -f "$ROOT/etc/$SERVICE.conf" ] || { echo "deploy: unknown service" >&2; exit 64; }
+
+# The service's settings (owned by ubuntu, installed by hand; CI cannot change them):
+#   KAMAL_SERVICES   Kamal configs in boot order, "<file>:<kamal service>"
+#   IMAGES           image repositories the bundle must carry, one per Kamal service
+#   VERSION_RE       the version grammar
+#   MAX_BYTES        largest bundle accepted; RECEIVE_SECONDS: time to receive it
+#   post_check VER   the service's check; non-zero fails the deploy
+# shellcheck source=/dev/null
+. "$ROOT/etc/$SERVICE.conf"
+
+KAMAL_IMAGE=$(cat "$ROOT/etc/kamal-image")   # ghcr.io/basecamp/kamal@sha256:...
+STATE=$ROOT/state
+LOCK=$STATE/host.lock
+mkdir -p "$STATE" "$ROOT/work" "$ROOT/log"
+
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+
+write_state() { # outcome stage version previous detail
+  local tmp
+  tmp=$(mktemp "$STATE/.$SERVICE.XXXXXX")
+  printf '{"service":"%s","outcome":"%s","stage":"%s","version":"%s","previous":"%s","live":"%s","detail":"%s","at":"%s"}\n' \
+    "$SERVICE" "$1" "$2" "$3" "$4" "$(live_versions)" "$5" "$(now)" >"$tmp"
+  chmod 0644 "$tmp"
+  mv "$tmp" "$STATE/$SERVICE.json"
+  # One line per finished run: the history a person reads, and what an alert points at.
+  printf '%s %s %s stage=%s version=%s previous=%s %s\n' "$(now)" "$SERVICE" "$1" "$2" "$3" "$4" "$5" >>"$STATE/events.log"
+}
+
+# Running version of every Kamal service of this deploy, "kamal-service=version ...".
+live_versions() {
+  local entry ksvc out=""
+  for entry in "${KAMAL_SERVICES[@]}"; do
+    ksvc=${entry#*:}
+    out+="$ksvc=$(running_version "$ksvc") "
+  done
+  printf '%s' "${out% }"
+}
+
+# The one running app container's version (Kamal names it <service>-<role>-<version>).
+running_version() {
+  local names
+  # Kamal's app containers: its service and role labels and its name. Accessories carry their own
+  # service label (<service>-<accessory>); other containers of the image inherit only the image's.
+  names=$(docker ps --filter "label=service=$1" --filter label=role --format '{{.Names}}' | grep "^$1-" | grep -v _replaced_ || true)
+  [ "$(printf '%s\n' "$names" | grep -c .)" = 1 ] || { printf 'unknown'; return; }
+  printf '%s' "$names" | sed -E "s/^$1-[a-z0-9]+-//"
+}
+
+kamal() { # workdir args...
+  local work=$1; shift
+  # uid 1000 is ubuntu on the host; the passwd entry names it ci-deploy in Kamal's audit log.
+  docker run --rm --network host --user 1000:1000 -e HOME=/kamal-home -v "$ROOT/etc/passwd:/etc/passwd:ro" \
+    -v "$work:/workdir" -v "$ROOT/kamal-ssh:/kamal-home/.ssh:ro" -v /home/ubuntu/.kamal/apps:/host-apps:ro \
+    "$KAMAL_IMAGE" "$@"
+}
+
+# .kamal/secrets for the Kamal on this host: every secret is read, when Kamal loads it, from
+# the env file the last deploy wrote (~/.kamal/apps/<service>/env/roles/<role>.env). No secret
+# is stored a second time, and a deploy from a laptop that rotates one is followed here.
+write_secrets() { # work
+  local work=$1 entry ksvc file key
+  mkdir -p "$work/.kamal"
+  # Kamal's dotenv strips backslashes from the line, substitutes $VAR inside the command, then
+  # substitutes $VAR again in what the command prints. So the line holds no $ or backslash, and
+  # the reader prints every $ of the value as \$, which the last step turns back into $.
+  cat >"$work/.kamal/read-secret" <<'READER'
+#!/bin/sh
+sed -n "s/^$1=//p" "/host-apps/$2" | sed 's/[$]/\\$/g'
+READER
+  chmod 0700 "$work/.kamal/read-secret"
+  : >"$work/.kamal/secrets"
+  for entry in "${KAMAL_SERVICES[@]}"; do
+    ksvc=${entry#*:}
+    for file in /home/ubuntu/.kamal/apps/"$ksvc"/env/roles/*.env /home/ubuntu/.kamal/apps/"$ksvc"/env/accessories/*.env; do
+      [ -f "$file" ] || continue
+      for key in $(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' "$file"); do
+        grep -q "^$key=" "$work/.kamal/secrets" && continue
+        printf '%s=$(.kamal/read-secret %s %s)\n' "$key" "$key" "${file#/home/ubuntu/.kamal/apps/}" >>"$work/.kamal/secrets"
+      done
+    done
+  done
+}
+
+# The env file each role would get must equal the one it has, byte for byte (hashes only):
+# a secret that does not survive the trip would start a container that is healthy and wrong.
+check_secrets() { # work config ksvc
+  local work=$1 cfg=$2 ksvc=$3 rendered role want have
+  # Fails closed: Kamal must load the config and render every role, and every role must match.
+  rendered=$(docker run --rm --user 1000:1000 -e HOME=/kamal-home -v "$ROOT/etc/passwd:/etc/passwd:ro" -v "$work:/workdir" -v /home/ubuntu/.kamal/apps:/host-apps:ro \
+    --entrypoint ruby "$KAMAL_IMAGE" -e '
+      require "kamal"; require "digest"
+      config = Kamal::Configuration.create_from(config_file: Pathname.new(ARGV[0]), version: "check")
+      config.roles.each { |r| r.hosts.each { |h| puts "role #{r.name} #{Digest::SHA256.hexdigest(r.secrets_io(h).read)}" } }' "config/$cfg") ||
+    { log "Kamal could not load config/$cfg with this host's secrets"; return 1; }
+  grep -q '^role ' <<<"$rendered" || { log "Kamal rendered no role for $ksvc"; return 1; }
+  while read -r _ role want; do
+    have=$(sha256sum "/home/ubuntu/.kamal/apps/$ksvc/env/roles/$role.env" 2>/dev/null | cut -d' ' -f1)
+    [ "$want" = "$have" ] || { log "secrets for $ksvc/$role would change (env file ${have:0:12}, Kamal would write ${want:0:12}); refusing"; return 1; }
+  done < <(grep '^role ' <<<"$rendered")
+  log "secrets for $ksvc: every role's env file would be written unchanged"
+}
+
+follow() { # log file, exit file: print the log until the run writes its exit code, return it
+  local file=$1 done=$2 tailer pid
+  tail -n +1 -F "$file" 2>/dev/null &
+  tailer=$!
+  while [ ! -f "$done" ]; do
+    sleep 2
+    # A run that is gone without an exit code ended unexpectedly: treat it as the worst case.
+    pid=$(cat "${done%/*}/pid" 2>/dev/null || true)
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null && [ ! -f "$done" ]; then
+      sleep 1; [ -f "$done" ] || echo 30 >"$done"
+    fi
+  done
+  sleep 1; kill "$tailer" 2>/dev/null || true; wait "$tailer" 2>/dev/null || true
+  return "$(cat "$done")"
+}
+
+# ---- the detached run --------------------------------------------------------------------------
+# Set by run, read by rollback_booted and the EXIT trap.
+status=30 stage=start detail="" finished="" booted=() previous=()
+
+run() { # version work
+  local version=$1 work=$2 entry cfg ksvc i prev
+  RUN_VERSION=$1 RUN_WORK=$2
+  exec >>"$work/run.log" 2>&1
+  echo $$ >"$work/pid"
+  # Whatever happens, the waiting side gets an exit code; a run that stopped unexpectedly is 30.
+  trap '[ -n "$finished" ] || write_state rollback_failed "$stage" "$RUN_VERSION" "${previous[*]}" "the run stopped unexpectedly";
+        [ "$stage" = start ] || : >"$STATE/lock-holder"; echo "$status" >"$RUN_WORK/exit"' EXIT
+
+  exec 9>"$LOCK"
+  if ! flock -n 9; then
+    log "waiting for the host lock (one Kamal run at a time on this host), held by: $(cat "$STATE/lock-holder" 2>/dev/null)"
+  fi
+  if ! flock -w "${LOCK_WAIT_SECONDS:-2400}" 9; then
+    status=10 finished=1; write_state failed lock "$version" "" "host lock not free in ${LOCK_WAIT_SECONDS:-2400}s"; return
+  fi
+  echo "$SERVICE $version since $(now) (pid $$)" >"$STATE/lock-holder"
+  stage=load
+  log "host lock taken"
+
+  log "loading images"
+  if ! zstd -dc "$work/images.tar.zst" | docker load -q; then
+    status=10 finished=1; write_state failed load "$version" "" "docker load failed"; return
+  fi
+  rm -f "$work/images.tar.zst"
+  for i in "${!KAMAL_SERVICES[@]}"; do
+    ksvc=${KAMAL_SERVICES[$i]#*:}
+    if [ "$(docker image inspect -f '{{index .Config.Labels "service"}}' "${IMAGES[$i]}:$version" 2>/dev/null)" != "$ksvc" ]; then
+      status=10 finished=1; write_state failed load "$version" "" "${IMAGES[$i]}:$version missing or not labelled service=$ksvc"; return
+    fi
+  done
+
+  stage=secrets
+  write_secrets "$work"
+  for entry in "${KAMAL_SERVICES[@]}"; do
+    if ! check_secrets "$work" "${entry%%:*}" "${entry#*:}"; then
+      status=10 finished=1; write_state failed secrets "$version" "" "secrets would change for ${entry#*:}"; return
+    fi
+  done
+
+  stage=boot
+  for i in "${!KAMAL_SERVICES[@]}"; do
+    cfg=${KAMAL_SERVICES[$i]%%:*}; ksvc=${KAMAL_SERVICES[$i]#*:}
+    prev=$(running_version "$ksvc")
+    previous+=("$prev")
+    if [ "$prev" = "$version" ] && [ "$(docker inspect -f '{{.Image}}' "$ksvc-$(kamal_role "$cfg")-$version" 2>/dev/null)" = "$(docker image inspect -f '{{.Id}}' "${IMAGES[$i]}:$version")" ]; then
+      log "$ksvc: $version is already live with this image"
+      continue
+    fi
+    log "$ksvc: boot $version (running: $prev)"
+    if ! kamal "$work" app boot --version "$version" -c "config/$cfg"; then
+      log "$ksvc: boot failed; Kamal stopped the new container and kept $prev"
+      detail="kamal app boot failed for $ksvc"
+      rollback_booted "$version" "$work"
+      return
+    fi
+    booted+=("$i")
+  done
+
+  stage=check
+  log "post-deploy check of $version"
+  if [ -f "$STATE/$SERVICE.fail-next-check" ]; then
+    rm -f "$STATE/$SERVICE.fail-next-check"
+    log "post-deploy check: failing on purpose (armed by $STATE/$SERVICE.fail-next-check, now removed)"
+    detail="post-deploy check failed (armed on purpose)"
+    rollback_booted "$version" "$work"
+    return
+  fi
+  if ! post_check "$version"; then
+    detail="post-deploy check failed"
+    rollback_booted "$version" "$work"
+    return
+  fi
+
+  log "prune (Kamal keeps retain_containers old versions and their images)"
+  for entry in "${KAMAL_SERVICES[@]}"; do
+    kamal "$work" prune all --version "$version" -c "config/${entry%%:*}" >/dev/null 2>&1 || log "prune of ${entry#*:} failed (harmless)"
+  done
+  status=0 finished=1
+  write_state live "done" "$version" "${previous[*]}" ""
+  log "LIVE $SERVICE $version"
+}
+
+kamal_role() { # config file -> its primary role name (servers: <role>: ...)
+  sed -n '/^servers:/,/^[a-z]/{s/^  \([a-z][a-z0-9_-]*\):.*/\1/p}' "$work/config/$1" | head -1
+}
+
+# Roll every Kamal service this run booted back to the version that ran before, last first.
+rollback_booted() { # version work   (uses booted, previous, stage, detail from run)
+  local version=$1 work=$2 i j cfg ksvc ok=1
+  if [ ${#booted[@]} = 0 ]; then
+    status=10 finished=1; write_state failed "$stage" "$version" "${previous[*]}" "$detail; nothing was swapped"
+    log "FAILED $SERVICE $version at $stage: $detail; the running version was not touched"
+    : >"$STATE/lock-holder"; return
+  fi
+  for ((j = ${#booted[@]} - 1; j >= 0; j--)); do
+    i=${booted[$j]}; cfg=${KAMAL_SERVICES[$i]%%:*}; ksvc=${KAMAL_SERVICES[$i]#*:}
+    if [ "${previous[$i]}" = unknown ] || [ "${previous[$i]}" = "$version" ]; then
+      log "$ksvc: no other version to roll back to (was ${previous[$i]})"; ok=; continue
+    fi
+    log "$ksvc: rollback to ${previous[$i]}"
+    kamal "$work" rollback "${previous[$i]}" --version "${previous[$i]}" -c "config/$cfg" || { log "$ksvc: kamal rollback failed"; ok=; }
+  done
+  if [ -n "$ok" ] && post_check_previous; then
+    status=20 finished=1; write_state rolled_back "$stage" "$version" "${previous[*]}" "$detail; rolled back"
+    log "ROLLED BACK $SERVICE $version -> ${previous[*]}: $detail"
+  else
+    status=30 finished=1; write_state rollback_failed "$stage" "$version" "${previous[*]}" "$detail; rollback not confirmed"
+    log "ROLLBACK FAILED $SERVICE $version: $detail; look at the host now"
+  fi
+}
+
+# The previous versions pass the same check (one version per service: the first entry's).
+post_check_previous() {
+  local i
+  for i in "${booted[@]}"; do
+    [ "$(running_version "${KAMAL_SERVICES[$i]#*:}")" = "${previous[$i]}" ] || return 1
+  done
+  post_check "${previous[0]}"
+}
+
+# ---- entry -------------------------------------------------------------------------------------
+# Modes only a shell on the host reaches (a CI key's command line is fixed to "deploy <service>"):
+#   deploy SERVICE run VERSION WORK        the detached run
+#   deploy SERVICE check-secrets WORK      write_secrets + check_secrets for WORK/config (no deploy)
+if [ "${2:-}" = run ]; then shift 2; run "$@"; exit 0; fi
+if [ "${2:-}" = check-secrets ]; then
+  for entry in "${KAMAL_SERVICES[@]}"; do write_secrets "$3"; check_secrets "$3" "${entry%%:*}" "${entry#*:}"; done
+  exit 0
+fi
+
+read -r -a words <<<"${SSH_ORIGINAL_COMMAND:-}"
+case "${words[0]:-}:${#words[@]}" in
+  status:1)
+    cat "$STATE/$SERVICE.json" 2>/dev/null || printf '{"service":"%s","outcome":"none","live":"%s"}\n' "$SERVICE" "$(live_versions)"
+    ;;
+  wait:2)
+    version=${words[1]}
+    [[ "$version" =~ $VERSION_RE ]] || { echo "deploy: bad version" >&2; exit 64; }
+    work=$({ ls -dt "$ROOT/work/$version".* 2>/dev/null || true; } | head -1)
+    [ -n "$work" ] || { echo "deploy: no run of $version" >&2; exit 64; }
+    follow "$work/run.log" "$work/exit"
+    ;;
+  deploy:3)
+    version=${words[1]} digest=${words[2]}
+    [[ "$version" =~ $VERSION_RE ]] || { echo "deploy: bad version" >&2; exit 64; }
+    [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo "deploy: bad sha256" >&2; exit 64; }
+    exec 8>"$STATE/$SERVICE.receive.lock"
+    flock -n 8 || { echo "deploy: another upload of $SERVICE is in progress" >&2; exit 75; }
+    free=$(df --output=avail -B1 "$ROOT/work" | tail -1)
+    [ "$free" -gt $((MAX_BYTES * 3)) ] || { echo "deploy: not enough disk for a bundle" >&2; exit 75; }
+    # Old runs: keep the last 10 logs, no images.
+    { ls -dt "$ROOT/work/"*.* 2>/dev/null || true; } | tail -n +11 | xargs -r rm -rf
+    work=$ROOT/work/$version.$(date -u +%Y%m%d%H%M%S)
+    mkdir -p "$work/config"
+    log "receiving $SERVICE $version (at most $MAX_BYTES bytes in ${RECEIVE_SECONDS}s)"
+    timeout "$RECEIVE_SECONDS" head -c $((MAX_BYTES + 1)) >"$work/bundle" || { rm -rf "$work"; echo "deploy: receive failed or too slow" >&2; exit 65; }
+    size=$(stat -c %s "$work/bundle")
+    [ "$size" -le "$MAX_BYTES" ] || { rm -rf "$work"; echo "deploy: bundle larger than $MAX_BYTES" >&2; exit 65; }
+    [ "$(sha256sum "$work/bundle" | cut -d' ' -f1)" = "$digest" ] || { rm -rf "$work"; echo "deploy: sha256 mismatch ($size bytes received)" >&2; exit 65; }
+    # Exactly the expected members, regular files, nothing else.
+    want=$(for entry in "${KAMAL_SERVICES[@]}"; do echo "${entry%%:*}"; done; echo images.tar.zst)
+    have=$(tar -tf "$work/bundle")
+    [ "$(sort <<<"$have")" = "$(sort <<<"$want")" ] || { rm -rf "$work"; echo "deploy: unexpected bundle members" >&2; exit 65; }
+    [ -z "$(tar -tvf "$work/bundle" | grep -v '^-')" ] || { rm -rf "$work"; echo "deploy: bundle members must be plain files" >&2; exit 65; }
+    tar -xf "$work/bundle" -C "$work/config" --no-same-owner --no-same-permissions
+    mv "$work/config/images.tar.zst" "$work/images.tar.zst"
+    rm -f "$work/bundle"
+    for entry in "${KAMAL_SERVICES[@]}"; do
+      grep -qx "service: ${entry#*:}" "$work/config/${entry%%:*}" || { rm -rf "$work"; echo "deploy: ${entry%%:*} is not service ${entry#*:}" >&2; exit 65; }
+    done
+    log "received $size bytes, sha256 ok; running detached (wait: ssh ... wait $version)"
+    : >"$work/run.log"
+    setsid -f "$0" "$SERVICE" run "$version" "$work" </dev/null >/dev/null 2>&1 8>&-
+    follow "$work/run.log" "$work/exit"
+    ;;
+  *)
+    echo "deploy: usage: status | deploy <version> <sha256> | wait <version>" >&2
+    exit 64
+    ;;
+esac

@@ -1,0 +1,123 @@
+name: Account service deploy
+
+# A merge to main that changes what the account service runs deploys it (docs/internal/mewla-relay.md, "Deploys
+# from CI"). The packages ./cmd/mewla-account builds from, daemon/go.mod and go.sum, daemon/Dockerfile.link and
+# config/deploy.yml count, compared with the version the host runs; anything else in daemon/ deploys nothing. The
+# account's own packages are tested here first, then Kamal builds the image as a laptop would, and
+# scripts/kamal-host/send streams it to the host's deploy command, which runs Kamal there under the host lock,
+# checks the service through the relay and rolls back by itself. A failure opens (or comments on) the issue
+# "Account service deploy failed"; the next good deploy closes it. The relay and TURN accessories never deploy here.
+on:
+  push:
+    branches: [main]
+    paths:
+      - daemon/**
+      - config/deploy.yml
+      - scripts/kamal-host/send
+      - .github/workflows/account-deploy.yml
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy main even if nothing the account service runs changed
+        type: boolean
+        default: false
+
+# One deploy at a time; a newer merge replaces a deploy still waiting to start.
+concurrency:
+  group: account-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: account-production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Deploy key
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/deploy"
+          printf '%s\n' "$DEPLOY_SSH_KEY" >"$RUNNER_TEMP/deploy/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >"$RUNNER_TEMP/deploy/known_hosts"
+          echo "DEPLOY_KEY=$RUNNER_TEMP/deploy/key" >>"$GITHUB_ENV"
+          echo "DEPLOY_KNOWN_HOSTS=$RUNNER_TEMP/deploy/known_hosts" >>"$GITHUB_ENV"
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      - name: What changed since the live version
+        id: plan
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          ssh_host() { ssh -i "$DEPLOY_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="$DEPLOY_KNOWN_HOSTS" \
+            -o StrictHostKeyChecking=yes -o ConnectTimeout=20 ubuntu@167.114.116.27 "$@"; }
+          state=$(ssh_host status || { sleep 30; ssh_host status; })
+          echo "host: $state"
+          live=$(printf '%s' "$state" | sed -n 's/.*"live":"mewla-link=\([0-9a-f]\{40\}\)".*/\1/p')
+          deploy=1 why="live version unknown"
+          if [ "$FORCE" = true ]; then
+            why="forced"
+          elif [ "$live" = "$VERSION" ]; then
+            deploy='' why="already live"
+          elif [ -n "$live" ] && git merge-base --is-ancestor "$VERSION" "$live" 2>/dev/null; then
+            deploy='' why="the live version $live is newer"
+          elif [ -n "$live" ] && git merge-base --is-ancestor "$live" "$VERSION" 2>/dev/null; then
+            root=$PWD
+            deps=$(cd daemon && go list -deps -f '{{if not .Standard}}{{.Dir}}{{end}}' ./cmd/mewla-account | sed -n "s|^$root/||p")
+            changed=$(git diff --name-only "$live" "$VERSION" | while read -r f; do
+              case "$f" in daemon/go.mod|daemon/go.sum|daemon/Dockerfile.link|config/deploy.yml) echo "$f"; continue ;; esac
+              for d in $deps; do case "$f" in "$d"/*) echo "$f"; break ;; esac; done
+            done)
+            if [ -n "$changed" ]; then why="changed since ${live:0:12}: $(echo "$changed" | head -20 | tr '\n' ' ')"; else deploy='' why="nothing the account service runs changed since ${live:0:12}"; fi
+          fi
+          echo "deploy=${deploy:-0}: $why"
+          echo "deploy=${deploy:-0}" >>"$GITHUB_OUTPUT"
+      - name: Test the account service's packages
+        if: steps.plan.outputs.deploy == '1'
+        working-directory: daemon
+        run: |
+          module=$(go list -m)
+          mapfile -t packages < <(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' ./cmd/mewla-account | grep "^$module/")
+          go test "${packages[@]}"
+      - uses: ruby/setup-ruby@v1
+        if: steps.plan.outputs.deploy == '1'
+        with:
+          ruby-version: "3.3"
+      - name: Build the image (Kamal's builder, as from a laptop)
+        if: steps.plan.outputs.deploy == '1'
+        run: |
+          gem install kamal -v 2.12.0 --no-document
+          timeout 1200 kamal build push --version "$VERSION"
+          docker pull -q "localhost:5555/daoleno/mewla-link:$VERSION"
+      - name: Deploy
+        if: steps.plan.outputs.deploy == '1'
+        run: scripts/kamal-host/send "$VERSION" config/deploy.yml -- "localhost:5555/daoleno/mewla-link:$VERSION"
+      - name: Alert
+        if: failure()
+        run: |
+          title="Account service deploy failed"
+          msg="Deploy of main (\`${VERSION:0:12}\`) failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. The run's last lines say whether the previous version still runs (exit 10), was rolled back to (20), or is not confirmed (30: look now)."
+          n=$(gh issue list --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number" | head -1) || n=""
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$msg"; else gh issue create --title "$title" --body "$msg"; fi
+      - name: Close the alert
+        if: success() && steps.plan.outputs.deploy == '1'
+        run: |
+          title="Account service deploy failed"
+          for n in $(gh issue list --state open --search "\"$title\" in:title" --json number,title -q ".[] | select(.title == \"$title\") | .number"); do
+            gh issue close "$n" --comment "Deployed main \`${VERSION:0:12}\`: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          done

@@ -547,7 +547,9 @@ kamal-proxy publishes only `:80` (`proxy.run` in Onlora's
 that setting would try to bind `:443`, fail, and take Onlora down; a normal
 `kamal deploy` restarts the existing proxy container and is safe.
 
-**Deploy the account service:** commit, then `kamal deploy --version $V`.
+**Deploy the account service:** merge to main; see
+[Deploys from CI](#deploys-from-ci). By hand, as the fallback, commit and run
+`kamal deploy --version $V`.
 The new container starts before the old one stops; both share the SQLite
 volume for a few seconds.
 
@@ -632,6 +634,109 @@ kamal app start --version "$RUNNING"
 If the grant key is lost, generate a new one (first deploy, step 4), replace
 `grant.pub`, upgrade the relay and deploy; every computer must then sign in
 again.
+
+### Deploys from CI
+
+A merge to main that changes what the account service runs deploys it
+(`.github/workflows/account-deploy.yml`). No laptop is involved. Onlora, on the
+same host, deploys the same way from its own repository. The relay, `turn` and
+`turncert` accessories never deploy from CI.
+
+**What counts as a change.** The workflow asks the host which version runs.
+It deploys when any of these changed since that version:
+
+- the packages `./cmd/mewla-account` builds from (`go list -deps`);
+- `daemon/go.mod` or `daemon/go.sum`;
+- `daemon/Dockerfile.link`;
+- `config/deploy.yml`.
+
+Any other change in `daemon/` deploys nothing. An older commit never replaces
+a newer live one. *Run workflow* with `force` deploys main anyway.
+
+**The CI side.**
+
+1. It runs the tests of those packages.
+2. `kamal build push` builds the image, as from a laptop.
+3. `scripts/kamal-host/send` streams the config and `docker save` (zstd) over
+   SSH.
+
+The key is the `account-production` environment's `DEPLOY_SSH_KEY`, limited to
+main. Its `authorized_keys` line is
+`restrict,command="/home/ubuntu/deploy/bin/deploy mewla-link"`, so it can run
+only `status`, `deploy <sha> <sha256>` and `wait <sha>`. Anything else, a
+shell, a pty and port forwarding are refused. `DEPLOY_KNOWN_HOSTS` pins the
+host keys.
+
+**The host side** (`scripts/kamal-host/deploy`):
+
+1. It accepts at most 300 MB in 10 minutes.
+2. It checks the sha256 and the bundle's members, and that the config is
+   `service: mewla-link`.
+3. From there the run is detached, so a dropped CI connection cannot stop it
+   halfway. `send` follows it again with `wait`.
+4. It takes the host lock (`~/deploy/state/host.lock`). One Kamal run at a
+   time, for this service and Onlora together; a second merge waits.
+5. It loads the image.
+6. It refuses to deploy (exit 10) if Kamal would write a different env file.
+   Secrets are read, when Kamal loads them, from the env file the last deploy
+   wrote (`~/.kamal/apps/mewla-link/env/roles/account.env`). No secret is
+   stored a second time, and a laptop deploy that rotates one is followed.
+   A deploy that adds a secret needs one laptop deploy first.
+7. It runs `kamal app boot --version <sha>` from the pinned Kamal image
+   (`~/deploy/etc/kamal-image`), over SSH to the host itself with a key that
+   works only from the host (`~/deploy/kamal-ssh`).
+8. The check: exactly one account container, at this version and healthy, and
+   `https://connect.mewla.ai/device` answering 302 through the relay five
+   times.
+9. If the check fails, it runs `kamal rollback` to the version that ran before
+   and checks that one (exit 20).
+10. If Kamal cannot boot the new version, the old one keeps running (exit 10).
+
+`kamal deploy --skip-push` is not used: its pull step deletes the loaded image
+and pulls from a registry the host does not have.
+
+**Exit codes and alerts.**
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Live, or it already was. |
+| 10 | Failed before any swap; the old version still runs. |
+| 20 | The check failed and the host rolled back. |
+| 30 | The rollback is not confirmed: look now. |
+
+Any failure opens the issue **"Account service deploy failed"**, or comments
+on it if it is already open; the next good deploy closes it.
+
+On the host, `~/deploy/state/mewla-link.json` is the last outcome, with what
+runs now. `~/deploy/state/events.log` has one line per run, and
+`~/deploy/work/<version>.*/run.log` has each run's log (the last ten).
+
+**Why the swap has no downtime.** The role has no kamal-proxy:
+
+- The new container joins the network alias `mewla-account` before the old
+  one stops. For a few seconds Docker's DNS returns both.
+- The relay dials the alias for each connection (`-sni-route`, Go's dialer,
+  no DNS cache) and falls through to the next address when one refuses.
+- On SIGTERM the old process closes its listeners at once and finishes its
+  requests (10 s).
+- Both processes open the same SQLite files in WAL mode with a busy timeout;
+  the grant key is only read.
+
+A request still running after 10 s is cut. ACME TXT waits can take up to 20 s.
+
+**Install or change the host side** (by hand; CI cannot change it).
+`scripts/kamal-host/install.sh` copies `deploy` and the service configs
+(`mewla-link.conf`, `onlora.conf`), pulls the pinned Kamal image and creates
+Kamal's own key, in one SSH connection.
+`install.sh mewla-link <key>.pub` authorizes a new CI key. Put its private
+half in the environment secret and delete the file.
+
+**Test without deploying.** On the host, `deploy mewla-link check-secrets <dir
+with config/deploy.yml>` runs the secrets check alone.
+
+**Force one failure.** To prove the rollback,
+`touch ~/deploy/state/mewla-link.fail-next-check` on the host: the next deploy
+fails its check on purpose and rolls back (the file is removed).
 
 ### TURN for Screen's video
 

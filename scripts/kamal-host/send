@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# The CI side of a deploy to the Kamal host: bundle the Kamal configs and the images, stream them
+# to the host's forced command and print its run until it ends. The exit code is the run's
+# (0 live, 10 failed before any swap, 20 rolled back, 30 rollback not confirmed; 255 SSH).
+#
+#   send VERSION CONFIG... -- IMAGE...
+#
+# Env: DEPLOY_HOST (ubuntu@167.114.116.27), DEPLOY_KEY (private key file), DEPLOY_KNOWN_HOSTS (file).
+# Copied into onlora/onlora as scripts/deploy-send.sh (only this line differs); keep the two equal.
+set -euo pipefail
+
+version=$1; shift
+configs=() images=()
+while [ $# -gt 0 ] && [ "$1" != -- ]; do configs+=("$1"); shift; done
+[ "${1:-}" = -- ] && shift
+images=("$@")
+[ ${#configs[@]} -gt 0 ] && [ ${#images[@]} -gt 0 ] || { echo "usage: send VERSION CONFIG... -- IMAGE..." >&2; exit 64; }
+
+host=${DEPLOY_HOST:-ubuntu@167.114.116.27}
+ssh_opts=(-i "${DEPLOY_KEY:?}" -o IdentitiesOnly=yes -o BatchMode=yes -o UserKnownHostsFile="${DEPLOY_KNOWN_HOSTS:?}"
+  -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=8)
+
+dir=$(mktemp -d)
+trap 'rm -rf "$dir"' EXIT
+for c in "${configs[@]}"; do cp "$c" "$dir/"; done
+start=$(date +%s)
+docker save "${images[@]}" | zstd -q -T0 -3 -o "$dir/images.tar.zst"
+(cd "$dir" && tar -cf bundle "${configs[@]##*/}" images.tar.zst)
+digest=$(sha256sum "$dir/bundle" | cut -d' ' -f1)
+echo "bundle: $(stat -c %s "$dir/bundle") bytes, sha256 $digest ($(( $(date +%s) - start )) s to build)"
+
+# The host allows six new SSH connections per 30 s per address: a failed handshake is tried
+# again once, 30 s later. Once the bundle is accepted the run is detached on the host, so a
+# connection lost after that is followed again with `wait`, never by sending twice.
+status=0
+ssh "${ssh_opts[@]}" "$host" deploy "$version" "$digest" <"$dir/bundle" | tee "$dir/out" || status=${PIPESTATUS[0]}
+if [ "$status" = 255 ] && ! grep -q 'running detached' "$dir/out"; then
+  echo "SSH failed before the bundle was accepted; again in 30 s"
+  sleep 30; status=0
+  ssh "${ssh_opts[@]}" "$host" deploy "$version" "$digest" <"$dir/bundle" | tee "$dir/out" || status=${PIPESTATUS[0]}
+fi
+tries=0
+while [ "$status" = 255 ] && grep -q 'running detached' "$dir/out" && [ $tries -lt 20 ]; do
+  tries=$((tries + 1))
+  echo "connection lost during the run; following it again in 30 s"
+  sleep 30; status=0
+  ssh "${ssh_opts[@]}" "$host" wait "$version" || status=$?
+done
+echo "deploy exit $status after $(( $(date +%s) - start )) s"
+exit "$status"
