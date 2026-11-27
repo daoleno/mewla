@@ -119,6 +119,17 @@ describe("account status and capability boundaries", () => {
     expect(accountRecovery(account({ status: "error" }), "GitHub")?.action).toBe("refresh");
   });
 
+  test("a sign-in that predates sending files offers one Reconnect when changes are allowed, and keeps its status", () => {
+    const access = { read: "allowed" as const, write: "allowed" as const, allowed: 7, tools: 8, write_upgrade: true };
+    const old = account({ integration: "slack", name: "FreeRide AI · paul", access });
+    expect(accountRecovery(old, "Slack")).toMatchObject({ title: "Reconnect to send files", action: "reconnect", actionLabel: "Reconnect" });
+    expect(accountStatus(old)).toBe("Connected");
+    expect(reconnectsWithWrites(old)).toBe(true);
+    // Changes off: nothing to fix yet. A full grant: nothing either.
+    expect(accountRecovery(account({ integration: "slack", access: { ...access, write: "off" } }), "Slack")).toBeNull();
+    expect(accountRecovery(account({ integration: "slack", access: { ...access, write_upgrade: false } }), "Slack")).toBeNull();
+  });
+
   test("a sign-in that predates file and DM reading offers one Reconnect, on the card and the list row", () => {
     const access = { read: "allowed" as const, write: "allowed" as const, allowed: 6, tools: 6, read_consent: true };
     const old = account({ integration: "slack", name: "FreeRide AI · paul", access });

@@ -3354,13 +3354,14 @@
             "mpim:history",
             "search:read",
             "files:read",
-            "chat:write"
+            "chat:write",
+            "files:write"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
         "flow": {
-          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread%2Cchat%3Awrite",
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread%2Cchat%3Awrite%2Cfiles%3Awrite",
           "has_account": true,
           "integration": "slack",
           "status": "waiting",
@@ -3413,13 +3414,14 @@
             "mpim:history",
             "search:read",
             "files:read",
-            "chat:write"
+            "chat:write",
+            "files:write"
           ],
           "status": "authorization_required",
           "trusted_networks": null
         },
         "flow": {
-          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread%2Cchat%3Awrite",
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Csearch%3Aread%2Cfiles%3Aread%2Cchat%3Awrite%2Cfiles%3Awrite",
           "has_account": true,
           "integration": "slack",
           "status": "waiting",
@@ -5044,6 +5046,16 @@
         "path": "/chat.update",
         "read": false,
         "fingerprint": "557f4648adc40579ac7b8ee64404b7b3a6ac64804f99beda916d356e65c59377",
+        "group": "write",
+        "group_oauth": "write"
+      },
+      {
+        "name": "send_files",
+        "description": "Post one or more files from this computer to a Slack conversation, in one message: images, PDF, documents, audio, video, archives, any file type Slack accepts (up to 1 GB each, 10 files). channel is a conversation id (C…, G…, D…; find a DM with list_channels types=im). files lists absolute local paths; each file keeps its own name and type unless filename or mimetype is given. text is the message that goes with them; thread_ts posts into a thread. Returns the Slack file ids",
+        "method": "POST",
+        "path": "/files.completeUploadExternal",
+        "read": false,
+        "fingerprint": "f94872885055e9ce9994ae1265019212cc6472c00160b471c70a31dca5a563c5",
         "group": "write",
         "group_oauth": "write"
       }

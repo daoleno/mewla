@@ -83,6 +83,8 @@ export type PluginAccess = {
   write_consent?: boolean;
   /** The sign-in predates reads Mewla now offers (Slack's files and private conversations): Reconnect asks for them. */
   read_consent?: boolean;
+  /** Changes are allowed, but the sign-in predates a change Mewla now offers (Slack's files): Reconnect asks for it. */
+  write_upgrade?: boolean;
   allowed: number;
   tools: number;
 };

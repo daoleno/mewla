@@ -128,8 +128,12 @@ type oauthSpec struct {
 	// ReadScopes must all be in a grant for the service's reviewed reads; a
 	// sign-in that lacks one shows Reconnect.
 	ReadScopes func() []string
-	Static     *staticOAuth
-	Device     *deviceFlow
+	// LaterChangeScopes were added to the change scopes after accounts held
+	// ChangeScopes: an account without them keeps its changes, and only the
+	// tools that need them ask for Reconnect.
+	LaterChangeScopes func() []string
+	Static            *staticOAuth
+	Device            *deviceFlow
 	// Loopback: the service takes only a loopback return address. The sign-in
 	// returns to this daemon's own port, which a browser on the daemon's
 	// computer reaches by itself; from any other device the person pastes the
@@ -348,13 +352,16 @@ func buildCatalog() []*entry {
 				Scopes: func(writes bool) []string {
 					scopes := append([]string(nil), slackReadScopes...)
 					if writes {
-						scopes = append(scopes, "chat:write")
+						scopes = append(scopes, slackChangeScopes...)
 					}
 					return scopes
 				},
 				ReadScopes:   func() []string { return append([]string(nil), slackReadScopes...) },
 				ChangeScopes: func() []string { return []string{"chat:write"} },
-				Codec:        "slack",
+				// files:write came after chat:write: a card that already makes
+				// changes keeps working and is offered one Reconnect for sending files.
+				LaterChangeScopes: func() []string { return []string{"files:write"} },
+				Codec:             "slack",
 			},
 		},
 		{

@@ -126,6 +126,21 @@ func readConsent(r *record) bool {
 	return false
 }
 
+// writeUpgrade reports a sign-in that holds the service's change scopes but
+// not one added later, so its newest change tools wait for Reconnect.
+func writeUpgrade(r *record) bool {
+	e := lookup(r.Account.Integration)
+	if r.OAuth == nil || e == nil || e.OAuth == nil || e.OAuth.LaterChangeScopes == nil || writeConsent(r) {
+		return false
+	}
+	for _, scope := range e.OAuth.LaterChangeScopes() {
+		if !contains(r.Account.Scopes, scope) {
+			return true
+		}
+	}
+	return false
+}
+
 // writeConsent reports a sign-in whose grant lacks the service's write scope,
 // so allowing changes means connecting again with writes. Tokens and imported
 // logins carry whatever the person granted them.

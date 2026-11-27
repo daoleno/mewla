@@ -295,6 +295,10 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
     // Signed in before Mewla read files and private conversations: one Reconnect asks for them.
     return { title: "Reconnect to read files and DMs", detail: `${serviceName}'s sign-in predates reading files and private conversations.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
+  if (account.access?.write_upgrade && account.access.write !== "off" && account.status === "connected") {
+    // Signed in before Mewla sent files: the messages it already sends keep working; one Reconnect adds files.
+    return { title: "Reconnect to send files", detail: `${serviceName}'s sign-in predates sending files. Messages still work.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
+  }
   if (account.status === "error" && account.unavailable) {
     return { title: "Unavailable", detail: `${serviceName} can't be reached: ${account.unavailable}. Mewla keeps trying and reconnects by itself.`, action: "refresh", actionLabel: "Check now", tone: "warning" };
   }

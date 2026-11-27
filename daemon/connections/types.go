@@ -119,8 +119,11 @@ type Access struct {
 	// ReadConsent: the sign-in predates reads Mewla now offers (Slack's files
 	// and private conversations); Reconnect asks the person for them.
 	ReadConsent bool `json:"read_consent,omitempty"`
-	Allowed     int  `json:"allowed"`
-	Tools       int  `json:"tools"`
+	// WriteUpgrade: changes are granted, but the sign-in predates a change
+	// Mewla now offers (Slack's files); Reconnect asks for it.
+	WriteUpgrade bool `json:"write_upgrade,omitempty"`
+	Allowed      int  `json:"allowed"`
+	Tools        int  `json:"tools"`
 }
 
 type Input struct {

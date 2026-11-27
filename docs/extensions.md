@@ -223,6 +223,16 @@ and a PDF or text file the usual way. Slack's token goes only in the request's
 Authorization header, never in an address, a log line or a tool's result.
 Each download clears that account's files older than seven days.
 
+**send_files** (a change, so it needs **Make changes when asked**) posts files
+from this computer to a conversation as one message: up to ten files of any
+type Slack accepts (images, PDF, documents, audio, video, archives), up to
+1 GB each, optionally into a thread and with a message. Each file is named by
+its absolute path, keeps its own file name and type unless Brain gives
+`filename` or `mimetype`, and streams to Slack's upload address without being
+loaded into memory; the token goes only to Slack's API. Mewla's own state
+folder, which holds sign-ins, is refused (files get_file downloaded may be sent
+on). Sending files asks Slack for `files:write` along with `chat:write`.
+
 An account connected before Mewla read files and private conversations shows
 **Reconnect to read files and DMs** with one **Reconnect**: Slack asks you once
 more for the new permissions, and the account keeps its ID, its name, its
@@ -234,7 +244,9 @@ disconnected next to a working one) is folded into the working one when Mewla
 starts, and its old ID keeps reaching the account, so Triggers and notes that
 named it still work. Until then it reads public channels as before, and
 Brain is told plainly to ask you to reconnect when it asks for a file or a
-thread.
+thread. An account that already makes changes but was connected before Mewla
+sent files shows **Reconnect to send files**; its messages keep working, and
+only send_files waits for the Reconnect.
 
 Slack's own hosted MCP server is not used: it accepts only apps listed in the
 Slack Marketplace or internal to one workspace, and has no tool to edit a

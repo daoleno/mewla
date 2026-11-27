@@ -27,6 +27,10 @@ var slackReadScopes = []string{
 	"search:read", "files:read",
 }
 
+// slackChangeScopes are the user scopes a sign-in asks for to make changes:
+// post messages, and attach files to them.
+var slackChangeScopes = []string{"chat:write", "files:write"}
+
 // These are reviewed Slack Web API capabilities. Available tools are filtered
 // against auth.test's X-OAuth-Scopes response; bot tokens never advertise the
 // user-only search.messages operation, even with misleading token annotations.
@@ -36,6 +40,7 @@ var slackToolScopes = map[string][]string{
 	"thread_replies":  {"channels:history", "groups:history", "im:history", "mpim:history"},
 	"search_messages": {"search:read"},
 	"get_file":        {"files:read"},
+	"send_files":      {"files:write"},
 	"send_message":    {"chat:write", "chat:write:bot", "chat:write:user"},
 	"update_message":  {"chat:write", "chat:write:bot", "chat:write:user"},
 }
@@ -54,6 +59,13 @@ func slackTools() []Tool {
 		builtin("get_file", "Download a file shared in Slack (an image, PDF, document) to this computer. Pass its id (F…) from a message's files, or its files.slack.com address. Returns the local path, name, type and size; open the path to read it, an image with your image reader", "GET", "/files.info", true, nil, object(map[string]any{"file": str()}, "file"), nil),
 		builtin("send_message", "Send a message to a Slack conversation", "POST", "/chat.postMessage", false, nil, nil, object(map[string]any{"channel": str(), "text": str(), "thread_ts": str()}, "channel", "text")),
 		builtin("update_message", "Update a message posted by this account", "POST", "/chat.update", false, nil, nil, object(map[string]any{"channel": str(), "ts": str(), "text": str()}, "channel", "ts", "text")),
+		builtin("send_files", "Post one or more files from this computer to a Slack conversation, in one message: images, PDF, documents, audio, video, archives, any file type Slack accepts (up to 1 GB each, 10 files). channel is a conversation id (C…, G…, D…; find a DM with list_channels types=im). files lists absolute local paths; each file keeps its own name and type unless filename or mimetype is given. text is the message that goes with them; thread_ts posts into a thread. Returns the Slack file ids", "POST", "/files.completeUploadExternal", false, nil, nil, object(map[string]any{
+			"channel": str(), "text": map[string]any{"type": "string", "minLength": 1, "maxLength": 40000}, "thread_ts": str(),
+			"files": map[string]any{"type": "array", "minItems": 1, "maxItems": slackUploadFiles, "items": object(map[string]any{
+				"path": str(), "filename": map[string]any{"type": "string", "minLength": 1, "maxLength": 255}, "mimetype": map[string]any{"type": "string", "minLength": 3, "maxLength": 127},
+				"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 255}, "alt_text": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000},
+			}, "path")},
+		}, "channel", "files")),
 	}
 }
 
@@ -98,7 +110,7 @@ func discoverSlack(m *Manager, ctx context.Context, r *record, secret string) ([
 // slackReconnect is what an old Slack sign-in says when it cannot do what a
 // newer Mewla offers: the scope was never granted, and only signing in again
 // asks Slack for it.
-const slackReconnect = "This Slack sign-in was made before Mewla could read files and private conversations. Ask the person to Reconnect Slack in Extensions, then call again"
+const slackReconnect = "This Slack sign-in was made before Mewla could read files and private conversations or send files. Ask the person to Reconnect Slack in Extensions, then call again"
 
 // slackRejected is a Slack Web API answer of {"ok": false}. Slack's error
 // code is a short fixed word (missing_scope, channel_not_found), never the
@@ -185,13 +197,13 @@ type slackFile struct {
 	Permalink  string `json:"permalink"`
 }
 
-// invokeSlackFile runs get_file outside the manager lock: a download takes
-// longer than an account change should wait. It is handled only for a Slack
-// account's get_file.
+// invokeSlackFile runs get_file and send_files outside the manager lock: a
+// download or an upload takes longer than an account change should wait. It is
+// handled only for a Slack account's two file tools.
 func (m *Manager) invokeSlackFile(parent context.Context, q Request) (Response, bool, error) {
 	m.mu.Lock()
 	r, ok := m.records[q.ID]
-	if !ok || m.isPending(q.ID) || r.Account.Integration != "slack" || q.Tool != "get_file" || usesMCP(r) {
+	if !ok || m.isPending(q.ID) || r.Account.Integration != "slack" || (q.Tool != "get_file" && q.Tool != "send_files") || usesMCP(r) {
 		m.mu.Unlock()
 		return Response{}, false, nil
 	}
@@ -199,7 +211,7 @@ func (m *Manager) invokeSlackFile(parent context.Context, q Request) (Response, 
 	if err == nil && !slackReviewed(t) {
 		err = errors.New("tool definition changed; refresh this account, then confirm the update in Extensions")
 	}
-	if err == nil && r.OAuth != nil && !contains(r.Account.Scopes, "files:read") {
+	if err == nil && r.OAuth != nil && !contains(r.Account.Scopes, slackToolScopes[q.Tool][0]) {
 		err = callRefused(slackReconnect)
 	}
 	secret := ""
@@ -222,14 +234,20 @@ func (m *Manager) invokeSlackFile(parent context.Context, q Request) (Response, 
 	}
 	snapshot := r.detached()
 	sensitive := m.sensitiveValues(r, secret)
-	dir := filepath.Join(filepath.Dir(m.path), "slack-files", r.Account.ID)
+	state := filepath.Dir(m.path)
+	dir := filepath.Join(state, "slack-files", r.Account.ID)
 	m.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(foreground(parent), slackFileTimeout)
-	defer cancel()
-	result, err := m.slackGetFile(ctx, &snapshot, secret, args, dir)
-	if ctx.Err() != nil && err != nil {
-		err = errors.New("Slack file download timed out; try again")
+	var result []byte
+	if q.Tool == "send_files" {
+		result, err = m.slackSendFiles(foreground(parent), &snapshot, secret, args, state, dir)
+	} else {
+		ctx, cancel := context.WithTimeout(foreground(parent), slackFileTimeout)
+		defer cancel()
+		result, err = m.slackGetFile(ctx, &snapshot, secret, args, dir)
+		if ctx.Err() != nil && err != nil {
+			err = errors.New("Slack file download timed out; try again")
+		}
 	}
 	if err == nil {
 		result = redactValues(result, sensitive)

@@ -338,7 +338,7 @@ func (m *Manager) projection(r *record) Account {
 			}
 		}
 	}
-	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), ReadConsent: readConsent(r), Tools: len(a.Tools)}
+	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), ReadConsent: readConsent(r), WriteUpgrade: writeUpgrade(r), Tools: len(a.Tools)}
 	for _, t := range a.Tools {
 		if t.Allowed {
 			a.Access.Allowed++
@@ -783,6 +783,9 @@ func checkInvoke(r *record, q Request) (Tool, map[string]any, error) {
 			// The tool is newer than this sign-in's grant: only signing in again adds it.
 			service := accountService(r)
 			return Tool{}, nil, callRefused(service + " has no " + cutRunes(q.Tool, 60) + " on this account yet: its sign-in was made before Mewla offered it. Ask the person to Reconnect " + service + " in Extensions, then call again")
+		}
+		if r.Account.Integration == "slack" && r.OAuth != nil && q.Tool == "send_files" {
+			return Tool{}, nil, callRefused(slackReconnect)
 		}
 		return Tool{}, nil, errors.New("tool not found")
 	}
