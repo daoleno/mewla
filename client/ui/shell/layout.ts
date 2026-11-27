@@ -4,7 +4,7 @@ import { railEdge } from "../../core/shell/rail";
 import { screenDockWidth } from "../../core/screen/float";
 import { clampPaneWidth, MAC_PANE_WIDTH, nextWide, WIDE_MIN_WIDTH, PANE_WIDTH, PANE_WIDTH_KEY, showsListDetail, storedPaneWidth } from "../../core/web/places";
 import { isMacApp } from "../mac/app";
-import { BESIDE_BRAIN_WIDTH, ROOMY_BRAIN_WIDTH, showsBeside } from "../../core/web/beside";
+import { BESIDE_BRAIN_WIDTH, besideMode as modeOf, PREVIEW_SHARE_KEY, previewSplit, ROOMY_BRAIN_WIDTH, storedShare } from "../../core/web/beside";
 import { roomy } from "../kit/density";
 
 /**
@@ -71,11 +71,34 @@ export const floatsShown = signal(0);
 export const listDetail = computed(() => showsListDetail({ wide: wide(), paneWidth: stackWidth() }));
 
 /**
- * Beside (core/web/beside.ts): a desktop or browser window whose right pane is 1480 or wider splits it, Brain's thread
- * at its left and what a card or a row opens at its right (the Work board while nothing is open). Never on iOS or
- * Android: their stack is the system's.
+ * Beside (core/web/beside.ts): a desktop or browser window splits its right pane, Brain's thread at its left and what
+ * is opened at its right. From a 1480 pane the board (always split, the Work board while nothing is open); from 1028
+ * the preview (split while a preview is open). Never on iOS or Android: their stack is the system's.
  */
-export const beside = computed(() => showsBeside({ desktop: !mobile, wide: wide(), rightPane: stackWidth() }));
+export const besideMode = computed(() => modeOf({ desktop: !mobile, wide: wide(), rightPane: stackWidth() }));
+
+/** The right pane splits (either kind). */
+export const beside = computed(() => besideMode() !== null);
+
+/** The preview's share of the split (its handle dragged), kept on this device. */
+export const previewShare = signal<number>(storedShare(null));
+let previewShareRead = false;
+/** Reads the saved share once (the shell's first render). */
+export function loadPreviewShare(): void {
+  if (previewShareRead) return;
+  previewShareRead = true;
+  void Storage.getItem(PREVIEW_SHARE_KEY).then((raw) => previewShare.set(storedShare(raw))).catch(() => {});
+}
+export function setPreviewShare(value: number): void {
+  previewShare.set(value);
+  void Storage.setItem(PREVIEW_SHARE_KEY, String(value)).catch(() => {});
+}
+
+/** The room the split shares: the right pane less a docked screen's strip. */
+export const splitRoom = computed(() => stackWidth() - (floatsShown() > 0 ? screenDock() : 0));
+
+/** The preview split's widths: the thread's and the preview's (core/web/beside.ts previewSplit). */
+export const previewWidths = computed(() => previewSplit(splitRoom(), previewShare()));
 
 /** The beside pane's width, as laid out. */
 export const besidePaneWidth = signal(0);

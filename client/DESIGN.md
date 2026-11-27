@@ -401,19 +401,41 @@ reports no fold, so nothing snaps to it.
    Git's files › file, Brain's workspace › file. Below that the item pushes,
    as on the phone. It follows the pane's width live, the handle included.
 9. **Beside** (`core/web/beside.ts`, 11-26: an ultrawide showed one 760
-   column in 3440 of grey). On a desktop or browser window whose right
-   pane is 1480 or wider (a 1920 window with any pane width; never iOS or
-   Android, whose stack is the system's), the right pane splits:
-   Brain's thread in an 800 pane (740 on the Mac; 880 on the web from a
-   2560 window, see Roomy), and the beside pane
-   for what you open. A Session, a Work, a Work file or a file a chat
-   names (its preview), from a card, a tray row, a link, the palette or a
-   URL, opens there instead of over Brain. The Brain row, `G` then B and
-   Back to Brain's entry return the pane to the board. Its
-   own stack (`besideNav` in `ui/shell/nav.ts`) has the Work board at its
-   root. Back on the first page returns to the board, and a row or card
-   replaces what stands there. Links inside the pane push onto it. Any
-   other page (the computer page, Settings, Calendar) covers both, and
+   column in 3440 of grey; 11-27: on a laptop a preview covered the thread
+   it came from). On a desktop or browser window (never iOS or Android,
+   whose stack is the system's) the right pane splits in one of two ways,
+   by its width (`besideMode`):
+   - **The preview split**, from a right pane of 1028 (the thread's 480,
+     the handle's 8, the preview's 540: a 1366 browser window with the 320
+     pane; the Mac at 1440, 1512 and 1728 with its 280). Brain's thread has
+     the pane until a preview opens: a file a chat names (an HTML page, a
+     picture, a PDF, a text, a folder's index.html), a Work file, or one
+     file of Brain's workspace (a Work result's file). The preview then
+     stands at the right and the thread keeps reading and typing at the
+     left. A new split gives the preview 55 % of the room; the handle
+     between them (`ui/shell/SplitHandle.tsx`) drags it within the two
+     minimums, ← and → step 16 while it has the focus, a double-click
+     resets it, and the share is kept on the device
+     (`mewla.wide.previewShare`), so the next preview opens as wide in a
+     window of any size. A second preview goes over the first: its Back
+     returns to it, and the same file again changes nothing. × at the
+     header's end closes the pane and gives the thread its width back (a
+     page's own close stands down there). A link inside a preview opens
+     a file in the pane; anything else (a Session) covers both, as below
+     1028. A Session or a Work still covers the thread here: a terminal
+     wants the whole pane. A Mac at 1280 (1000) covers, as a phone does.
+   - **The board**, from a right pane of 1480 (a 1920 window with any
+     pane width). The right pane is always split: Brain's thread in an 800
+     pane (740 on the Mac; 880 on the web from a 2560 window, see Roomy),
+     and the beside pane for what you open. A Session, a Work or a preview,
+     from a card, a tray row, a link, the palette or a URL, opens there
+     instead of over Brain. The Brain row, `G` then B and Back to Brain's
+     entry return the pane to the board. Its own stack (`besideNav` in
+     `ui/shell/nav.ts`) has the Work board at its root. Back on the first
+     page returns to the board, and a row or card replaces what stands
+     there (a preview over a preview goes on top). Links inside the pane
+     push onto it.
+   Any other page (the computer page, Settings, Calendar) covers both, and
    Back finds the pane as it was (kept, `display: none`).
    - **The Work board** (`ui/work/WorkBoard.tsx`) shows Brain's Work by
      group (Needs you first, with any Work the tray's Needs you names),
@@ -435,8 +457,11 @@ reports no fold, so nothing snaps to it.
      step larger (18/28) and the composer taller (60). It follows the
      window live; a thread following its newest row stays there across the
      step (`ui/chat/Timeline.tsx`).
-   - **Crossing the gate.** Narrowing puts what stood beside Brain on the
-     stack over it. Widening moves the pages above Brain beside it again.
+   - **Crossing the gates** (`crossBeside`). Narrowing below 1028 puts what
+     stood beside Brain on the stack over it, still open. Widening moves
+     the pages above Brain beside it again, previews into the preview
+     split. From the board to the preview split a preview stays beside; a
+     Session or a Work goes on the stack over Brain.
      URLs, the tab title and the left pane's selection read Brain › what
      stands beside it (`shown` in `ui/shell/nav.ts`). Headless `nsh test`
      cannot see a beside page drawn with no width;

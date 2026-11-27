@@ -141,6 +141,15 @@ stays open as a left pane, with the cat on top, and the page you open sits on
 the right. There, **Search or run** (Ctrl K, ⌘ K on a Mac) opens any place,
 Session or Work.
 
+In the Mac app and in a desktop browser, a file you open from Brain's thread
+(a page, a picture, a PDF, a text, a Work's file) opens beside the thread
+once the right side is at least 1028 points wide, as on a 1366 browser window
+or a MacBook. You keep reading and typing to Brain while it is open. Drag the
+line between them to give the file more or less room; **×** closes it. A
+narrower window shows the file over the thread instead. From a 1920 window,
+Sessions and Work open beside Brain too, and the Work board fills that side
+while nothing is open.
+
 ## Next
 
 - Keep the daemon running across reboots: [Install and update](install-daemon.md#keep-it-running)

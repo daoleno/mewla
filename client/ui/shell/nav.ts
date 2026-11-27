@@ -3,8 +3,8 @@ import { createNavStack } from "nsh/base";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { PageNav } from "../more/routes";
 import type { Route } from "./routes";
-import { beside } from "./layout";
-import { opensBeside, shownRoutes } from "../../core/web/beside";
+import { beside, besideMode } from "./layout";
+import { allBeside, besideShows, openedBeside, opensBeside, samePage, shownRoutes } from "../../core/web/beside";
 
 /**
  * The app's one stack (SPEC §3): home at the bottom, every other page pushed on it. Pages take
@@ -18,9 +18,14 @@ export type BesideRoute = Route | { name: "board" };
 const BOARD: BesideRoute = { name: "board" };
 export const besideNav = createNavStack<BesideRoute>([BOARD]);
 
-/** The beside pane shows: the split is up and Brain is the page on the stack. */
+/** The beside pane shows: the split is up and Brain is the page on the stack (on a laptop, while a preview is open). */
 export function besideShown(): boolean {
-  return beside() && nav.routes().length === 1;
+  return besideShows(besideMode(), nav.routes().length, besideNav.routes().length - 1);
+}
+
+/** Whether `route`, opened now from Brain or a page beside it, goes in the beside pane (on a laptop it opens the pane). */
+function goesBeside(route: Route): boolean {
+  return untracked(nav.routes).length === 1 && opensBeside(route, untracked(besideMode));
 }
 
 /** Whether the beside page at `index` is the one shown. */
@@ -28,7 +33,7 @@ export function isBesideTop(index: number): boolean {
   return besideShown() && index === besideNav.routes().length - 1;
 }
 
-/** The beside pane back to the Work board (a computer switch: what it held was the old computer's). */
+/** The beside pane back to the Work board, or closed on a laptop (a computer switch: what it held was the old computer's). */
 export function closeBeside(): void {
   if (untracked(besideNav.routes).length > 1) besideNav.popToRoot();
 }
@@ -61,10 +66,12 @@ export function homeShown(): boolean {
 
 /** Replaces everything above home with `routes`. */
 export function openPage(...routes: Route[]): void {
-  // With the split up, a Session, a Work or a Work file stands beside Brain in place of what stood there.
-  if (untracked(beside) && opensBeside(routes[0])) {
+  // With the split up, what opens beside (a Session, a Work, a preview; on a laptop a preview) stands beside Brain in
+  // place of what stood there; a preview over a preview goes on top of it, so Back returns to the first.
+  const opened = routes.filter((route) => route.name !== "home");
+  if (allBeside(opened, untracked(besideMode))) {
     if (untracked(nav.routes).length > 1) nav.popToRoot();
-    besideNav.setRoutes([BOARD, ...routes.filter((route) => route.name !== "home")]);
+    besideNav.setRoutes([BOARD, ...openedBeside(untracked(besidePages), opened)]);
     return;
   }
   // Home stays the page it is (its draft, thread scroll and tray, SPEC §3.8): only what is above it changes.
@@ -82,15 +89,18 @@ export function openSession(workerId: string, hint?: TerminalRouteSessionHint): 
   push({ name: "session", workerId, hint });
 }
 
-/** Pushes a page: on the beside pane while it shows (a link inside it, a new Session, a file a chat names), else on the one stack. */
+/**
+ * Pushes a page: on the beside pane while Brain shows and it opens there (a link inside it, a new Session, a file a
+ * chat names; on a laptop a file opens the pane), else on the one stack. The page already on top is not pushed again.
+ */
 export function push(route: Route): void {
-  if (untracked(besideShown) && opensBeside(route)) besideNav.push(route);
-  else nav.push(route);
+  if (!goesBeside(route)) return nav.push(route);
+  if (!samePage(untracked(besideNav.routes).at(-1), route)) besideNav.push(route);
 }
 
 /** Opens what a card in Brain's thread names: in place of what stands beside Brain, or pushed over Brain. */
 export function openFromBrain(route: Route): void {
-  if (untracked(besideShown) && opensBeside(route)) openPage(route);
+  if (goesBeside(route)) openPage(route);
   else nav.push(route);
 }
 

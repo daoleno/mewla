@@ -509,6 +509,20 @@ describe("beside: a wide window opens what you pick next to Brain (core/web/besi
     expect(app.shows("id:beside-pane")).toBe(false);
   }, 20_000);
 
+  for (const [platform, width, height] of [["android", 390, 844], ["ios", 390, 844], ["android", 1440, 900]] as const) {
+    test(`${platform} ${width}: a file Brain names covers the thread on the native stack, as before (no preview split)`, async () => {
+      const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+      const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md)." };
+      const app = await open(APP, { platform, width, height, storage: paired, host: phoneHost({ brain: { chat_thread_id: "t-now", host_worker }, conversations: { "brain-host": [reply] } }) });
+      await app.waitFor("text:the plan", { timeout: 10_000 });
+      await app.press("text:the plan");
+      await app.waitFor("id:file-preview", { timeout: 10_000 });
+      expect(app.shows("id:beside-pane")).toBe(false);
+      expect(app.shows("id:split-handle")).toBe(false);
+      expect(app.shows("id:page-close")).toBe(false);
+    }, 20_000);
+  }
+
   test("Back from what stood beside Brain returns the pane to the board; the Brain row and G then B do too", async () => {
     const app = await open(APP, { ...big, clock: {}, host: webHost({ brain: {}, worker_sessions: [running("w1", "api")], conversations: { w1: [] } }) });
     await app.waitFor("id:beside-pane", { timeout: 10_000 });
@@ -549,4 +563,57 @@ describe("beside: a wide window opens what you pick next to Brain (core/web/besi
     await app.press("id:beside-pane >> id:page-back");
     await app.waitFor("id:work-board");
   }, 20_000);
+
+  test("on a laptop (1440) a file Brain names opens beside the thread, which keeps its composer; × gives the thread its width back", async () => {
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md) and [the notes](/home/me/worklog/notes.md)." };
+    const app = await open(APP, { ...big, width: 1440, height: 900, host: webHost({ brain: { chat_thread_id: "t-now", host_worker, current_work: work }, conversations: { "brain-host": [reply] } }) });
+    await app.waitFor("text:the plan", { timeout: 10_000 });
+    // Nothing open: the thread has the right pane, no board.
+    expect(app.shows("id:beside-pane")).toBe(false);
+    expect(app.shows("id:work-board-card")).toBe(false);
+    await app.press("text:the plan");
+    await app.waitFor("id:beside-pane >> id:file-preview", { timeout: 10_000 });
+    expect(app.shows("id:home-header")).toBe(true);
+    expect(app.shows("id:split-handle")).toBe(true);
+    // The first preview has no Back: × closes the pane.
+    expect(app.shows("id:beside-pane >> id:page-back")).toBe(false);
+    expect(app.shows("id:beside-pane >> id:page-close")).toBe(true);
+    // The person keeps typing to Brain beside it.
+    await app.type("id:composer", "beside the plan");
+    expect(app.shows("id:beside-pane >> id:file-preview")).toBe(true);
+    // A second file goes over the first: its Back returns to the plan.
+    await app.press("text:the notes");
+    await app.waitUntil(() => app.shows("id:beside-pane >> id:page-back"));
+    await app.press("id:beside-pane >> id:page-back");
+    await app.waitUntil(() => !app.shows("id:beside-pane >> id:page-back"));
+    expect(app.shows("id:beside-pane >> id:file-preview")).toBe(true);
+    await app.press("id:beside-pane >> id:page-close");
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    expect(app.shows("id:home-header")).toBe(true);
+    expect(app.shows("id:work-board-card")).toBe(false);
+  }, 30_000);
+
+  test("on a laptop a preview covers the thread below 1028 of right pane and stands beside it again when widened", async () => {
+    const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
+    const reply = { id: "a1", seq: 1, timestamp: new Date().toISOString(), kind: "assistant_message", role: "assistant", body: "I wrote [the plan](/home/me/worklog/plan.md)." };
+    const app = await open(APP, { ...big, width: 1440, height: 900, host: webHost({ brain: { chat_thread_id: "t-now", host_worker }, conversations: { "brain-host": [reply] } }) });
+    await app.waitFor("text:the plan", { timeout: 10_000 });
+    await app.press("text:the plan");
+    await app.waitFor("id:beside-pane >> id:file-preview", { timeout: 10_000 });
+    // 1280 less the 320 pane is 960: the preview covers Brain, still open, with a Back to the thread.
+    await app.setViewport(1280, 800);
+    await app.waitUntil(() => !app.shows("id:beside-pane"));
+    expect(app.shows("id:file-preview")).toBe(true);
+    expect(app.shows("id:page-back")).toBe(true);
+    expect(app.shows("id:home-header")).toBe(false);
+    await app.setViewport(1440, 900);
+    await app.waitFor("id:beside-pane >> id:file-preview");
+    expect(app.shows("id:home-header")).toBe(true);
+    // Widened to the board (1920): the preview stays beside, the thread at its 800.
+    await app.setViewport(1920, 1080);
+    await app.waitUntil(() => Math.round(app.layout("id:beside-pane")!.x - app.layout("id:right-pane")!.x) === 800);
+    expect(app.shows("id:beside-pane >> id:file-preview")).toBe(true);
+    expect(app.shows("id:beside-pane >> id:page-back")).toBe(true);
+  }, 30_000);
 });

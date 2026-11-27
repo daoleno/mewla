@@ -1,7 +1,7 @@
 import { cleanup, effect, Image, openUrl, platform, safeArea, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import type { JSX, ScrollRef } from "nsh";
 import { Button, TextView } from "nsh/base";
-import { NavPage } from "../../shell/NavPage";
+import { NavPage, PageStack } from "../../shell/NavPage";
 import { GuardedDialog } from "../../shell/AppSheet";
 import { isSvgImage } from "../../../core/files/imageSource";
 import { dirnameOf, resolveMarkdownLink } from "../../../core/files/markdownLinks";
@@ -215,6 +215,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
   const canCopy = () => (!!text() && (!text()!.truncated || sessionFileCanCopyWhole(metadata()))) || (!!page() && sessionFileCanCopyWhole(metadata()));
   const status = () => sessionFileDownloadStatus(download(), downloadError());
   const shownPage = () => (loading() || problem() ? null : page());
+  const stack = PageStack();
+  const paneCloses = () => Boolean(stack.close?.());
 
   return (
     <NavPage
@@ -244,7 +246,8 @@ export function FilePreviewPage(props: { reference: string; identity: SessionFil
           <If when={canCopy()}><Action testID="file-copy" label={copied() ? "Copied" : "Copy"} icon={copied() ? "check" : "copy"} onPress={onCopy} /></If>
           <If when={shownPage() && OPEN_IN_BROWSER}><Action testID="file-open-browser" label="Open in browser" icon="open-external" onPress={onOpenInBrowser} /></If>
           <If when={shownPage()}><Action testID="file-full-screen" label="Full screen" icon="expand" onPress={() => full.set(true)} /></If>
-          <Action testID="file-close" label="Close file preview" icon="close" onPress={() => props.nav.pop()} />
+          {/* Beside a laptop's thread the pane's own × closes it (client/DESIGN.md "The wide layout", Beside). */}
+          <If when={!paneCloses()}><Action testID="file-close" label="Close file preview" icon="close" onPress={() => props.nav.pop()} /></If>
         </View>
       }
     >

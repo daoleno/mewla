@@ -9,9 +9,10 @@ import type { WebPlace } from "../../core/web/places";
 import { placeOfRoutes, routesOfPlace } from "./routePlaces";
 import { DesktopOverlays } from "./desktop/Overlays";
 import { LeftPane, PaneHandle } from "./LeftPane";
+import { SplitHandle } from "./SplitHandle";
 import { Rail } from "./Rail";
-import { beside, besideBrainWidth, besidePaneWidth, floatsShown, loadPaneWidth, paneWidth, rightPaneWidth, screenDock, stackWidth, wide } from "./layout";
-import { intoBeside, opensBeside, outOfBeside } from "../../core/web/beside";
+import { beside, besideBrainWidth, besideMode, besidePaneWidth, floatsShown, loadPaneWidth, loadPreviewShare, paneWidth, previewWidths, rightPaneWidth, screenDock, stackWidth, wide } from "./layout";
+import { allBeside, crossBeside } from "../../core/web/beside";
 import { WorkBoard } from "../work/WorkBoard";
 import { MenuHost } from "../kit/Menu";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
@@ -40,7 +41,8 @@ import { settingsLinkRoutes } from "../../core/settings/settingsLink";
 import { setOpenExtensions } from "../more/extensions/plugins";
 import { sessionRowModel } from "../../core/sessions/listRow";
 import { workLinkOf } from "../sessions/workLinks";
-import { besideNav, besidePages, besideShown, closeBeside, goHome, isBesideTop, isTop, nav, openPage, openSession, pageNav, replaceSession, setBesidePages, shown, trayOpen, type BesideRoute } from "./nav";
+import { besideNav, besidePages, besideShown, closeBeside, goHome, isBesideTop, isTop, nav, openPage, openSession, pageNav, push, replaceSession, setBesidePages, shown, trayOpen, type BesideRoute } from "./nav";
+import type { PageNav } from "../more/routes";
 import type { Route } from "./routes";
 import { belowSections, paneBottom } from "./below";
 
@@ -89,7 +91,7 @@ function followBrainHost(host: string) {
 /** Goes to a place a URL, the palette or `G` then a letter names. */
 export function openPlace(place: WebPlace) {
   const routes = routesOfPlace(place);
-  if (untracked(beside) && opensBeside(routes[0])) return openPage(...routes);
+  if (allBeside(routes, untracked(besideMode))) return openPage(...routes);
   // Brain itself (G then B, the palette): Brain alone, the beside pane back to the board.
   if (routes.length === 0) closeBeside();
   nav.setRoutes([{ name: "home" }, ...routes]);
@@ -108,7 +110,7 @@ function restore(page: PoppedPage<PageSnapshot>) {
   if (page.kind === "place") return openPlace(page.place);
   const routes = page.snapshot.routes as Route[];
   if (!routes.length || routes[0]?.name !== "home") return goHome();
-  if (untracked(beside) && opensBeside(routes[1])) {
+  if (allBeside(routes.slice(1), untracked(besideMode))) {
     if (untracked(nav.routes).length > 1) nav.popToRoot();
     return setBesidePages(reuseRoutes(untracked(besidePages) as unknown[], routes.slice(1)) as Route[]);
   }
@@ -127,10 +129,17 @@ const floatPage = () => {
   };
 };
 
+/** How a beside page's own links push and its Back pops: a preview's link to a file opens in the pane, anything else over Brain. */
+const besidePageNav: PageNav = {
+  push: (route) => push(route as Route),
+  pop: () => besideNav.pop(),
+  routes: () => besideNav.routes(),
+};
+
 /** The stack a page is made on: the one stack, or the beside pane's. */
-type PageStackOf = { nav: NavStackState<Route>; top: (index: number) => boolean; width: () => number };
-const MAIN: PageStackOf = { nav, top: isTop, width: () => stackWidth() };
-const BESIDE: PageStackOf = { nav: besideNav as unknown as NavStackState<Route>, top: isBesideTop, width: () => besidePaneWidth() };
+type PageStackOf = { nav: NavStackState<Route>; more: PageNav; top: (index: number) => boolean; width: () => number };
+const MAIN: PageStackOf = { nav, more: pageNav, top: isTop, width: () => stackWidth() };
+const BESIDE: PageStackOf = { nav: besideNav as unknown as NavStackState<Route>, more: besidePageNav, top: isBesideTop, width: () => besidePaneWidth() };
 
 function page(route: Route, index: () => number, on: PageStackOf = MAIN): JSX.Element {
   const nav = on.nav;
@@ -151,7 +160,7 @@ function page(route: Route, index: () => number, on: PageStackOf = MAIN): JSX.El
     case "workFile":
       return calendarRoute(route, nav);
     default:
-      return <MorePageView route={route} nav={pageNav} onPair={() => nav.push({ name: "pair" })} />;
+      return <MorePageView route={route} nav={on.more} onPair={() => nav.push({ name: "pair" })} />;
   }
 }
 
@@ -182,19 +191,22 @@ function Stack() {
   );
 }
 
-/** A beside page: the board at the root (a route never changes its page), else the page the route names. */
+/** A beside page: the board at the root (a route never changes its page; on a laptop it is not drawn), else the page the route names. */
 function besidePage(route: BesideRoute, index: () => number): JSX.Element {
-  if (route.name === "board") return <WorkBoard />;
+  if (route.name === "board") return <WorkBoard live={() => besideMode() === "board"} />;
   return page(route, index, BESIDE);
 }
 
 /**
- * The beside pane (core/web/beside.ts): the Work board at its root, then what a card, a row or a link opened. Its
- * pages have a Back: to the page under, and from the first one to the board.
+ * The beside pane (core/web/beside.ts): the Work board at its root, then what a card, a row or a link opened. On the
+ * board its pages have a Back: to the page under, and from the first one to the board. On a laptop the first preview
+ * has no Back; × closes the pane (the thread takes the width again) and a later preview's Back returns to the one before.
  */
 function BesideStack() {
+  const laptop = () => besideMode() === "preview";
+  const canGoBack = () => besideNav.routes().length > (laptop() ? 2 : 1);
   return (
-    <PageStack.Provider value={{ canGoBack: () => besideNav.routes().length > 1, back: () => besideNav.pop() }}>
+    <PageStack.Provider value={{ canGoBack, back: () => besideNav.pop(), close: () => (laptop() ? closeBeside : null) }}>
       <NavStack testID="beside-stack" state={besideNav} style={{ flex: 1 }}>
         {besidePage}
       </NavStack>
@@ -238,27 +250,27 @@ function Overlays(props: { bottomInset?: () => number }) {
  */
 export function Shell() {
   loadPaneWidth();
+  loadPreviewShare();
   // On the desktops and the web every place has a URL and the tab a title (SPEC §14.5).
   if (!mobile) syncWebLocation({ place: currentPlace, snapshot, pageTitle, serverId: () => current()?.id ?? null, restore });
   // Narrow to wide: an open tray becomes the left pane (§14.6), and the phone's overlay does not come back when narrowed again.
   effect(() => {
     if (wide()) untracked(() => trayOpen() && trayOpen.set(false));
   });
-  // Crossing the split's gate: the pages above Brain move beside it, and back on the stack when it closes.
+  // Crossing a split's gate: the pages above Brain move beside it, and back on the stack when it closes; a Session or
+  // a Work leaving the board for a laptop's split goes back on the stack, a preview stays beside.
   effect(() => {
-    const split = beside();
+    const mode = besideMode();
     untracked(() => {
-      if (split) {
-        const moved = intoBeside(nav.routes());
-        if (moved) {
-          setBesidePages(moved.beside);
-          nav.setRoutes(moved.main);
-        }
-        return;
+      const main = nav.routes();
+      const aside = besidePages();
+      const next = crossBeside(mode, main, aside);
+      const changed = (a: readonly Route[], b: readonly Route[]) => a.length !== b.length || a.some((route, i) => route !== b[i]);
+      if (changed(next.beside, aside)) {
+        if (next.beside.length) setBesidePages(next.beside);
+        else closeBeside();
       }
-      const back = outOfBeside(nav.routes(), besidePages());
-      if (back) nav.setRoutes(back);
-      closeBeside();
+      if (changed(next.main, main)) nav.setRoutes(next.main);
     });
   });
   // Brain's terminal is Brain's host's: one the computer replaces (after a restart, or a lost Session resumed) takes the
@@ -282,9 +294,11 @@ export function Shell() {
           paneBottom.set(bounds.origin.y + bounds.size.height);
         }}>
           <View class="flex-1 flex-row">
-            <View class="h-full" style={besideShown() ? { width: besideBrainWidth() } : { flex: 1 }}><Stack /></View>
+            <View class="h-full" style={!besideShown() ? { flex: 1 } : besideMode() === "board" ? { width: besideBrainWidth() } : { width: previewWidths().thread }}><Stack /></View>
+            {/* A laptop's split: the handle between the thread and the preview (the board's pane has its border). */}
+            <If when={besideShown() && besideMode() === "preview"}><SplitHandle /></If>
             {/* Kept while the split is up, so what it shows keeps its state under a page that covers both (Settings). */}
-            <If when={beside()}><View testID="beside-pane" onLayout={({ bounds }) => besidePaneWidth.set(bounds.size.width)} class="h-full flex-1 flex-row overflow-hidden border-l border-border" style={{ display: besideShown() ? "flex" : "none" }}><BesideStack /></View></If>
+            <If when={beside()}><View testID="beside-pane" onLayout={({ bounds }) => besidePaneWidth.set(bounds.size.width)} class={`h-full flex-1 flex-row overflow-hidden ${besideMode() === "board" ? "border-l border-border" : ""}`} style={{ display: besideShown() ? "flex" : "none" }}><BesideStack /></View></If>
           </View>
         </View>
       </View>

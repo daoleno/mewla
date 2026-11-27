@@ -17,7 +17,11 @@ import { macLightsRow } from "../mac/local";
 import { lightsLead } from "../../core/mac/frame";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
-export const PageStack = context<{ canGoBack: () => boolean; back: () => void }>({ canGoBack: () => false, back: () => {} });
+/**
+ * What a page's header offers: Back (the stack holds more than its first page), and on a laptop's preview pane ×
+ * (`close`: what closes the pane, or null when the stack has none; client/DESIGN.md "The wide layout", Beside).
+ */
+export const PageStack = context<{ canGoBack: () => boolean; back: () => void; close?: () => (() => void) | null }>({ canGoBack: () => false, back: () => {} });
 
 export type AppNavPageProps = NavPageProps & {
   /** The page's column (client/DESIGN.md): its header row and, framed, its content share it. Default `"page"`. */
@@ -185,7 +189,7 @@ export function NavPage(props: AppNavPageProps) {
   const headerWidth = () => pageColumnWidth(own.column ?? "page", macColumn, roomy());
   return (
     <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
-      header={own.header ?? <PageHeader title={props.title} titleView={own.headerTitle} left={own.headerLeft} right={own.headerRight} width={headerWidth} canGoBack={stack.canGoBack} back={stack.back} mark={mark} />}>
+      header={own.header ?? <PageHeader title={props.title} titleView={own.headerTitle} left={own.headerLeft} right={own.headerRight} width={headerWidth} canGoBack={stack.canGoBack} back={stack.back} close={() => stack.close?.() ?? null} mark={mark} />}>
       <View testID="page-paper" class={`flex-1 ${paperOf(own.class)}`}><Column width={width}>{own.children}</Column></View>
     </BaseNavPage>
   );
@@ -199,6 +203,7 @@ function PageHeader(props: {
   width: () => number | null;
   canGoBack: () => boolean;
   back: () => void;
+  close: () => (() => void) | null;
   mark: () => ReturnType<typeof backMark>;
 }) {
   const size = headerSize();
@@ -218,6 +223,9 @@ function PageHeader(props: {
           {props.titleView ?? <Text role="header" class={`${size.title} line-clamp-1`}>{props.title ?? ""}</Text>}
         </View>
         <If when={"right" in props}><View class="flex-row items-center gap-3">{props.right}</View></If>
+        <If when={props.close()}><Button testID="page-close" accessibilityLabel="Close" onPress={() => props.close()?.()} class={`${size.back} items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
+            <Icon name="close" size={size.backIcon - 2} tone="ink" />
+          </Button></If>
       </View>
     </View>
   );

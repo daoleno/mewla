@@ -28,14 +28,15 @@ const groups = computed(() => {
  * side by side over the whole pane, the longest taking the spare card tracks as a grid (core/work/board.ts), so the
  * pane is filled at any width and any number of Works.
  */
-export function WorkBoard() {
+export function WorkBoard(props: { live?: () => boolean }) {
   const width = signal(0);
   const sessions = computed(() => new Map(workers().map((w) => [w.id, w] as const)));
   const layout = computed(() => boardLayout(width(), groups().map((g) => g.slips.length)));
   return (
     <NavPage title="Work" testID="work-board" column="full" frame={false}>
       <View class="flex-1 bg-background" onLayout={({ bounds }) => width.set(bounds.size.width)}>
-        <If when={groups().length > 0} else={<EmptyState icon="brain" title="No Work" testID="work-board-empty" />}>
+        {/* Under a laptop's preview split the board is never shown: nothing of it is made. */}
+        <If when={props.live?.() ?? true}><If when={groups().length > 0} else={<EmptyState icon="brain" title="No Work" testID="work-board-empty" />}>
           <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-6 pt-2 pb-10">
             <View class="flex-row items-start gap-4">
               <Each of={layout().columns} key={(column) => `${column.groups.join(",")}:${column.width}`}>{(column) => (
@@ -56,7 +57,7 @@ export function WorkBoard() {
               )}</Each>
             </View>
           </Scroll>
-        </If>
+        </If></If>
       </View>
     </NavPage>
   );
