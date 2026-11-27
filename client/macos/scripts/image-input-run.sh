@@ -226,8 +226,8 @@ grep -q "drag ended: none" "$D/drag.out" && report "mode-000 file: macOS refused
 "$B/pasteboard" file "$D/locked.png"; front; cmd_v; sleep 3
 report "mode-000 file pasted: onPaste reported '$(log | grep "composer: pasted" | tail -1 | sed 's/.*composer: //')'"
 key 'keystroke "a" using command down'; key 'key code 51'
-# A file that reaches Mewla Dev but cannot be read when it reads it (it went in between): a chip that says so.
-unread='\[failed (gone\.png|File): Mewla can.t read this file\.\]'
+# A file that reaches Mewla Dev but cannot be read when it reads it (it went in between): a chip that says so. A gone file is "can't find" since fd82d19b9 (the host reads it), "can't read" before.
+unread='\[failed (gone\.png|File): Mewla can.t (read|find) this file\.\]'
 cp "$D/picture.png" "$D/gone.png"
 # Its own marker: the deletion waits until the drag is over the window (a marker left by an earlier drag deleted the
 # file before this drag began, and macOS refuses a drag of a file that is not there, as the mode-000 one).
