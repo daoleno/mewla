@@ -938,23 +938,24 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     if (to[0] < 0) clearSelection() else if (from[0] < 0) { from[0] = 0; from[1] = 0 }
   }
 
-  /** The word under (line, col): the run of non-blank cells around it; null on a blank. */
+  /** The word under (line, col), as the chat and a browser select one ([TerminalWords]); null on a blank. */
   private fun wordAt(i: Int, col: Int): Pair<Int, Int>? {
     if (col !in 0 until cols) return null
-    val blank = BooleanArray(cols) { true }
+    // Each cell's character: a plain run's one UTF-16 unit per cell, a cluster's first code point in its first
+    // cell and its other cells the wide character's.
+    val cells = IntArray(cols)
     for (run in lineAt(i).runs) {
       for (k in 0 until run.cells) {
         val c = run.col + k
         if (c >= cols) break
-        blank[c] = run.plain && run.chars[run.start + k] == ' '
+        cells[c] = when {
+          run.plain -> run.chars[run.start + k].code
+          k == 0 && run.len > 0 -> Character.codePointAt(run.chars, run.start, run.start + run.len)
+          else -> TerminalWords.WIDE
+        }
       }
     }
-    if (blank[col]) return null
-    var a = col
-    var b = col
-    while (a > 0 && !blank[a - 1]) a--
-    while (b < cols - 1 && !blank[b + 1]) b++
-    return a to b
+    return TerminalWords.at(cells, col)
   }
 
   private fun select(i: Int, a: Int, b: Int) {

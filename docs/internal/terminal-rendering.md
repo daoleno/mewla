@@ -39,7 +39,9 @@ libghostty-vt for the program's modes; a key whose encoding is only the text it
 types is left to the textarea, so its text arrives with the `input` event after
 the input method had it: a Chinese input method's ，。、 and a composition it
 starts after the key go, never the bare key). Selection and copy are the platform's own
-(long press and the system menu on the phones; drag, double-click a word and
+(long press and the system menu on the phones, where a long press selects a word as
+the chat does: a CJK character on its own, a word without the punctuation around it,
+a path or URL whole (TerminalWords on both phones); drag, double-click a word and
 triple-click a line, then the browser's copy, on the web). Text a
 program copies (OSC 52, OSC 1337 Copy, OSC 5522) arrives as `copy`. If the VT
 cannot be made, the view reports `failed` and `retry` tries again.

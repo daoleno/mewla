@@ -153,6 +153,31 @@ final class TerminalTests: XCTestCase {
     XCTAssertEqual(input, ["echo a\recho b", "\u{1b}[200~x\ny\u{1b}[201~"])
   }
 
+  /// A long press selects a word as the chat and a browser do: a CJK character, not the whole row; a
+  /// word without the punctuation around it; a path whole (TerminalWords, as Android's TerminalWords.kt).
+  func testLongPressSelectsAWordNotARow() throws {
+    let view = TerminalView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    view.setTheme(background: "#141210", foreground: "#f4f0ea", cursor: "#f4f0ea", selection: "#3D7EFF55",
+                  palette: palette.map { String(format: "#%06x", $0) })
+    view.setFontSize(13)
+    view.frame = CGRect(x: 0, y: 0, width: ceil(40 * view.cellW), height: ceil(4 * view.cellH))
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    XCTAssertEqual(view.cols, 40)
+    view.write("文件里没有空行，也没有\r\nthe proxy, not the app.\r\ntee /tmp/window-edges.log")
+    let at = { (col: Int, row: Int) in CGPoint(x: (CGFloat(col) + 0.5) * view.cellW, y: (CGFloat(row) + 0.5) * view.cellH) }
+
+    XCTAssertTrue(view.selectWord(at: at(2, 0)))
+    XCTAssertEqual(view.selectedText(), "件", "each CJK character is a word; its second cell is that character")
+    XCTAssertTrue(view.selectWord(at: at(14, 0)))
+    XCTAssertEqual(view.selectedText(), "，")
+    XCTAssertTrue(view.selectWord(at: at(6, 1)))
+    XCTAssertEqual(view.selectedText(), "proxy")
+    XCTAssertTrue(view.selectWord(at: at(12, 2)))
+    XCTAssertEqual(view.selectedText(), "/tmp/window-edges.log")
+    XCTAssertEqual(TerminalWords.at([Int]("v0.4.35 ok".unicodeScalars.map { Int($0.value) }), 3).map { [$0.0, $0.1] }, [0, 6])
+  }
+
   /// History is drawn a page (64 rows) at a time when first needed: every row reads back across page
   /// boundaries, after rows leave the front, and after a theme change voids what was drawn.
   @MainActor

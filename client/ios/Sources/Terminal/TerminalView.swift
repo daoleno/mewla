@@ -868,21 +868,23 @@ final class TerminalView: UIView, UITextInput, UIEditMenuInteractionDelegate {
     selTo = to
   }
 
-  /// The word under (line, col): the run of non-blank cells around it; nil on a blank.
+  /// The word under (line, col), as TerminalWords finds it; nil on a blank.
   private func word(at i: Int, col: Int) -> (Int, Int)? {
     guard col >= 0, col < cols else { return nil }
-    var blank = [Bool](repeating: true, count: cols)
+    var cells = [Int](repeating: 0, count: cols)
     for cell in line(i).cells {
       let run = cell.run
       for k in 0..<run.cells where run.col + k < cols {
-        blank[run.col + k] = run.plain && run.units[k] == 0x20
+        if run.plain {
+          cells[run.col + k] = k < run.units.count ? Int(run.units[k]) : 0
+        } else if k == 0 {
+          cells[run.col] = run.text.unicodeScalars.first.map { Int($0.value) } ?? 0
+        } else {
+          cells[run.col + k] = TerminalWords.wide
+        }
       }
     }
-    guard !blank[col] else { return nil }
-    var a = col, b = col
-    while a > 0, !blank[a - 1] { a -= 1 }
-    while b < cols - 1, !blank[b + 1] { b += 1 }
-    return (a, b)
+    return TerminalWords.at(cells, col)
   }
 
   /// The selected text: rows joined by newlines, except where a row wraps onto the next.
