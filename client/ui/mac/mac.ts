@@ -472,6 +472,7 @@ async function updateProof(hold = 12): Promise<void> {
   if (!(await until(() => ["ready", "available", "failed", "current", "checkFailed"].includes(owner.state().kind)))) return void console.log("dev script: update stopped (no answer)");
   const state = owner.state();
   if (state.kind !== "ready") return void console.log(`dev script: update none (${state.kind})`);
+  console.log(`dev script: update ready ${state.update.version}: downloaded and waiting, nothing pressed`);
   console.log(`dev script: update found ${state.update.version}`);
   // The cat's menu row for this state, from the function the menu's items come from (a run cannot open a menu bar item's menu).
   console.log(`dev script: menu row ${JSON.stringify(appUpdateMenuItem(state, () => {}).flatMap((item) => ("label" in item ? [item.label] : [])))}`);
