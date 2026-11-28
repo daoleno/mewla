@@ -85,16 +85,44 @@ const hostNotReadyGrace = 60 * time.Second
 
 // noteHostActivation records whether the last host reconcile left the agent open
 // but never ready for input (a sign-in prompt, a first-run question), the state
-// a person cannot see from the phone.
+// a person cannot see from the phone. An activation whose delivery is
+// ambiguous reached the agent's composer, so the agent was ready: it ends the
+// not-ready state as success does. Other failures (a probe to repeat) leave
+// it as it was.
 func (s *Service) noteHostActivation(err error) {
 	s.hostProblemMu.Lock()
 	defer s.hostProblemMu.Unlock()
 	switch {
-	case err == nil:
+	case err == nil, errors.Is(err, ErrHostActivationAmbiguous):
 		s.hostNotReadySince = time.Time{}
 	case errors.Is(err, watcher.ErrWorkerInputNotReady) && s.hostNotReadySince.IsZero():
 		s.hostNotReadySince = time.Now()
 	}
+}
+
+// noteHostActivationAccepted ends the not-ready state once the Host took its
+// activation, on whichever path delivered it: a client's new chat or host
+// choice delivers it too, and only a reconcile used to end the state.
+func (s *Service) noteHostActivationAccepted() {
+	s.hostProblemMu.Lock()
+	s.hostNotReadySince = time.Time{}
+	s.hostProblemMu.Unlock()
+}
+
+// hostActivationRecorded reports that the current Host Session took its
+// activation, as the store records it. Such a Host is past any sign-in or
+// first-run screen and answers on its own, so it is not "open but not ready",
+// whatever a later check of its screen says.
+func (s *Service) hostActivationRecorded() bool {
+	if s == nil || s.store == nil {
+		return false
+	}
+	host, err := s.store.HostSession()
+	if err != nil || strings.TrimSpace(host.ID) == "" {
+		return false
+	}
+	activation, err := s.store.HostActivation()
+	return err == nil && strings.TrimSpace(activation.SessionID) == strings.TrimSpace(host.ID)
 }
 
 func (s *Service) hostActivationStuck() bool {
@@ -117,6 +145,9 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 	// the grace: not even "not signed in", which an agent on an API key or a
 	// login-shell sign-in reads as while it starts and runs.
 	if time.Since(since) < hostNotReadyGrace {
+		return nil
+	}
+	if s.hostActivationRecorded() {
 		return nil
 	}
 	name := executor.ID

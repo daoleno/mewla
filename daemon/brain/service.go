@@ -3800,6 +3800,7 @@ func (s *Service) markHostActivation(sessionID, receipt string, owned watcher.Ow
 	}); err != nil {
 		return fmt.Errorf("persist Brain Host activation: %w", err)
 	}
+	s.noteHostActivationAccepted()
 	return nil
 }
 

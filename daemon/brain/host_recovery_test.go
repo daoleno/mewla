@@ -173,3 +173,63 @@ func pastNotReadyGrace(service *Service) {
 	service.hostNotReadySince = time.Now().Add(-hostNotReadyGrace - time.Second)
 	service.hostProblemMu.Unlock()
 }
+
+// The owner's photo (Mewla for Mac, first install, Codex 0.172 as Brain):
+// "Brain's codex session is open but not ready" while Codex was working on
+// the activation and Brain had answered. Whatever path delivers the
+// activation, a Host that took it is not "open but not ready".
+func TestHostThatTookItsActivationIsNeverReportedNotReady(t *testing.T) {
+	const id = "brain-host:@1"
+	notReady := fmt.Errorf("deliver Brain Host activation: %w", fmt.Errorf("%w for %q", watcher.ErrWorkerInputNotReady, "codex"))
+	stuck := func(t *testing.T) *Service {
+		t.Helper()
+		service := hostFixture(t, map[string]bool{"claude": true, "codex": true},
+			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthAuthenticated})
+		if err := service.store.SetHostSession(id, "codex"); err != nil {
+			t.Fatal(err)
+		}
+		service.watcher = &fakeWatcher{sessions: map[string]*classifier.Worker{
+			id: {ID: id, Hidden: true, Command: "codex", ProcessID: 42, StartedAt: time.Now()},
+		}}
+		service.noteHostActivation(notReady)
+		pastNotReadyGrace(service)
+		if snapshot, _ := service.Snapshot(); snapshot.HostProblem == nil || snapshot.HostProblem.Code != "not_ready" {
+			t.Fatalf("precondition: host problem = %+v", snapshot.HostProblem)
+		}
+		return service
+	}
+	t.Run("activation accepted outside a reconcile", func(t *testing.T) {
+		// A new chat, a host choice or a restart's adoption delivers the
+		// activation through ensureHostActivation; only a reconcile used to
+		// end the not-ready state.
+		service := stuck(t)
+		if err := service.ensureHostActivation(id, "codex", service.hostExecutor(), false, false); err != nil {
+			t.Fatal(err)
+		}
+		if snapshot, _ := service.Snapshot(); snapshot.HostProblem != nil {
+			t.Fatalf("host that took its activation still reported: %+v", snapshot.HostProblem)
+		}
+		if service.HostRecoveryDue() {
+			t.Fatal("an activated host is still retried as stuck")
+		}
+	})
+	t.Run("activation delivery ambiguous", func(t *testing.T) {
+		// The bytes reached the composer, so it was ready; every later
+		// reconcile says "refusing replay", never success.
+		service := stuck(t)
+		service.noteHostActivation(fmt.Errorf("%w: receipt %q; refusing replay", ErrHostActivationAmbiguous, "r"))
+		if snapshot, _ := service.Snapshot(); snapshot.HostProblem != nil {
+			t.Fatalf("host whose activation reached it still reported: %+v", snapshot.HostProblem)
+		}
+	})
+	t.Run("activation recorded while reconciles keep failing", func(t *testing.T) {
+		service := stuck(t)
+		if err := service.store.MarkHostActivation(HostActivation{SessionID: id, HostGeneration: "g", ContractDigest: brainHostContractDigest()}); err != nil {
+			t.Fatal(err)
+		}
+		service.noteHostActivation(notReady)
+		if snapshot, _ := service.Snapshot(); snapshot.HostProblem != nil {
+			t.Fatalf("host with a recorded activation still reported: %+v", snapshot.HostProblem)
+		}
+	})
+}

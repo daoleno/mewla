@@ -199,19 +199,23 @@ func isCodexStartupReady(content string) bool {
 	if match := codexFooterReadyRe.FindAllStringIndex(normalized, -1); len(match) > 0 {
 		lastFooter = match[len(match)-1][0]
 	}
-	if lastHeader < 0 && lastFooter < 0 {
-		return false
-	}
 	composerIndexes := codexComposerReadyRe.FindAllStringIndex(normalized, -1)
 	if len(composerIndexes) == 0 {
 		return false
 	}
 	lastComposer := composerIndexes[len(composerIndexes)-1][0]
+	// Without the banner, the composer must sit on Codex's own footer: the
+	// rows under it are only Codex's status and hint rows. Codex 0.172 no
+	// longer prints "% context left" there, so the footer regex alone missed
+	// every Codex whose banner had scrolled away.
+	if lastHeader < 0 && lastFooter < 0 && !codexFooterFollows(normalized[lastComposer:]) {
+		return false
+	}
 	epoch := lastHeader
 	if epoch < 0 {
-		epoch = lastFooter
-		if lastComposer < epoch {
-			epoch = lastComposer
+		epoch = lastComposer
+		if lastFooter >= 0 && lastFooter < epoch {
+			epoch = lastFooter
 		}
 	}
 	lower = strings.ToLower(normalized)
@@ -232,6 +236,45 @@ func isCodexStartupReady(content string) bool {
 		}
 	}
 	return lastComposer >= lastHeader
+}
+
+// codexFooterRowsMax bounds the rows Codex draws under its composer: the
+// status row (model, effort, folder, thread) and the hint row, with room for a
+// notice.
+const codexFooterRowsMax = 4
+
+// codexFooterRowRe is one row of Codex's footer under the composer. Every
+// footer row Codex draws is a list of items joined by " · " ("gpt-5.6-sol
+// xhigh · 87% left · ~/repo", "GPT-6.2 Astra · GPT default · ~/repo · title",
+// "← for agents · ? for shortcuts  ⚠ 1 warning · f2 to view"), or the lone
+// "? for shortcuts" hint. A picker's options ("2. Skip"), a draft's further
+// lines or tool output are not.
+var codexFooterRowRe = regexp.MustCompile(`(?i)\s·\s|\?\s+for\s+shortcuts|\bcontext\s+left\b`)
+
+// codexPickerOptionRe is a numbered option of one of Codex's pickers (trust,
+// update, model): the selected one carries the composer's "›".
+var codexPickerOptionRe = regexp.MustCompile(`^(?:›\s*)?\d+\.\s`)
+
+// codexFooterFollows reports that the composer line at the start of fromComposer
+// is followed only by Codex's own footer rows, and at least one of them. A
+// picker's selected option is not a composer, whatever is drawn under it.
+func codexFooterFollows(fromComposer string) bool {
+	lines := strings.Split(fromComposer, "\n")
+	if codexPickerOptionRe.MatchString(strings.TrimSpace(lines[0])) {
+		return false
+	}
+	rows := 0
+	for _, line := range lines[1:] {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		rows++
+		if rows > codexFooterRowsMax || codexPickerOptionRe.MatchString(line) || !codexFooterRowRe.MatchString(line) {
+			return false
+		}
+	}
+	return rows > 0
 }
 
 func isGrokInputReady(content string) bool {

@@ -470,7 +470,9 @@ sign-in screen does not notice a sign-in made in another terminal). Mewla never
 holds Brain back because an agent's sign-in check says signed out: Codex on an
 API key or its own model provider, or a sign-in that lives in your login shell,
 reads as signed out there and runs. If it really cannot run, it shows as open
-but not ready.
+but not ready. A host that has taken Brain's activation is past its sign-in and
+first-run screens, so it never shows as open but not ready, and the tray clears
+as soon as it takes it.
 
 When Brain's Session is gone (a reboot, a crash, an upgrade), Brain starts again
 in its conversation when its agent can resume it. When it cannot (no
