@@ -65,8 +65,7 @@ export function isFoldableToolRow(
   if (item.activityKind) return false;
   if (item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX)) return false;
   if (item.statusKey?.startsWith("choice:")) return false;
-  // A Ledger step that failed opens itself, and stays in its run: the run shows it without being opened.
-  if (shouldAutoExpandActivity(item) && !(item.ledger && item.tone === "failed")) return false;
+  if (shouldAutoExpandActivity(item)) return false;
   const mark = splitActivityStatusDetail(item.detail, item.tone).mark;
   return mark === null || mark === "ready" || mark === "failed";
 }

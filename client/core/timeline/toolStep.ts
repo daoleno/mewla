@@ -56,8 +56,8 @@ export function toolStepActivity(event: CodexConversationEvent): ActivityTimelin
     body: output ? (failed ? tail(output, FAILED_OUTPUT_TAIL_LINES) : head(output, OUTPUT_PREVIEW_LINES)) : undefined,
     bodyKind: output ? "terminal" : undefined,
     files: files.length ? files : undefined,
-    // A failed step is open from the start: its command and the end of its output (owner 11-27, note 2).
-    defaultExpanded: failed,
+    // A failed step starts closed like any other; its row and its run header say it failed (owner 11-28).
+    defaultExpanded: false,
     semanticKind: SEMANTIC_KIND[tool.kind],
     accessibilityLabel: [title, shownTarget, ledger.result, failed ? "failed" : ""].filter(Boolean).join(", "),
     providerToolId: event.tool_name || undefined,

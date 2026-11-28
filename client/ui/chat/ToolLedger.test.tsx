@@ -1,8 +1,8 @@
 import { describe, expect, open, test } from "nsh/test";
 import { paired, phoneHost } from "../testing/fixtures";
 
-// The Ledger (owner 11-27, variant A): a run of calls is one quiet line with its time; its failures show under it,
-// open, without a tap; opened, every step says what it did to what, with its result and time on the right.
+// The Ledger (owner 11-27, variant A): a run of calls is one quiet line with its time and its failure count, closed
+// like any other (owner 11-28: a failure never opens itself); opened, every step says what it did to what, with its result and time on the right.
 const APP = "../FakeDaemonApp.tsx";
 const host_worker = { id: "brain-host", name: "Brain", cwd: "/home/me", command: "claude", started_at: 1_762_840_800_000, process_id: 4242 };
 const brain = { chat_thread_id: "t-now", host_worker };
@@ -30,15 +30,31 @@ async function brainWith(events: Record<string, unknown>[]) {
 }
 
 describe("the tool Ledger", () => {
-  test("a run is one line with its time and its failure count; the failure shows open without a tap", async () => {
+  test("a run is one line with its time and its failure count; the failed step stays closed until a tap, and a tap closes it again", async () => {
     const app = await brainWith(turn);
     await app.waitFor("text:/^Ran 2 commands, edited 1 file, read 1 file|^Edited 1 file, ran 2 commands, read 1 file/", { timeout: 10_000 });
     expect(app.shows("text:/· 1 failed$/")).toBe(true);
-    // The failed step, its command and the end of its output, under the closed run.
-    expect(app.shows("text:/Test screencapture over SSH/")).toBe(true);
-    expect(app.shows("text:/could not create image from display/")).toBe(true);
-    // Closed, the run shows nothing else of its steps.
+    // Closed, the run shows none of its steps, the failed one included: no row, no command, no output.
+    expect(app.shows("text:/Test screencapture over SSH/")).toBe(false);
+    expect(app.shows("text:/could not create image from display/")).toBe(false);
     expect(app.shows("text:/Check the candidate run/")).toBe(false);
+    // Opened, the failed step is a closed row; a tap on it shows its command and output, another tap puts them away.
+    await app.press("id:activity");
+    await app.waitFor("id:ledger-step-failed", { timeout: 5_000 });
+    expect(app.shows("text:/could not create image from display/")).toBe(false);
+    await app.press("id:ledger-step-failed");
+    await app.waitFor("text:/could not create image from display/", { timeout: 5_000 });
+    await app.press("id:ledger-step-failed");
+    expect(app.shows("text:/could not create image from display/")).toBe(false);
+  }, 20_000);
+
+  test("a lone failed call is a closed row that says it failed, and opens on a tap", async () => {
+    const app = await brainWith([turn[0], turn[2], turn[6]]);
+    await app.waitFor("id:ledger-step-failed", { timeout: 10_000 });
+    expect(app.shows("text:/exit 1/")).toBe(true);
+    expect(app.shows("text:/could not create image from display/")).toBe(false);
+    await app.press("id:ledger-step-failed");
+    await app.waitFor("text:/could not create image from display/", { timeout: 5_000 });
   }, 20_000);
 
   test("opened, every step names what it did, and a Sleep is no row", async () => {

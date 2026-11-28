@@ -172,8 +172,8 @@ export function formatStepDuration(ms: number | undefined): string {
 
 const TABULAR: { fontVariant: ["tabular-nums"] } = { fontVariant: ["tabular-nums"] };
 
-/** Whether a Ledger row is open: a failed step starts open (owner 11-27), and a tap turns either the other way. */
-const ledgerOpen = (expansion: Expansion, item: ActivityTimelineItem) => expansion.isOpen(stepKey(item)) !== Boolean(item.defaultExpanded && item.tone === "failed");
+/** Whether a Ledger row is open: every step starts closed, a failed one too (owner 11-28); a tap turns it. */
+const ledgerOpen = (expansion: Expansion, item: ActivityTimelineItem) => expansion.isOpen(stepKey(item));
 /** A step's own key in the open set: a folded run carries its first step's id. */
 const stepKey = (item: ActivityTimelineItem) => `step:${item.id}`;
 
@@ -252,15 +252,15 @@ function LedgerThought(props: { item: () => ActivityTimelineItem; expansion: Exp
 
 /**
  * A run of calls between two messages (variant A, the Ledger): one quiet line, "Ran 4 commands, read 1 file", with
- * its time on the right; its failures (the only accent) show under it closed or open. Open, every step is a line
- * under a hairline rail.
+ * its time on the right; a failure shows as "· 1 failed" in its header (the only accent), the run closed like any
+ * other (owner 11-28). Open, every step is a line under a hairline rail.
  */
 function LedgerRun(props: { item: () => ActivityTimelineItem; expansion: Expansion; onFile?: (path: string) => void }) {
   const item = props.item;
   const type = threadType();
   const open = () => props.expansion.isOpen(item().id);
   const failed = () => item().ledger?.failed ?? 0;
-  const shown = () => (open() ? item().steps ?? [] : (item().steps ?? []).filter((step) => step.tone === "failed"));
+  const shown = () => (open() ? item().steps ?? [] : []);
   return (
     <View testID="ledger-run">
       <Button testID="activity" accessibilityLabel={`${item().title}${failed() ? `, ${failed()} failed` : ""}`} onPress={() => props.expansion.toggle(item().id)}

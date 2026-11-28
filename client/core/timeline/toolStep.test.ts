@@ -53,12 +53,12 @@ const event = (id: string, tool: ConversationTool, extra: Partial<CodexConversat
 });
 
 describe("a turn's calls as a Ledger", () => {
-  test("a Sleep is no row (note 3), a failure opens itself with the end of its output (note 2)", () => {
+  test("a Sleep is no row (note 3), a failure stays closed (owner 11-28) and keeps the end of its output", () => {
     const sleep = toolStepActivity(event("e1", { kind: "wait", status: "done", duration_ms: 60_000 }));
     expect(sleep).toBeNull();
     const failed = toolStepActivity(event("e2", { kind: "command", target: "go test ./x", status: "failed", result: "exit 1", duration_ms: 515 },
       { command: "go test ./x", output: Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join("\n"), exit_code: 1 }))!;
-    expect(failed.defaultExpanded).toBe(true);
+    expect(failed.defaultExpanded).toBe(false);
     expect(failed.tone).toBe("failed");
     expect(failed.body?.endsWith("line 20")).toBe(true);
     expect(failed.body?.includes("line 1\n")).toBe(false);
