@@ -27,7 +27,9 @@ function connect(server: StoredServer) {
   installMemoryPlatform({
     openSocket: (url, protocols) => {
       const socket = new FakeSocket(url, protocols ?? []);
-      sockets.push(socket);
+      // Only this computer's: another file's connection retrying late (ws://127.0.0.1:9) opens through the
+      // platform installed last, and CI once saw it as this test's first socket.
+      if (url.startsWith(server.url.replace(/\/ws$/, ""))) sockets.push(socket);
       return socket;
     },
     fetch: async () => new Response(JSON.stringify({ displays: [], available: true }), { headers: { "content-type": "application/json" } }),
