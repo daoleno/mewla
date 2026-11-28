@@ -421,7 +421,7 @@ function ProjectChips(props: { filter: () => TrayFilter; onPick: (next: TrayFilt
   };
   const all = () => m().projects.reduce((sum, project) => sum + project.count, 0);
   return (
-    <Scroll testID="tray-projects" horizontal keyboardShouldPersistTaps="handled" class="max-h-[44px] grow-0" contentClass="flex-row items-center gap-1.5 px-4 pb-1.5">
+    <Scroll testID="tray-projects" horizontal scrollbar={false} keyboardShouldPersistTaps="handled" class="max-h-[44px] grow-0" contentClass="flex-row items-center gap-1.5 px-4 pb-1.5">
       {chip(undefined, "All", all())}
       <Each of={m().projects} key={(project) => project.name}>{(project) => chip(project().name, project().name, project().count)}</Each>
     </Scroll>

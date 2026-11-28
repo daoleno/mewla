@@ -248,7 +248,7 @@ export function StageChip(props: { stage: Stage }) {
 /** Every agent as a tab, on a wide window: one tap switches. */
 export function StageTabs(props: { stage: Stage }) {
   return (
-    <Scroll horizontal keyboardShouldPersistTaps="handled" class="min-w-0 flex-1" contentClass="flex-row items-center gap-2">
+    <Scroll horizontal scrollbar={false} keyboardShouldPersistTaps="handled" class="min-w-0 flex-1" contentClass="flex-row items-center gap-2">
       {keyedRows(props.stage, (agent) => {
         const selected = () => props.stage.current()?.id === agent.id;
         const held = () => selected() && props.stage.holding();
