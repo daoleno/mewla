@@ -1,6 +1,16 @@
 {
   "releases": [
     {
+      "version": "0.4.36",
+      "date": "2026-11-29",
+      "highlights": [],
+      "fixes": [
+        "The agent list no longer shows sign-in status, only each agent's name.",
+        "A Brain that can't start shows its own terminal screen, with an Open terminal button.",
+        "In the terminal, a long press selects the word under your finger."
+      ]
+    },
+    {
       "version": "0.4.35",
       "date": "2026-11-28",
       "highlights": [
