@@ -506,7 +506,9 @@ jobs:
           new=$(ls "$RUNNER_TEMP"/b/Mewla-*-macos-aarch64.zip | sed -E 's/.*Mewla-(.*)-macos-aarch64.zip/\1/')
           echo "new=$new" >> "$GITHUB_ENV"
           grep -q "dev script: update found $new" "$RUNNER_TEMP"/data/logs/*
-          grep -q "dev script: menu row \[\"Update to $new\"\]" "$RUNNER_TEMP"/data/logs/*
+          grep -q "dev script: menu row \[\"Restart to update to $new\"\]" "$RUNNER_TEMP"/data/logs/*
+          # It downloaded on its own: the app went through "downloading" to "ready" before the proof pressed anything.
+          grep -q "dev script: update ready" "$RUNNER_TEMP"/data/logs/*
           sleep 4
           client/macos/scripts/capture-windows.sh "Mewla" "$RUNNER_TEMP/captures/update-found" "update-found-" || true
           # The status item's menu, opened as a person right-clicks it (best effort: Control Center owns the item on macOS 26).

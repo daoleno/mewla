@@ -452,9 +452,10 @@ async function grantProof(press: "asked" | "open_settings" | "not_now"): Promise
 }
 
 /**
- * The update proof (macos-app.yml, `update`): a release app finds the newer Mewla a loopback manifest offers, waits
- * `hold` seconds so the run can capture Settings with its row, then takes it as the row's button does; the app
- * restarts as the new version. Every state it goes through is logged, and the new app logs that it is current.
+ * The update proof (macos-app.yml, `update`; macos-release.yml): a release app finds the newer Mewla a loopback manifest
+ * offers and downloads it on its own, with no press (the states it goes through are logged: checking, downloading,
+ * ready); it waits `hold` seconds so the run can capture the window with its Update button, then takes it as the
+ * button does, and the app restarts as the new version. The new app logs that it is current.
  */
 async function updateProof(hold = 12): Promise<void> {
   const owner = appUpdateOwner();
@@ -466,9 +467,11 @@ async function updateProof(hold = 12): Promise<void> {
     }
     return true;
   };
-  if (!(await until(() => ["available", "current", "checkFailed"].includes(owner.state().kind)))) return void console.log("dev script: update stopped (no answer)");
+  // An install that can replace itself downloads by itself and settles at `ready`; `available` is the install that
+  // cannot (the release page opens), so there is nothing here to press.
+  if (!(await until(() => ["ready", "available", "failed", "current", "checkFailed"].includes(owner.state().kind)))) return void console.log("dev script: update stopped (no answer)");
   const state = owner.state();
-  if (state.kind !== "available") return void console.log(`dev script: update none (${state.kind})`);
+  if (state.kind !== "ready") return void console.log(`dev script: update none (${state.kind})`);
   console.log(`dev script: update found ${state.update.version}`);
   // The cat's menu row for this state, from the function the menu's items come from (a run cannot open a menu bar item's menu).
   console.log(`dev script: menu row ${JSON.stringify(appUpdateMenuItem(state, () => {}).flatMap((item) => ("label" in item ? [item.label] : [])))}`);

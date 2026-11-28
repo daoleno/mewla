@@ -22,7 +22,8 @@
       ],
       "fixes": [
         "A failed tool call stays folded in Chat; tap to open it, and the header counts how many failed.",
-        "Brain and Workers on Cursor start again."
+        "Brain and Workers on Cursor start again.",
+        "Brain on Codex no longer reports it can't start while it is working."
       ]
     },
     {
