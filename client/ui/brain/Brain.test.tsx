@@ -17,10 +17,10 @@ const brain = {
   host_executor: claude,
   executors: [claude, codex, agent, grok],
   executor_states: {
-    claude: { installed: true, signed_in: true, account: "me@x" },
-    codex: { installed: true, signed_in: true },
-    agent: { installed: true, signed_in: false },
-    grok: { installed: false, signed_in: false },
+    claude: { installed: true },
+    codex: { installed: true },
+    agent: { installed: true },
+    grok: { installed: false },
   },
 };
 const runtime = { session_id: "brain-host", client: "claude", connection_id: "c1", connection_name: "Anthropic", model_id: "claude-sonnet-5-5", reasoning_effort: "high", reasoning_efforts: ["low", "high"], credential_ready: true, hot_switchable: true };
@@ -91,9 +91,9 @@ describe("Brain's menu (§1.6)", () => {
     expect(app.shows("id:brain-executor-agent")).toBe(true);
     expect(app.shows("id:brain-executor-grok")).toBe(false);
     expect(app.shows("id:brain-executor-install")).toBe(true);
-    // One line per agent, by product name; no lone account; a second line only to ask for a sign-in.
-    for (const text of ["Claude Code", "Codex", "Cursor Agent", "Not signed in"]) expect(app.texts()).toContain(text);
-    expect(app.texts().some((t) => t.includes("me@x"))).toBe(false);
+    // One line per agent, by product name; nothing about its sign-in.
+    for (const text of ["Claude Code", "Codex", "Cursor Agent"]) expect(app.texts()).toContain(text);
+    expect(app.texts().some((t) => /sign/i.test(t))).toBe(false);
     await app.press("id:brain-executor-codex");
     await app.waitFor("id:brain-executor-error");
     expect(app.texts()).toContain("brain host executor is locked by environment override");
@@ -138,7 +138,7 @@ describe("Brain's menu (§1.6)", () => {
 });
 
 describe("Brain's states (§1.3)", () => {
-  const problem = { code: "not_signed_in", executor: "agent", detail: "Brain is set to run on agent, but agent is not signed in on this computer.", installed_executors: ["claude", "codex"] };
+  const problem = { code: "not_ready", executor: "agent", detail: "Brain's agent session is open but not ready; Brain continues once it is. It shows: Please log in / Press Enter to open the browser", installed_executors: ["claude", "codex"] };
   const cantStart = { ...brain, host_worker: null, host_executor: agent, host_problem: { ...problem, suggest_executor: "claude" } };
 
   test("Brain can't start: the computer's reason, Use {suggested} switches to it, and Switch executor is there too", async () => {

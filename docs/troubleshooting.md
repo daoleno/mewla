@@ -20,14 +20,14 @@ The state control next to **Brain** says how the computer is, and the tray
 | **Offline** | The app can't reach the computer. The tray names the problem, such as **Relay unreachable**, or **It may be asleep** | **Try again** in the tray, or **Details** for the computer page. If it stays offline, see [The phone cannot connect](#the-phone-cannot-connect) |
 | **Pair again** | This computer no longer trusts the phone | Tap it for the pairing sheet; run `mewla pair` on the computer and scan the new code |
 | **Starting…** | Brain is starting | Wait |
-| **Can't start** | Brain can't start; the tray says why | **Use …** moves Brain to the ready agent it names; **Switch executor** picks another. See [It paired, but no Sessions appear or agents fail to start](#it-paired-but-no-sessions-appear-or-agents-fail-to-start) |
+| **Can't start** | Brain can't start; the tray says why | **Open terminal** answers the agent's own screen (a sign-in, a question); **Use …** moves Brain to the installed agent it names; **Switch executor** picks another. See [It paired, but no Sessions appear or agents fail to start](#it-paired-but-no-sessions-appear-or-agents-fail-to-start) |
 
 On a pushed page, a dot on Back means the computer is connecting, offline or
 must be paired again.
 
 The computer page (tap the cat) lists what **Needs fixing**, each with its fix:
 **Relay unreachable** › **Try again**, **Device not paired** › **Pair**,
-**Claude is not signed in** › **Switch**, **Chrome extension missing** ›
+**Claude is not installed** › **Switch**, **Chrome extension missing** ›
 **Fix**, **Update required** › **Update**. A dot on the cat means this
 computer must be paired again or needs a required update, or another computer
 has requests waiting for you.
@@ -156,27 +156,21 @@ phone's network may be blocking the relay: try another network.
 
 ## It paired, but no Sessions appear or agents fail to start
 
-- Install and sign in to at least one agent CLI on the computer, as the same
-  user that runs `mewla`. One is enough. Until then the state control reads
-  **Can't start**, and the tray says which step is missing (`mewla deps`
-  installs one on Linux and macOS, `claude auth login` or `codex login` signs
-  in). Brain starts by itself once it is done; no restart needed.
-- `mewla doctor` also asks the running Mewla and warns when an agent is ready in
-  your terminal but not for Mewla: a sign-in that lives in your shell's
-  environment (an API key or token you export) is invisible to Mewla when it
-  starts at login. Sign in once with the agent's own login so it is kept for
-  every program, or stop Mewla and start it again from that terminal. It also
-  warns the other way: when the running Mewla has an agent signed in that your
-  terminal does not see (a different PATH or environment), Brain uses the running
-  Mewla's view, not the terminal's. `mewla doctor` looks for agents where Mewla
+- Install at least one agent CLI on the computer, as the same user that runs
+  `mewla`. One is enough. Until then the state control reads **Can't start**,
+  and the tray says so (`mewla deps` installs one on Linux and macOS). Brain
+  starts by itself once it is done; no restart needed.
+- `mewla doctor` also asks the running Mewla and warns when an agent is on your
+  terminal's PATH but not on Mewla's, or the other way round (Brain uses the
+  running Mewla's view, not the terminal's). `mewla doctor` looks for agents where Mewla
   does: on PATH, then `~/.local/bin` and the other native-installer folders.
   On Linux and macOS Mewla also adds the directories your login shell puts on
   `PATH` (nvm, fnm, volta, bun, an npm prefix, mise or asdf set up in
   `~/.profile`, `~/.bashrc` or `~/.zshrc`), so an agent installed that way is
   found when Mewla starts at login too.
-- If the tray says Brain's session "is open but not ready", the agent is
-  waiting at a sign-in or first-run question in its terminal. Run that agent
-  once on the computer, or answer it in Brain's terminal (⋯ › **Open
+- If the tray says Brain's session "is open but not ready", it quotes what the
+  agent shows: often its own sign-in or a first-run question. Answer it in
+  Brain's terminal (**Open terminal** on the notice, or ⋯ › **Open
   terminal**), and Brain continues.
 - If you have `~/.mewla/executors.toml`, check its commands; a typo there makes
   launches fail. Restart `mewla` after editing it.

@@ -2,6 +2,7 @@ package brain
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"os"
 	"os/exec"
@@ -14,8 +15,8 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-// hostFixture installs the given commands and sign-in states for one test.
-func hostFixture(t *testing.T, installed map[string]bool, auth map[string]HostAuthState) *Service {
+// hostFixture installs the given commands for one test.
+func hostFixture(t *testing.T, installed map[string]bool) *Service {
 	t.Helper()
 	store, err := NewStore(t.TempDir())
 	if err != nil {
@@ -29,14 +30,7 @@ func hostFixture(t *testing.T, installed map[string]bool, auth map[string]HostAu
 		}
 		return "", exec.ErrNotFound
 	}
-	previousAuth := hostAuth
-	hostAuth = func(id string) HostAuthState {
-		if state, ok := auth[id]; ok {
-			return state
-		}
-		return HostAuthUnknown
-	}
-	t.Cleanup(func() { hostLookPath, hostAuth = previousLook, previousAuth })
+	t.Cleanup(func() { hostLookPath = previousLook })
 	return newTestService(t, store, nil, work.NewExecutorConfig(map[string]work.Executor{
 		"claude": {Command: "claude", Kind: "claude"},
 		"codex":  {Command: "codex", Kind: "codex"},
@@ -44,35 +38,16 @@ func hostFixture(t *testing.T, installed map[string]bool, auth map[string]HostAu
 	}))
 }
 
-// A fresh Mac with Grok installed but never signed in, and Claude signed in
-// (the report that left Brain on "Waking up"): the verified agent hosts Brain.
-func TestFirstBrainHostPrefersAVerifiedSignedInAgent(t *testing.T) {
-	service := hostFixture(t,
-		map[string]bool{"claude": true, "grok": true},
-		map[string]HostAuthState{"claude": HostAuthUnauthenticated, "grok": HostAuthUnknown})
-	if got := service.hostExecutor().ID; got != "grok" {
-		t.Fatalf("claude signed out, grok unknown: host = %q, want grok before a signed-out claude", got)
-	}
-
-	service = hostFixture(t,
-		map[string]bool{"claude": true, "grok": true},
-		map[string]HostAuthState{"grok": HostAuthAuthenticated})
-	if got := service.hostExecutor().ID; got != "grok" {
-		t.Fatalf("grok verified, claude unknown: host = %q, want the verified grok", got)
-	}
-
-	service = hostFixture(t,
-		map[string]bool{"claude": true, "grok": true, "codex": true},
-		map[string]HostAuthState{"claude": HostAuthAuthenticated, "grok": HostAuthUnknown})
+// The first Brain host is the first installed agent in AgentOrder; Mewla
+// never asks an agent whether it is signed in to pick one.
+func TestFirstBrainHostIsTheFirstInstalledAgent(t *testing.T) {
+	service := hostFixture(t, map[string]bool{"claude": true, "grok": true})
 	if got := service.hostExecutor().ID; got != "claude" {
-		t.Fatalf("claude verified: host = %q, want claude", got)
+		t.Fatalf("host = %q, want the first installed in AgentOrder", got)
 	}
-
-	service = hostFixture(t,
-		map[string]bool{"claude": true, "grok": true},
-		map[string]HostAuthState{})
-	if got := service.hostExecutor().ID; got != "claude" {
-		t.Fatalf("nothing verified: host = %q, want the first installed in AgentOrder", got)
+	service = hostFixture(t, map[string]bool{"grok": true})
+	if got := service.hostExecutor().ID; got != "grok" {
+		t.Fatalf("host = %q, want the only installed grok", got)
 	}
 }
 
@@ -81,7 +56,7 @@ func TestHostProblemNamesWhyBrainHasNoHost(t *testing.T) {
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
 
 	t.Run("not installed", func(t *testing.T) {
-		service := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := hostFixture(t, map[string]bool{"claude": true})
 		if err := service.store.SetHostSession("brain-host:@1", "grok"); err != nil {
 			t.Fatal(err)
 		}
@@ -91,28 +66,14 @@ func TestHostProblemNamesWhyBrainHasNoHost(t *testing.T) {
 			t.Fatalf("problem = %+v", problem)
 		}
 	})
-	// Login status is no reason Brain has no host: an agent on an API key says
-	// "not logged in" and runs. What is reported is that it did not start.
-	t.Run("signed out by login status", func(t *testing.T) {
-		service := hostFixture(t, map[string]bool{"claude": true, "codex": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
-		if err := service.store.SetHostSession("brain-host:@1", "codex"); err != nil {
-			t.Fatal(err)
-		}
-		problem := service.hostProblem(service.hostExecutor())
-		if problem == nil || problem.Code != "not_started" || problem.SuggestExecutor != "claude" {
-			t.Fatalf("problem = %+v", problem)
-		}
-	})
 	t.Run("did not start", func(t *testing.T) {
-		service := hostFixture(t, map[string]bool{"claude": true, "grok": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := hostFixture(t, map[string]bool{"claude": true, "grok": true})
 		if err := service.store.SetHostSession("brain-host:@1", "grok"); err != nil {
 			t.Fatal(err)
 		}
 		problem := service.hostProblem(service.hostExecutor())
-		if problem == nil || problem.Code != "not_started" || problem.SuggestExecutor != "claude" ||
-			!strings.Contains(problem.Detail, "cannot tell whether grok is signed in") {
+		if problem == nil || problem.Code != "not_started" || problem.SuggestExecutor != "" ||
+			strings.Contains(strings.ToLower(problem.Detail), "sign") {
 			t.Fatalf("problem = %+v", problem)
 		}
 	})
@@ -120,7 +81,7 @@ func TestHostProblemNamesWhyBrainHasNoHost(t *testing.T) {
 		previous := processStartedAt
 		processStartedAt = time.Now()
 		t.Cleanup(func() { processStartedAt = previous })
-		service := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthUnknown})
+		service := hostFixture(t, map[string]bool{"claude": true})
 		if problem := service.hostProblem(service.hostExecutor()); problem != nil {
 			t.Fatalf("problem = %+v within the start grace", problem)
 		}
@@ -132,8 +93,7 @@ func TestHostProblemNamesWhyBrainHasNoHost(t *testing.T) {
 func TestSnapshotReportsAHostProblemForARecordedButUnobservedHost(t *testing.T) {
 	processStartedAt = processStartedAt.Add(-time.Hour)
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
-	service := hostFixture(t, map[string]bool{"claude": true},
-		map[string]HostAuthState{"claude": HostAuthAuthenticated})
+	service := hostFixture(t, map[string]bool{"claude": true})
 	if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -178,14 +138,14 @@ func TestSnapshotReportsAHostProblemForARecordedButUnobservedHost(t *testing.T) 
 
 // A "Switch executor" button is a way out only when another agent is on the
 // computer; with none installed it is a dead end, so the problem says which
-// others are installed (signed in or not).
+// others are installed.
 func TestHostProblemListsTheOtherInstalledAgents(t *testing.T) {
 	processStartedAt = processStartedAt.Add(-time.Hour)
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
 
-	project := func(t *testing.T, installed map[string]bool, auth map[string]HostAuthState, host string) *HostProblem {
+	project := func(t *testing.T, installed map[string]bool, host string) *HostProblem {
 		t.Helper()
-		service := hostFixture(t, installed, auth)
+		service := hostFixture(t, installed)
 		if err := service.store.SetHostSession("brain-host:@1", host); err != nil {
 			t.Fatal(err)
 		}
@@ -193,20 +153,19 @@ func TestHostProblemListsTheOtherInstalledAgents(t *testing.T) {
 		return service.projectHostProblem(WorkerRef{ID: "brain-host:@1"}, service.hostExecutor())
 	}
 
-	if problem := project(t, map[string]bool{}, nil, "claude"); problem == nil ||
+	if problem := project(t, map[string]bool{}, "claude"); problem == nil ||
 		problem.Code != "not_installed" || len(problem.InstalledExecutors) != 0 {
 		t.Fatalf("nothing installed: %+v", problem)
 	}
-	// Installed but never verified signed in still counts: the person may know better.
-	problem := project(t, map[string]bool{"codex": true, "grok": true}, nil, "claude")
-	if problem == nil || problem.Code != "not_installed" || problem.SuggestExecutor != "" ||
+	problem := project(t, map[string]bool{"codex": true, "grok": true}, "claude")
+	if problem == nil || problem.Code != "not_installed" || problem.SuggestExecutor != "codex" ||
 		strings.Join(problem.InstalledExecutors, ",") != "codex,grok" {
-		t.Fatalf("others installed, none verified: %+v", problem)
+		t.Fatalf("others installed: %+v", problem)
 	}
 	// The host itself is never its own alternative.
-	problem = project(t, map[string]bool{"claude": true, "codex": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated}, "claude")
+	problem = project(t, map[string]bool{"claude": true, "codex": true}, "claude")
 	if problem == nil || problem.Code != "not_started" || strings.Join(problem.InstalledExecutors, ",") != "codex" {
-		t.Fatalf("host signed out: %+v", problem)
+		t.Fatalf("host installed, not started: %+v", problem)
 	}
 }
 
@@ -220,7 +179,7 @@ func TestSnapshotOffersAgentInstallsOnlyWhenNoAgentIsInstalled(t *testing.T) {
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
 	snapshot := func(t *testing.T, installed map[string]bool, command bool) Snapshot {
 		t.Helper()
-		service := hostFixture(t, installed, nil)
+		service := hostFixture(t, installed)
 		if err := service.store.SetHostSession("brain-host:@1", "claude"); err != nil {
 			t.Fatal(err)
 		}
@@ -250,19 +209,15 @@ func TestSnapshotOffersAgentInstallsOnlyWhenNoAgentIsInstalled(t *testing.T) {
 	}
 }
 
-// The executor sheet offers only what is installed, signed-in ones first, so
-// the snapshot says which executors are installed and verified signed in.
-func TestSnapshotSaysWhichExecutorsAreInstalledAndSignedIn(t *testing.T) {
-	service := hostFixture(t, map[string]bool{"claude": true, "codex": true},
-		map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
+// The executor sheet offers only what is installed, so the snapshot says which
+// executors are installed, and nothing about their sign-in.
+func TestSnapshotSaysWhichExecutorsAreInstalled(t *testing.T) {
+	service := hostFixture(t, map[string]bool{"claude": true, "codex": true})
 	snapshot, err := service.Snapshot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]ExecutorState{
-		"claude": {Installed: true, SignedIn: true, AuthState: HostAuthAuthenticated},
-		"codex":  {Installed: true, AuthState: HostAuthUnauthenticated},
-	}
+	want := map[string]ExecutorState{"claude": {Installed: true}, "codex": {Installed: true}}
 	if len(snapshot.ExecutorStates) != len(want) {
 		t.Fatalf("states = %+v, want only the installed executors %+v (grok is not installed)", snapshot.ExecutorStates, want)
 	}
@@ -270,5 +225,12 @@ func TestSnapshotSaysWhichExecutorsAreInstalledAndSignedIn(t *testing.T) {
 		if snapshot.ExecutorStates[id] != state {
 			t.Fatalf("%s = %+v, want %+v (all: %+v)", id, snapshot.ExecutorStates[id], state, snapshot.ExecutorStates)
 		}
+	}
+	raw, err := json.Marshal(snapshot.ExecutorStates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text := string(raw); strings.Contains(text, "signed") || strings.Contains(text, "auth") || strings.Contains(text, "account") {
+		t.Fatalf("executor states carry sign-in: %s", text)
 	}
 }

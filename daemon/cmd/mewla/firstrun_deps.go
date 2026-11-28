@@ -20,8 +20,9 @@ import (
 	"github.com/daoleno/mewla/daemon/platform"
 )
 
-// depsPrompt checks the one thing Brain cannot work without, a signed-in agent
-// CLI, and offers the official command when it is missing.
+// depsPrompt checks the one thing Brain cannot work without, an installed agent
+// CLI, and offers the official command when it is missing. Sign-in is the
+// agent's own: it shows it when Brain starts on it.
 // It never blocks a start: a "no", a failed install or a closed input prints
 // the command and moves on.
 type depsPrompt struct {
@@ -175,8 +176,6 @@ func (d *depsPrompt) checkAll() (agentReady bool, err error) {
 		default:
 			agentValue = agentName(agents.RecommendedHost) + style.dim(" · Brain uses it")
 		}
-	case anyInstalledAgent(agents) != "":
-		agentValue = agentName(anyInstalledAgent(agents)) + " · not signed in"
 	}
 	fmt.Fprintln(d.w)
 	fmt.Fprintln(d.w, style.bold("This computer"))
@@ -211,11 +210,7 @@ func (d *depsPrompt) chooseBrainHost(ready []doctor.ExecutorCheck) error {
 		fmt.Fprintln(d.w)
 		options := make([]menuOption, 0, len(ready))
 		for _, item := range ready {
-			note := "sign-in not checked"
-			if item.Auth == doctor.AuthAuthenticated {
-				note = "signed in"
-			}
-			options = append(options, menuOption{label: agentName(item.ID), note: note})
+			options = append(options, menuOption{label: agentName(item.ID)})
 		}
 		switch pick = chooseOption(d.in, d.w, options); pick {
 		case menuCancelled:
@@ -278,15 +273,6 @@ func agentList(ready []doctor.ExecutorCheck) string {
 	return strings.Join(names, ", ")
 }
 
-func anyInstalledAgent(check doctor.ExecutorsCheck) string {
-	for _, item := range check.Items {
-		if item.BinaryFound && !outdatedAgent(item) {
-			return item.ID
-		}
-	}
-	return ""
-}
-
 // outdatedAgent reports an installed agent CLI whose version Mewla does not
 // support (OpenCode 1); doctor's summary says how to upgrade.
 func outdatedAgent(item doctor.ExecutorCheck) bool {
@@ -294,7 +280,7 @@ func outdatedAgent(item doctor.ExecutorCheck) bool {
 }
 
 // ensureAgent reports whether one agent CLI is usable, after offering to
-// install one and to sign in.
+// install one.
 func (d *depsPrompt) ensureAgent() bool {
 	check := d.agents()
 	if ready := readyAgent(check); ready != "" {
@@ -302,17 +288,14 @@ func (d *depsPrompt) ensureAgent() bool {
 	}
 	agents := hostdeps.Agents(d.platform)
 	if len(agents) == 0 {
-		fmt.Fprintln(d.w, "Brain needs an agent CLI such as Claude Code or Codex. Install and sign in to one.")
+		fmt.Fprintln(d.w, "Brain needs an agent CLI such as Claude Code or Codex. Install one.")
 		return false
-	}
-	if agent, ok := unauthenticatedAgent(check, agents); ok {
-		return d.signIn(agent)
 	}
 
 	fmt.Fprintln(d.w, "Brain needs an agent CLI, and none is ready yet.")
 	if !d.interactive {
 		for _, agent := range agents {
-			fmt.Fprintf(d.w, "  %-12s %s   then: %s\n", agent.Name+":", agent.Install.Command(), agent.Login)
+			fmt.Fprintf(d.w, "  %-12s %s\n", agent.Name+":", agent.Install.Command())
 		}
 		return false
 	}
@@ -325,7 +308,7 @@ func (d *depsPrompt) ensureAgent() bool {
 	options = append(options, menuOption{label: "Skip for now"})
 	choice := chooseOption(d.in, d.w, options) + 1
 	if choice <= 0 || choice == len(options) {
-		fmt.Fprintln(d.w, "Brain starts working once one is installed and signed in.")
+		fmt.Fprintln(d.w, "Brain starts working once one is installed.")
 		return false
 	}
 	agent := agents[choice-1]
@@ -340,18 +323,19 @@ func (d *depsPrompt) ensureAgent() bool {
 		return false
 	}
 	addToolDirToPath(item.BinaryPath)
-	if item.Usable && item.Auth == doctor.AuthAuthenticated {
-		fmt.Fprintf(d.w, "✓ %s is ready. Brain will use it.\n", agent.Name)
-		return true
+	if !item.Usable {
+		fmt.Fprintf(d.w, "%s\n", item.Summary)
+		return false
 	}
-	return d.signIn(agent)
+	fmt.Fprintf(d.w, "✓ %s is ready. Brain will use it.\n", agent.Name)
+	return true
 }
 
 // installAgent is what an app runs when the person picks an agent to install
 // (mewla deps -agent <id>, in a terminal Session on this computer, where the
-// installer and the sign-in can ask their own questions): the agent's official
-// install unless it is there, its sign-in unless done, then moveBrain puts
-// Brain on it, which starts Brain when it had no agent.
+// installer can ask its own questions): the agent's official install unless it
+// is there, then moveBrain puts Brain on it, which starts Brain when it had no
+// agent. The agent shows its own sign-in, if it needs one, when Brain starts on it.
 func (d *depsPrompt) installAgent(id string, moveBrain func(id string) error) bool {
 	var agent hostdeps.Agent
 	for _, candidate := range hostdeps.Agents(d.platform) {
@@ -377,36 +361,15 @@ func (d *depsPrompt) installAgent(id string, moveBrain func(id string) error) bo
 		}
 	}
 	addToolDirToPath(item.BinaryPath)
-	if !item.Usable || item.Auth != doctor.AuthAuthenticated {
-		if !d.signIn(agent) {
-			return false
-		}
+	if !item.Usable {
+		fmt.Fprintf(d.w, "%s\n", item.Summary)
+		return false
 	}
 	if err := moveBrain(id); err != nil {
 		fmt.Fprintf(d.w, "Brain did not move to %s (%v). Move it: %s\n", agent.Name, err, d.style().cmd("mewla brain use "+id))
 		return false
 	}
 	fmt.Fprintf(d.w, "✓ Brain runs on %s.\n", agent.Name)
-	return true
-}
-
-func (d *depsPrompt) signIn(agent hostdeps.Agent) bool {
-	fmt.Fprintf(d.w, "%s is installed. Sign in to it:\n  %s\n", agent.Name, d.style().cmd(agent.Login))
-	if !d.ask("Sign in now?") {
-		return false
-	}
-	fmt.Fprintf(d.w, "\n%s %s\n", d.style().dim("$"), d.style().cmd(agent.Login))
-	if err := d.run(agent.Login); err != nil {
-		fmt.Fprintf(d.w, "\nSign-in did not finish (%v). Later: %s\n", err, agent.Login)
-		return false
-	}
-	item, _ := executorItem(d.agents(), agent.ID)
-	if item.Auth == doctor.AuthUnauthenticated || !item.Usable {
-		fmt.Fprintf(d.w, "%s is not signed in yet. Later: %s\n", agent.Name, agent.Login)
-		return false
-	}
-	addToolDirToPath(item.BinaryPath)
-	fmt.Fprintf(d.w, "\n✓ %s is ready. Brain will use it.\n", agent.Name)
 	return true
 }
 
@@ -421,16 +384,6 @@ func readyAgent(check doctor.ExecutorsCheck) string {
 		return check.RecommendedHost
 	}
 	return ""
-}
-
-func unauthenticatedAgent(check doctor.ExecutorsCheck, agents []hostdeps.Agent) (hostdeps.Agent, bool) {
-	for _, agent := range agents {
-		if item, ok := executorItem(check, agent.ID); ok && item.BinaryFound && item.Auth == doctor.AuthUnauthenticated {
-			addToolDirToPath(item.BinaryPath)
-			return agent, true
-		}
-	}
-	return hostdeps.Agent{}, false
 }
 
 func executorItem(check doctor.ExecutorsCheck, id string) (doctor.ExecutorCheck, bool) {
@@ -572,14 +525,14 @@ func bootServiceInstalled() bool {
 func runDepsCommand(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla deps", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	agent := fs.String("agent", "", "install this agent (claude, codex), sign in to it and move Brain to it")
+	agent := fs.String("agent", "", "install this agent (claude, codex) and move Brain to it")
 	stateDir := fs.String("state-dir", "", "the state of the Mewla whose Brain moves (with -agent)")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla deps [-agent <id> [-state-dir <dir>]]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Check for an agent CLI. In a terminal, offer this computer's official")
 		fmt.Fprintln(stderr, "install command and run it after you agree; otherwise print it.")
-		fmt.Fprintln(stderr, "With -agent: install that agent, sign in to it, and Brain runs on it.")
+		fmt.Fprintln(stderr, "With -agent: install that agent, and Brain runs on it.")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

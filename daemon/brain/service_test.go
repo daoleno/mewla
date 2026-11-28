@@ -2572,33 +2572,6 @@ func TestServiceSnapshotNamesTheFirstAgentInOrderButLaunchesNothingUninstalled(t
 	}
 }
 
-// Mewla judges sign-in in its own environment, but the Brain pane starts in
-// the person's login shell, whose environment can hold a sign-in (ANTHROPIC_*
-// variables) Mewla never sees. A "signed out" verdict therefore never keeps
-// the pane from starting: refusing would leave a working setup with no way out.
-func TestHostStartsEvenWhenMewlaSeesTheAgentSignedOut(t *testing.T) {
-	store, err := NewStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	previous := hostLookPath
-	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
-	t.Cleanup(func() { hostLookPath = previous })
-	SetHostAuthProbe(func(string) HostAuthState { return HostAuthUnauthenticated })
-	t.Cleanup(func() { SetHostAuthProbe(nil) })
-	fw := &fakeWatcher{}
-	service := newTestService(t, store, fw, work.NewExecutorConfig(map[string]work.Executor{
-		"claude": {Name: "claude", Command: "claude"},
-	}))
-
-	if _, err := service.EnsureHostSnapshot(); err != nil {
-		t.Fatalf("EnsureHostSnapshot error = %v", err)
-	}
-	if len(fw.created) != 1 {
-		t.Fatalf("signed-out verdict kept the host from starting: created=%#v", fw.created)
-	}
-}
-
 func TestServiceSnapshotHonorsHostExecutorOverride(t *testing.T) {
 	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "claude")
 	store, err := NewStore(t.TempDir())

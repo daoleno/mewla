@@ -15,7 +15,7 @@ import (
 )
 
 // The disposable Windows runner executes real PowerShell launchers. Cursor's
-// script stands in for an installed cursor-agent wrapper without an account.
+// script stands in for an installed cursor-agent wrapper.
 func TestBrainRefreshDoesNotLaunchUnusedWindowsAgents(t *testing.T) {
 	dir := t.TempDir()
 	countPath := filepath.Join(dir, "launches.txt")
@@ -27,8 +27,6 @@ func TestBrainRefreshDoesNotLaunchUnusedWindowsAgents(t *testing.T) {
 	script := `$ErrorActionPreference = 'Stop'
 Add-Content -LiteralPath $env:MEWLA_TEST_COUNT -Value $env:MEWLA_TEST_AGENT
 if ($args[0] -eq '--version') { '2.1.0'; exit 0 }
-if ($env:MEWLA_TEST_AGENT -eq 'codex' -and $args[0] -eq 'login') { 'Logged in'; exit 0 }
-if ($env:MEWLA_TEST_AGENT -eq 'cursor' -and $args[0] -eq 'status') { '{"status":"unauthenticated"}'; exit 0 }
 exit 1
 `
 	paths := map[string]string{}
@@ -56,18 +54,15 @@ exit 1
 	}
 	now := time.Unix(1000, 0)
 	options := doctor.Options{ExecutorsPath: configPath, LookPath: look, RunCommand: run}
-	probe, auth, unsupported, account := newHostProbes(func(id string) doctor.ExecutorsCheck {
+	probe, unsupported := newHostProbes(func(id string) doctor.ExecutorsCheck {
 		options.ExecutorID = id
 		return doctor.CheckExecutors(options)
 	}, func() time.Time { return now })
 	brain.SetHostActiveProbe(probe)
 	brain.SetHostUnsupportedProbe(unsupported)
-	brain.SetHostAccountProbe(account)
 	t.Cleanup(func() {
 		brain.SetHostActiveProbe(nil)
-		brain.SetHostAuthProbe(nil)
 		brain.SetHostUnsupportedProbe(nil)
-		brain.SetHostAccountProbe(nil)
 	})
 	restoreLook := brain.SetHostLookPath(look)
 	t.Cleanup(restoreLook)
@@ -106,37 +101,6 @@ exit 1
 		}
 		return out
 	}
-	// Reproduce the prior all-executor cache through the real Brain refresh.
-	// One installed signed-out agent holds it at the 30-second TTL.
-	legacyAt := time.Time{}
-	legacy := map[string]brain.HostAuthState{}
-	brain.SetHostAuthProbe(func(id string) brain.HostAuthState {
-		if legacyAt.IsZero() || now.Sub(legacyAt) > hostAuthProbeTTL {
-			options.ExecutorID = ""
-			legacy = map[string]brain.HostAuthState{}
-			for _, item := range doctor.CheckExecutors(options).Items {
-				if item.VerifiedAuthenticated {
-					legacy[item.ID] = brain.HostAuthAuthenticated
-				} else if item.BinaryFound && item.Auth == doctor.AuthUnauthenticated {
-					legacy[item.ID] = brain.HostAuthUnauthenticated
-				}
-			}
-			legacyAt = now
-		}
-		return legacy[id]
-	})
-	for _, advance := range []time.Duration{0, 31 * time.Second, 31 * time.Second, 16 * time.Minute} {
-		now = now.Add(advance)
-		refresh()
-	}
-	red := counts()
-	if red["cursor"] < 4 || red["codex"] < 4 {
-		t.Fatalf("baseline did not reproduce repeated PowerShell launches: %v", red)
-	}
-	if err := os.Remove(countPath); err != nil {
-		t.Fatal(err)
-	}
-	brain.SetHostAuthProbe(auth)
 	for _, advance := range []time.Duration{0, 31 * time.Second, 31 * time.Second, 16 * time.Minute} {
 		now = now.Add(advance)
 		refresh()
@@ -151,27 +115,16 @@ exit 1
 		t.Fatalf("selected host probe = %v", got)
 	}
 	before := counts()["codex"]
-	now = now.Add(hostAuthProbeTTL + time.Second)
+	now = now.Add(hostVersionProbeTTL + time.Second)
 	probe("codex")
 	refresh()
 	if got := counts(); got["codex"] != before || got["cursor"] != 0 {
 		t.Fatalf("settled cache or snapshot launched an agent: %v", got)
 	}
-	now = now.Add(hostAuthSettledTTL)
+	now = now.Add(hostVersionSettledTTL)
 	probe("codex")
 	if got := counts(); got["codex"] <= before || got["cursor"] != 0 {
 		t.Fatalf("selected host settled refresh = %v", got)
 	}
-	// An explicit diagnostic checks the installed, signed-out Cursor wrapper.
-	options.ExecutorID = ""
-	full := doctor.CheckExecutors(options)
-	if counts()["cursor"] == 0 {
-		t.Fatal("explicit diagnosis did not invoke Cursor")
-	}
-	for _, item := range full.Items {
-		if item.ID == "cursor-alias" && item.Auth != doctor.AuthUnauthenticated {
-			t.Fatalf("Cursor auth = %s", item.Auth)
-		}
-	}
-	t.Logf("Windows PowerShell launches: baseline Brain refresh %v; fixed Brain refresh 0; after selected Codex %v; after explicit doctor %v", red, before, counts())
+	t.Logf("Windows PowerShell launches: Brain refresh 0; after selected Codex %v", counts())
 }

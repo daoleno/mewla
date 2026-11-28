@@ -133,7 +133,7 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 		t.Fatalf("result = %+v", result)
 	}
 	candidates := selectableCandidates(result.Doctor)
-	if len(candidates) < 2 || !candidates[0].VerifiedAuthenticated || candidates[0].ID != "codex" {
+	if len(candidates) < 2 || candidates[0].ID != "codex" {
 		t.Fatalf("candidate order = %+v", candidates)
 	}
 

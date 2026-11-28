@@ -170,11 +170,11 @@ describe("The computer page", () => {
     await app.waitFor("id:pair-stub");
   });
 
-  test("Claude not signed in says so, and Switch opens Brain's host sheet", async () => {
+  test("Claude not installed says so, and Switch opens Brain's host sheet", async () => {
     const app = await open(HARNESS, setup({}, { network: { "GET http://desk.test:9877/auth-check": { status: 503 } } }));
     await app.waitFor("id:computer-page");
-    await app.host.send("app.brain", { host_problem: { code: "not_signed_in", executor: "claude", detail: "Sign in to Claude Code.", installed_executors: ["claude", "codex"] } });
-    await app.waitFor("text:Claude is not signed in");
+    await app.host.send("app.brain", { host_problem: { code: "not_installed", executor: "claude", detail: "claude is not installed on this computer.", installed_executors: ["codex"] } });
+    await app.waitFor("text:Claude is not installed");
     // The cat settles from waking into its nap as the page connects: a press during that swap is the harness's to lose.
     await pressUntil(app, "id:fix-host-button", "id:opened-brain-host");
   });

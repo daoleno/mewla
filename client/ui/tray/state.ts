@@ -153,6 +153,7 @@ export const tray = computed(() => {
     diagnosis: currentDiagnosis(),
     surface: brainSurface({ hasServer: Boolean(server), connected: connection() === "connected", snapshot }),
     hostProblem: snapshot?.host_problem,
+    hostWorkerId: snapshot?.host_worker?.id,
     installsOffered: isMacApp() && brainAgentInstalls(snapshot).length > 0,
     workers: workers(),
     brainHost: brainHost(),

@@ -11,12 +11,11 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-// An agent whose sign-in Mewla cannot probe may sit at a login wall: the pane
-// is open, input never becomes ready. The computer says so after a grace, and
-// keeps retrying, so the person signing in is enough.
+// An agent may sit at its own login wall: the pane is open, input never
+// becomes ready. The computer says so after a grace, and keeps retrying, so the
+// person signing in there is enough.
 func TestAnOpenButNeverReadyHostIsReportedAndRetried(t *testing.T) {
-	service := hostFixture(t, map[string]bool{"claude": true, "grok": true},
-		map[string]HostAuthState{"claude": HostAuthAuthenticated})
+	service := hostFixture(t, map[string]bool{"claude": true, "grok": true})
 	if err := service.store.SetHostSession("brain-host:@1", "grok"); err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +41,7 @@ func TestAnOpenButNeverReadyHostIsReportedAndRetried(t *testing.T) {
 	service.hostProblemMu.Unlock()
 	snapshot, _ = service.Snapshot()
 	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "not_ready" ||
-		snapshot.HostProblem.Executor != "grok" || snapshot.HostProblem.SuggestExecutor != "claude" {
+		snapshot.HostProblem.Executor != "grok" || snapshot.HostProblem.SuggestExecutor != "" {
 		t.Fatalf("host problem = %+v", snapshot.HostProblem)
 	}
 	if !service.HostRecoveryDue() {
@@ -65,18 +64,19 @@ func TestAnOpenButNeverReadyHostIsReportedAndRetried(t *testing.T) {
 func TestHostProblemDetailsNameTheNextStep(t *testing.T) {
 	processStartedAt = processStartedAt.Add(-time.Hour)
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
-	missing := hostFixture(t, map[string]bool{}, nil)
+	missing := hostFixture(t, map[string]bool{})
 	problem := missing.hostProblem(missing.hostExecutor())
 	if problem == nil || problem.Code != "not_installed" || !strings.Contains(problem.Detail, "mewla deps") {
 		t.Fatalf("not installed: %+v", problem)
 	}
-	// Signed out is said only of a host that opened and is not ready.
-	signedOut := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated})
+	// A host that opened and is not ready says only that, never a guess about
+	// sign-in.
+	signedOut := hostFixture(t, map[string]bool{"claude": true})
 	signedOut.noteHostActivation(watcher.ErrWorkerInputNotReady)
 	pastNotReadyGrace(signedOut)
 	problem = signedOut.hostNotReadyProblem(signedOut.hostExecutor())
-	if problem == nil || problem.Code != "not_signed_in" || !strings.Contains(problem.Detail, "claude auth login") {
-		t.Fatalf("not signed in: %+v", problem)
+	if problem == nil || problem.Code != "not_ready" || strings.Contains(strings.ToLower(problem.Detail), "sign") {
+		t.Fatalf("not ready: %+v", problem)
 	}
 	// The agent's own screen is quoted: its real words, not Mewla's guess.
 	if err := signedOut.store.SetHostSession("brain-host:@3", "claude"); err != nil {
@@ -97,7 +97,7 @@ func TestHostProblemDetailsNameTheNextStep(t *testing.T) {
 func TestAnUnsupportedAgentIsNotLaunchedAndSaysWhy(t *testing.T) {
 	processStartedAt = processStartedAt.Add(-time.Hour)
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
-	service := hostFixture(t, map[string]bool{"claude": true}, nil)
+	service := hostFixture(t, map[string]bool{"claude": true})
 	fw := &fakeWatcher{}
 	service.watcher = fw
 	reason := "OpenCode 1.1.25 found; Mewla supports OpenCode 2 only. Upgrade: curl -fsSL https://opencode.ai/v2/install | bash"
@@ -128,14 +128,11 @@ func TestAnUnsupportedAgentIsNotLaunchedAndSaysWhy(t *testing.T) {
 	}
 }
 
-// A signed-out agent still gets its pane (an API key or the login shell may
-// hold a sign-in Mewla cannot see). Every agent is unready for a moment while
-// it starts, so nothing is said within the grace; a pane still unready after
-// it, while Mewla's view says signed out, says how to sign in. A pane that
-// becomes ready never counts as stuck.
-func TestAnUnreadyPaneOfASignedOutAgentSaysSoAfterTheGrace(t *testing.T) {
-	service := hostFixture(t, map[string]bool{"claude": true},
-		map[string]HostAuthState{"claude": HostAuthUnauthenticated})
+// Every agent is unready for a moment while it starts, so nothing is said
+// within the grace; a pane still unready after it says so, with what the agent
+// shows. A pane that becomes ready never counts as stuck.
+func TestAnUnreadyPaneSaysSoAfterTheGrace(t *testing.T) {
+	service := hostFixture(t, map[string]bool{"claude": true})
 	if err := service.store.SetHostSession("brain-host:@1", "claude"); err != nil {
 		t.Fatal(err)
 	}
@@ -144,23 +141,18 @@ func TestAnUnreadyPaneOfASignedOutAgentSaysSoAfterTheGrace(t *testing.T) {
 	}}
 	notReady := fmt.Errorf("deliver Brain Host activation: %w", fmt.Errorf("%w for %q", watcher.ErrWorkerInputNotReady, "claude"))
 
-	// The pane is up and became ready: signed in through the shell, nothing to say.
 	if snapshot, err := service.Snapshot(); err != nil || snapshot.HostProblem != nil {
 		t.Fatalf("ready pane: %v %+v", err, snapshot.HostProblem)
 	}
-	// Not ready yet while it starts: nothing to say.
 	service.noteHostActivation(notReady)
 	if snapshot, _ := service.Snapshot(); snapshot.HostProblem != nil {
 		t.Fatalf("starting pane reported: %+v", snapshot.HostProblem)
 	}
-	// It never becomes ready: say how to sign in.
 	pastNotReadyGrace(service)
 	snapshot, _ := service.Snapshot()
-	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "not_signed_in" ||
-		!strings.Contains(snapshot.HostProblem.Detail, "claude auth login") {
+	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "not_ready" {
 		t.Fatalf("host problem = %+v", snapshot.HostProblem)
 	}
-	// Signing in clears it.
 	service.noteHostActivation(nil)
 	if snapshot, _ = service.Snapshot(); snapshot.HostProblem != nil {
 		t.Fatalf("not cleared: %+v", snapshot.HostProblem)
@@ -183,8 +175,7 @@ func TestHostThatTookItsActivationIsNeverReportedNotReady(t *testing.T) {
 	notReady := fmt.Errorf("deliver Brain Host activation: %w", fmt.Errorf("%w for %q", watcher.ErrWorkerInputNotReady, "codex"))
 	stuck := func(t *testing.T) *Service {
 		t.Helper()
-		service := hostFixture(t, map[string]bool{"claude": true, "codex": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthAuthenticated})
+		service := hostFixture(t, map[string]bool{"claude": true, "codex": true})
 		if err := service.store.SetHostSession(id, "codex"); err != nil {
 			t.Fatal(err)
 		}

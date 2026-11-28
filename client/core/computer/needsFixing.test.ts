@@ -62,10 +62,12 @@ describe("needs fixing", () => {
     expect(rows.map((r) => r.key)).toEqual(["connection"]);
   });
 
-  test("Brain's agent not signed in says so and offers Switch", () => {
-    const rows = needsFixing({ ...base, hostProblem: { code: "not_signed_in", executor: "claude" } });
-    expect(rows).toEqual([{ key: "host", title: "Claude is not signed in", button: "Switch", action: { kind: "switch_executor" }, blocking: false }]);
+  test("Brain's agent not installed says so and offers Switch; nothing guesses at its sign-in", () => {
+    const rows = needsFixing({ ...base, hostProblem: { code: "not_installed", executor: "claude" } });
+    expect(rows).toEqual([{ key: "host", title: "Claude is not installed", button: "Switch", action: { kind: "switch_executor" }, blocking: false }]);
     expect(needsFixing({ ...base, hostProblem: { code: "not_started", executor: "claude" } })).toEqual([]);
+    expect(needsFixing({ ...base, hostProblem: { code: "not_ready", executor: "claude" } })).toEqual([]);
+    expect(needsFixing({ ...base, hostProblem: { code: "not_signed_in", executor: "claude" } })).toEqual([]);
   });
 
   test("a missing Chrome extension and a screen permission each have their fix", () => {
@@ -98,9 +100,9 @@ describe("needs fixing", () => {
   });
 
   test("the button is ink only when it is the one fix", () => {
-    const one = needsFixing({ ...base, hostProblem: { code: "not_signed_in", executor: "codex" } });
+    const one = needsFixing({ ...base, hostProblem: { code: "not_installed", executor: "codex" } });
     expect(fixButtonKind(one)).toBe("ink");
-    const two = needsFixing({ ...base, hostProblem: { code: "not_signed_in", executor: "codex" }, update: { version: "0.1.0", supported: true } });
+    const two = needsFixing({ ...base, hostProblem: { code: "not_installed", executor: "codex" }, update: { version: "0.1.0", supported: true } });
     expect(fixButtonKind(two)).toBe("ghost");
   });
 });

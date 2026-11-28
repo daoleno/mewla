@@ -385,7 +385,7 @@ describe("Mewla for Mac", () => {
       { id: "codex", name: "codex", provider: "codex", host: true },
       { id: "grok", name: "grok", provider: "grok" },
     ];
-    const states = { claude: { installed: true, signed_in: true }, codex: { installed: true, signed_in: true }, grok: { installed: false, signed_in: false } };
+    const states = { claude: { installed: true }, codex: { installed: true }, grok: { installed: false } };
     const ready = { ...brain, host_executor: { id: "codex", name: "codex", provider: "codex" }, executors, executor_states: states };
     const host = phoneHost({ brain: ready, conversations: { "brain-host": [] } }, { "app.pairing": () => pairing });
     const app = await open(APP, { platform: "macos", width: 1280, height: 800, storage: paired, host: { ...host, params: { ...host.params, devScript: {} } } });

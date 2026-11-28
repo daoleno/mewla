@@ -15,12 +15,12 @@ import (
 )
 
 type fakeHost struct {
-	ran        []string
-	agentState map[string]doctor.AuthState // id -> auth; missing = not installed
-	failRun    bool
-	brainHost  string // agent Brain already uses
-	brainSet   bool   // a Brain host is set, even with an empty id
-	saved      []string
+	ran       []string
+	installed map[string]bool // id -> installed
+	failRun   bool
+	brainHost string // agent Brain already uses
+	brainSet  bool   // a Brain host is set, even with an empty id
+	saved     []string
 }
 
 func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Platform) (*depsPrompt, *bytes.Buffer) {
@@ -37,24 +37,19 @@ func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Plat
 			}
 			switch {
 			case strings.Contains(command, "claude.ai/install.sh"):
-				h.agentState["claude"] = doctor.AuthUnauthenticated
-			case command == "claude auth login":
-				h.agentState["claude"] = doctor.AuthAuthenticated
+				h.installed["claude"] = true
 			case strings.Contains(command, "chatgpt.com/codex/install.sh"):
-				h.agentState["codex"] = doctor.AuthUnauthenticated
-			case command == "codex login":
-				h.agentState["codex"] = doctor.AuthAuthenticated
+				h.installed["codex"] = true
 			}
 			return nil
 		},
 		agents: func() doctor.ExecutorsCheck {
 			check := doctor.ExecutorsCheck{}
 			for _, id := range []string{"claude", "codex"} {
-				auth, installed := h.agentState[id]
-				item := doctor.ExecutorCheck{ID: id, BinaryFound: installed, Auth: auth}
+				installed := h.installed[id]
+				item := doctor.ExecutorCheck{ID: id, BinaryFound: installed, Usable: installed}
 				if installed {
 					item.BinaryPath = "/home/u/.local/bin/" + id
-					item.Usable = auth != doctor.AuthUnauthenticated
 				}
 				if item.Usable {
 					check.UsableCount++
@@ -79,18 +74,18 @@ var (
 	macHost    = hostdeps.Platform{GOOS: "darwin", Pretty: "macOS"}
 )
 
-func TestEnsureAgentInstallsThenSignsIn(t *testing.T) {
+func TestEnsureAgentInstalls(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	host := &fakeHost{installed: map[string]bool{}}
 	d, out := host.prompt("\n\n", true, ubuntuHost)
 	if !d.ensureAgent() {
 		t.Fatalf("agent not ready:\n%s", out)
 	}
-	want := []string{"curl -fsSL https://claude.ai/install.sh | bash", "claude auth login"}
+	want := []string{"curl -fsSL https://claude.ai/install.sh | bash"}
 	if strings.Join(host.ran, "|") != strings.Join(want, "|") {
 		t.Fatalf("ran %q, want %q", host.ran, want)
 	}
-	for _, line := range []string{"1. Claude Code", "2. Codex", "3. Skip for now", "Choose 1-3 [1]:", "Sign in now? [Y/n]", "Claude Code is ready. Brain will use it."} {
+	for _, line := range []string{"1. Claude Code", "2. Codex", "3. Skip for now", "Choose 1-3 [1]:", "Claude Code is ready. Brain will use it."} {
 		if !strings.Contains(out.String(), line) {
 			t.Fatalf("output missing %q:\n%s", line, out)
 		}
@@ -98,16 +93,17 @@ func TestEnsureAgentInstallsThenSignsIn(t *testing.T) {
 }
 
 // Mewla for Mac's Install Codex (no agent on this Mac): Codex's official
-// install, its sign-in, then Brain moves to Codex, which Brain was not set to.
-func TestInstallAgentInstallsSignsInAndMovesBrain(t *testing.T) {
+// install, then Brain moves to Codex, which Brain was not set to. Codex asks
+// for its own sign-in when Brain starts on it; Mewla runs no login.
+func TestInstallAgentInstallsAndMovesBrain(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	host := &fakeHost{installed: map[string]bool{}}
 	d, out := host.prompt("\n", true, macHost)
 	var moved []string
 	if !d.installAgent("codex", func(id string) error { moved = append(moved, id); return nil }) {
 		t.Fatalf("not installed:\n%s", out)
 	}
-	want := []string{"curl -fsSL https://chatgpt.com/codex/install.sh | sh", "codex login"}
+	want := []string{"curl -fsSL https://chatgpt.com/codex/install.sh | sh"}
 	if strings.Join(host.ran, "|") != strings.Join(want, "|") {
 		t.Fatalf("ran %q, want %q", host.ran, want)
 	}
@@ -117,7 +113,7 @@ func TestInstallAgentInstallsSignsInAndMovesBrain(t *testing.T) {
 }
 
 func TestInstallAgentOnlyMovesBrainToAnAgentAlreadyReady(t *testing.T) {
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"claude": doctor.AuthAuthenticated}}
+	host := &fakeHost{installed: map[string]bool{"claude": true}}
 	d, out := host.prompt("", true, macHost)
 	var moved []string
 	if !d.installAgent("claude", func(id string) error { moved = append(moved, id); return nil }) || len(host.ran) != 0 || strings.Join(moved, "|") != "claude" {
@@ -126,7 +122,7 @@ func TestInstallAgentOnlyMovesBrainToAnAgentAlreadyReady(t *testing.T) {
 }
 
 func TestInstallAgentThatFailsLeavesBrainWhereItIs(t *testing.T) {
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}, failRun: true}
+	host := &fakeHost{installed: map[string]bool{}, failRun: true}
 	d, out := host.prompt("", true, macHost)
 	moved := false
 	if d.installAgent("claude", func(string) error { moved = true; return nil }) || moved {
@@ -142,28 +138,16 @@ func TestInstallAgentThatFailsLeavesBrainWhereItIs(t *testing.T) {
 
 func TestEnsureAgentSkipsWhenOneIsReady(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated}}
+	host := &fakeHost{installed: map[string]bool{"codex": true}}
 	d, out := host.prompt("", true, ubuntuHost)
 	if !d.ensureAgent() || len(host.ran) != 0 || out.Len() != 0 {
 		t.Fatalf("ready agent still prompted: ran %q\n%s", host.ran, out)
 	}
 }
 
-func TestEnsureAgentOffersSignInForAnInstalledAgent(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"claude": doctor.AuthUnauthenticated}}
-	d, out := host.prompt("\n", true, ubuntuHost)
-	if !d.ensureAgent() || strings.Join(host.ran, "|") != "claude auth login" {
-		t.Fatalf("ran %q\n%s", host.ran, out)
-	}
-	if strings.Contains(out.String(), "Choose 1-3") {
-		t.Fatalf("installed agent was offered an install menu:\n%s", out)
-	}
-}
-
 func TestEnsureAgentSkipAndNonInteractive(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
+	host := &fakeHost{installed: map[string]bool{}}
 	d, _ := host.prompt("3\n", true, ubuntuHost)
 	if d.ensureAgent() || len(host.ran) != 0 {
 		t.Fatalf("skip ran %q", host.ran)
@@ -172,17 +156,20 @@ func TestEnsureAgentSkipAndNonInteractive(t *testing.T) {
 	if d.ensureAgent() || len(host.ran) != 0 {
 		t.Fatalf("non-interactive ran %q", host.ran)
 	}
-	for _, line := range []string{"curl -fsSL https://claude.ai/install.sh | bash   then: claude auth login", "curl -fsSL https://chatgpt.com/codex/install.sh | sh   then: codex login"} {
+	for _, line := range []string{"curl -fsSL https://claude.ai/install.sh | bash", "curl -fsSL https://chatgpt.com/codex/install.sh | sh"} {
 		if !strings.Contains(out.String(), line) {
 			t.Fatalf("output missing %q:\n%s", line, out)
 		}
+	}
+	if strings.Contains(out.String(), "login") {
+		t.Fatalf("non-interactive output names a sign-in:\n%s", out)
 	}
 }
 
 func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	both := map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}
-	host := &fakeHost{agentState: both}
+	both := map[string]bool{"codex": true, "claude": true}
+	host := &fakeHost{installed: both}
 	d, out := host.prompt("\n", true, ubuntuHost)
 	if ready, err := d.checkAll(); !ready || err != nil {
 		t.Fatalf("ready=%v err=%v\n%s", ready, err, out)
@@ -193,16 +180,19 @@ func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
 	for _, line := range []string{
 		"Claude Code, Codex · ready",
 		"Which agent should Brain use?",
-		"1. Claude Code   signed in",
-		"2. Codex         signed in",
+		"1. Claude Code",
+		"2. Codex",
 		"Brain uses Claude Code. Change it any time: mewla brain use codex",
 	} {
 		if !strings.Contains(out.String(), line) {
 			t.Fatalf("output missing %q:\n%s", line, out)
 		}
 	}
+	if strings.Contains(out.String(), "sign") {
+		t.Fatalf("first run speaks of sign-in:\n%s", out)
+	}
 
-	host = &fakeHost{agentState: both}
+	host = &fakeHost{installed: both}
 	d, out = host.prompt("2\n", true, ubuntuHost)
 	d.checkAll()
 	if strings.Join(host.saved, "|") != "codex" || !strings.Contains(out.String(), "Brain uses Codex. Change it any time: mewla brain use claude") {
@@ -210,19 +200,9 @@ func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
 	}
 }
 
-func TestCheckAllListsClaudeCodeFirstEvenWhenOnlyCodexSignInIsVerified(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnknown}}
-	d, out := host.prompt("\n", true, ubuntuHost)
-	d.checkAll()
-	if strings.Join(host.saved, "|") != "claude" || !strings.Contains(out.String(), "1. Claude Code   sign-in not checked") {
-		t.Fatalf("saved %q\n%s", host.saved, out)
-	}
-}
-
 func TestCheckAllDoesNotAskWithOneReadyAgent(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnauthenticated}}
+	host := &fakeHost{installed: map[string]bool{"codex": true}}
 	d, out := host.prompt("", true, ubuntuHost)
 	if ready, _ := d.checkAll(); !ready {
 		t.Fatalf("codex not ready\n%s", out)
@@ -237,8 +217,8 @@ func TestCheckAllDoesNotAskWithOneReadyAgent(t *testing.T) {
 
 func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	both := map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}
-	host := &fakeHost{agentState: both, brainHost: "codex"}
+	both := map[string]bool{"codex": true, "claude": true}
+	host := &fakeHost{installed: both, brainHost: "codex"}
 	d, out := host.prompt("", true, ubuntuHost)
 	d.checkAll()
 	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Codex · Brain uses it") {
@@ -246,7 +226,7 @@ func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
 	}
 
 	// A Brain that already ran without a recorded executor keeps its agent.
-	host = &fakeHost{agentState: both, brainSet: true}
+	host = &fakeHost{installed: both, brainSet: true}
 	d, out = host.prompt("", true, ubuntuHost)
 	d.checkAll()
 	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Brain keeps its agent") {
@@ -256,7 +236,7 @@ func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
 
 func TestChooseBrainHostWithoutTerminalTakesTheDefault(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
+	host := &fakeHost{installed: map[string]bool{"codex": true, "claude": true}}
 	d, out := host.prompt("", false, ubuntuHost)
 	if err := d.chooseBrainHost(readyAgents(d.agents())); err != nil {
 		t.Fatal(err)
@@ -269,7 +249,7 @@ func TestChooseBrainHostWithoutTerminalTakesTheDefault(t *testing.T) {
 
 func TestChooseBrainHostClosedInputSavesNothing(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
+	host := &fakeHost{installed: map[string]bool{"codex": true, "claude": true}}
 	d, out := host.prompt("", true, ubuntuHost)
 	if err := d.chooseBrainHost(readyAgents(d.agents())); err != nil {
 		t.Fatal(err)

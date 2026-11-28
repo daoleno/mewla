@@ -49,23 +49,18 @@ func WriteHuman(w io.Writer, report Report) error {
 		fmt.Fprintln(w, "")
 		fmt.Fprintln(w, "Configured executors:")
 		for _, item := range report.Executors.Items {
-			fmt.Fprintf(w, "  - %s [%s] binary=%s auth=%s runnable=%t verified=%t usable=%t\n",
+			fmt.Fprintf(w, "  - %s [%s] binary=%s runnable=%t usable=%t\n",
 				item.ID,
 				item.Provider,
 				boolWord(item.BinaryFound),
-				item.Auth,
 				item.Runnable,
-				item.VerifiedAuthenticated,
 				item.Usable,
 			)
 			if item.Summary != "" {
 				fmt.Fprintf(w, "      %s\n", item.Summary)
 			}
-			if item.Account != "" {
-				fmt.Fprintf(w, "      signed in as %s\n", item.Account)
-			}
 			if item.ConfigDir != "" {
-				fmt.Fprintf(w, "      own sign-in in %s\n", item.ConfigDir)
+				fmt.Fprintf(w, "      own config in %s\n", item.ConfigDir)
 			}
 			if item.Remediation != "" {
 				fmt.Fprintf(w, "      remediation: %s\n", item.Remediation)
@@ -76,7 +71,6 @@ func WriteHuman(w io.Writer, report Report) error {
 	if report.Executors.RecommendedHost != "" {
 		fmt.Fprintln(w, "")
 		fmt.Fprintf(w, "Recommended host executor: %s\n", emptyDash(report.Executors.RecommendedHost))
-		fmt.Fprintf(w, "Recommendation confidence: %s\n", emptyDash(string(report.Executors.RecommendationConfidence)))
 	}
 
 	if len(report.Warnings) > 0 {
@@ -99,7 +93,7 @@ func WriteHuman(w io.Writer, report Report) error {
 		fmt.Fprintln(w, "")
 		fmt.Fprintln(w, "Fix the failing checks above, then re-run: mewla doctor")
 		if report.Executors.UsableCount == 0 {
-			fmt.Fprintln(w, "Mewla needs at least one runnable executor (binary present and not explicitly unauthenticated).")
+			fmt.Fprintln(w, "Mewla needs at least one runnable executor (installed, of a supported version).")
 		}
 	}
 	return nil

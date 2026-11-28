@@ -66,10 +66,8 @@ type Result struct {
 
 // Candidate is one selectable executor for the Brain host.
 type Candidate struct {
-	ID                    string           `json:"id"`
-	Provider              string           `json:"provider"`
-	Auth                  doctor.AuthState `json:"auth"`
-	VerifiedAuthenticated bool             `json:"verified_authenticated"`
-	Runnable              bool             `json:"runnable"`
-	Summary               string           `json:"summary"`
+	ID       string `json:"id"`
+	Provider string `json:"provider"`
+	Runnable bool   `json:"runnable"`
+	Summary  string `json:"summary"`
 }

@@ -49,38 +49,25 @@ export function brainExecutorLabel(executor?: BrainExecutorRef | null): string {
 }
 
 /**
- * The line under an executor's name, only when it says something the name does
- * not: "Not signed in" when it needs a sign-in; the account (else the executor's
- * own id, for an API key) when another choice shows the same name. Otherwise none (the runtime is never shown).
+ * The line under an executor's name, only when another choice shows the same name: the executor's own id tells
+ * them apart. Otherwise none (neither the runtime nor its sign-in is shown).
  */
-export function brainExecutorMeta(
-  executor: BrainExecutorRef,
-  states: Readonly<Record<string, BrainExecutorState>> | undefined,
-  choices: readonly BrainExecutorRef[],
-): string {
-  const state = states?.[executor.id];
-  if (state?.auth_state === "unknown") return "Sign-in not checked";
-  if (state && !state.signed_in) return "Not signed in";
+export function brainExecutorMeta(executor: BrainExecutorRef, choices: readonly BrainExecutorRef[]): string {
   const label = brainExecutorLabel(executor);
-  const shared = choices.some((other) => other.id !== executor.id && brainExecutorLabel(other) === label);
-  if (!shared) return "";
-  return state?.account?.trim() || executor.id;
+  return choices.some((other) => other.id !== executor.id && brainExecutorLabel(other) === label) ? executor.id : "";
 }
 
 /**
- * The executors a person can choose: the ones installed on the computer,
- * signed-in ones first (otherwise in the computer's order). The rest are not
- * choices; `moreToInstall` says there are some, for one line pointing at
- * `mewla deps`.
+ * The executors a person can choose: the ones installed on the computer, in the
+ * computer's order. The rest are not choices; `moreToInstall` says there are
+ * some, for one line pointing at `mewla deps`.
  */
 export function brainExecutorChoices(
   executors: readonly BrainExecutorRef[],
   states: Readonly<Record<string, BrainExecutorState>> | undefined,
 ): { choices: BrainExecutorRef[]; moreToInstall: boolean } {
   const installed = executors.filter((executor) => states?.[executor.id]?.installed);
-  const signedIn = installed.filter((executor) => states?.[executor.id]?.signed_in);
-  const others = installed.filter((executor) => !states?.[executor.id]?.signed_in);
-  return { choices: [...signedIn, ...others], moreToInstall: installed.length < executors.length };
+  return { choices: installed, moreToInstall: installed.length < executors.length };
 }
 
 /** Switching needs an installed executor other than the one Brain runs on. */

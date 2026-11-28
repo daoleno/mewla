@@ -89,7 +89,7 @@ func newEnv(opts Options) env {
 	return e
 }
 
-// CheckExecutors runs only the executor checks, including auth probes.
+// CheckExecutors runs only the executor checks. Sign-in is never checked.
 func CheckExecutors(opts Options) ExecutorsCheck {
 	return newEnv(opts).checkExecutors()
 }
@@ -283,7 +283,6 @@ func isReady(report Report) bool {
 	if report.Listen.Status != StatusOK {
 		return false
 	}
-	// StatusWarn is allowed: auth-unknown runnable candidates still satisfy readiness.
 	return report.Executors.UsableCount > 0 && report.Executors.Status != StatusFail
 }
 
@@ -506,67 +505,19 @@ func (e env) checkExecutors() ExecutorsCheck {
 			usable = append(usable, item)
 			check.UsableCount++
 		}
-		if item.VerifiedAuthenticated {
-			check.VerifiedCount++
-		}
 	}
 
-	verified := filterByAuth(usable, AuthAuthenticated)
-	unknown := filterByAuth(usable, AuthUnknown)
-	recommendFrom := verified
-	check.RecommendationConfidence = ConfidenceVerified
-	if len(recommendFrom) == 0 {
-		recommendFrom = unknown
-		if len(recommendFrom) > 0 {
-			check.RecommendationConfidence = ConfidenceUnverified
-		} else {
-			check.RecommendationConfidence = ConfidenceNone
-		}
-	}
-	check.RecommendedHost = recommendHost(recommendFrom)
+	check.RecommendedHost = recommendHost(usable)
 
-	switch {
-	case check.VerifiedCount > 0:
+	if check.UsableCount > 0 {
 		check.Status = StatusOK
-		check.Summary = fmt.Sprintf("%d usable executor(s), %d verified; host=%s", check.UsableCount, check.VerifiedCount, check.RecommendedHost)
-	case check.UsableCount > 0:
-		check.Status = StatusWarn
-		check.Summary = fmt.Sprintf("%d runnable executor(s) with unverified auth; host=%s", check.UsableCount, check.RecommendedHost)
-		check.Warnings = append(check.Warnings, "auth state is unknown for recommended executors; Mewla did not pretend they are authenticated")
-		if check.RecommendationConfidence == ConfidenceUnverified {
-			check.Warnings = append(check.Warnings, "recommendations selected auth-unknown candidates because no verified authenticated executor exists")
-		}
-	case anyAuth(check.Items, AuthUnauthenticated):
-		check.Status = StatusFail
-		check.Remediation = RemediationAuthenticateExec
-		check.Summary = "executor binaries found but all probed executors are unauthenticated"
-		check.RecommendationConfidence = ConfidenceNone
-	default:
+		check.Summary = fmt.Sprintf("%d usable executor(s); host=%s", check.UsableCount, check.RecommendedHost)
+	} else {
 		check.Status = StatusFail
 		check.Remediation = RemediationInstallExecutor
-		check.Summary = "no usable executor found; install and authenticate at least one of Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, or Antigravity"
-		check.RecommendationConfidence = ConfidenceNone
+		check.Summary = "no usable executor found; install at least one of Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, or Antigravity"
 	}
 	return check
-}
-
-func filterByAuth(items []ExecutorCheck, want AuthState) []ExecutorCheck {
-	out := make([]ExecutorCheck, 0, len(items))
-	for _, item := range items {
-		if item.Auth == want {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func anyAuth(items []ExecutorCheck, want AuthState) bool {
-	for _, item := range items {
-		if item.BinaryFound && item.Auth == want {
-			return true
-		}
-	}
-	return false
 }
 
 func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
@@ -578,7 +529,6 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 		Configured:   true,
 		Command:      worker.Command,
 		ConfigDir:    worker.ConfigDir,
-		Auth:         AuthUnknown,
 		Capabilities: worker.Capabilities,
 	}
 
@@ -604,7 +554,7 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 		item.Runnable = true
 		item.Usable = true
 		item.Status = StatusWarn
-		item.Summary = fmt.Sprintf("%s installed; sign-in and version not checked", item.ID)
+		item.Summary = fmt.Sprintf("%s installed; version not checked", item.ID)
 		return item
 	}
 	item.Version = e.probeVersion(path, worker.Provider)
@@ -617,35 +567,13 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 			return item
 		}
 	}
-	item.Auth = e.probeAuth(path, worker.Provider, worker.ConfigDir)
-	if item.Auth == AuthAuthenticated {
-		item.Account = accountLabel(worker.Provider, worker.ConfigDir)
-	}
 	if worker.Provider == work.WorkerProviderOpenCode {
 		e.probeOpenCodeRuntime(path, &item)
 	}
-
-	switch item.Auth {
-	case AuthAuthenticated:
-		item.Runnable = true
-		item.Usable = true
-		item.VerifiedAuthenticated = true
-		item.Status = StatusOK
-		item.Summary = fmt.Sprintf("%s ready (%s, auth verified)", item.ID, item.Provider)
-	case AuthUnauthenticated:
-		item.Runnable = false
-		item.Usable = false
-		item.Status = StatusFail
-		item.Remediation = RemediationAuthenticateExec
-		item.Summary = fmt.Sprintf("%s found but not authenticated", item.ID)
-	default:
-		// Auth unknown: treat as runnable candidate with warning, not a hard fail.
-		item.Runnable = true
-		item.Usable = true
-		item.VerifiedAuthenticated = false
-		item.Status = StatusWarn
-		item.Summary = fmt.Sprintf("%s runnable (%s); auth state unknown", item.ID, item.Provider)
-	}
+	item.Runnable = true
+	item.Usable = true
+	item.Status = StatusOK
+	item.Summary = fmt.Sprintf("%s ready (%s)", item.ID, item.Provider)
 	if worker.Provider == work.WorkerProviderOpenCode {
 		item.Summary = appendOpenCodeProbeSummary(item.Summary, item.ModelsStatus, item.ServiceStatus)
 	}
@@ -785,218 +713,6 @@ func (e env) askVersion(binaryPath string) string {
 		}
 	}
 	return normalizeVersion(string(out))
-}
-
-func (e env) probeAuth(binaryPath, provider, configDir string) AuthState {
-	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
-	defer cancel()
-	run := e.opts.RunCommand
-	// A separate sign-in is asked with its own config directory, not the
-	// daemon's, or every instance would report the default account.
-	if variable := work.ConfigDirEnv(provider); variable != "" && configDir != "" {
-		run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return e.opts.RunCommand(ctx, "env", append([]string{variable + "=" + configDir, name}, args...)...)
-		}
-	}
-
-	switch provider {
-	case work.WorkerProviderCodex:
-		out, err := run(ctx, binaryPath, "login", "status")
-		return unlessOtherCredentials(parseCodexAuth(out, err), provider, configDir)
-	case work.WorkerProviderClaude:
-		// Claude prints its JSON status and exits 1 when logged out.
-		out, _ := run(ctx, binaryPath, "auth", "status", "--json")
-		return unlessOtherCredentials(parseClaudeAuth(out), provider, configDir)
-	case work.WorkerProviderCursor:
-		out, _ := run(ctx, binaryPath, "status", "--format", "json")
-		return parseCursorAuth(out)
-	case work.WorkerProviderGrok:
-		// Grok has login but no safe official non-interactive status command.
-		return AuthUnknown
-	case work.WorkerProviderOpenCode:
-		out, _ := run(ctx, binaryPath, "auth", "list", "--format", "json")
-		return parseOpenCodeAuth(out)
-	case work.WorkerProviderPi:
-		return probePiAuth()
-	case work.WorkerProviderAntigravity:
-		// agy has no status command; `agy models` needs a sign-in (or a
-		// GEMINI_API_KEY with modelProvider "gemini") and says so with exit 1.
-		out, err := run(ctx, binaryPath, "models")
-		return parseAntigravityAuth(out, err)
-	default:
-		return AuthUnknown
-	}
-}
-
-// unlessOtherCredentials turns a "signed out" verdict into AuthUnknown when
-// the agent can run on credentials its login status does not see.
-func unlessOtherCredentials(state AuthState, provider, configDir string) AuthState {
-	if state == AuthUnauthenticated && otherCredentials(provider, configDir) {
-		return AuthUnknown
-	}
-	return state
-}
-
-// Auth probes read each CLI's structured answer where it has one: Claude,
-// Cursor and OpenCode print JSON. Codex only has `login status`, which exits 0
-// when logged in and 1 otherwise, saying "Not logged in" when it knows; any
-// other answer is AuthUnknown, never a guess. Raw output is never returned or
-// logged: it may embed API key fragments or account identifiers.
-
-func parseCodexAuth(out []byte, err error) AuthState {
-	if err == nil {
-		return AuthAuthenticated
-	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 1 && hasLineEqual(out, "not logged in") {
-		return AuthUnauthenticated
-	}
-	// A failed probe (missing flag, broken config, timeout) says nothing.
-	return AuthUnknown
-}
-
-// hasLineEqual reports whether one trimmed line of out equals want, ignoring case.
-func hasLineEqual(out []byte, want string) bool {
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.EqualFold(strings.TrimSpace(line), want) {
-			return true
-		}
-	}
-	return false
-}
-
-// decodeProbeJSON decodes the first JSON document in a probe's output. The
-// runner merges stderr into the output, so a CLI's warning lines may come
-// before the document; only a line that starts a document that decodes counts.
-func decodeProbeJSON(out []byte, into any) bool {
-	for offset := 0; offset < len(out); {
-		end := bytes.IndexByte(out[offset:], '\n')
-		line := out[offset:]
-		if end >= 0 {
-			line = out[offset : offset+end]
-		}
-		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
-			if json.NewDecoder(bytes.NewReader(out[offset:])).Decode(into) == nil {
-				return true
-			}
-		}
-		if end < 0 {
-			break
-		}
-		offset += end + 1
-	}
-	return false
-}
-
-func parseClaudeAuth(out []byte) AuthState {
-	var status struct {
-		LoggedIn *bool `json:"loggedIn"`
-	}
-	if !decodeProbeJSON(out, &status) || status.LoggedIn == nil {
-		return AuthUnknown
-	}
-	if *status.LoggedIn {
-		return AuthAuthenticated
-	}
-	return AuthUnauthenticated
-}
-
-func parseCursorAuth(out []byte) AuthState {
-	var status struct {
-		Status          string `json:"status"`
-		IsAuthenticated *bool  `json:"isAuthenticated"`
-	}
-	if !decodeProbeJSON(out, &status) {
-		return AuthUnknown
-	}
-	switch strings.ToLower(strings.TrimSpace(status.Status)) {
-	case "authenticated":
-		return AuthAuthenticated
-	case "unauthenticated":
-		return AuthUnauthenticated
-	}
-	if status.IsAuthenticated != nil {
-		if *status.IsAuthenticated {
-			return AuthAuthenticated
-		}
-		return AuthUnauthenticated
-	}
-	// Empty object / missing fields → unknown, never default-false.
-	return AuthUnknown
-}
-
-// parseAntigravityAuth reads `agy models`: exit 0 and a model list when agy has
-// a sign-in or a Gemini API key, exit 1 with "Please sign in" when it has
-// neither. Any other failure (no network, a timeout) is unknown, never a guess.
-func parseAntigravityAuth(out []byte, err error) AuthState {
-	if err == nil {
-		// Any model row is a sign-in: the list is the account's own (it now
-		// holds non-Google ids too), so no id is looked for by name.
-		for _, line := range strings.Split(string(out), "\n") {
-			line = strings.TrimSpace(line)
-			if line != "" && !strings.HasPrefix(line, "Fetching") {
-				return AuthAuthenticated
-			}
-		}
-		return AuthUnknown
-	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 1 && strings.Contains(strings.ToLower(string(out)), "please sign in") {
-		return AuthUnauthenticated
-	}
-	return AuthUnknown
-}
-
-// parseOpenCodeAuth reads `opencode auth list --format json`: a list of
-// integrations, each with its connections (a stored credential or an
-// environment variable). Any connection means a provider is usable; a list
-// with none means OpenCode has nothing to authenticate with.
-func parseOpenCodeAuth(out []byte) AuthState {
-	var integrations []struct {
-		Connections []json.RawMessage `json:"connections"`
-	}
-	if !decodeProbeJSON(out, &integrations) || integrations == nil {
-		return AuthUnknown
-	}
-	for _, integration := range integrations {
-		if len(integration.Connections) > 0 {
-			return AuthAuthenticated
-		}
-	}
-	return AuthUnauthenticated
-}
-
-func probePiAuth() AuthState {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return AuthUnknown
-	}
-	authPath := filepath.Join(home, ".pi", "agent", "auth.json")
-	info, err := os.Stat(authPath)
-	if err != nil || info.IsDir() || info.Size() == 0 {
-		if hasPiProviderEnv() {
-			return AuthUnknown
-		}
-		return AuthUnknown
-	}
-	// Presence of auth.json is not proof of a usable provider credential.
-	return AuthUnknown
-}
-
-func hasPiProviderEnv() bool {
-	for _, key := range []string{
-		"ANTHROPIC_API_KEY",
-		"OPENAI_API_KEY",
-		"GOOGLE_API_KEY",
-		"GEMINI_API_KEY",
-		"OPENROUTER_API_KEY",
-		"PI_API_KEY",
-	} {
-		if strings.TrimSpace(os.Getenv(key)) != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // recommendHost picks Brain's host from usable executors in hostdeps'

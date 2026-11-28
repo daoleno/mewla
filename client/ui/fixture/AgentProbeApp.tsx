@@ -18,8 +18,8 @@ const daemon = new FakeDaemon({
       { id: "claude", name: "Claude Code", provider: "claude", command: "claude" },
     ],
     executor_states: {
-      codex: { installed: true, signed_in: true, auth_state: "authenticated" },
-      agent: { installed: true, signed_in: false, auth_state: "unknown" },
+      codex: { installed: true },
+      agent: { installed: true },
     },
   },
 });

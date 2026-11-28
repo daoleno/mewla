@@ -101,9 +101,6 @@ type Service struct {
 	hostProblemSince time.Time
 	// hostNotReadySince is when the host pane first stayed unready for input.
 	hostNotReadySince time.Time
-	// hostLaunchAuth is what the sign-in probe said when the current Host was
-	// launched: a Host opened at a sign-in screen is opened again once that changes.
-	hostLaunchAuth HostAuthState
 	// hostChangedAt is when the person last chose another Host executor. The
 	// "did not start" grace counts from it, not only from daemon start: a
 	// long-running daemon that is switching Hosts must not call the new one
@@ -3416,9 +3413,6 @@ func (s *Service) ReconcileHostContinuity() (bool, error) {
 	}
 	hostExecutor := s.hostExecutor()
 	_, continuityErr := s.ensureHostContinuity(hostExecutor, true)
-	if s.hostSignedInSinceLaunch(hostExecutor.ID, continuityErr) {
-		continuityErr = s.reopenHostAfterSignIn(hostExecutor)
-	}
 	s.noteHostActivation(continuityErr)
 	s.noteHostStartResult(hostExecutor, continuityErr)
 	// Capture identity even if activation failed or its receipt is ambiguous.
@@ -3632,7 +3626,6 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	if lostConversation {
 		s.noteHostRestartedFresh(workerID, executor.ID)
 	}
-	s.noteHostLaunchAuth(executor.ID)
 	if err := s.ensureHostActivation(workerID, command, executor, true, resumeToken == ""); err != nil {
 		// A program that ended at start fails its activation with whatever
 		// the input path noticed first; how it ended is the error to report.
@@ -4229,26 +4222,8 @@ func SetHostLookPath(look func(name string) (string, error)) (restore func()) {
 	return func() { hostLookPath = previous }
 }
 
-// HostAuthState is what Mewla knows of an agent CLI's sign-in: "authenticated"
-// (verified), "unauthenticated" (verified not signed in) or "unknown".
-type HostAuthState string
-
-const (
-	HostAuthAuthenticated   HostAuthState = "authenticated"
-	HostAuthUnauthenticated HostAuthState = "unauthenticated"
-	HostAuthUnknown         HostAuthState = "unknown"
-)
-
-// ExecutorAuth is doctor's sign-in verdict for an executor, for a launch that
-// would otherwise stop at the agent's own sign-in screen.
-func ExecutorAuth(executorID string) HostAuthState { return hostAuth(executorID) }
-
-// hostAuth reports an executor's sign-in. The daemon installs doctor's probe
-// with SetHostAuthProbe; without one every executor is unknown. Tests replace it.
-var hostAuth = func(string) HostAuthState { return HostAuthUnknown }
-
-// hostActiveProbe refreshes evidence only when the executor is actually being
-// selected, launched or recovered. Client projections never call it.
+// hostActiveProbe refreshes the version check only when the executor is
+// actually being selected, launched or recovered. Client projections never call it.
 var hostActiveProbe = func(string) {}
 
 func SetHostActiveProbe(probe func(executorID string)) {
@@ -4257,28 +4232,6 @@ func SetHostActiveProbe(probe func(executorID string)) {
 		return
 	}
 	hostActiveProbe = probe
-}
-
-// hostAccount is who an executor is signed in as, when its CLI records it.
-var hostAccount = func(string) string { return "" }
-
-// SetHostAccountProbe installs the probe that names each executor's account.
-func SetHostAccountProbe(probe func(executorID string) string) {
-	if probe == nil {
-		hostAccount = func(string) string { return "" }
-		return
-	}
-	hostAccount = probe
-}
-
-// SetHostAuthProbe installs the sign-in probe the Brain host choice and the
-// host problem report use. It must be cheap to call repeatedly (cached).
-func SetHostAuthProbe(probe func(executorID string) HostAuthState) {
-	if probe == nil {
-		hostAuth = func(string) HostAuthState { return HostAuthUnknown }
-		return
-	}
-	hostAuth = probe
 }
 
 // installedHostExecutor picks, before any Brain host has been chosen, the
@@ -4304,12 +4257,6 @@ func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 	if len(installed) == 0 {
 		return work.WorkerExecutor{}, false
 	}
-	// An agent Mewla verified as signed in runs Brain before one whose sign-in
-	// is unknown, and that before one verified signed out: the first agent
-	// installed in AgentOrder may be a CLI the person never logged in to.
-	slices.SortStableFunc(installed, func(a, b work.WorkerExecutor) int {
-		return hostAuthRank(hostAuth(a.ID)) - hostAuthRank(hostAuth(b.ID))
-	})
 	if len(installed) > 1 {
 		s.defaultHostLogged.Do(func() {
 			others := make([]string, 0, len(installed)-1)
@@ -4355,7 +4302,7 @@ func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecuto
 		if failure := s.currentHostStartFailure(executor.ID); problem == nil && failure != nil && !failure.ExitedAt.IsZero() {
 			// The Host started again after its program ended at start; until
 			// it answers, how the last one ended is still the problem.
-			problem = &HostProblem{Code: "start_failed", Executor: executor.ID, Detail: fmt.Sprintf("Brain could not start on %s: %s", executor.ID, failure.Detail), SuggestExecutor: s.verifiedAlternativeHost(executor.ID)}
+			problem = &HostProblem{Code: "start_failed", Executor: executor.ID, Detail: fmt.Sprintf("Brain could not start on %s: %s", executor.ID, failure.Detail)}
 		}
 	}
 	key := ""
@@ -4411,13 +4358,12 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	case time.Since(s.hostStartedSince()) > hostStartGrace:
 		problem.Code = "not_started"
 		problem.Detail = fmt.Sprintf("Brain's %s session did not start. Run mewla doctor on the computer to see why.", name)
-		if hostAuth(executor.ID) == HostAuthUnknown {
-			problem.Detail = fmt.Sprintf("Brain's %s session did not start, and Mewla cannot tell whether %s is signed in. Run mewla doctor on the computer to see why.", name, name)
-		}
 	default:
 		return nil
 	}
-	problem.SuggestExecutor = s.verifiedAlternativeHost(executor.ID)
+	if problem.Code == "not_installed" || problem.Code == "unsupported" {
+		problem.SuggestExecutor = s.alternativeHost(executor.ID)
+	}
 	return problem
 }
 
@@ -4447,47 +4393,25 @@ func (s *Service) installedAlternativeHosts(current string) []string {
 	return installed
 }
 
-// verifiedAlternativeHost is the first installed agent, in AgentOrder, that
-// Mewla verified as signed in and that is not the current host.
-func (s *Service) verifiedAlternativeHost(current string) string {
-	if s == nil || s.execs == nil {
-		return ""
-	}
-	for _, id := range hostdeps.AgentOrder() {
-		if id == current {
-			continue
-		}
-		executor, ok := s.execs.WorkerExecutor(id)
-		if !ok {
-			continue
-		}
-		fields := strings.Fields(executorProgram(executor))
-		if len(fields) == 0 {
-			continue
-		}
-		if _, err := hostLookPath(fields[0]); err != nil {
-			continue
-		}
-		if hostAuth(id) == HostAuthAuthenticated {
-			return id
-		}
+// alternativeHost is the first installed agent, in AgentOrder, that is not
+// the current host.
+func (s *Service) alternativeHost(current string) string {
+	if installed := s.installedAlternativeHosts(current); len(installed) > 0 {
+		return installed[0]
 	}
 	return ""
 }
 
 const (
 	hostHealInterval = 30 * time.Second
-	// hostHealGrace is how long a host that simply has not started may stay
-	// down before Brain moves to an agent verified signed in. Not installed or
-	// verified signed out is certain and moves at once.
-	hostHealGrace    = 2 * time.Minute
 	hostHealCooldown = 5 * time.Minute
 )
 
 // RunHostSelfHeal keeps onboarding from leaving a person stuck: Brain's agent
 // that Mewla picked by default (never one a person chose) and that turns out
-// not installed, not signed in or not starting moves to an installed agent
-// verified signed in.
+// not installed or of an unsupported version moves to an installed agent. An
+// agent that starts but is not ready (its own sign-in or first-run screen, an
+// error) stays, so the person sees what it shows.
 func (s *Service) RunHostSelfHeal(ctx context.Context) {
 	if s == nil || s.store == nil {
 		return
@@ -4504,9 +4428,9 @@ func (s *Service) RunHostSelfHeal(ctx context.Context) {
 	}
 }
 
-// healImplicitHost moves a default-picked, failing host to a verified agent and
-// reports whether it moved. An agent a person chose, an environment override
-// and a host with nothing verified to move to are all left alone.
+// healImplicitHost moves a default-picked host that cannot run to an installed
+// agent and reports whether it moved. An agent a person chose, an environment
+// override and a host with nothing installed to move to are all left alone.
 func (s *Service) healImplicitHost() bool {
 	if s == nil || s.store == nil || brainHostExecutorOverride() != "" {
 		return false
@@ -4520,27 +4444,18 @@ func (s *Service) healImplicitHost() bool {
 		return false
 	}
 	problem := s.projectHostProblem(host, executor)
-	reason := ""
-	switch {
-	case problem != nil && (problem.Code == "not_installed" || problem.Code == "not_signed_in" || problem.Code == "unsupported"):
-		reason = problem.Code
-	case problem != nil && (problem.Code == "not_started" || problem.Code == "not_ready"):
-		s.hostProblemMu.Lock()
-		since := s.hostProblemSince
-		s.hostProblemMu.Unlock()
-		if !since.IsZero() && time.Since(since) >= hostHealGrace {
-			reason = problem.Code
-		}
-	}
-	if reason == "" {
+	if problem == nil || (problem.Code != "not_installed" && problem.Code != "unsupported") {
 		return false
 	}
-	// Recovery is an active attempt to find a replacement. Diagnose only
-	// installed alternatives here, after a real host failure is established.
+	reason := problem.Code
+	target := ""
 	for _, id := range s.installedAlternativeHosts(executor.ID) {
 		hostActiveProbe(id)
+		if hostUnsupported(id) == "" {
+			target = id
+			break
+		}
 	}
-	target := s.verifiedAlternativeHost(executor.ID)
 	if target == "" || target == executor.ID {
 		return false
 	}
@@ -4553,21 +4468,11 @@ func (s *Service) healImplicitHost() bool {
 	if recent {
 		return false
 	}
-	log.Printf("brain host: %s is not working (%s) and was not chosen by you; moving Brain to %s, which is signed in. Choose your own: mewla brain use <agent>", executor.ID, reason, target)
+	log.Printf("brain host: %s cannot run (%s) and was not chosen by you; moving Brain to %s, which is installed. Choose your own: mewla brain use <agent>", executor.ID, reason, target)
 	if _, err := s.setHostExecutor(target, false); err != nil {
 		log.Printf("brain host: moving to %s failed: %v", target, err)
 	}
 	return true
-}
-
-func hostAuthRank(state HostAuthState) int {
-	switch state {
-	case HostAuthAuthenticated:
-		return 0
-	case HostAuthUnauthenticated:
-		return 2
-	}
-	return 1
 }
 
 // HostExecutorID names the executor running Brain. Launches Brain does not
@@ -4610,8 +4515,6 @@ func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
 	return executors
 }
 
-// executorStates says which of the executors are installed on this computer
-// and which of those Mewla verified signed in.
 // SetAgentInstallCommand gives Brain the command that installs an agent for it
 // and moves it there (the daemon's own mewla deps -agent <id>, on its state).
 func (s *Service) SetAgentInstallCommand(command func(id string) string) {
@@ -4619,7 +4522,7 @@ func (s *Service) SetAgentInstallCommand(command func(id string) string) {
 }
 
 // agentInstalls are offered only while Brain can't start because no agent is
-// installed: one installed but signed out is a sign-in, not an install.
+// installed.
 func (s *Service) agentInstalls(problem *HostProblem, states map[string]ExecutorState) []AgentInstall {
 	command := s.agentInstallCommand.Load()
 	if command == nil || problem == nil || problem.Code != "not_installed" || len(states) > 0 {
@@ -4632,6 +4535,7 @@ func (s *Service) agentInstalls(problem *HostProblem, states map[string]Executor
 	return installs
 }
 
+// executorStates says which of the executors are installed on this computer.
 func (s *Service) executorStates(executors []work.WorkerExecutor) map[string]ExecutorState {
 	states := make(map[string]ExecutorState, len(executors))
 	for _, executor := range executors {
@@ -4642,13 +4546,7 @@ func (s *Service) executorStates(executors []work.WorkerExecutor) map[string]Exe
 		if _, err := hostLookPath(fields[0]); err != nil {
 			continue
 		}
-		auth := hostAuth(executor.ID)
-		signedIn := auth == HostAuthAuthenticated
-		state := ExecutorState{Installed: true, SignedIn: signedIn, AuthState: auth}
-		if signedIn {
-			state.Account = hostAccount(executor.ID)
-		}
-		states[executor.ID] = state
+		states[executor.ID] = ExecutorState{Installed: true}
 	}
 	return states
 }

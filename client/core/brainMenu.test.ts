@@ -10,7 +10,7 @@ const snapshot: BrainSnapshot = {
   host_executor: claude,
   chat_thread_id: "t1",
   executors: [claude, codex, grok],
-  executor_states: { claude: { installed: true, signed_in: true }, codex: { installed: true, signed_in: false, account: "me@x" }, grok: { installed: false, signed_in: false } },
+  executor_states: { claude: { installed: true }, codex: { installed: true }, grok: { installed: false } },
 };
 
 describe("Brain's menu (soft-final/SPEC.md §1.6)", () => {
@@ -29,52 +29,48 @@ describe("Brain's menu (soft-final/SPEC.md §1.6)", () => {
     // Offline: only Brain's terminal (its offline card).
     expect(enabled({ ...running, connected: false })).toEqual(["terminal"]);
     // Can't start: the workspace and the switch, no terminal, model or new chat.
-    const cantStart = { ...snapshot, host_worker: null, host_problem: { code: "not_signed_in", executor: "codex", detail: "Sign in.", installed_executors: ["claude"] } };
+    const cantStart = { ...snapshot, host_worker: null, host_problem: { code: "not_ready", executor: "codex", detail: "Not ready.", installed_executors: ["claude"] } };
     expect(enabled({ ...running, snapshot: cantStart })).toEqual(["workspace", "executor"]);
     // New chat waits for the thread; Model for a route that can switch.
     expect(enabled({ ...running, threadLoaded: false, modelSwitchable: false })).toEqual(["terminal", "workspace", "executor"]);
     // Only one installed executor: nothing to switch to.
-    const alone = { ...snapshot, executor_states: { claude: { installed: true, signed_in: true } } };
+    const alone = { ...snapshot, executor_states: { claude: { installed: true } } };
     expect(enabled({ ...running, snapshot: alone })).toEqual(["terminal", "workspace", "model", "new-chat"]);
   });
 });
 
 describe("Switch executor", () => {
-  test("offers installed executors, signed-in first, and says when more can be installed", () => {
+  test("offers installed executors in the computer's order, and says when more can be installed", () => {
     const { choices, moreToInstall } = brainExecutorChoices(snapshot.executors!, snapshot.executor_states);
     expect(choices.map((e) => e.id)).toEqual(["claude", "codex"]);
     expect(moreToInstall).toBe(true);
     expect(canSwitchBrainExecutor(snapshot)).toBe(true);
   });
 
-  test("Antigravity is a choice like any installed agent, after the signed-in ones in order", () => {
+  test("Antigravity is a choice like any installed agent, in the computer's order", () => {
     const agy = { id: "agy", name: "agy", provider: "antigravity" };
-    const states = { ...snapshot.executor_states!, agy: { installed: true, signed_in: true } };
+    const states = { ...snapshot.executor_states!, agy: { installed: true } };
     const { choices } = brainExecutorChoices([...snapshot.executors!, agy], states);
-    expect(choices.map((e) => e.id)).toEqual(["claude", "agy", "codex"]);
+    expect(choices.map((e) => e.id)).toEqual(["claude", "codex", "agy"]);
     expect(brainExecutorLabel(agy)).toBe("Antigravity");
   });
 
-  test("one line per agent: its product name, no runtime; a second line only to tell rows apart or ask for a sign-in", () => {
-    const states = snapshot.executor_states!;
+  test("one line per agent: its product name, no runtime, no sign-in; a second line only to tell rows apart", () => {
     expect(brainExecutorLabel({ id: "codex", name: "codex", provider: "codex" })).toBe("Codex");
     expect(brainExecutorLabel({ id: "agent", name: "agent", provider: "cursor" })).toBe("Cursor Agent");
     expect(brainExecutorLabel({ id: "oc", name: "", provider: "opencode" })).toBe("OpenCode");
     expect(brainExecutorLabel({ id: "work", name: "Work Codex", provider: "codex" })).toBe("Work Codex");
-    expect(brainExecutorMeta(claude, states, [claude, codex])).toBe("");
-    expect(brainExecutorMeta(codex, states, [claude, codex])).toBe("Not signed in");
-    expect(brainExecutorMeta(codex, { ...states, codex: { installed: true, signed_in: false, auth_state: "unknown" } }, [claude, codex])).toBe("Sign-in not checked");
+    expect(brainExecutorMeta(claude, [claude, codex])).toBe("");
+    expect(brainExecutorMeta(codex, [claude, codex])).toBe("");
     const codex2 = { id: "codex2", name: "codex2", provider: "codex" };
-    const both = { ...states, codex: { installed: true, signed_in: true, account: "me@x" }, codex2: { installed: true, signed_in: true, account: "you@y" } };
-    expect(brainExecutorMeta(codex, both, [codex, codex2])).toBe("me@x");
-    expect(brainExecutorMeta(codex2, both, [codex, codex2])).toBe("you@y");
-    expect(brainExecutorMeta(codex2, { ...both, codex2: { installed: true, signed_in: true } }, [codex, codex2])).toBe("codex2");
+    expect(brainExecutorMeta(codex, [codex, codex2])).toBe("codex");
+    expect(brainExecutorMeta(codex2, [codex, codex2])).toBe("codex2");
   });
 
   test("a switch is done when the new host shows up, failed on its host problem", () => {
     expect(brainHostSwitchProgress(snapshot, "codex")).toEqual({ state: "pending" });
-    const failed = { ...snapshot, host_problem: { code: "not_signed_in", executor: "codex", detail: "Codex is not signed in.", installed_executors: [] } };
-    expect(brainHostSwitchProgress(failed, "codex")).toEqual({ state: "failed", detail: "Codex is not signed in." });
+    const failed = { ...snapshot, host_problem: { code: "not_installed", executor: "codex", detail: "codex is not installed.", installed_executors: [] } };
+    expect(brainHostSwitchProgress(failed, "codex")).toEqual({ state: "failed", detail: "codex is not installed." });
     const ready = { ...snapshot, host_executor: codex, host_worker: { ...snapshot.host_worker!, provider: "codex" } };
     expect(brainHostSwitchProgress(ready, "codex")).toEqual({ state: "ready" });
   });

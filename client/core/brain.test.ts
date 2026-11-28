@@ -13,7 +13,7 @@ describe("brainSurface", () => {
     expect(brainSurface({ hasServer: true, connected: false, snapshot: null })).toBe("offline");
   });
   test("a host problem outranks a recorded host", () => {
-    const host_problem = { code: "not_signed_in", executor: "claude", detail: "Sign in to Claude Code.", installed_executors: ["claude"] };
+    const host_problem = { code: "not_ready", executor: "claude", detail: "Brain's claude session is open but not ready.", installed_executors: ["claude"] };
     expect(brainSurface({ hasServer: true, connected: true, snapshot: { host_worker: host, chat_thread_id: "t1", host_problem } })).toBe("host_down");
   });
   test("Brain's chat is unavailable on an executor without structured chat events", () => {
@@ -65,8 +65,8 @@ describe("brainAgentInstalls (DESIGN-MAC.md §2.4, m-noagent)", () => {
     expect(brainAgentInstalls({ host_problem: problem, agent_installs: installs }).map((install) => install.id)).toEqual(["claude", "codex"]);
   });
   test("an agent installed (signed out, or another than Brain's) is not an install", () => {
-    expect(brainAgentInstalls({ host_problem: problem, agent_installs: installs, executor_states: { codex: { installed: true, signed_in: false } } })).toEqual([]);
-    expect(brainAgentInstalls({ host_problem: { ...problem, code: "not_signed_in" }, agent_installs: installs })).toEqual([]);
+    expect(brainAgentInstalls({ host_problem: problem, agent_installs: installs, executor_states: { codex: { installed: true } } })).toEqual([]);
+    expect(brainAgentInstalls({ host_problem: { ...problem, code: "not_ready" }, agent_installs: installs })).toEqual([]);
   });
   test("no problem, or a computer that offers none: nothing", () => {
     expect(brainAgentInstalls({ agent_installs: installs })).toEqual([]);

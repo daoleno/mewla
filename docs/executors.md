@@ -1,13 +1,13 @@
 # Agents and models
 
-Mewla runs the agent CLIs already installed and signed in on your computer.
+Mewla runs the agent CLIs already installed on your computer.
 This page covers which ones it runs, how much they may do without asking,
 which model endpoints they use, and which Skills they load.
 
 ## Built-in agents
 
 An **executor** is a named launch command. With no configuration, Mewla knows
-these; one installed, signed-in CLI is enough:
+these; one installed CLI is enough:
 
 | Executor | Command | Approval prompts |
 | --- | --- | --- |
@@ -69,10 +69,11 @@ A Session offers no model choice while its agent cannot give one: not signed
 in, a Codex still on a startup question or started by hand outside Mewla, a Pi
 that has not linked up yet.
 
-Listing an installed agent does not start its command or check its sign-in.
-The menu says "Sign-in not checked" until Mewla has used that agent. A verified
-signed-out agent says "Not signed in". `mewla doctor` runs explicit version and
-sign-in checks for every configured agent when detailed diagnosis is needed.
+Listing an installed agent does not start its command. Mewla never checks
+whether an agent is signed in: it starts the agent, and an agent that needs a
+sign-in shows its own sign-in screen. While Brain's agent sits at such a screen,
+**Brain can't start** quotes what the agent shows, and **Open terminal** opens
+it there to answer. `mewla doctor` checks every configured agent's version.
 
 ## executors.toml
 
@@ -129,11 +130,9 @@ command = "claude"
 config_dir = "/path/to/claude_work"
 ```
 
-`mewla doctor` shows which account each executor is signed in as; Brain's
-menu › **Switch executor** shows it under a row only when two sign-ins of one
-agent are installed, so they can be told apart. The
-account is the email the CLI recorded at sign-in; it is blank for an API key.
-A separate sign-in keeps its own conversations and settings, so the Model
+Brain's menu › **Switch executor** shows the executor's name under a row only
+when two of one agent are installed, so they can be told apart. A separate
+sign-in keeps its own conversations and settings, so the Model
 Provider you picked and the Skills listed under **Extensions** apply to the
 default sign-in only.
 
@@ -412,8 +411,8 @@ its page, after you confirm.
 mewla doctor
 ```
 
-It reports which configured agents are on `PATH`, hints when one looks signed
-out, and exits nonzero when the machine is not ready.
+It reports which configured agents are on `PATH` and of a version Mewla
+supports, and exits nonzero when the machine is not ready.
 
 ## Antigravity
 
@@ -423,7 +422,7 @@ accounts on 18 June 2026). Install it with
 Windows: `irm https://antigravity.google/cli/install.ps1 | iex`), then run `agy`
 once and sign in with Google OAuth in the browser; Mewla never types a
 credential. Gemini 4 Neon and the other models of your plan appear in
-`agy models`. `mewla doctor` runs `agy models` to see whether it is signed in.
+`agy models`.
 
 Antigravity runs Workers from Brain, Calendar and the app, and can be Brain's own
 agent (`mewla brain use agy`, or the Brain menu's Switch executor); the

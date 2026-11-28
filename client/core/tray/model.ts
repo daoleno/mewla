@@ -149,7 +149,7 @@ export function stateShortWords(state: StateControlModel): string {
   return (state.kind === "needs" || state.kind === "running") && state.count ? String(state.count) : state.words;
 }
 
-export type TrayNoticeAction = "try_again" | "details" | "pair_again" | "use_suggested" | "switch_executor";
+export type TrayNoticeAction = "try_again" | "details" | "pair_again" | "open_terminal" | "use_suggested" | "switch_executor";
 
 /** The tray's first group when something is wrong (§11 Tray notice). */
 export interface TrayNotice {
@@ -157,7 +157,7 @@ export interface TrayNotice {
   title: string;
   detail: string;
   /** Ink first. */
-  actions: { id: TrayNoticeAction; label: string; executor?: string }[];
+  actions: { id: TrayNoticeAction; label: string; executor?: string; worker?: string }[];
 }
 
 export type TraySort = "opened" | "activity";
@@ -172,6 +172,8 @@ export interface TrayInput {
   diagnosis?: string;
   surface: BrainSurface;
   hostProblem?: BrainHostProblem;
+  /** Brain's host Session, when the computer has one open (`brain.host_worker.id`). */
+  hostWorkerId?: string;
   /** Brain's thread offers the agent installs (Mewla for Mac, no agent on this Mac): it says why itself, so the tray
    * has no "Brain can't start" notice (its Switch executor has nothing to switch to). */
   installsOffered?: boolean;
@@ -454,11 +456,17 @@ function noticeOf(input: TrayInput): TrayNotice | null {
   }
   if (input.connection === "connected" && input.surface === "host_down" && !input.installsOffered) {
     const suggested = input.hostProblem?.suggest_executor;
+    // Open but not ready: the agent's own screen (a sign-in, a question) is in Brain's terminal, where the person answers it.
+    const terminal = input.hostProblem?.code === "not_ready" && input.hostWorkerId ? input.hostWorkerId : "";
     return {
       kind: "cant_start",
       title: "Brain can't start",
       detail: input.hostProblem?.detail || "",
-      actions: [...(suggested ? [{ id: "use_suggested" as const, label: `Use ${suggested}`, executor: suggested }] : []), { id: "switch_executor", label: "Switch executor" }],
+      actions: [
+        ...(terminal ? [{ id: "open_terminal" as const, label: "Open terminal", worker: terminal }] : []),
+        ...(suggested ? [{ id: "use_suggested" as const, label: `Use ${suggested}`, executor: suggested }] : []),
+        { id: "switch_executor", label: "Switch executor" },
+      ],
     };
   }
   return null;

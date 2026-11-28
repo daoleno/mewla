@@ -451,26 +451,23 @@ mewla brain use claude
 The thread and its history move with Brain. First run asks which agent Brain
 uses when more than one is ready and keeps that answer. A start without a
 terminal (a service, CI) never asks: Brain takes the first installed agent in
-the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, Antigravity, preferring one
-`mewla doctor` verified as signed in over one it could not verify, and the daemon
+the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, Antigravity, and the daemon
 log names it and the `mewla brain use` command that changes it.
 
 When Brain has no running host, the state control reads "Can't start". The
 tray says why: the agent is not installed, did not start, or is open but never
-became ready (a sign-in or first-run prompt waiting in its terminal; when its
-own sign-in check also says signed out, the tray says to sign in). It offers **Use** and an agent's name (**Use Codex**) for an installed agent
-that is signed in,
-and **Switch executor** when the computer has another agent installed; with
-none installed, `mewla deps` is the next step (Mewla for Mac says "No agent on this Mac" in Brain's
-thread with Install Claude Code and Install Codex, each its own `mewla deps -agent` in a terminal
-Session that installs, signs in and moves Brain to that agent). Nothing needs a restart: Mewla
-checks again every few seconds, starts Brain's host as soon as the agent is
-installed, and opens it again once the agent is signed in (an agent's own
-sign-in screen does not notice a sign-in made in another terminal). Mewla never
-holds Brain back because an agent's sign-in check says signed out: Codex on an
-API key or its own model provider, or a sign-in that lives in your login shell,
-reads as signed out there and runs. If it really cannot run, it shows as open
-but not ready. A host that has taken Brain's activation is past its sign-in and
+became ready, quoting what the agent itself shows (its own sign-in screen, a
+first-run question, an error); **Open terminal** opens it there to answer. It
+offers **Use** and an agent's name (**Use Codex**) for another installed agent
+when Brain's own is not installed, and **Switch executor** when the computer has
+another agent installed; with none installed, `mewla deps` is the next step
+(Mewla for Mac says "No agent on this Mac" in Brain's thread with Install Claude
+Code and Install Codex, each its own `mewla deps -agent` in a terminal Session
+that installs it and moves Brain to that agent). Nothing needs a restart: Mewla
+checks again every few seconds and starts Brain's host as soon as the agent is
+installed. Mewla never checks whether an agent is signed in and never holds
+Brain back for it: the agent starts, and asks for its own sign-in if it needs
+one. A host that has taken Brain's activation is past its sign-in and
 first-run screens, so it never shows as open but not ready, and the tray clears
 as soon as it takes it.
 

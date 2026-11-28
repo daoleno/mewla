@@ -233,26 +233,14 @@ func machineBlocked(report doctor.Report) (bool, string) {
 }
 
 func selectableCandidates(report doctor.Report) []Candidate {
-	var verified, unknown []Candidate
+	var candidates []Candidate
 	for _, item := range report.Executors.Items {
 		if !item.Runnable || !item.Usable {
 			continue
 		}
-		c := Candidate{
-			ID:                    item.ID,
-			Provider:              item.Provider,
-			Auth:                  item.Auth,
-			VerifiedAuthenticated: item.VerifiedAuthenticated,
-			Runnable:              item.Runnable,
-			Summary:               item.Summary,
-		}
-		if item.VerifiedAuthenticated {
-			verified = append(verified, c)
-		} else {
-			unknown = append(unknown, c)
-		}
+		candidates = append(candidates, Candidate{ID: item.ID, Provider: item.Provider, Runnable: item.Runnable, Summary: item.Summary})
 	}
-	return append(verified, unknown...)
+	return candidates
 }
 
 func isCandidate(candidates []Candidate, id string) bool {

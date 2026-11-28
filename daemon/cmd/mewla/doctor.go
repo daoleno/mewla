@@ -87,8 +87,8 @@ func daemonExecutors(stateDir string) *doctor.ExecutorsCheck {
 }
 
 // daemonViewWarnings names each agent this terminal finds ready that the
-// running Mewla does not, with the step that fixes it. A sign-in or path that
-// only exists in the shell's environment is invisible to the daemon.
+// running Mewla does not, with the step that fixes it. A path that only
+// exists in the shell's environment is invisible to the daemon.
 func daemonViewWarnings(here doctor.ExecutorsCheck, daemon *doctor.ExecutorsCheck) []string {
 	if daemon == nil {
 		return nil
@@ -104,21 +104,14 @@ func daemonViewWarnings(here doctor.ExecutorsCheck, daemon *doctor.ExecutorsChec
 			continue
 		}
 		// The other way round: Brain runs on what the running Mewla sees, so a
-		// terminal that finds the agent missing or signed out (a different PATH
-		// or environment) must not leave "NOT READY" or another agent's name as
-		// the last word on a Brain that works.
-		if theirs.VerifiedAuthenticated && !item.VerifiedAuthenticated {
-			warnings = append(warnings, fmt.Sprintf("%s is signed in for the running Mewla, so Brain can use it, but this terminal does not see it signed in (a different PATH or sign-in environment). The agent checks and host above come from this terminal, not from the running Mewla.", item.Name))
+		// terminal that finds the agent missing (a different PATH) must not
+		// leave "NOT READY" as the last word on a Brain that works.
+		if theirs.BinaryFound && !item.BinaryFound {
+			warnings = append(warnings, fmt.Sprintf("%s is on the running Mewla's PATH, so Brain can use it, but not on this terminal's. The agent checks and host above come from this terminal, not from the running Mewla.", item.Name))
 			continue
 		}
-		if !item.BinaryFound {
-			continue
-		}
-		switch {
-		case !theirs.BinaryFound:
+		if item.BinaryFound && !theirs.BinaryFound {
 			warnings = append(warnings, fmt.Sprintf("%s is on your PATH here, but not on the running Mewla's. Install %s somewhere standard such as /usr/local/bin, or stop Mewla and start it again from this terminal (run mewla).", item.Name, item.Name))
-		case item.VerifiedAuthenticated && !theirs.VerifiedAuthenticated:
-			warnings = append(warnings, fmt.Sprintf("%s is signed in here, but the running Mewla cannot see that sign-in: it comes from your shell's environment, which Mewla does not get when it starts at login. Sign in once with %s's own login so it is kept for every program, or stop Mewla and start it again from this terminal (run mewla).", item.Name, item.Name))
 		}
 	}
 	return warnings

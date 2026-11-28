@@ -27,8 +27,7 @@ default one. Brain routes Workers to it like any executor.
           (CLAUDE_CONFIG_DIR for Claude Code, CODEX_HOME for Codex).
   login   Sign that executor's CLI in to its account, in this terminal.
 
-Restart mewla after add so the new executor appears. Run mewla doctor to see
-which account each executor is signed in as.
+Restart mewla after add so the new executor appears.
 `
 
 var executorNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)

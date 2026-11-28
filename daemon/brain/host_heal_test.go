@@ -12,11 +12,11 @@ func workerSession(id, command string) map[string]*classifier.Worker {
 	return map[string]*classifier.Worker{id: {ID: id, Hidden: true, Command: command}}
 }
 
-func healFixture(t *testing.T, installed map[string]bool, auth map[string]HostAuthState) *Service {
+func healFixture(t *testing.T, installed map[string]bool) *Service {
 	t.Helper()
 	processStartedAt = processStartedAt.Add(-time.Hour)
 	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
-	service := hostFixture(t, installed, auth)
+	service := hostFixture(t, installed)
 	service.watcher = &fakeWatcher{}
 	return service
 }
@@ -30,12 +30,13 @@ func hostExecutorOnDisk(t *testing.T, service *Service) string {
 	return session.ExecutorID
 }
 
-// A default pick that turns out unusable moves itself to an agent verified
-// signed in, so onboarding never leaves a person on a Brain that cannot start.
-func TestDefaultPickedHostMovesToAVerifiedAgent(t *testing.T) {
+// A default pick that cannot run (not installed, an unsupported version) moves
+// itself to an installed agent, so onboarding never leaves a person on a Brain
+// that cannot start. One that starts but is not ready stays, so the person sees
+// what it shows (its own sign-in, a question, an error).
+func TestDefaultPickedHostMovesOnlyWhenItCannotRun(t *testing.T) {
 	t.Run("not installed moves at once", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := healFixture(t, map[string]bool{"claude": true})
 		if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
 			t.Fatal(err)
 		}
@@ -49,57 +50,35 @@ func TestDefaultPickedHostMovesToAVerifiedAgent(t *testing.T) {
 			t.Fatal("a move by Mewla was recorded as a person's choice")
 		}
 	})
-	// Login status alone is no verdict: codex on an API key or its own
-	// provider says "not logged in" and runs. Brain stays where it is.
-	t.Run("signed out by login status alone stays", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true, "codex": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
-		if err := service.store.SetHostSession("brain-host:@9", "codex"); err != nil {
-			t.Fatal(err)
-		}
-		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "codex" {
-			t.Fatalf("executor = %q, want codex", hostExecutorOnDisk(t, service))
-		}
-		service.watcher = &fakeWatcher{sessions: workerSession("brain-host:@9", "codex")}
-		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "codex" {
-			t.Fatalf("running host moved: executor = %q, want codex", hostExecutorOnDisk(t, service))
-		}
-	})
-	t.Run("running host stuck at a sign-in prompt moves", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true, "codex": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
+	t.Run("a running host stuck before ready stays", func(t *testing.T) {
+		service := healFixture(t, map[string]bool{"claude": true, "codex": true})
 		if err := service.store.SetHostSession("brain-host:@9", "codex"); err != nil {
 			t.Fatal(err)
 		}
 		service.watcher = &fakeWatcher{sessions: workerSession("brain-host:@9", "codex")}
 		service.noteHostActivation(watcher.ErrWorkerInputNotReady)
-		if service.healImplicitHost() {
-			t.Fatal("moved while the agent was still starting")
-		}
 		pastNotReadyGrace(service)
-		if !service.healImplicitHost() || hostExecutorOnDisk(t, service) != "claude" {
-			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
+		service.hostProblemMu.Lock()
+		service.hostProblemSince = time.Now().Add(-time.Hour)
+		service.hostProblemMu.Unlock()
+		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "codex" {
+			t.Fatalf("executor = %q, want codex", hostExecutorOnDisk(t, service))
 		}
 	})
-	t.Run("a host that did not start moves after the grace", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true, "grok": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+	t.Run("a host that did not start stays", func(t *testing.T) {
+		service := healFixture(t, map[string]bool{"claude": true, "grok": true})
 		if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
 			t.Fatal(err)
 		}
-		if service.healImplicitHost() {
-			t.Fatal("moved before the host had been down for the grace")
-		}
 		service.hostProblemMu.Lock()
-		service.hostProblemSince = time.Now().Add(-hostHealGrace - time.Second)
+		service.hostProblemSince = time.Now().Add(-time.Hour)
 		service.hostProblemMu.Unlock()
-		if !service.healImplicitHost() || hostExecutorOnDisk(t, service) != "claude" {
-			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
+		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "grok" {
+			t.Fatalf("executor = %q, want grok", hostExecutorOnDisk(t, service))
 		}
 	})
 	t.Run("an unsupported version moves at once", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true, "grok": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := healFixture(t, map[string]bool{"claude": true, "grok": true})
 		hostUnsupported = func(id string) string {
 			if id == "grok" {
 				return "Grok 0.0.1 found; Mewla supports a newer version."
@@ -114,29 +93,8 @@ func TestDefaultPickedHostMovesToAVerifiedAgent(t *testing.T) {
 			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
 		}
 	})
-	t.Run("an agent open at a login wall moves after the grace", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true, "grok": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
-		if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
-			t.Fatal(err)
-		}
-		service.watcher = &fakeWatcher{sessions: workerSession("brain-host:@9", "grok")}
-		service.hostProblemMu.Lock()
-		service.hostNotReadySince = time.Now().Add(-2 * hostNotReadyGrace)
-		service.hostProblemMu.Unlock()
-		if service.healImplicitHost() {
-			t.Fatal("moved on the first sight of the problem, before the grace")
-		}
-		service.hostProblemMu.Lock()
-		service.hostProblemSince = time.Now().Add(-hostHealGrace - time.Second)
-		service.hostProblemMu.Unlock()
-		if !service.healImplicitHost() || hostExecutorOnDisk(t, service) != "claude" {
-			t.Fatalf("executor = %q, want claude", hostExecutorOnDisk(t, service))
-		}
-	})
 	t.Run("moves at most once per cooldown", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true, "codex": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := healFixture(t, map[string]bool{"claude": true, "codex": true})
 		if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
 			t.Fatal(err)
 		}
@@ -154,8 +112,7 @@ func TestDefaultPickedHostMovesToAVerifiedAgent(t *testing.T) {
 
 func TestChosenHostIsNeverMoved(t *testing.T) {
 	t.Run("mewla brain use stays", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := healFixture(t, map[string]bool{"claude": true})
 		if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
 			t.Fatal(err)
 		}
@@ -170,8 +127,7 @@ func TestChosenHostIsNeverMoved(t *testing.T) {
 		}
 	})
 	t.Run("first-run choice stays", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := healFixture(t, map[string]bool{"claude": true})
 		if err := SaveHostExecutorID(service.store.Root, "grok"); err != nil {
 			t.Fatal(err)
 		}
@@ -180,21 +136,19 @@ func TestChosenHostIsNeverMoved(t *testing.T) {
 		}
 	})
 	t.Run("environment override stays", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true},
-			map[string]HostAuthState{"claude": HostAuthAuthenticated})
+		service := healFixture(t, map[string]bool{"claude": true})
 		t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "grok")
 		if service.healImplicitHost() {
 			t.Fatal("an environment-locked agent moved")
 		}
 	})
-	t.Run("nothing verified to move to stays", func(t *testing.T) {
-		service := healFixture(t, map[string]bool{"claude": true},
-			map[string]HostAuthState{"claude": HostAuthUnknown})
+	t.Run("nothing installed to move to stays", func(t *testing.T) {
+		service := healFixture(t, map[string]bool{})
 		if err := service.store.SetHostSession("brain-host:@9", "grok"); err != nil {
 			t.Fatal(err)
 		}
 		if service.healImplicitHost() || hostExecutorOnDisk(t, service) != "grok" {
-			t.Fatalf("moved to %q with nothing verified", hostExecutorOnDisk(t, service))
+			t.Fatalf("moved to %q with nothing installed", hostExecutorOnDisk(t, service))
 		}
 	})
 }

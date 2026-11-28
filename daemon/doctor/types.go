@@ -24,16 +24,6 @@ const (
 	StatusUnknown Status = "unknown"
 )
 
-// AuthState is best-effort executor authentication state.
-// Unknown means no safe official probe exists or the probe failed ambiguously.
-type AuthState string
-
-const (
-	AuthAuthenticated   AuthState = "authenticated"
-	AuthUnauthenticated AuthState = "unauthenticated"
-	AuthUnknown         AuthState = "unknown"
-)
-
 // Remediation codes are stable identifiers for automated onboarding flows.
 type Remediation string
 
@@ -42,20 +32,7 @@ const (
 	RemediationStateDirUnwritable  Remediation = "state_dir_unwritable"
 	RemediationPortInUse           Remediation = "port_in_use"
 	RemediationInstallExecutor     Remediation = "install_executor"
-	RemediationAuthenticateExec    Remediation = "authenticate_executor"
 	RemediationConfigureExecutor   Remediation = "configure_executor"
-)
-
-// RecommendationConfidence describes how strongly doctor trusts a recommendation.
-type RecommendationConfidence string
-
-const (
-	// ConfidenceVerified means at least one recommended executor has verified auth.
-	ConfidenceVerified RecommendationConfidence = "verified"
-	// ConfidenceUnverified means recommendations rely on auth-unknown runnable candidates.
-	ConfidenceUnverified RecommendationConfidence = "unverified"
-	// ConfidenceNone means no runnable executor was available to recommend.
-	ConfidenceNone RecommendationConfidence = "none"
 )
 
 // Report is the top-level doctor result. JSON field names are part of the
@@ -160,46 +137,38 @@ type ListenCheck struct {
 
 // ExecutorsCheck summarizes configured executors and recommendations.
 type ExecutorsCheck struct {
-	ConfigPath               string                   `json:"config_path"`
-	ConfigExists             bool                     `json:"config_exists"`
-	Status                   Status                   `json:"status"`
-	Remediation              Remediation              `json:"remediation,omitempty"`
-	Summary                  string                   `json:"summary"`
-	Items                    []ExecutorCheck          `json:"items"`
-	UsableCount              int                      `json:"usable_count"`
-	VerifiedCount            int                      `json:"verified_count"`
-	RecommendedHost          string                   `json:"recommended_host,omitempty"`
-	RecommendationConfidence RecommendationConfidence `json:"recommendation_confidence"`
-	Warnings                 []string                 `json:"warnings,omitempty"`
+	ConfigPath      string          `json:"config_path"`
+	ConfigExists    bool            `json:"config_exists"`
+	Status          Status          `json:"status"`
+	Remediation     Remediation     `json:"remediation,omitempty"`
+	Summary         string          `json:"summary"`
+	Items           []ExecutorCheck `json:"items"`
+	UsableCount     int             `json:"usable_count"`
+	RecommendedHost string          `json:"recommended_host,omitempty"`
+	Warnings        []string        `json:"warnings,omitempty"`
 }
 
 // ExecutorCheck is one configured executor's capability and readiness view.
 //
-// Runnable/Usable means the binary is present and not explicitly
-// unauthenticated. VerifiedAuthenticated is stricter: an official probe
-// confirmed login. Auth-unknown candidates are usable with warning.
+// Runnable/Usable means the binary is present and of a supported version.
+// Sign-in is never checked: an agent shows its own sign-in when it starts.
 type ExecutorCheck struct {
-	ID                    string                  `json:"id"`
-	Name                  string                  `json:"name"`
-	Provider              string                  `json:"provider"`
-	Configured            bool                    `json:"configured"`
-	Command               string                  `json:"command,omitempty"`
-	BinaryFound           bool                    `json:"binary_found"`
-	BinaryPath            string                  `json:"binary_path,omitempty"`
-	Version               string                  `json:"version,omitempty"`
-	Auth                  AuthState               `json:"auth"`
-	Runnable              bool                    `json:"runnable"`
-	Usable                bool                    `json:"usable"`
-	VerifiedAuthenticated bool                    `json:"verified_authenticated"`
-	Capabilities          work.WorkerCapabilities `json:"capabilities"`
-	Status                Status                  `json:"status"`
-	Remediation           Remediation             `json:"remediation,omitempty"`
-	Summary               string                  `json:"summary"`
+	ID           string                  `json:"id"`
+	Name         string                  `json:"name"`
+	Provider     string                  `json:"provider"`
+	Configured   bool                    `json:"configured"`
+	Command      string                  `json:"command,omitempty"`
+	BinaryFound  bool                    `json:"binary_found"`
+	BinaryPath   string                  `json:"binary_path,omitempty"`
+	Version      string                  `json:"version,omitempty"`
+	Runnable     bool                    `json:"runnable"`
+	Usable       bool                    `json:"usable"`
+	Capabilities work.WorkerCapabilities `json:"capabilities"`
+	Status       Status                  `json:"status"`
+	Remediation  Remediation             `json:"remediation,omitempty"`
+	Summary      string                  `json:"summary"`
 	// ConfigDir is set for a separate Claude Code or Codex sign-in.
 	ConfigDir string `json:"config_dir,omitempty"`
-	// Account is who the CLI is signed in as (an email address), when the CLI
-	// records it; empty when unknown. Never a token.
-	Account string `json:"account,omitempty"`
 	// OpenCode-only non-mutating probes. StatusUnknown means the probe was not
 	// run or failed ambiguously; never includes model lists or secrets.
 	ModelsStatus  Status `json:"models_status,omitempty"`

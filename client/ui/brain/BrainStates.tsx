@@ -54,8 +54,8 @@ export function BrainChatFailed(props: { onTryAgain?: () => void; onOpenTerminal
 
 /**
  * "Brain can't start" (soft-final/SPEC.md §1.3, the tray's notice): the host
- * problem as the computer reports it, then Use {suggested} (an installed agent the
- * computer verified as signed in; it switches in place, "Switching…") and Switch
+ * problem as the computer reports it, then Use {suggested} (another installed agent,
+ * when the host's own is not installed; it switches in place, "Switching…") and Switch
  * executor (when another agent is installed). A refused switch shows under the
  * buttons. Renders nothing while Brain has no host problem.
  */

@@ -10,7 +10,7 @@ import { scenario } from "./scenario";
 
 const base = scenario();
 const executor = (id: string, provider: string, command: string) => ({ id, name: id, provider, command });
-const found = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { installed: true, signed_in: true }]));
+const found = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { installed: true }]));
 const daemon = new FakeDaemon({
   ...base,
   brain: {

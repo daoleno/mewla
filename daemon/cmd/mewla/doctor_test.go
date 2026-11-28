@@ -58,7 +58,7 @@ func TestDoctorJSONSchemaSmoke(t *testing.T) {
 }
 
 func TestDaemonViewWarningsNameWhatOnlyTheShellSees(t *testing.T) {
-	ready := doctor.ExecutorCheck{ID: "claude", Name: "Claude Code", BinaryFound: true, VerifiedAuthenticated: true}
+	ready := doctor.ExecutorCheck{ID: "claude", Name: "Claude Code", BinaryFound: true}
 	here := doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{ready}}
 
 	if got := daemonViewWarnings(here, nil); len(got) != 0 {
@@ -70,30 +70,19 @@ func TestDaemonViewWarningsNameWhatOnlyTheShellSees(t *testing.T) {
 		t.Fatalf("matching views must warn nothing, got %v", got)
 	}
 
-	// Signed in through the shell's environment: the daemon, started at login
-	// without it, sees the same binary signed out.
-	signedOut := ready
-	signedOut.VerifiedAuthenticated = false
-	got := daemonViewWarnings(here, &doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{signedOut}})
-	if len(got) != 1 || !strings.Contains(got[0], "Claude Code is signed in here") || !strings.Contains(got[0], "run mewla") {
-		t.Fatalf("want one sign-in warning with its fix, got %v", got)
-	}
-
 	// A binary on the shell's PATH only.
 	missing := doctor.ExecutorCheck{ID: "claude", Name: "Claude Code"}
-	got = daemonViewWarnings(here, &doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{missing}})
+	got := daemonViewWarnings(here, &doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{missing}})
 	if len(got) != 1 || !strings.Contains(got[0], "not on the running Mewla's") {
 		t.Fatalf("want one PATH warning, got %v", got)
 	}
 
-	// The daemon does better than the terminal (the terminal's PATH or sign-in
-	// environment differs): nothing to fix, but the terminal's host line is not
-	// Brain's, and the output says so.
-	for name, terminal := range map[string]doctor.ExecutorCheck{"signed out here": signedOut, "missing here": missing} {
-		got := daemonViewWarnings(doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{terminal}}, same)
-		if len(got) != 1 || !strings.Contains(got[0], "signed in for the running Mewla") || !strings.Contains(got[0], "Brain can use it") {
-			t.Fatalf("%s: want one warning that Brain uses the daemon's view, got %v", name, got)
-		}
+	// The daemon does better than the terminal (the terminal's PATH differs):
+	// nothing to fix, but the terminal's host line is not Brain's, and the
+	// output says so.
+	got = daemonViewWarnings(doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{missing}}, same)
+	if len(got) != 1 || !strings.Contains(got[0], "on the running Mewla's PATH") || !strings.Contains(got[0], "Brain can use it") {
+		t.Fatalf("want one warning that Brain uses the daemon's view, got %v", got)
 	}
 }
 

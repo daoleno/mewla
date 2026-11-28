@@ -261,13 +261,6 @@ func TestAgentRelaunchIsNotDoneFor(t *testing.T) {
 		t.Cleanup(work.SetAgentLookPath(func(string) (string, error) { return "", errors.New("not found") }))
 		report(t, f, "is not installed on this computer", "Not restarted: not installed")
 	})
-	t.Run("an agent signed out", func(t *testing.T) {
-		f := newRelaunchFixture(t)
-		previous := hostAuth
-		hostAuth = func(string) HostAuthState { return HostAuthUnauthenticated }
-		t.Cleanup(func() { hostAuth = previous })
-		report(t, f, "Claude Code is not signed in on this computer", "Not restarted: signed out")
-	})
 	t.Run("a Worker spawned before launches were recorded, idle", func(t *testing.T) {
 		// After an upgrade: nothing was lost and the person saw it end; log only.
 		f := newRelaunchFixture(t)

@@ -272,10 +272,17 @@ describe("tray model", () => {
 
   test("Brain starting and can't start", () => {
     expect(trayModel(input({ surface: "waking" })).state.words).toBe("Starting…");
-    const down = trayModel(input({ surface: "host_down", hostProblem: { code: "not_signed_in", executor: "agent", detail: "Cursor is not signed in", suggest_executor: "claude", installed_executors: ["claude", "agent"] } }));
+    const down = trayModel(input({ surface: "host_down", hostProblem: { code: "not_installed", executor: "agent", detail: "agent is not installed on this computer.", suggest_executor: "claude", installed_executors: ["claude"] } }));
     expect(down.state).toMatchObject({ kind: "cant_start", words: "Can't start", dot: "seal" });
-    expect(down.notice).toMatchObject({ title: "Brain can't start", detail: "Cursor is not signed in" });
+    expect(down.notice).toMatchObject({ title: "Brain can't start", detail: "agent is not installed on this computer." });
     expect(down.notice!.actions.map((a) => a.label)).toEqual(["Use claude", "Switch executor"]);
+    // Open but not ready (its own sign-in or first-run screen): the agent's words, and its terminal to answer them in.
+    const notReady = { code: "not_ready", executor: "claude", detail: "Brain's claude session is open but not ready; Brain continues once it is. It shows: Select login method:", installed_executors: ["codex"] };
+    const stuck = trayModel(input({ surface: "host_down", hostProblem: notReady, hostWorkerId: "brain-host" }));
+    expect(stuck.notice!.detail).toBe(notReady.detail);
+    expect(stuck.notice!.actions).toEqual([{ id: "open_terminal", label: "Open terminal", worker: "brain-host" }, { id: "switch_executor", label: "Switch executor" }]);
+    // No Session open: nothing to open.
+    expect(trayModel(input({ surface: "host_down", hostProblem: notReady })).notice!.actions.map((a) => a.id)).toEqual(["switch_executor"]);
     // No agent on this Mac: the thread offers the installs and says why; the state stays, the notice goes.
     const noAgent = trayModel(input({ surface: "host_down", installsOffered: true, hostProblem: { code: "not_installed", executor: "claude", detail: "claude is not installed", installed_executors: [] } }));
     expect(noAgent.state).toMatchObject({ kind: "cant_start", words: "Can't start" });

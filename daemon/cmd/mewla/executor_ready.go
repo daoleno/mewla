@@ -3,7 +3,6 @@ package main
 import (
 	"runtime"
 
-	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -13,19 +12,14 @@ func agyInstallCommand(goos string) string {
 }
 
 // executorNotReady says, before a Worker is spawned, why an Antigravity launch
-// could only stop at a screen nobody is watching: agy is not installed, or has
-// no sign-in. It returns "" for every other agent and when agy can start. A
-// sign-in is the person's own step in a browser, so the words name it and
-// Mewla never types it.
+// could only fail: agy is not installed. It returns "" for every other agent
+// and when agy is installed.
 func executorNotReady(command string) string {
 	if work.InferWorkerProvider(command) != work.WorkerProviderAntigravity {
 		return ""
 	}
 	if _, err := work.AgentLookPath("agy"); err != nil {
 		return "Antigravity (agy) is not installed on this computer. Install it with: " + agyInstallCommand(runtime.GOOS)
-	}
-	if brain.ExecutorAuth("agy") == brain.HostAuthUnauthenticated {
-		return "Antigravity (agy) is not signed in on this computer. Run agy in a terminal once, choose Google OAuth and finish signing in on the page it opens; the Worker can start after that."
 	}
 	return ""
 }

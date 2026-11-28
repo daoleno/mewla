@@ -488,7 +488,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
 		return on
 	})
-	installHostAuthProbe()
+	installHostVersionProbe()
 	brainService := brain.NewService(brainStore, w, execs)
 	// No agent here: an app offers the installs, each this daemon's own mewla
 	// deps -agent on this state, in a terminal Session (never another mewla on

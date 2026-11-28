@@ -35,13 +35,9 @@ func successLines(result Result) []string {
 }
 
 func formatCandidates(candidates []Candidate) []string {
-	lines := []string{"Runnable executors (verified first):"}
+	lines := []string{"Runnable executors:"}
 	for _, c := range candidates {
-		auth := string(c.Auth)
-		if c.VerifiedAuthenticated {
-			auth = "verified"
-		}
-		lines = append(lines, fmt.Sprintf("  - %s [%s] auth=%s", c.ID, c.Provider, auth))
+		lines = append(lines, fmt.Sprintf("  - %s [%s]", c.ID, c.Provider))
 	}
 	lines = append(lines, "One executor is enough. Brain routes Workers to any configured executor.")
 	return lines
@@ -81,7 +77,7 @@ func noExecutorLines(report doctor.Report) []string {
 	lines := []string{
 		"mewla setup: no runnable executor found",
 		"",
-		"Install and authenticate at least one provider CLI on this host, then re-run mewla setup.",
+		"Install at least one provider CLI on this host, then re-run mewla setup.",
 		"Official login/status commands (provider docs; Mewla does not invent install URLs):",
 	}
 	lines = append(lines, executorInstallSteps(report)...)

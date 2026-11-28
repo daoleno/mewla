@@ -136,7 +136,7 @@ function CatHeader(props: { nav: PageNav }) {
  */
 export function ComputerPage(props: {
   nav: PageNav;
-  /** "Claude is not signed in" › Switch: the Brain host sheet, which belongs to Brain's menu. */
+  /** "Claude is not installed" › Switch: the Brain host sheet, which belongs to Brain's menu. */
   onSwitchExecutor: () => void;
 }) {
   const busy = signal("");

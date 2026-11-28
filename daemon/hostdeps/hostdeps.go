@@ -92,7 +92,6 @@ type Agent struct {
 	ID      string // executor id, e.g. "claude"
 	Name    string
 	Install Plan
-	Login   string
 }
 
 // agentOrder lists executor ids in the one order Mewla uses everywhere: the
@@ -132,22 +131,16 @@ func Agents(p Platform) []Agent {
 	if p.GOOS != "darwin" && p.GOOS != "linux" {
 		return nil
 	}
-	codexLogin := "codex login"
-	if p.Headless {
-		codexLogin = "codex login --device-auth"
-	}
 	agents := []Agent{
 		{
 			ID:      "claude",
 			Name:    "Claude Code",
 			Install: Plan{Steps: []string{"curl -fsSL https://claude.ai/install.sh | bash"}},
-			Login:   "claude auth login",
 		},
 		{
 			ID:      "codex",
 			Name:    "Codex",
 			Install: Plan{Steps: []string{"curl -fsSL https://chatgpt.com/codex/install.sh | sh"}},
-			Login:   codexLogin,
 		},
 	}
 	slices.SortStableFunc(agents, func(a, b Agent) int { return AgentRank(a.ID) - AgentRank(b.ID) })

@@ -11,7 +11,7 @@ import { isPromptGoneError, PROMPT_GONE_NOTICE } from "../../core/timeline/claud
 import { filterTray, TODAY_SHOWN, type TrayFilter, type TrayNoticeAction, type TrayRequest, type TrayRow as Row, type TrayTarget, type TrayTile } from "../../core/tray/model";
 import { Icon } from "../kit/Icon";
 import { PillButton } from "../kit/kit";
-import { homeShown, openCalendarItem, openPage, openSession, openTrigger, openWorkDetail, trayOpen } from "../shell/nav";
+import { homeShown, openBrainTerminal, openCalendarItem, openPage, openSession, openTrigger, openWorkDetail, trayOpen } from "../shell/nav";
 import { createMenuAnchor, showMenu } from "../kit/Menu";
 import { countsForm, countText, hasDot } from "../../core/tray/counts";
 import { requestPaneKey, rowKey } from "../../core/tray/pane";
@@ -253,6 +253,10 @@ export function TrayBody(props: TrayBodyProps) {
       case "try_again": forgetConnectionIssue(); return resumeConnection();
       case "details": return props.open.computer();
       case "pair_again": return props.onPairAgain();
+      case "open_terminal": {
+        const worker = untracked(tray).notice?.actions.find((action) => action.id === "open_terminal")?.worker;
+        return worker ? openBrainTerminal(worker) : undefined;
+      }
       case "use_suggested": {
         const executor = untracked(tray).notice?.actions.find((action) => action.id === "use_suggested")?.executor;
         return executor ? props.onUseExecutor?.(executor) : undefined;

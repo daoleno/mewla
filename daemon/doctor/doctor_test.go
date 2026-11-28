@@ -83,7 +83,7 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	}
 }
 
-func TestRunReadyWithAuthenticatedExecutor(t *testing.T) {
+func TestRunReadyWithAnInstalledExecutor(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	stateDir := filepath.Join(home, ".mewla")
@@ -122,68 +122,15 @@ command = "codex"
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 	codex := findExecutor(report, "codex")
-	if codex == nil || codex.Auth != AuthAuthenticated || !codex.Usable || !codex.VerifiedAuthenticated {
+	if codex == nil || !codex.Usable || !codex.Runnable || codex.Status != StatusOK {
 		t.Fatalf("codex = %+v", codex)
 	}
-	if report.Executors.RecommendationConfidence != ConfidenceVerified || report.Executors.VerifiedCount < 1 {
+	if report.Executors.Status != StatusOK {
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 }
 
-func TestAuthUnknownDistinctFromUnauthenticated(t *testing.T) {
-	home := t.TempDir()
-	binDir := t.TempDir()
-	writeFakeCodex(t, binDir, "Not logged in")
-	writeFakeGrok(t, binDir)
-	writeExecutorsTOML(t, home, `
-[[executors]]
-name = "codex"
-command = "codex"
-
-[[executors]]
-name = "grok"
-command = "grok"
-`)
-
-	report, err := Run(Options{
-		Home:          home,
-		StateDir:      filepath.Join(home, ".mewla"),
-		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
-		Addr:          "127.0.0.1:0",
-		PathEnv:       binDir,
-		Listen:        func(network, address string) (io.Closer, error) { return nopCloser{}, nil },
-		HTTPGet:       func(ctx context.Context, url string) (int, []byte, error) { return 0, nil, errors.New("refused") },
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	// Grok is auth-unknown but runnable, so overall readiness is allowed with warnings.
-	if !report.Ready {
-		t.Fatalf("expected ready with grok unknown candidate, report=%+v", report)
-	}
-	if report.Executors.Status != StatusWarn {
-		t.Fatalf("executors status = %s, want warn", report.Executors.Status)
-	}
-	codex := findExecutor(report, "codex")
-	grok := findExecutor(report, "grok")
-	if codex == nil || codex.Auth != AuthUnauthenticated || codex.Usable || codex.Runnable {
-		t.Fatalf("codex = %+v", codex)
-	}
-	if grok == nil || grok.Auth != AuthUnknown || !grok.Usable || !grok.Runnable || grok.VerifiedAuthenticated {
-		t.Fatalf("grok = %+v", grok)
-	}
-	if codex.Remediation != RemediationAuthenticateExec {
-		t.Fatalf("codex remediation = %q", codex.Remediation)
-	}
-	if report.Executors.RecommendedHost != "grok" || report.Executors.RecommendationConfidence != ConfidenceUnverified {
-		t.Fatalf("recommendations = host=%s confidence=%s", report.Executors.RecommendedHost, report.Executors.RecommendationConfidence)
-	}
-	if len(report.Warnings) == 0 {
-		t.Fatal("expected warnings for unverified auth readiness")
-	}
-}
-
-func TestGrokOnlyUnknownAuthReadyWithWarning(t *testing.T) {
+func TestGrokOnlyReady(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeGrok(t, binDir)
@@ -198,27 +145,24 @@ command = "grok"
 	if !report.Ready {
 		t.Fatalf("expected ready: %+v", report)
 	}
-	if report.Executors.Status != StatusWarn || report.Executors.VerifiedCount != 0 || report.Executors.UsableCount < 1 {
+	if report.Executors.Status != StatusOK || report.Executors.UsableCount < 1 {
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 	grok := findExecutor(report, "grok")
-	if grok == nil || grok.Auth != AuthUnknown || !grok.Usable || grok.VerifiedAuthenticated {
+	if grok == nil || !grok.Usable {
 		t.Fatalf("grok = %+v", grok)
 	}
-	if report.Executors.RecommendedHost != "grok" || report.Executors.RecommendationConfidence != ConfidenceUnverified {
-		t.Fatalf("host=%s confidence=%s", report.Executors.RecommendedHost, report.Executors.RecommendationConfidence)
+	if report.Executors.RecommendedHost != "grok" {
+		t.Fatalf("host=%s", report.Executors.RecommendedHost)
 	}
 	var human bytes.Buffer
 	_ = WriteHuman(&human, report)
-	if !strings.Contains(human.String(), "READY (with warnings)") {
-		t.Fatalf("human output:\n%s", human.String())
-	}
-	if !strings.Contains(human.String(), "unverified") {
-		t.Fatalf("human output missing confidence:\n%s", human.String())
+	if text := strings.ToLower(human.String()); strings.Contains(text, "auth=") || strings.Contains(text, "signed in") || strings.Contains(text, "verified") {
+		t.Fatalf("human output speaks of sign-in:\n%s", human.String())
 	}
 }
 
-func TestCustomExecutorUnknownAuthReadyWithWarning(t *testing.T) {
+func TestCustomExecutorReady(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeCustom(t, binDir, "mycli")
@@ -234,40 +178,14 @@ command = "mycli"
 		t.Fatalf("expected ready: %+v", report)
 	}
 	item := findExecutor(report, "mycli")
-	if item == nil || item.Provider != "custom" || item.Auth != AuthUnknown || !item.Usable {
+	if item == nil || item.Provider != "custom" || !item.Usable {
 		t.Fatalf("mycli = %+v", item)
 	}
-	if report.Executors.Status != StatusWarn || report.Executors.RecommendationConfidence != ConfidenceUnverified {
+	if report.Executors.Status != StatusOK {
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 	if report.Executors.RecommendedHost != "mycli" {
 		t.Fatalf("recommended host = %q", report.Executors.RecommendedHost)
-	}
-}
-
-func TestUnauthenticatedOnlyNotReady(t *testing.T) {
-	home := t.TempDir()
-	binDir := t.TempDir()
-	writeFakeCodex(t, binDir, "Not logged in")
-	writeExecutorsTOML(t, home, `
-[[executors]]
-name = "codex"
-command = "codex"
-`)
-
-	report := mustRunDoctor(t, home, binDir)
-	if report.Ready {
-		t.Fatal("expected not ready when only unauthenticated executors exist")
-	}
-	if report.Executors.Status != StatusFail || report.Executors.Remediation != RemediationAuthenticateExec {
-		t.Fatalf("executors = %+v", report.Executors)
-	}
-	if report.Executors.UsableCount != 0 || report.Executors.RecommendationConfidence != ConfidenceNone {
-		t.Fatalf("executors = %+v", report.Executors)
-	}
-	codex := findExecutor(report, "codex")
-	if codex == nil || codex.Auth != AuthUnauthenticated || codex.Usable || codex.Runnable {
-		t.Fatalf("codex = %+v", codex)
 	}
 }
 
@@ -286,7 +204,7 @@ command = "claude"
 `)
 
 	report := mustRunDoctor(t, home, binDir)
-	if report.Executors.VerifiedCount != 2 {
+	if report.Executors.UsableCount != 2 {
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 	if report.Executors.RecommendedHost != "claude" {
@@ -324,7 +242,7 @@ exit 1
 	writeExec(t, filepath.Join(binDir, "claude"), script)
 }
 
-func TestAuthenticatedPreferredOverUnknown(t *testing.T) {
+func TestRetiredDelegatedExecutorKeyIsReported(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
@@ -344,58 +262,19 @@ command = "grok"
 	if !report.Ready {
 		t.Fatalf("expected ready: %+v", report)
 	}
-	if report.Executors.Status != StatusOK || report.Executors.VerifiedCount < 1 {
+	if report.Executors.Status != StatusOK {
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 	if report.Executors.RecommendedHost != "codex" {
-		t.Fatalf("recommended host = %q, want codex over grok", report.Executors.RecommendedHost)
+		t.Fatalf("recommended host = %q, want codex before grok, as on the install menu", report.Executors.RecommendedHost)
 	}
 	// The retired delegated_executor key loads, is ignored and is reported.
 	if !strings.Contains(strings.Join(report.Executors.Warnings, "\n"), "delegated_executor are retired and ignored") {
 		t.Fatalf("missing retired-key warning: %v", report.Executors.Warnings)
 	}
-	if report.Executors.RecommendationConfidence != ConfidenceVerified {
-		t.Fatalf("confidence = %s", report.Executors.RecommendationConfidence)
-	}
 	grok := findExecutor(report, "grok")
-	if grok == nil || !grok.Usable || grok.VerifiedAuthenticated {
-		t.Fatalf("grok should remain usable unknown candidate: %+v", grok)
-	}
-}
-
-func TestCodexAuthOutputNeverLeaksIntoReport(t *testing.T) {
-	home := t.TempDir()
-	binDir := t.TempDir()
-	writeFakeCodex(t, binDir, "Logged in using an API key - sk-RzC84SECRETVALUE")
-	writeExecutorsTOML(t, home, `
-[[executors]]
-name = "codex"
-command = "codex"
-`)
-
-	report, err := Run(Options{
-		Home:          home,
-		StateDir:      filepath.Join(home, ".mewla"),
-		ExecutorsPath: filepath.Join(home, ".mewla", "executors.toml"),
-		Addr:          "127.0.0.1:0",
-		PathEnv:       binDir,
-		Listen:        func(network, address string) (io.Closer, error) { return nopCloser{}, nil },
-		HTTPGet:       func(ctx context.Context, url string) (int, []byte, error) { return 0, nil, errors.New("refused") },
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	raw, err := json.Marshal(report)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-	if strings.Contains(string(raw), "sk-") || strings.Contains(string(raw), "SECRET") {
-		t.Fatalf("secret leaked into report JSON: %s", raw)
-	}
-	var human bytes.Buffer
-	_ = WriteHuman(&human, report)
-	if strings.Contains(human.String(), "sk-") || strings.Contains(human.String(), "SECRET") {
-		t.Fatalf("secret leaked into human output: %s", human.String())
+	if grok == nil || !grok.Usable {
+		t.Fatalf("grok should remain usable: %+v", grok)
 	}
 }
 
@@ -477,112 +356,6 @@ func exitError(t *testing.T, code int) error {
 		t.Fatalf("exit %d produced %v", code, err)
 	}
 	return err
-}
-
-func TestParseAuthHelpers(t *testing.T) {
-	// Codex: exit 0 is logged in whatever it prints; exit 1 saying "Not logged
-	// in" is logged out; every other failure says nothing.
-	if got := parseCodexAuth([]byte("Logged in using an API key - sk-SECRET"), nil); got != AuthAuthenticated {
-		t.Fatalf("codex auth = %s", got)
-	}
-	if got := parseCodexAuth([]byte("Logged in using ChatGPT"), nil); got != AuthAuthenticated {
-		t.Fatalf("codex auth = %s", got)
-	}
-	notLoggedIn := []byte("WARNING: proceeding, even though we could not create PATH aliases\nNot logged in\n")
-	if got := parseCodexAuth(notLoggedIn, exitError(t, 1)); got != AuthUnauthenticated {
-		t.Fatalf("codex logged out = %s", got)
-	}
-	for name, tc := range map[string]struct {
-		out []byte
-		err error
-	}{
-		"other exit code":       {notLoggedIn, exitError(t, 2)},
-		"exit 1, other message": {[]byte("Error loading configuration: bad toml"), exitError(t, 1)},
-		"message inside a line": {[]byte("this is not logged in anywhere, really"), exitError(t, 1)},
-		"not an exit error":     {notLoggedIn, errors.New("context deadline exceeded")},
-		"exit 1, no output":     {nil, exitError(t, 1)},
-		"other wording":         {[]byte("Logged out"), exitError(t, 1)},
-	} {
-		if got := parseCodexAuth(tc.out, tc.err); got != AuthUnknown {
-			t.Errorf("codex %s = %s, want unknown", name, got)
-		}
-	}
-
-	if got := parseClaudeAuth([]byte(`{"loggedIn":true}`)); got != AuthAuthenticated {
-		t.Fatalf("claude auth = %s", got)
-	}
-	if got := parseClaudeAuth([]byte(`{"loggedIn":false}`)); got != AuthUnauthenticated {
-		t.Fatalf("claude auth = %s", got)
-	}
-	for _, out := range []string{``, `{}`, `{"loggedIn":"yes"}`, `Logged in as someone`, `Not logged in`} {
-		if got := parseClaudeAuth([]byte(out)); got != AuthUnknown {
-			t.Fatalf("claude %q = %s, want unknown", out, got)
-		}
-	}
-
-	// A warning line from the CLI, merged in from stderr, does not hide the document.
-	if got := parseClaudeAuth([]byte("(node:1) ExperimentalWarning: something [beta]\n{\"loggedIn\":true}\n")); got != AuthAuthenticated {
-		t.Fatalf("claude with a warning line = %s", got)
-	}
-	if got := parseOpenCodeAuth([]byte("[warn] stale cache\n[{\"id\":\"a\",\"connections\":[{\"type\":\"env\"}]}]\n")); got != AuthAuthenticated {
-		t.Fatalf("opencode with a warning line = %s", got)
-	}
-	if got := parseCursorAuth([]byte(`{"status":"authenticated","isAuthenticated":true}`)); got != AuthAuthenticated {
-		t.Fatalf("cursor auth = %s", got)
-	}
-	if got := parseCursorAuth([]byte(`{"status":"unauthenticated","isAuthenticated":false}`)); got != AuthUnauthenticated {
-		t.Fatalf("cursor auth = %s", got)
-	}
-	if got := parseCursorAuth([]byte(`{"isAuthenticated":false}`)); got != AuthUnauthenticated {
-		t.Fatalf("cursor explicit false = %s", got)
-	}
-	for _, out := range []string{``, `{}`, `unsupported`, `Logged in`} {
-		if got := parseCursorAuth([]byte(out)); got != AuthUnknown {
-			t.Fatalf("cursor %q = %s, want unknown", out, got)
-		}
-	}
-
-	if got := parseOpenCodeAuth([]byte(`[{"id":"openai","name":"OpenAI","connections":[{"type":"credential","id":"x","label":"y","method":"oauth"}]}]`)); got != AuthAuthenticated {
-		t.Fatalf("opencode credential = %s", got)
-	}
-	if got := parseOpenCodeAuth([]byte(`[{"id":"a","connections":[]},{"id":"b","connections":[{"type":"env","id":"OPENAI_API_KEY"}]}]`)); got != AuthAuthenticated {
-		t.Fatalf("opencode env = %s", got)
-	}
-	for _, out := range []string{`[]`, `[{"id":"a","name":"A","connections":[]}]`} {
-		if got := parseOpenCodeAuth([]byte(out)); got != AuthUnauthenticated {
-			t.Fatalf("opencode %q = %s, want unauthenticated", out, got)
-		}
-	}
-	for _, out := range []string{``, `null`, `{}`, `0 credentials`, `1 credentials\nopenai oauth`} {
-		if got := parseOpenCodeAuth([]byte(out)); got != AuthUnknown {
-			t.Fatalf("opencode %q = %s, want unknown", out, got)
-		}
-	}
-}
-
-func TestFailedOfficialAuthCommandIsUnknown(t *testing.T) {
-	home := t.TempDir()
-	binDir := t.TempDir()
-	// Codex auth command fails / returns empty — must not become unauthenticated.
-	writeExec(t, filepath.Join(binDir, "codex"), `#!/bin/sh
-if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then echo "codex-cli 0.0.1"; exit 0; fi
-if [ "$1" = "login" ] && [ "$2" = "status" ]; then exit 2; fi
-exit 1
-`)
-	writeExecutorsTOML(t, home, `
-[[executors]]
-name = "codex"
-command = "codex"
-`)
-
-	report := mustRunDoctor(t, home, binDir)
-	codex := findExecutor(report, "codex")
-	if codex == nil || codex.Auth != AuthUnknown || !codex.Usable {
-		t.Fatalf("codex = %+v", codex)
-	}
-	if !report.Ready || report.Executors.Status != StatusWarn {
-		t.Fatalf("expected ready with warning, got ready=%v executors=%+v", report.Ready, report.Executors)
-	}
 }
 
 func TestPlatformSupportedOnCurrentOS(t *testing.T) {
@@ -762,8 +535,8 @@ command = "opencode"
 		t.Fatalf("probe status models=%s service=%s summary=%q", item.ModelsStatus, item.ServiceStatus, item.Summary)
 	}
 	joined := strings.Join(seen, " | ")
-	if !strings.Contains(joined, "opencode auth list --format json") || item.Auth != AuthAuthenticated {
-		t.Fatalf("auth probe: auth=%s seen=%v", item.Auth, seen)
+	if strings.Contains(joined, "auth") {
+		t.Fatalf("doctor asked OpenCode about its sign-in: %v", seen)
 	}
 	if !strings.Contains(joined, "opencode models") || !strings.Contains(joined, "opencode service status") {
 		t.Fatalf("expected models and service status probes, seen=%v", seen)
@@ -827,9 +600,6 @@ command = "opencode"
 	}
 	if item.ModelsStatus != StatusFail || item.ServiceStatus != StatusFail {
 		t.Fatalf("expected failed probes, got models=%s service=%s", item.ModelsStatus, item.ServiceStatus)
-	}
-	if item.Auth != AuthUnknown {
-		t.Fatalf("auth must stay unknown on empty auth list, got %s", item.Auth)
 	}
 	if !strings.Contains(item.Summary, "models probe failed") || !strings.Contains(item.Summary, "service probe failed") {
 		t.Fatalf("summary = %q", item.Summary)
@@ -986,5 +756,37 @@ func TestProbeVersionAsksOncePerBuildOfABinary(t *testing.T) {
 	e.probeVersion(filepath.Join(t.TempDir(), "missing"), "claude")
 	if asked != 4 {
 		t.Fatalf("unexaminable paths were asked %d times in all, want 4", asked)
+	}
+}
+
+// Doctor never asks an agent whether it is signed in: a "Not logged in" Codex
+// is as usable as any installed agent, and no login command runs.
+func TestSignInIsNeverChecked(t *testing.T) {
+	home := t.TempDir()
+	binDir := t.TempDir()
+	calls := filepath.Join(t.TempDir(), "calls")
+	writeExec(t, filepath.Join(binDir, "codex"), fmt.Sprintf(`#!/bin/sh
+echo "$*" >> %q
+if [ "$1" = "--version" ]; then echo "codex-cli 0.1.0"; exit 0; fi
+echo "Not logged in"
+exit 1
+`, calls))
+	writeExecutorsTOML(t, home, `
+[[executors]]
+name = "codex"
+command = "codex"
+`)
+	report := mustRunDoctor(t, home, binDir)
+	codex := findExecutor(report, "codex")
+	if codex == nil || !codex.Usable || !report.Ready || report.Executors.Status != StatusOK {
+		t.Fatalf("codex = %+v ready=%v", codex, report.Ready)
+	}
+	raw, _ := os.ReadFile(calls)
+	if strings.Contains(string(raw), "login") || strings.Contains(string(raw), "auth") {
+		t.Fatalf("doctor ran a sign-in check: %q", raw)
+	}
+	encoded, _ := json.Marshal(report.Executors)
+	if text := string(encoded); strings.Contains(text, "auth") || strings.Contains(text, "signed") || strings.Contains(text, "verified") {
+		t.Fatalf("executors report carries sign-in: %s", text)
 	}
 }

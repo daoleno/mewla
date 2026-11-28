@@ -74,12 +74,11 @@ function connectionRow(input: NeedsFixingInput): FixRow | null {
   return null;
 }
 
-/** Brain's agent cannot start here for a reason the person fixes by choosing another (or signing in). */
+/** Brain's agent cannot start here for a reason the person fixes by choosing another. */
 function hostRow(input: NeedsFixingInput): FixRow | null {
   const problem = input.hostProblem;
   if (!problem || input.connection !== "connected") return null;
   const who = executorName(problem.executor);
-  if (problem.code === "not_signed_in") return { key: "host", title: `${who} is not signed in`, button: "Switch", action: { kind: "switch_executor" }, blocking: false };
   if (problem.code === "not_installed") return { key: "host", title: `${who} is not installed`, button: "Switch", action: { kind: "switch_executor" }, blocking: false };
   return null;
 }

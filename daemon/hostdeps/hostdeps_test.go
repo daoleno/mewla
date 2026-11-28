@@ -61,12 +61,6 @@ func TestAgentsUseOfficialInstallersOnMacAndLinux(t *testing.T) {
 		if got := agents[1].Install.Command(); got != "curl -fsSL https://chatgpt.com/codex/install.sh | sh" {
 			t.Fatalf("%s codex install = %q", goos, got)
 		}
-		if agents[0].Login != "claude auth login" || agents[1].Login != "codex login" {
-			t.Fatalf("%s logins = %q %q", goos, agents[0].Login, agents[1].Login)
-		}
-	}
-	if got := Agents(Platform{GOOS: "linux", Headless: true})[1].Login; got != "codex login --device-auth" {
-		t.Fatalf("headless codex login = %q", got)
 	}
 	if Agents(Platform{GOOS: "windows"}) != nil {
 		t.Fatal("windows has no supported agent plan")

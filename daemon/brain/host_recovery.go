@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
@@ -32,11 +31,9 @@ func SetHostUnsupportedProbe(probe func(executorID string) string) {
 }
 
 // hostRunnable reports whether the executor's command is installed and of a
-// version Mewla supports. Sign-in is not part of it: the pane starts in the
-// person's login shell, whose environment can hold a sign-in (ANTHROPIC_*
-// variables) that Mewla's own, narrower environment does not see, so a
-// "signed out" verdict here is not proof. A host that really sits at a sign-in
-// prompt is reported once it has been open and unready for a while.
+// version Mewla supports. Sign-in is not part of it: Mewla never checks it. A
+// host that sits at its own sign-in or first-run screen is reported, with what
+// it shows, once it has been open and unready for a while.
 func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
 	command := strings.TrimSpace(executor.Command)
 	if command == "" {
@@ -56,8 +53,8 @@ func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
 }
 
 // HostRecoveryDue reports that Brain has no observed host and its agent can run
-// now: the person installed or signed in to it after Mewla started, so the
-// host should start without a restart. A host that is observed, or whose agent
+// now: the person installed it after Mewla started, so the host should start
+// without a restart. A host that is observed, or whose agent
 // still cannot run, is not due.
 func (s *Service) HostRecoveryDue() bool {
 	if s == nil || s.store == nil {
@@ -73,7 +70,7 @@ func (s *Service) HostRecoveryDue() bool {
 			return true
 		}
 		// A pane that is open but never became ready is retried too: the person
-		// may have signed in at its prompt since.
+		// may have finished its own screen (a sign-in, a question) since.
 		return s.hostActivationStuck()
 	}
 	return s.hostRunnable(executor) == nil
@@ -132,8 +129,8 @@ func (s *Service) hostActivationStuck() bool {
 }
 
 // hostNotReadyProblem names an agent whose pane is open but has not become
-// ready for input for a while. Agents whose sign-in Mewla cannot probe (Grok,
-// Pi) end up here when they were never signed in.
+// ready for input for a while, with what the agent itself shows there (its
+// sign-in screen, a first-run question, an error). Mewla does not guess why.
 func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem {
 	s.hostProblemMu.Lock()
 	since := s.hostNotReadySince
@@ -142,30 +139,17 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 		return nil
 	}
 	// Every agent takes a moment to become ready, so nothing is said before
-	// the grace: not even "not signed in", which an agent on an API key or a
-	// login-shell sign-in reads as while it starts and runs.
+	// the grace.
 	if time.Since(since) < hostNotReadyGrace {
 		return nil
 	}
 	if s.hostActivationRecorded() {
 		return nil
 	}
-	name := executor.ID
-	screen := s.hostScreenTail()
-	// Mewla's own view says signed out and the pane really is not ready.
-	if hostAuth(executor.ID) == HostAuthUnauthenticated {
-		return &HostProblem{
-			Code:            "not_signed_in",
-			Executor:        executor.ID,
-			Detail:          fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID)) + screen,
-			SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
-		}
-	}
 	return &HostProblem{
-		Code:            "not_ready",
-		Executor:        executor.ID,
-		Detail:          fmt.Sprintf("Brain's %s session is open but not ready. It may be waiting for you to sign in: run %s on this computer, finish its first-run steps, and Brain continues by itself.", name, name) + screen,
-		SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
+		Code:     "not_ready",
+		Executor: executor.ID,
+		Detail:   fmt.Sprintf("Brain's %s session is open but not ready; Brain continues once it is.", executor.ID) + s.hostScreenTail(),
 	}
 }
 
@@ -220,17 +204,6 @@ func (s *Service) hostHoldsNoConversation(host HostSession) bool {
 	return err == nil && !hasTurn
 }
 
-// hostSignInStep is the sentence that tells a person how to sign in to an agent
-// on the computer: its official login command where Mewla knows it.
-func hostSignInStep(executorID string) string {
-	for _, agent := range hostdeps.Agents(hostdeps.Detect()) {
-		if agent.ID == executorID && agent.Login != "" {
-			return "Run " + agent.Login
-		}
-	}
-	return "Sign in to " + executorID + " by running it"
-}
-
 // hostSessionExited reports a host Session whose program has ended. The
 // session host keeps such a Session, with its last screen, so it is still
 // observed; the Brain in it is gone all the same.
@@ -267,63 +240,4 @@ func (s *Service) noteHostRestartedFresh(hostID, executorID string) {
 	}); err != nil {
 		log.Printf("brain host restarted fresh as %s; Chat notice failed: %v", hostID, err)
 	}
-}
-
-// noteHostLaunchAuth records the sign-in probe's answer as a Host launches.
-func (s *Service) noteHostLaunchAuth(executorID string) {
-	hostActiveProbe(executorID)
-	state := hostAuth(executorID)
-	s.hostProblemMu.Lock()
-	s.hostLaunchAuth = state
-	s.hostProblemMu.Unlock()
-}
-
-// hostSignedInSinceLaunch reports a Host that never became ready (it sits at
-// the agent's own sign-in screen, which does not notice a sign-in made
-// elsewhere) and whose agent is no longer signed out, when it opened signed
-// out or before this process (an update or restart adopts the Host without
-// knowing how it opened: it is opened again once, after the not-ready grace).
-// The probe never keeps a Host from launching; it only says when opening it
-// again can help.
-func (s *Service) hostSignedInSinceLaunch(executorID string, continuityErr error) bool {
-	if !errors.Is(continuityErr, watcher.ErrWorkerInputNotReady) {
-		return false
-	}
-	s.hostProblemMu.Lock()
-	launchAuth, since := s.hostLaunchAuth, s.hostNotReadySince
-	s.hostProblemMu.Unlock()
-	hostActiveProbe(executorID)
-	if hostAuth(executorID) == HostAuthUnauthenticated {
-		return false
-	}
-	switch launchAuth {
-	case HostAuthUnauthenticated:
-		return true
-	case "":
-		return !since.IsZero() && time.Since(since) >= hostNotReadyGrace
-	}
-	return false
-}
-
-// reopenHostAfterSignIn closes a Host left at a sign-in screen and opens a new
-// one. A Host that holds a conversation is never closed for this.
-func (s *Service) reopenHostAfterSignIn(executor work.WorkerExecutor) error {
-	host, err := s.store.HostSession()
-	if err != nil {
-		return err
-	}
-	id := strings.TrimSpace(host.ID)
-	if id == "" || !s.hostHoldsNoConversation(host) {
-		return watcher.ErrWorkerInputNotReady
-	}
-	log.Printf("brain host: %s was signed out when %s opened and is signed in now; opening Brain again", executor.ID, id)
-	if err := s.teardownHostSession(id); err != nil {
-		return fmt.Errorf("close the Brain Session left at sign-in %s: %w", id, err)
-	}
-	s.hostProblemMu.Lock()
-	s.hostNotReadySince = time.Time{}
-	s.hostLaunchAuth = HostAuthUnknown
-	s.hostProblemMu.Unlock()
-	_, err = s.ensureHostContinuity(executor, true)
-	return err
 }

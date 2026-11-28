@@ -153,6 +153,19 @@ describe("the tray", () => {
     expect(app.texts().some((t) => t.startsWith("Relay unreachable · "))).toBe(true);
   }, 20_000);
 
+  test("Brain open but not ready: the notice quotes the agent's own screen and Open terminal opens Brain's Session there", async () => {
+    const detail = "Brain's claude session is open but not ready; Brain continues once it is. It shows: Select login method: / › 1. Claude account with subscription";
+    const brain = { host_worker: { id: "brain-host", name: "brain", status: "running" }, chat_thread_id: "t1", host_problem: { code: "not_ready", executor: "claude", detail, installed_executors: [] } };
+    const app = await open(HARNESS, { host: { params: { brain } }, platform: "android" });
+    await app.waitFor("text:Can't start");
+    await app.press("id:state-control");
+    await app.waitFor("id:tray-notice-open_terminal");
+    expect(app.texts()).toContain(detail);
+    expect(app.texts().some((text) => /signed in|sign-in not checked/i.test(text))).toBe(false);
+    await app.press("id:tray-notice-open_terminal");
+    await app.waitFor("text:session brain-host");
+  }, 20_000);
+
   test("the scrim closes it; offline shows the notice and dims the lists", async () => {
     const app = await open(HARNESS, { host: { params: { workers: [worker("alpha")], connection: "waiting" } }, platform: "android" });
     await app.waitFor("text:Offline");

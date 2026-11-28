@@ -41,15 +41,16 @@ type WorkerRef struct {
 // HostProblem says why Brain has no running host, so a client shows the
 // actual problem instead of waiting for a host that is not coming.
 type HostProblem struct {
-	// Code is not_installed, unsupported, not_signed_in, start_failed, not_started or not_ready.
+	// Code is not_installed, unsupported, start_failed, not_started or not_ready.
 	Code     string `json:"code"`
 	Executor string `json:"executor"`
 	Detail   string `json:"detail"`
-	// SuggestExecutor is an installed agent Mewla verified as signed in, when
-	// the host's own is not one: `mewla brain use <id>` moves Brain to it.
+	// SuggestExecutor is another installed agent, when the host's own cannot
+	// run here (not installed, an unsupported version): `mewla brain use <id>`
+	// moves Brain to it.
 	SuggestExecutor string `json:"suggest_executor,omitempty"`
 	// InstalledExecutors are the other configured agents installed on this
-	// computer, signed in or not. A client offers to switch Brain's executor
+	// computer. A client offers to switch Brain's executor
 	// only when there is one to switch to.
 	InstalledExecutors []string `json:"installed_executors,omitempty"`
 }
@@ -64,15 +65,9 @@ type AgentInstall struct {
 }
 
 // ExecutorState is what a client needs to offer an executor as a choice: only
-// an installed agent is one, and a signed-in one is the better one.
+// an installed agent is one.
 type ExecutorState struct {
 	Installed bool `json:"installed"`
-	// SignedIn is true only when Mewla verified the sign-in; unknown is false.
-	SignedIn  bool          `json:"signed_in,omitempty"`
-	AuthState HostAuthState `json:"auth_state,omitempty"`
-	// Account is who it is signed in as (an email address), when its CLI
-	// records it. It tells two sign-ins of one CLI apart.
-	Account string `json:"account,omitempty"`
 }
 
 type Snapshot struct {

@@ -268,7 +268,7 @@ function ResultSheet() {
 /** Brain's menu is open (the header's ⋯). */
 const menuOpen = signal(false);
 
-/** Home with the Brain host sheet open (the computer page's "Claude is not signed in" › Switch). */
+/** Home with the Brain host sheet open (the computer page's "Claude is not installed" › Switch). */
 export function openBrainHost(): void {
   goHome();
   hostSheetOpen.set(true);

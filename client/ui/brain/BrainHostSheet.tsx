@@ -11,8 +11,8 @@ import { isMacApp } from "../mac/app";
 
 /**
  * "Brain host" (soft-final/SPEC.md §1.6 Switch executor): the installed agents,
- * signed-in first, one line each: the agent's product name and logo; a second line
- * only for "Not signed in" or the account that tells two of the same agent apart;
+ * one line each: the agent's product name and logo; a second line only for the
+ * executor id that tells two of the same agent apart;
  * the one Brain runs on is checked; "Install more with mewla deps" when more
  * are configured than installed. A pick switches Brain to it (the source's host
  * switch); the current one closes the page. The computer's refusal shows under it.
@@ -33,7 +33,7 @@ export function BrainHostPanel(props: { onClose: () => void; source?: BrainSourc
           <View class="-mb-px">
             {choices().choices.map((executor) => (
               <Row testID={`brain-executor-${executor.id}`} accessibilityLabel={`Set Brain host to ${brainExecutorLabel(executor)}`}
-                title={brainExecutorLabel(executor)} subtitle={brainExecutorMeta(executor, source.snapshot()?.executor_states, choices().choices) || undefined}
+                title={brainExecutorLabel(executor)} subtitle={brainExecutorMeta(executor, choices().choices) || undefined}
                 leading={<AgentIcon kind={agentKindFromProvider(executor.provider)} size={24} />}
                 value={source.hostSwitch.switching() === executor.id ? "Switching…" : undefined}
                 check={!source.hostSwitch.switching() && executor.id === hostId()}

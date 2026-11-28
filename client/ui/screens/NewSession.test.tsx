@@ -78,7 +78,7 @@ async function newSessionOn(daemon: Record<string, unknown>) {
   return app;
 }
 
-const found = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { installed: true, signed_in: true }]));
+const found = (...ids: string[]) => Object.fromEntries(ids.map((id) => [id, { installed: true }]));
 const created = (app: Awaited<ReturnType<typeof newSessionOn>>) => framesOf(app.host.posts(), "create_session").length;
 
 describe("New session on a computer with some agents missing", () => {

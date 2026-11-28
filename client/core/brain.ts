@@ -31,11 +31,11 @@ export type BrainExecutorRef = {
   host?: boolean;
 };
 
-export type BrainExecutorState = { installed: boolean; signed_in: boolean; auth_state?: "authenticated" | "unauthenticated" | "unknown"; account?: string };
+export type BrainExecutorState = { installed: boolean };
 
 /** Why Brain has no running host, said by the computer (daemon brain.HostProblem). */
 export type BrainHostProblem = {
-  /** not_installed, not_signed_in, not_started or not_ready; a newer computer may say more. */
+  /** not_installed, unsupported, start_failed, not_started or not_ready; a newer computer may say more. */
   code: string;
   executor: string;
   detail: string;
@@ -138,7 +138,7 @@ export function newBrainChat(transport: Pick<Transport, "request">): Promise<Bra
 }
 
 /** The agents to install while Brain can't start because no agent is on the computer ("No agent on this Mac"); empty
- * otherwise: an installed agent that is signed out is a sign-in, not an install. */
+ * otherwise. */
 export function brainAgentInstalls(snapshot: BrainSnapshot | null | undefined): BrainAgentInstall[] {
   if (snapshot?.host_problem?.code !== "not_installed") return [];
   if (Object.values(snapshot.executor_states ?? {}).some((state) => state.installed)) return [];
