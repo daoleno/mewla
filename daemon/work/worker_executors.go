@@ -326,21 +326,23 @@ func ScheduledActionCommand(executorID string, executor Executor) (string, error
 		}
 		forcePresent, forceEnabled := options.option("", "--force")
 		yoloPresent, yoloEnabled := options.option("", "--yolo")
-		trustPresent, trustEnabled := options.option("", "--trust")
+		// cursor-agent accepts --trust only with --print, and every launch here
+		// is the interactive TUI Mewla types into, so the flag makes it exit at
+		// once. The workspace trust picker is answered by the readiness wait
+		// instead (advanceStartupTrustPromptOnce).
+		if trustPresent, _ := options.option("", "--trust"); trustPresent {
+			return "", fmt.Errorf("%w: executor %q uses Cursor --trust, which cursor-agent allows only with --print", ErrScheduledActionUnattended, executorID)
+		}
 		approveMCPsPresent, approveMCPsEnabled := options.option("", "--approve-mcps")
-		if forcePresent && !forceEnabled || yoloPresent && !yoloEnabled ||
-			trustPresent && !trustEnabled || approveMCPsPresent && !approveMCPsEnabled {
+		if forcePresent && !forceEnabled || yoloPresent && !yoloEnabled || approveMCPsPresent && !approveMCPsEnabled {
 			return "", fmt.Errorf("%w: executor %q has an invalid Cursor unattended option", ErrScheduledActionUnattended, executorID)
 		}
-		appendArgs := make([]string, 0, 5)
+		appendArgs := make([]string, 0, 4)
 		if !forceEnabled && !yoloEnabled {
 			appendArgs = append(appendArgs, "--force")
 		}
 		if !sandboxPresent {
 			appendArgs = append(appendArgs, "--sandbox", "disabled")
-		}
-		if !trustEnabled {
-			appendArgs = append(appendArgs, "--trust")
 		}
 		if !approveMCPsEnabled {
 			appendArgs = append(appendArgs, "--approve-mcps")

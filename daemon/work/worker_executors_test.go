@@ -112,8 +112,8 @@ func TestScheduledActionCommandRecognizesExactUnattendedArgv(t *testing.T) {
 		{"Claude explicit auto equals migrated", "claude", "claude --permission-mode=auto --model m", "", "claude --permission-mode=bypassPermissions --model m"},
 		{"Claude quoted auto migrated", "claude", `env PROFILE=calendar -- claude "--permission-mode=auto"`, "", `env PROFILE=calendar -- claude --permission-mode=bypassPermissions`},
 		{"Claude default is bypassPermissions", "claude", "claude --model m", "", "claude --model m --permission-mode bypassPermissions"},
-		{"Cursor substrings", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra --force --trust --approve-mcps"},
-		{"Cursor quoted exact", "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`, "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`},
+		{"Cursor substrings", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra --force --approve-mcps"},
+		{"Cursor quoted exact", "cursor", `cursor-agent '--yolo' "--sandbox=disabled" "--approve-mcps"`, "cursor", `cursor-agent '--yolo' "--sandbox=disabled" "--approve-mcps"`},
 		{"Grok env spoof", "grok", "env APPROVAL=--always-approve grok --sandbox=off", "", "env APPROVAL=--always-approve grok --sandbox=off --permission-mode bypassPermissions"},
 		{"Grok quoted equals", "grok", `grok '--permission-mode=bypassPermissions' "--sandbox=off"`, "", `grok '--permission-mode=bypassPermissions' "--sandbox=off"`},
 	}
@@ -157,6 +157,8 @@ func TestScheduledActionCommandRejectsExplicitNonUnattendedModes(t *testing.T) {
 		{"Cursor equals plan", "agent", "cursor-agent --mode=plan", "cursor"},
 		{"Cursor quoted ask", "agent", `cursor-agent "--mode" "ask"`, "cursor"},
 		{"Cursor restricted sandbox", "agent", "cursor-agent --sandbox=enabled", "cursor"},
+		{"Cursor trust is print-only", "agent", "cursor-agent --force --sandbox disabled --trust", "cursor"},
+		{"Cursor quoted trust is print-only", "agent", `cursor-agent "--trust"`, "cursor"},
 		{"Grok permission", "grok", "grok --permission-mode default", ""},
 		{"Grok quoted sandbox", "grok", `grok "--sandbox=strict"`, ""},
 	}

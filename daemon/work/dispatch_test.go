@@ -108,7 +108,7 @@ func TestLauncher_StartDedicatedUsesFreshConfiguredExecutor(t *testing.T) {
 			name:        "Cursor direct",
 			role:        "agent",
 			executor:    Executor{Name: "agent", Command: "cursor-agent --force --sandbox disabled", Kind: "cursor"},
-			wantCommand: "cursor-agent --force --sandbox disabled --trust --approve-mcps",
+			wantCommand: "cursor-agent --force --sandbox disabled --approve-mcps",
 		},
 		{
 			name:        "Grok direct",
@@ -131,8 +131,8 @@ func TestLauncher_StartDedicatedUsesFreshConfiguredExecutor(t *testing.T) {
 		{
 			name:        "Cursor env",
 			role:        "agent",
-			executor:    Executor{Name: "agent", Command: "env PROFILE=calendar -- cursor-agent --force --sandbox=disabled --trust --approve-mcps", Kind: "cursor"},
-			wantCommand: "env PROFILE=calendar -- cursor-agent --force --sandbox=disabled --trust --approve-mcps",
+			executor:    Executor{Name: "agent", Command: "env PROFILE=calendar -- cursor-agent --force --sandbox=disabled --approve-mcps", Kind: "cursor"},
+			wantCommand: "env PROFILE=calendar -- cursor-agent --force --sandbox=disabled --approve-mcps",
 		},
 		{
 			name:        "Grok env alias",
@@ -203,7 +203,7 @@ func TestLauncher_StartDedicatedRejectsProviderExecutableMismatchBeforeSpawn(t *
 		{
 			name:     "Cursor through other executable",
 			role:     "cursor",
-			executor: Executor{Name: "cursor", Kind: WorkerProviderCursor, Command: "other cursor-agent --force --sandbox=disabled --trust --approve-mcps"},
+			executor: Executor{Name: "cursor", Kind: WorkerProviderCursor, Command: "other cursor-agent --force --sandbox=disabled --approve-mcps"},
 		},
 		{
 			name:     "Grok through other executable",

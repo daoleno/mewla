@@ -152,7 +152,7 @@ func TestDelegatedCodexTrustFollowsCD(t *testing.T) {
 	}
 }
 
-func TestDelegatedCursorDisablesUpdaterWithoutChangingTrustPolicy(t *testing.T) {
+func TestDelegatedCursorLaunchIsInteractiveSafe(t *testing.T) {
 	command, err := PrepareDelegatedCommand(WorkerProviderCursor, "cursor-agent")
 	if err != nil {
 		t.Fatal(err)
@@ -161,10 +161,15 @@ func TestDelegatedCursorDisablesUpdaterWithoutChangingTrustPolicy(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, flag := range []string{"--force", "--sandbox disabled", "--trust", "--approve-mcps", "--disable-auto-update"} {
+	for _, flag := range []string{"--force", "--sandbox disabled", "--approve-mcps", "--disable-auto-update"} {
 		if !strings.Contains(got, flag) {
 			t.Fatalf("missing %s: %s", flag, got)
 		}
+	}
+	// cursor-agent allows --trust only with --print; an interactive launch
+	// carrying it exits at once ("--trust can only be used with --print").
+	if strings.Contains(got, "--trust") {
+		t.Fatalf("interactive Cursor launch carries --trust: %s", got)
 	}
 }
 

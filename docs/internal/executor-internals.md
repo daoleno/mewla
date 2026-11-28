@@ -272,8 +272,7 @@ Claude's undocumented `CLAUDE_CODE_SANDBOXED` environment variable also skips th
 dialog but is Anthropic's internal switch for its own hosted sandboxes and widens
 more than trust, so it is deliberately not used. Mewla never answers a Codex trust
 screen on a person's behalf either.
-Cursor already supplies `--trust --approve-mcps` with its unattended execution
-flags, and delegated launch disables its background self-updater with the
+Cursor's unattended execution flags are `--force --sandbox disabled --approve-mcps`; never `--trust`, which cursor-agent accepts only with `--print` (an interactive launch with it exits at once), so the readiness wait answers the workspace trust picker with `a`. Delegated launch disables its background self-updater with the
 native `--disable-auto-update` option; OpenCode uses `--auto`. Initial input still waits for the provider's
 composer, and update menus are explicitly excluded from readiness.
 

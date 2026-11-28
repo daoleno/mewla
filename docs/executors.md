@@ -152,7 +152,7 @@ configuration says:
 | --- | --- |
 | Codex | `--dangerously-bypass-approvals-and-sandbox` |
 | Claude Code | `--permission-mode bypassPermissions`: no per-action approval, and nothing reviews what it runs. An explicit `bypassPermissions` or `--dangerously-skip-permissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected for delegated work |
-| Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
+| Cursor Agent | `--force --sandbox disabled --approve-mcps`. `--trust` is not added: cursor-agent accepts it only with `--print`, and a command that carries it is refused. Mewla answers Cursor's workspace trust screen itself |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
 | Antigravity | `--dangerously-skip-permissions`, handed to `agy acp`. A command Mewla cannot run through `agy acp` (a flag beyond `--model`, `--effort`, `--mode`, `--conversation`, `--add-dir` and the permission switch) starts agy's own interface instead, with one inline `--settings` for the launch that trusts the Worker's folder and opens agy's tool and plan review gates. Nothing is written to your `~/.gemini`. A `--mode`, `--sandbox`, `-p` or `--continue` in the command is refused for delegated work |
 | OpenCode | `--auto` |
