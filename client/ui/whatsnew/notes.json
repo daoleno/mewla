@@ -1,6 +1,14 @@
 {
   "releases": [
     {
+      "version": "0.4.35",
+      "date": "2026-11-28",
+      "highlights": [],
+      "fixes": [
+        "On the Mac, an update downloads by itself and waits behind an Update button, or installs when you quit."
+      ]
+    },
+    {
       "version": "0.4.34",
       "date": "2026-11-27",
       "highlights": [

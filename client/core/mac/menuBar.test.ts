@@ -3,20 +3,20 @@ import { menuBarItem, menuBarReaction, peekOf, perchOrigin, stopWords } from "./
 
 describe("the menu bar cat", () => {
   test("away is hollow, whatever else waits", () => {
-    expect(menuBarItem({ cat: "offline", needs: 2, update: true })).toEqual({ image: "offline", needs: 0 });
-    expect(menuBarItem({ cat: "homeless", needs: 0, update: false }).image).toBe("offline");
+    expect(menuBarItem({ cat: "offline", needs: 2 })).toEqual({ image: "offline", needs: 0 });
+    expect(menuBarItem({ cat: "homeless", needs: 0 }).image).toBe("offline");
   });
-  test("needs you is the face with the count; Brain's turn turns the arc; an update is the ink dot", () => {
-    expect(menuBarItem({ cat: "attention", needs: 3, update: true })).toEqual({ image: "needs", needs: 3 });
-    expect(menuBarItem({ cat: "working", needs: 0, update: true })).toEqual({ image: "arc", needs: 0 });
-    expect(menuBarItem({ cat: "idle", needs: 0, update: true })).toEqual({ image: "update", needs: 0 });
-    expect(menuBarItem({ cat: "delegating", needs: 0, update: false })).toEqual({ image: "quiet", needs: 0 });
-    expect(menuBarItem({ cat: "waking", needs: 0, update: true })).toEqual({ image: "quiet", needs: 0 });
+  test("needs you is the face with the count; Brain's turn turns the arc", () => {
+    expect(menuBarItem({ cat: "attention", needs: 3 })).toEqual({ image: "needs", needs: 3 });
+    expect(menuBarItem({ cat: "working", needs: 0 })).toEqual({ image: "arc", needs: 0 });
+    expect(menuBarItem({ cat: "idle", needs: 0 })).toEqual({ image: "quiet", needs: 0 });
+    expect(menuBarItem({ cat: "delegating", needs: 0 })).toEqual({ image: "quiet", needs: 0 });
+    expect(menuBarItem({ cat: "waking", needs: 0 })).toEqual({ image: "quiet", needs: 0 });
   });
 });
 
 describe("the cat reacts once, never loops", () => {
-  const at = (cat: Parameters<typeof menuBarItem>[0]["cat"], needs = 0) => ({ item: menuBarItem({ cat, needs, update: false }), cat });
+  const at = (cat: Parameters<typeof menuBarItem>[0]["cat"], needs = 0) => ({ item: menuBarItem({ cat, needs}), cat });
   test("something starting to need you arrives; more of it does not again", () => {
     expect(menuBarReaction(at("working"), at("attention", 1))).toBe("arrive");
     expect(menuBarReaction(at("attention", 1), at("attention", 2))).toBeNull();

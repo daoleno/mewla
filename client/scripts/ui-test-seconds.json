@@ -64,7 +64,8 @@
   "tray/FrameBurst.test.tsx": 2,
   "tray/Tray.test.tsx": 6,
   "update/AboutUpdateRow.test.tsx": 6,
-  "update/UpdateHint.test.tsx": 5,
+  "update/SettingsUpdate.test.tsx": 4,
+  "update/UpdateButton.test.tsx": 5,
   "whatsnew/WhatsNew.test.tsx": 7,
   "work/Work.test.tsx": 22
 }

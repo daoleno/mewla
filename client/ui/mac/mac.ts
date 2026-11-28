@@ -15,7 +15,6 @@ import { showCalendarDay } from "../calendar/CalendarPage";
 import { clock } from "../calendar/clock";
 import { showAlert } from "../shell/alert";
 import { tray as trayState } from "../tray/state";
-import { catUpdateHint } from "../update/hint";
 import { appUpdateOwner } from "../update/update";
 import { appUpdateMenuItem } from "./appUpdateMenu";
 import { grantRequestAction } from "../../core/screen/grantRequest";
@@ -138,7 +137,7 @@ export function startMac(): void {
     if (connection() === "connected" && isThisMac(current())) untracked(() => localProblem.set(""));
   });
 
-  const cat = computed(() => menuBarItem({ cat: catNow(), needs: trayState().needs.length, update: Boolean(catUpdateHint()) }));
+  const cat = computed(() => menuBarItem({ cat: catNow(), needs: trayState().needs.length }));
   // The menu bar cat moves only to react, once (P3): the arrival when something starts to need the person, the nod
   // when a Work comes back done; and the arc turns while Brain's turn runs. Under reduced motion nothing moves.
   let last: { item: MenuBarItem; cat: PetState } | null = null;
@@ -202,7 +201,7 @@ export function startMac(): void {
     const clipName = play && (play.clip === "arrive" ? (dark ? "arrive-dark" : "arrive-light") : play.clip);
     const clip = clipName ? MENU_BAR_CLIPS[clipName] : null;
     // Still images; under reduced motion the arc rests on its frame 03 (DESIGN-MAC.md §2.1).
-    const still = { quiet: MENU_BAR_IMAGES.quiet, offline: MENU_BAR_IMAGES.offline, update: MENU_BAR_IMAGES.update, arc: MENU_BAR_CLIPS.arc.frames[3], needs: dark ? MENU_BAR_IMAGES["needs-dark"] : MENU_BAR_IMAGES["needs-light"] };
+    const still = { quiet: MENU_BAR_IMAGES.quiet, offline: MENU_BAR_IMAGES.offline, arc: MENU_BAR_CLIPS.arc.frames[3], needs: dark ? MENU_BAR_IMAGES["needs-dark"] : MENU_BAR_IMAGES["needs-light"] };
     const counting = now.needs > 0 && (play?.clip !== "arrive" || play.ms >= ARRIVE_COUNT_MS);
     const frame = clip ? Math.min(play!.frame, clip.frames.length - 1) : 0;
     return {

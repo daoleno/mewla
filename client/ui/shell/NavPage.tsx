@@ -14,6 +14,7 @@ import { bottomBarInset } from "./below";
 import { joinRail, type RailAction } from "./railPages";
 import { density, headerSize, roomy } from "../kit/density";
 import { macLightsRow } from "../mac/local";
+import { UpdateButton } from "../update/UpdateButton";
 import { lightsLead } from "../../core/mac/frame";
 
 /** The stack a page is on, for its header's Back (the shell provides it per page). */
@@ -222,6 +223,7 @@ function PageHeader(props: {
         <View class="min-w-0 flex-1">
           {props.titleView ?? <Text role="header" class={`${size.title} line-clamp-1`}>{props.title ?? ""}</Text>}
         </View>
+        <If when={!wide()}><UpdateButton /></If>
         <If when={"right" in props}><View class="flex-row items-center gap-3">{props.right}</View></If>
         <If when={props.close()}><Button testID="page-close" accessibilityLabel="Close" onPress={() => props.close()?.()} class={`${size.back} items-center justify-center rounded-full hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}>
             <Icon name="close" size={size.backIcon - 2} tone="ink" />

@@ -34,6 +34,7 @@ import { workWorkerLines } from "../../core/work/workers";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { Sheet } from "../kit/Sheet";
 import { PillButton } from "../kit/kit";
+import { UpdateButton } from "../update/UpdateButton";
 import { clock } from "../calendar/clock";
 import { Icon } from "../kit/Icon";
 import { linkHooks } from "../kit/wait";
@@ -316,6 +317,7 @@ function MacColumnHeader() {
           </View>
         </Button>
         <View class="flex-1" />
+        <UpdateButton />
         <View class="shrink-0"><StateControl onPairAgain={() => openPage({ name: "computer" }, { name: "pair" })} capsule={{ short: () => false }} /></View>
         <Button ref={menuAnchor.ref} testID="brain-menu" accessibilityLabel="Brain's menu" onPress={() => menuOpen.set(true)}
           class="size-7 items-center justify-center rounded-lg hover:bg-accent active:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">

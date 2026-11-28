@@ -1,7 +1,7 @@
 import type { PetState } from "../settings/petPreview";
 
 /** Which image the menu bar cat shows (client/ui/mac/assets/menubar, DESIGN-MAC.md §2.1). */
-export type MenuBarImage = "quiet" | "offline" | "update" | "arc" | "needs";
+export type MenuBarImage = "quiet" | "offline" | "arc" | "needs";
 
 export interface MenuBarItem {
   image: MenuBarImage;
@@ -12,14 +12,12 @@ export interface MenuBarItem {
 /**
  * The menu bar cat from the header cat's state (core/pets/cat.ts), highest first: away (no computer, offline, pair
  * again, Brain can't start) is the face hollow; something needing the person is the face with the seal dot and the
- * count; Brain's own turn turns the arc; an update waiting is the ink dot; else (connecting, Workers running, quiet)
- * the face.
+ * count; Brain's own turn turns the arc; else (connecting, Workers running, quiet) the face.
  */
-export function menuBarItem(input: { cat: PetState; needs: number; update: boolean }): MenuBarItem {
+export function menuBarItem(input: { cat: PetState; needs: number }): MenuBarItem {
   if (input.cat === "homeless" || input.cat === "offline") return { image: "offline", needs: 0 };
   if (input.cat === "attention" && input.needs > 0) return { image: "needs", needs: input.needs };
   if (input.cat === "working") return { image: "arc", needs: 0 };
-  if (input.update && input.cat !== "waking") return { image: "update", needs: 0 };
   return { image: "quiet", needs: 0 };
 }
 

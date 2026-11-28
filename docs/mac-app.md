@@ -62,10 +62,17 @@ directory and your phone's pairing when installing the new version.
 
 ## Updates
 
-When a newer release exists, **Settings → General** shows **Update to X** beside
-the version, and so does the cat's menu. One click downloads it (checked against
-the update key built into the app), replaces the app, restarts the daemon onto
-the new version and opens Mewla again. Sessions keep running, and the paired
+Mewla looks for a newer release at launch, when you come back to it and every
+few hours while it runs, and downloads it on its own (checked against the update
+key built into the app). When it is ready, an **Update** button appears at the
+top right of the window's title bar (in the header when the window is narrow, in
+full screen at the top of the left pane), and the cat's menu offers **Restart to
+update to X**. One click replaces the app, restarts the daemon onto the new
+version and opens Mewla again. If you never click, the update is put in place
+when you quit Mewla, and the next start opens the new version. **Settings →
+General** shows the version and where the update stands, and checks again when
+you ask. An install that cannot replace itself (the app run from the disk image)
+shows **Update to X**, which opens the release page. Sessions keep running, and the paired
 devices and the login item stay as they were. Once any Worker's model reply has
 finished, the daemon stops and macOS starts it again from the installed app,
 so the phone and Brain are back within seconds. A daemon from Mewla 0.4.32 or

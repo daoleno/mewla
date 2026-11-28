@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { AUTO_CHECK_INTERVAL_MS, appUpdatePending, appUpdateRow, type AppUpdateState } from "./appUpdate";
-import { DesktopUpdateController, isNoMacFiles, type DesktopUpdateFound, type DesktopUpdater } from "./desktopUpdate";
+import { DesktopUpdateController, desktopArtifact, desktopUpdateButton, isNoMacFiles, type DesktopUpdateFound, type DesktopUpdater } from "./desktopUpdate";
 
 class FakeUpdater implements DesktopUpdater {
   installed: string | null = "0.4.17";
   found: DesktopUpdateFound | null = null;
   checkError: Error | null = null;
   downloadError: Error | null = null;
+  stageError: Error | null = null;
+  restartError: Error | null = null;
   checks = 0;
   downloads = 0;
+  staged = 0;
   restarts = 0;
   opened: string[] = [];
   time = 1_000_000;
@@ -27,8 +30,13 @@ class FakeUpdater implements DesktopUpdater {
     for (const tick of this.report) onProgress(tick);
     if (this.downloadError) throw this.downloadError;
   }
+  async installOnQuit() {
+    if (this.stageError) throw this.stageError;
+    this.staged += 1;
+  }
   async installAndRestart() {
     this.restarts += 1;
+    if (this.restartError) throw this.restartError;
   }
   async openUrl(url: string) {
     this.opened.push(url);
@@ -78,52 +86,126 @@ describe("Mewla for Mac's update", () => {
     expect(controller.state.kind).toBe("current");
   });
 
-  test("a newer release is pending, with its version", async () => {
-    const updater = new FakeUpdater();
-    updater.found = newer;
-    const controller = new DesktopUpdateController(updater);
-    await controller.start();
-    expect(controller.state.kind).toBe("available");
-    expect(appUpdatePending(controller.state)).toBe(true);
-    expect(appUpdateRow(controller.state)).toMatchObject({ title: "Update available", subtitle: "v0.4.18", action: "Update" });
-  });
-
-  test("one tap downloads with its progress and restarts into the new app", async () => {
+  test("a newer release downloads on its own, waits for the app's quit and shows the Update button: nobody pressed anything", async () => {
     const updater = new FakeUpdater();
     updater.found = newer;
     updater.report = [{ received: 5, total: 10 }, { received: 10, total: 10 }];
     const controller = new DesktopUpdateController(updater);
-    await controller.start();
     const kinds = track(controller);
     const progress: number[] = [];
     controller.subscribe((state) => state.kind === "downloading" && progress.push(state.progress));
-    await controller.press();
-    expect(kinds).toEqual(["downloading", "downloading", "downloading", "ready"]);
+    await controller.start();
+    expect(kinds).toEqual(["idle", "checking", "downloading", "downloading", "downloading", "ready"]);
     expect(progress).toEqual([0, 0.5, 1]);
     expect(updater.downloads).toBe(1);
+    expect(updater.staged).toBe(1);
+    expect(updater.restarts).toBe(0);
+    expect(controller.state).toMatchObject({ kind: "ready", update: { version: "0.4.18" } });
+    expect(appUpdatePending(controller.state)).toBe(true);
+    expect(desktopUpdateButton(controller.state)).toBe(true);
+    expect(appUpdateRow(controller.state)).toMatchObject({ title: "Ready to install", subtitle: "v0.4.18" });
+  });
+
+  test("the button shows only while the update waits downloaded (or its install failed), not while checking or downloading", () => {
+    const update = desktopArtifact("0.4.18");
+    for (const state of [{ kind: "hidden" }, { kind: "idle" }, { kind: "checking" }, { kind: "current" }, { kind: "checkFailed" }, { kind: "available", update }, { kind: "downloading", update, progress: 0.3 }] as const) expect(desktopUpdateButton(state)).toBe(false);
+    expect(desktopUpdateButton({ kind: "ready", update, fileName: "" })).toBe(true);
+    expect(desktopUpdateButton({ kind: "failed", update, message: "x" })).toBe(true);
+  });
+
+  test("one click on the button restarts into the new app, with nothing downloaded again", async () => {
+    const updater = new FakeUpdater();
+    updater.found = newer;
+    const controller = new DesktopUpdateController(updater);
+    await controller.start();
+    await controller.press();
+    expect(updater.restarts).toBe(1);
+    expect(updater.downloads).toBe(1);
+    expect(updater.staged).toBe(1);
+  });
+
+  test("a second click while it restarts does nothing more", async () => {
+    const updater = new FakeUpdater();
+    updater.found = newer;
+    const controller = new DesktopUpdateController(updater);
+    await controller.start();
+    await Promise.all([controller.press(), controller.press()]);
     expect(updater.restarts).toBe(1);
   });
 
-  test("a failed download says so and a tap tries again", async () => {
+  test("a failed download says so, shows the button, and a click downloads again and restarts", async () => {
     const updater = new FakeUpdater();
     updater.found = newer;
     updater.downloadError = new Error("the download does not match");
     const controller = new DesktopUpdateController(updater);
     await controller.start();
-    await controller.press();
     expect(controller.state).toMatchObject({ kind: "failed", message: "the download does not match" });
+    expect(desktopUpdateButton(controller.state)).toBe(true);
     expect(appUpdateRow(controller.state)).toMatchObject({ title: "Update failed", action: "Retry" });
     expect(updater.restarts).toBe(0);
     updater.downloadError = null;
     await controller.press();
+    expect(updater.downloads).toBe(2);
     expect(updater.restarts).toBe(1);
   });
 
-  test("an app run from a disk image cannot replace itself: the release page opens", async () => {
+  test("an update that cannot be staged for the quit fails too, and is tried again", async () => {
+    const updater = new FakeUpdater();
+    updater.found = newer;
+    updater.stageError = new Error("refused");
+    const controller = new DesktopUpdateController(updater);
+    await controller.start();
+    expect(controller.state).toMatchObject({ kind: "failed", message: "refused" });
+    updater.stageError = null;
+    updater.time += AUTO_CHECK_INTERVAL_MS;
+    await controller.foreground();
+    expect(controller.state.kind).toBe("ready");
+    expect(updater.staged).toBe(1);
+  });
+
+  test("a failed download is tried again by itself at the next check's time, not before", async () => {
+    const updater = new FakeUpdater();
+    updater.found = newer;
+    updater.downloadError = new Error("offline");
+    const controller = new DesktopUpdateController(updater);
+    await controller.start();
+    updater.downloadError = null;
+    updater.time += AUTO_CHECK_INTERVAL_MS - 1;
+    await controller.foreground();
+    expect(controller.state.kind).toBe("failed");
+    updater.time += 1;
+    await controller.foreground();
+    expect(controller.state.kind).toBe("ready");
+    expect(updater.downloads).toBe(2);
+    expect(updater.restarts).toBe(0);
+  });
+
+  test("a restart that fails keeps the update staged for the quit: a click tries the restart again, no download", async () => {
+    const updater = new FakeUpdater();
+    updater.found = newer;
+    updater.restartError = new Error("the app cannot be replaced");
+    const controller = new DesktopUpdateController(updater);
+    await controller.start();
+    await controller.press();
+    expect(controller.state).toMatchObject({ kind: "failed", message: "the app cannot be replaced" });
+    expect(desktopUpdateButton(controller.state)).toBe(true);
+    updater.restartError = null;
+    await controller.press();
+    expect(updater.restarts).toBe(2);
+    expect(updater.downloads).toBe(1);
+    // Nothing downloads again by itself either: it waits for the quit.
+    updater.time += AUTO_CHECK_INTERVAL_MS;
+    await controller.foreground();
+    expect(updater.downloads).toBe(1);
+  });
+
+  test("an app run from a disk image cannot replace itself: nothing downloads, the release page opens, no button", async () => {
     const updater = new FakeUpdater();
     updater.found = { ...newer, canInstall: false };
     const controller = new DesktopUpdateController(updater);
     await controller.start();
+    expect(controller.state.kind).toBe("available");
+    expect(desktopUpdateButton(controller.state)).toBe(false);
     await controller.press();
     expect(updater.opened).toEqual([newer.url]);
     expect(updater.downloads).toBe(0);
@@ -178,6 +260,6 @@ describe("Mewla for Mac's update", () => {
     updater.found = newer;
     await controller.foreground();
     expect(updater.checks).toBe(2);
-    expect(controller.state.kind).toBe("available");
+    expect(controller.state.kind).toBe("ready");
   });
 });

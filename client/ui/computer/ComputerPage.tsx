@@ -28,7 +28,6 @@ import { isMacApp, isThisMac, joinLocalDaemon, localProblem, thisMacChosen, this
 import { thisMacSays } from "../../core/mac/thisMac";
 import { openMacSettings } from "../mac/MacSettings";
 import { openPairPhone } from "../mac/PairPhone";
-import { markComputerUpdateSeen } from "../update/hint";
 import { appUpdateWaiting } from "../update/update";
 import { computerAgentUse, computerOptionalUpdate, computerUpdate, fixRows, readComputer } from "./state";
 
@@ -170,11 +169,6 @@ export function ComputerPage(props: {
       void probeComputers();
       if (connection() === "connected") readComputer();
     });
-  });
-  // Shown with the current computer's update row: the cat's dot for that version goes.
-  effect(() => {
-    const top = (props.nav.routes?.().length ?? depth) === depth;
-    if (top && lifecycle() === "active" && computerOptionalUpdate()) untracked(markComputerUpdateSeen);
   });
 
   // While what it shows can change (an update installing, a fix under way), read again.

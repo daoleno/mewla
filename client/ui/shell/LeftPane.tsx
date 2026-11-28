@@ -18,6 +18,7 @@ import { paletteOpen } from "./desktop/Overlays";
 import { paneRange, paneWidth, setPaneWidth } from "./layout";
 import { closeBeside, goHome, nav, openPage, shown } from "./nav";
 import { MaterialTint } from "../mac/materials";
+import { UpdateButton } from "../update/UpdateButton";
 
 /** A left-pane row replaces the right pane's page above Brain (SPEC §14.1): Brain › that page › what it pushed. */
 const REPLACE: TrayOpeners = {
@@ -54,6 +55,7 @@ function PaneHeader() {
             <Text testID="pane-state" class={`${MAC ? "text-[12px] leading-[16px]" : "text-sub"} line-clamp-1 ${line().ink ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{MAC && isThisMac(current()) ? `This Mac · ${thisMacSays({ problem: localProblem(), state: { entry: "current", kind: tray().state.kind, diagnosis: currentDiagnosis() || undefined }, words: line().words })}` : line().words}</Text>
           </View></If>
       </View>
+      <If when={macLightsRow() === 0}><UpdateButton /></If>
     </View>
   );
 }
@@ -168,6 +170,8 @@ export function LeftPane() {
       macos={isMacApp() ? { backdrop: { material: "sidebar", blending: "behindWindow" } } : undefined}
       style={{ width: paneWidth(), paddingTop: homeHeaderInset() + macLightsRow() }}>
       <If when={isMacApp()}><MaterialTint material="sidebar" /></If>
+      {/* The Mac's title bar, right of the traffic lights: the one place the Update button waits (full screen has no such row: the pane header's). */}
+      <If when={macLightsRow() > 0}><View testID="title-bar-update" class="absolute right-2.5 flex-row items-center" style={{ top: homeHeaderInset(), height: macLightsRow() }}><UpdateButton /></View></If>
       <PaneHeader />
       <SearchOrRun />
       <BrainRow />

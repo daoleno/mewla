@@ -1,7 +1,8 @@
 import { type Accessor, computed, effect, host, openUrl, platform, signal, lifecycle } from "nsh";
-import { checkForUpdate, downloadUpdate, installAndRestart, shellInfo } from "nsh/updater";
-import { appUpdatePending, type AppUpdateState, type UpdateHostInfo } from "../../core/update/appUpdate";
-import { DesktopUpdateController, type DesktopUpdater } from "../../core/update/desktopUpdate";
+import { checkForUpdate, downloadUpdate, installAndRestart, installOnQuit, shellInfo } from "nsh/updater";
+import { AUTO_CHECK_INTERVAL_MS, appUpdatePending, type AppUpdateState, type UpdateHostInfo } from "../../core/update/appUpdate";
+import { DesktopUpdateController, desktopUpdateButton, type DesktopUpdater } from "../../core/update/desktopUpdate";
+import { isMacApp } from "../mac/app";
 import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type DownloadProgress, type DownloadRequest } from "../../core/update/controller";
 
 /**
@@ -15,9 +16,10 @@ import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type Downlo
  * `update.progress` {received, total}, `update.canInstall`, `update.openInstallSettings`,
  * `update.install` {fileName}. A failing `update.info` (the Play build, the web) hides it.
  *
- * Mewla for Mac updates by NSH's own updater (`nsh/updater`): the whole app, its daemon and CLI inside, is replaced
- * from the release's signed `latest.json` and starts again; the release names that source in its nsh-updater.json
- * (client/macos/package.sh), Mewla Dev has none and shows nothing.
+ * Mewla for Mac updates by NSH's own updater (`nsh/updater`), the way desktop apps do: a newer release downloads on
+ * its own and is staged to replace the whole app (its daemon and CLI inside) when the app quits; the header's Update
+ * button (`UpdateButton`) installs it now and starts the new app. The release names that source in its
+ * nsh-updater.json (client/macos/package.sh), Mewla Dev has none and shows nothing.
  */
 export interface AppUpdate {
   state: Accessor<AppUpdateState>;
@@ -25,7 +27,7 @@ export interface AppUpdate {
   pending: Accessor<boolean>;
   /** Learns what this build is and checks; returning to the foreground checks again when due. Once. */
   start(): void;
-  /** The About row's tap or button. */
+  /** The About row's tap or button, and the header's Update button. */
   press(): void;
 }
 
@@ -81,6 +83,7 @@ const nshUpdater: DesktopUpdater = {
     return found ? { version: found.version, canInstall: found.canInstall, url: found.url } : null;
   },
   download: (onProgress) => downloadUpdate(onProgress),
+  installOnQuit: () => installOnQuit(),
   installAndRestart: () => installAndRestart(),
   openUrl: async (url) => (await openUrl(url)).opened,
   now: () => Date.now(),
@@ -114,6 +117,9 @@ export function createAppUpdate(overrides: Partial<AppUpdateDeps> = {}, desktop:
       effect(() => {
         if (lifecycle() === "active") void controller.foreground();
       });
+      // The Mac's app runs for weeks with its window closed: it looks again by itself (the controller keeps the
+      // six hours between checks), so the update is downloaded before anyone opens the window.
+      if (desktop) setInterval(() => void controller.foreground(), AUTO_CHECK_INTERVAL_MS / 6);
     },
     press() {
       void controller.press();
@@ -123,7 +129,7 @@ export function createAppUpdate(overrides: Partial<AppUpdateDeps> = {}, desktop:
 
 export const appUpdate = createAppUpdate();
 
-/** This app's update owner for what shows it (Settings, the update hint): the app's own; a test binds one of its own. */
+/** This app's update owner for what shows it (Settings, the Update button): the app's own; a test binds one of its own. */
 export const appUpdateOwner = signal<AppUpdate>(appUpdate);
 
 export function bindAppUpdate(update: AppUpdate): void {
@@ -132,6 +138,9 @@ export function bindAppUpdate(update: AppUpdate): void {
 
 /** A newer release of this app waits, until it is installed: Settings' row carries the dot and the update row sits first. */
 export const appUpdateWaiting = computed(() => appUpdateOwner().pending());
+
+/** The header's Update button shows (Mewla for Mac): the update waits downloaded, and a press restarts into it. */
+export const appUpdateButton = computed(() => isMacApp() && desktopUpdateButton(appUpdateOwner().state()));
 
 /** Once, at start (App.tsx): checks at launch and when the app comes back, at most every six hours. */
 export function startAppUpdate(): void {

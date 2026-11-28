@@ -429,10 +429,8 @@ it (at most every six hours). **Settings › About** shows the version and an
 update row under it: **Check for updates** says **Up to date** and checks again
 when you tap it, and offers **Retry** if it can't reach GitHub. When a newer
 release exists, the row moves to the top of **Settings** and reads **Update
-available** with the version and an **Update** button. The cat on home carries
-a small ink dot until you have opened Settings once for that version, and the
-computer page's **Settings** row carries the same dot until the update is
-installed.
+available** with the version and an **Update** button, and the computer
+page's **Settings** row carries a small dot until the update is installed.
 
 Tap **Update** to download the APK, with progress in the row. Mewla checks the
 release's signed manifest and the APK's SHA-256, then opens the Android

@@ -1,4 +1,5 @@
 import {
+  AUTO_CHECK_INTERVAL_MS,
   type AndroidUpdateArtifact,
   type AppUpdateState,
   isNewerVersion,
@@ -6,10 +7,12 @@ import {
 } from "./appUpdate";
 
 /**
- * Mewla for Mac's own update: NSH's updater replaces the whole `.app` (its daemon and CLI inside) from the signed
- * `latest.json` of the GitHub release, and the app starts again as the new one. The states are the app's update
- * states (`AppUpdateState`), so the same row and the same dot serve every platform; a desktop update has only a
- * version to show, so the artifact's other fields are the ones this installer does not use.
+ * Mewla for Mac's own update, the way desktop apps do it: NSH's updater downloads the newer `.app` (its daemon and CLI
+ * inside, from the signed `latest.json` of the GitHub release) on its own and stages it to replace the app when it
+ * quits (`installOnQuit`), so nobody stays stale; the header's Update button, once it is `ready`, installs it now and
+ * starts the new app. The states are the app's update states (`AppUpdateState`), so the same row serves every
+ * platform; a desktop update has only a version to show, so the artifact's other fields are the ones this installer
+ * does not use.
  */
 
 /** A newer version of the app, as NSH's `checkForUpdate` answers. */
@@ -27,6 +30,8 @@ export interface DesktopUpdater {
   installedVersion(): string | null;
   check(): Promise<DesktopUpdateFound | null>;
   download(onProgress: (progress: { received: number; total?: number | null }) => void): Promise<void>;
+  /** The downloaded update replaces the app when it quits (the next start opens the new one); settles once it waits. */
+  installOnQuit(): Promise<void>;
   /** The app quits and the new one starts, so this settles only on failure. */
   installAndRestart(): Promise<void>;
   openUrl(url: string): Promise<boolean>;
@@ -37,6 +42,11 @@ export interface DesktopUpdater {
 /** The update as a row shows it: the version, and the fields an installer of another platform needs left empty. */
 export function desktopArtifact(version: string, url = ""): AndroidUpdateArtifact {
   return { version, versionCode: 0, fileName: "", url, sha256: "", size: 0 };
+}
+
+/** The header's Update button: the update waits downloaded (a click restarts into it), or its install failed (a click tries again). */
+export function desktopUpdateButton(state: AppUpdateState): boolean {
+  return state.kind === "ready" || state.kind === "failed";
 }
 
 /**
@@ -51,7 +61,8 @@ export function isNoMacFiles(error: unknown): boolean {
 
 /**
  * The same owner the app has on Android (`AppUpdateController`): checks at launch and on return to the foreground, at
- * most every six hours, and on a tap of the row; one tap on an update downloads it and restarts into it.
+ * most every six hours, and on a tap of the row. A newer release downloads at once and waits for the app's quit
+ * (`ready`); the Update button restarts into it now. A failed download is tried again at the next check's time.
  */
 export class DesktopUpdateController {
   private current: AppUpdateState = { kind: "hidden" };
@@ -59,6 +70,10 @@ export class DesktopUpdateController {
   private lastCheckAt = 0;
   private started: Promise<void> | null = null;
   private found: DesktopUpdateFound | null = null;
+  /** The update is downloaded and waits for the app's quit. */
+  private staged = false;
+  private restarting = false;
+  private failedAt = 0;
   private readonly listeners = new Set<(state: AppUpdateState) => void>();
 
   constructor(private readonly deps: DesktopUpdater) {}
@@ -87,10 +102,17 @@ export class DesktopUpdateController {
 
   async foreground(): Promise<void> {
     await this.started;
-    if (this.installed) await this.check();
+    if (!this.installed) return;
+    const state = this.current;
+    // A download that failed is tried again when a check would be due, as the next check is.
+    if (state.kind === "failed") {
+      if (!this.staged && this.deps.now() - this.failedAt >= AUTO_CHECK_INTERVAL_MS) await this.stage(state.update);
+      return;
+    }
+    await this.check();
   }
 
-  /** The row's tap or button. */
+  /** The row's tap or button: Update (restart into the downloaded app), Retry, or check again. */
   async press(): Promise<void> {
     const state = this.current;
     switch (state.kind) {
@@ -98,9 +120,14 @@ export class DesktopUpdateController {
       case "checkFailed":
         return this.check(true);
       case "available":
+        // An install the updater cannot make (the app runs from a disk image): the release page, by hand.
+        return this.openRelease();
       case "failed":
+        if (!this.staged) await this.stage(state.update);
+        if (this.staged) await this.restart(state.update);
+        return;
       case "ready":
-        return this.install(state.update);
+        return this.restart(state.update);
     }
   }
 
@@ -112,7 +139,17 @@ export class DesktopUpdateController {
     try {
       const found = await this.deps.check();
       this.found = found;
-      this.set(found && isNewerVersion(found.version, this.installed) ? { kind: "available", update: desktopArtifact(found.version, found.url) } : { kind: "current" });
+      if (!found || !isNewerVersion(found.version, this.installed)) {
+        this.set({ kind: "current" });
+        return;
+      }
+      const update = desktopArtifact(found.version, found.url);
+      // An app the updater cannot replace (run from a disk image) only offers the release page.
+      if (!found.canInstall) {
+        this.set({ kind: "available", update });
+        return;
+      }
+      await this.stage(update);
     } catch (error) {
       // The latest release has no Mac files (no manifest to read): that is no update, not a fault.
       if (isNoMacFiles(error)) {
@@ -126,25 +163,44 @@ export class DesktopUpdateController {
     }
   }
 
-  private async install(update: AndroidUpdateArtifact): Promise<void> {
-    const found = this.found;
-    if (!found) return;
-    // An install the updater cannot make (the app runs from a disk image): the release page, by hand.
-    if (!found.canInstall) {
-      await this.deps.openUrl(found.url).catch((error) => this.warn("couldn't open the release", error));
-      return;
-    }
+  /** Downloads the update and stages it for the app's quit; `ready` once it waits. */
+  private async stage(update: AndroidUpdateArtifact): Promise<void> {
+    this.staged = false;
     this.set({ kind: "downloading", update, progress: 0 });
     try {
       await this.deps.download(({ received, total }) => {
         if (this.current.kind === "downloading" && total && total > 0) this.set({ kind: "downloading", update, progress: Math.min(received / total, 1) });
       });
+      await this.deps.installOnQuit();
+      this.staged = true;
       this.set({ kind: "ready", update, fileName: "" });
+    } catch (error) {
+      this.fail(update, "update failed", error);
+    }
+  }
+
+  /** The app quits and starts again as the new one: this settles only when it could not. */
+  private async restart(update: AndroidUpdateArtifact): Promise<void> {
+    if (this.restarting) return;
+    this.restarting = true;
+    try {
       await this.deps.installAndRestart();
     } catch (error) {
-      this.warn("update failed", error);
-      this.set({ kind: "failed", update, message: error instanceof Error ? error.message : String(error) });
+      this.fail(update, "restart failed", error);
+    } finally {
+      this.restarting = false;
     }
+  }
+
+  private async openRelease(): Promise<void> {
+    const found = this.found;
+    if (found) await this.deps.openUrl(found.url).catch((error) => this.warn("couldn't open the release", error));
+  }
+
+  private fail(update: AndroidUpdateArtifact, what: string, error: unknown): void {
+    this.warn(what, error);
+    this.failedAt = this.deps.now();
+    this.set({ kind: "failed", update, message: error instanceof Error ? error.message : String(error) });
   }
 
   private set(next: AppUpdateState): void {

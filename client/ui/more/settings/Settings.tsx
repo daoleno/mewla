@@ -13,7 +13,6 @@ import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen
 import type { PageNav } from "../routes";
 import { current } from "../../session";
 import { AboutUpdateRow } from "../../update/AboutUpdateRow";
-import { markAppUpdateSeen } from "../../update/hint";
 import { appUpdateWaiting } from "../../update/update";
 import { chooseUsage, followUsage, usageLockedText, usageState } from "./usage";
 
@@ -80,16 +79,6 @@ export const SUPPORT_URL = "https://mewla.ai/support/";
  * (which one is in use, pairing, each one's details) are on the cat's computer page.
  */
 export function Settings(props: { nav: PageNav }) {
-  const depth = untracked(() => {
-    const routes = props.nav.routes?.() ?? [];
-    const at = routes.findIndex((route) => route.name === "settings");
-    return at >= 0 ? at + 1 : routes.length;
-  });
-  // Shown with this app's update row on top: the cat's dot for that version goes.
-  effect(() => {
-    const top = (props.nav.routes?.().length ?? depth) === depth;
-    if (top && lifecycle() === "active" && appUpdateWaiting()) untracked(markAppUpdateSeen);
-  });
   followFriends();
   if (!onWeb()) void loadStrongAlerts();
   followVirtualScreen();
