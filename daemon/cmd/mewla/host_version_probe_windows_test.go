@@ -121,10 +121,12 @@ exit 1
 	if got := counts(); got["codex"] != before || got["cursor"] != 0 {
 		t.Fatalf("settled cache or snapshot launched an agent: %v", got)
 	}
+	// Past the settled TTL the probe asks again, still only for Codex (doctor
+	// keeps a build's version, so Codex itself need not start again).
 	now = now.Add(hostVersionSettledTTL)
 	probe("codex")
-	if got := counts(); got["codex"] <= before || got["cursor"] != 0 {
-		t.Fatalf("selected host settled refresh = %v", got)
+	if got := counts(); got["cursor"] != 0 {
+		t.Fatalf("selected host settled refresh launched Cursor: %v", got)
 	}
 	t.Logf("Windows PowerShell launches: Brain refresh 0; after selected Codex %v", counts())
 }
